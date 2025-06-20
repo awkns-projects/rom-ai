@@ -33,6 +33,8 @@ import { generateUUID } from '../utils';
 import { generateHashedPassword } from './utils';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { ChatSDKError } from '../errors';
+import { auth } from '@/app/(auth)/auth';
+import type { UserType } from '@/app/(auth)/auth';
 
 // Optionally, if not using email/pass login, you can
 // use the Drizzle adapter for Auth.js / NextAuth
@@ -220,6 +222,24 @@ export async function saveMessages({
   }
 }
 
+export async function updateMessage({
+  messageId,
+  message: messageData,
+}: {
+  messageId: string;
+  message: Partial<DBMessage>;
+}) {
+  try {
+    return await db
+      .update(message)
+      .set(messageData)
+      .where(eq(message.id, messageId))
+      .returning();
+  } catch (error) {
+    throw new ChatSDKError('bad_request:database', 'Failed to update message');
+  }
+}
+
 export async function getMessagesByChatId({ id }: { id: string }) {
   try {
     return await db
@@ -304,6 +324,98 @@ export async function saveDocument({
       .returning();
   } catch (error) {
     throw new ChatSDKError('bad_request:database', 'Failed to save document');
+  }
+}
+
+export async function updateDocument({
+  id,
+  title,
+  content,
+  userId,
+}: {
+  id: string;
+  title?: string;
+  content?: string;
+  userId: string;
+}) {
+  try {
+    const [existingDocument] = await db
+      .select()
+      .from(document)
+      .where(and(eq(document.id, id), eq(document.userId, userId)))
+      .orderBy(desc(document.createdAt))
+      .limit(1);
+
+    if (!existingDocument) {
+      throw new ChatSDKError('not_found:document', 'Document not found');
+    }
+
+    const [updatedDocument] = await db
+      .update(document)
+      .set({
+        ...(title && { title }),
+        ...(content && { content }),
+      })
+      .where(
+        and(
+          eq(document.id, id),
+          eq(document.createdAt, existingDocument.createdAt),
+          eq(document.userId, userId)
+        )
+      )
+      .returning();
+
+    return updatedDocument;
+  } catch (error) {
+    if (error instanceof ChatSDKError) {
+      throw error;
+    }
+    throw new ChatSDKError('bad_request:database', 'Failed to update document');
+  }
+}
+
+export async function saveOrUpdateDocument({
+  id,
+  title,
+  kind,
+  content,
+  userId,
+}: {
+  id: string;
+  title: string;
+  kind: ArtifactKind;
+  content: string;
+  userId: string;
+}) {
+  try {
+    const [existingDocument] = await db
+      .select()
+      .from(document)
+      .where(and(eq(document.id, id), eq(document.userId, userId)))
+      .orderBy(desc(document.createdAt))
+      .limit(1);
+
+    if (existingDocument) {
+      return await updateDocument({
+        id,
+        title,
+        content,
+        userId,
+      });
+    } else {
+      return await saveDocument({
+        id,
+        title,
+        kind,
+        content,
+        userId,
+      });
+    }
+  } catch (error) {
+    if (error instanceof ChatSDKError) {
+      throw error;
+    }
+    throw new ChatSDKError('bad_request:database', 'Failed to save or update document');
   }
 }
 

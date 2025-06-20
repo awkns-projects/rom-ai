@@ -57,6 +57,20 @@
       "when": 1750384160497,
       "tag": "0007_oval_changeling",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1750392245276,
+      "tag": "0008_amazing_doomsday",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1750393817583,
+      "tag": "0009_typical_vengeance",
+      "breakpoints": true
     }
   ]
 }

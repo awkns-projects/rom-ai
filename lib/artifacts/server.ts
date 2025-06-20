@@ -6,7 +6,7 @@ import { agentDocumentHandler } from '@/artifacts/agent/server';
 import type { ArtifactKind } from '@/components/artifact';
 import type { DataStreamWriter } from 'ai';
 import type { Document } from '../db/schema';
-import { saveDocument } from '../db/queries';
+import { saveOrUpdateDocument } from '../db/queries';
 import type { Session } from 'next-auth';
 
 export interface SaveDocumentProps {
@@ -53,7 +53,7 @@ export function createDocumentHandler<T extends ArtifactKind>(config: {
       });
 
       if (args.session?.user?.id) {
-        await saveDocument({
+        await saveOrUpdateDocument({
           id: args.id,
           title: args.title,
           content: draftContent,
@@ -73,7 +73,7 @@ export function createDocumentHandler<T extends ArtifactKind>(config: {
       });
 
       if (args.session?.user?.id) {
-        await saveDocument({
+        await saveOrUpdateDocument({
           id: args.document.id,
           title: args.document.title,
           content: draftContent,

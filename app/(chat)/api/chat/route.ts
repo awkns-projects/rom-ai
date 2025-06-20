@@ -6,11 +6,13 @@ import {
   streamText,
 } from 'ai';
 import { auth, type UserType } from '@/app/(auth)/auth';
+import type { Session } from 'next-auth';
 import { type RequestHints, systemPrompt } from '@/lib/ai/prompts';
 import {
   createStreamId,
   deleteChatById,
   getChatById,
+  getDocumentById,
   getMessageCountByUserId,
   getMessagesByChatId,
   getStreamIdsByChatId,
@@ -33,8 +35,6 @@ import type { Chat } from '@/lib/db/schema';
 import { differenceInSeconds } from 'date-fns';
 import { ChatSDKError } from '@/lib/errors';
 import { agentBuilder } from '@/lib/ai/tools/agent-builder';
-import { databaseBuilder } from '@/lib/ai/tools/database-builder';
-import { actionBuilder } from '@/lib/ai/tools/action-builder';
 
 export const maxDuration = 60;
 
@@ -62,82 +62,241 @@ function getStreamContext() {
 
 // Function to determine which tool to use based on conversation context
 function determineToolsForConversation(messages: any[], isNewConversation: boolean): string[] {
-  // For new conversations, start with agent builder
-  if (isNewConversation) {
-    return ['agentBuilder'];
-  }
-
-  // Analyze recent messages to determine intent
-  const recentMessages = messages.slice(-3).map(msg => {
-    if (typeof msg.content === 'string') {
-      return msg.content.toLowerCase();
-    }
-    return '';
-  }).join(' ');
-
-  const tools = [];
-
-  // Agent builder keywords (main orchestrator)
-  const agentKeywords = [
-    'build', 'create system', 'design app', 'make application', 'complete system',
-    'full stack', 'entire application', 'build everything', 'create everything'
-  ];
-
-  // Database-related keywords (for updates to existing systems)
-  const databaseKeywords = [
-    'database', 'table', 'schema', 'model', 'field', 'column', 'relation', 
-    'entity', 'enum', 'data structure', 'db', 'sql', 'create table',
-    'add field', 'update schema', 'modify database', 'update model'
-  ];
-
-  // Action-related keywords (for updates to existing systems)
-  const actionKeywords = [
-    'action', 'workflow', 'automation', 'process', 'trigger', 'schedule',
-    'notification', 'email', 'alert', 'integration', 'api', 'webhook',
-    'business logic', 'rule', 'validate', 'transform', 'execute', 'update action'
-  ];
-
-  // Check for agent builder intent (main system creation)
-  if (agentKeywords.some(keyword => recentMessages.includes(keyword))) {
-    tools.push('agentBuilder');
-  }
-  // Check for database-specific updates
-  else if (databaseKeywords.some(keyword => recentMessages.includes(keyword))) {
-    tools.push('databaseBuilder');
-  }
-  // Check for action-specific updates
-  else if (actionKeywords.some(keyword => recentMessages.includes(keyword))) {
-    tools.push('actionBuilder');
-  }
-  // Default to agent builder for comprehensive system creation
-  else {
-    tools.push('agentBuilder');
-  }
-
-  return tools;
+  // Always use the agent builder
+  return ['agentBuilder'];
 }
 
-function extractArtifactDataFromMessages(messages: any[]): string | null {
-  // Look for the most recent agent artifact data in the conversation
+async function getExistingAgentContext(messages: any[], session: Session | null): Promise<{ documentId: string; content: string } | null> {
+  console.log('🔍 Searching for existing agent document in conversation...');
+  console.log(`📋 Analyzing ${messages.length} messages for agent document ID`);
+  
+  // Look for the most recent agent document ID in the conversation from any message
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
+    console.log(`🔍 Checking message ${i + 1}/${messages.length} (role: ${message.role})`);
     
-    // Check if this is an assistant message with tool calls
-    if (message.role === 'assistant' && message.parts) {
+    // Check if this message has parts (could be any role)
+    if (message.parts) {
+      console.log(`📋 Message has ${message.parts.length} parts`);
+      
       for (const part of message.parts) {
+        console.log(`🔍 Checking part type: ${part.type}`);
+        
+        // Method 1: Look for tool-invocation parts (correct AI framework structure)
+        if (part.type === 'tool-invocation' && part.toolInvocation) {
+          const { toolInvocation } = part;
+          const { toolName, state } = toolInvocation;
+          
+          console.log(`🔍 Found tool invocation: ${toolName}, state: ${state}`);
+          
+          if (toolName === 'agentBuilder') {
+            console.log('✅ Found agentBuilder tool invocation');
+            
+            // Check if this is a result state with document ID
+            if (state === 'result' && toolInvocation.result) {
+              const result = toolInvocation.result;
+              console.log('🔍 Tool result data:', JSON.stringify(result).substring(0, 200));
+              
+              if (result.id && result.kind === 'agent') {
+                const documentId = result.id;
+                console.log('🎯 Found agent document ID from tool invocation result:', documentId);
+                
+                const agentData = await fetchAndValidateAgentDocument(documentId, session);
+                if (agentData) return agentData;
+              }
+            }
+            
+            // Also check call state args for document ID (in case of continuing conversation)
+            if (state === 'call' && toolInvocation.args) {
+              const args = toolInvocation.args;
+              console.log('🔍 Tool call args:', JSON.stringify(args).substring(0, 200));
+              
+              if (args.context || args.existingDocumentId) {
+                const documentId = args.existingDocumentId;
+                if (documentId) {
+                  console.log('🎯 Found existing document ID from tool call args:', documentId);
+                  
+                  const agentData = await fetchAndValidateAgentDocument(documentId, session);
+                  if (agentData) return agentData;
+                }
+              }
+            }
+          }
+        }
+        
+        // Method 2: Legacy support - Look for old tool-call structure
+        if (part.type === 'tool-call' && part.toolName === 'agentBuilder') {
+          console.log('✅ Found legacy agentBuilder tool call');
+          
+          if (part.result && part.result.id && part.result.kind === 'agent') {
+            const documentId = part.result.id;
+            console.log('🎯 Found agent document ID from legacy tool result:', documentId);
+            
+            const agentData = await fetchAndValidateAgentDocument(documentId, session);
+            if (agentData) return agentData;
+          }
+        }
+        
+        // Method 3: Look for tool-result parts
         if (part.type === 'tool-result' && part.toolName === 'agentBuilder') {
-          // Extract agent data from the tool result
-          if (part.result && part.result.data) {
-            console.log('🔍 Found existing agent data in conversation:', JSON.stringify(part.result.data, null, 2));
-            return JSON.stringify(part.result.data);
+          console.log('✅ Found agentBuilder tool result');
+          
+          if (part.result && part.result.id && part.result.kind === 'agent') {
+            const documentId = part.result.id;
+            console.log('🎯 Found agent document ID from tool result part:', documentId);
+            
+            const agentData = await fetchAndValidateAgentDocument(documentId, session);
+            if (agentData) return agentData;
+          }
+        }
+        
+        // Method 4: Look in text content for document references
+        if (part.type === 'text' && typeof part.text === 'string') {
+          // Look for document ID patterns in text
+          const documentIdMatch = part.text.match(/document.*?(?:id|ID)[:\s]*([a-f0-9-]{36})/i);
+          if (documentIdMatch) {
+            const documentId = documentIdMatch[1];
+            console.log('🎯 Found potential document ID in text:', documentId);
+            
+            const agentData = await fetchAndValidateAgentDocument(documentId, session);
+            if (agentData) return agentData;
+          }
+        }
+        
+        // Method 5: Look for streaming data that might contain document IDs
+        if (part.experimental_providerMetadata && part.experimental_providerMetadata.cursor) {
+          console.log('🔍 Checking provider metadata for document references...');
+          const metadata = part.experimental_providerMetadata;
+          
+          // Check if metadata contains document information
+          if (metadata.documentId) {
+            const documentId = metadata.documentId;
+            console.log('🎯 Found document ID in provider metadata:', documentId);
+            
+            const agentData = await fetchAndValidateAgentDocument(documentId, session);
+            if (agentData) return agentData;
           }
         }
       }
     }
+    
+    // Method 6: Check if message itself has document metadata
+    if (message.experimental_providerMetadata) {
+      console.log('🔍 Checking message-level provider metadata...');
+      const metadata = message.experimental_providerMetadata;
+      
+      if (metadata.documentId) {
+        const documentId = metadata.documentId;
+        console.log('🎯 Found document ID in message metadata:', documentId);
+        
+        const agentData = await fetchAndValidateAgentDocument(documentId, session);
+        if (agentData) return agentData;
+      }
+    }
+    
+    // Method 7: Look for document ID in the entire message content (as fallback)
+    const messageStr = JSON.stringify(message);
+    const documentIdMatch = messageStr.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/g);
+    if (documentIdMatch) {
+      console.log(`🔍 Found ${documentIdMatch.length} potential UUID(s) in message:`, documentIdMatch);
+      
+      // Try each UUID to see if it's a valid agent document
+      for (const potentialId of documentIdMatch) {
+        console.log('🎯 Testing potential document ID:', potentialId);
+        const agentData = await fetchAndValidateAgentDocument(potentialId, session);
+        if (agentData) return agentData;
+      }
+    }
   }
   
-  console.log('🔍 No existing agent data found in conversation');
+  console.log('🔍 No existing agent document found in conversation');
   return null;
+}
+
+// Helper function to fetch and validate agent document
+async function fetchAndValidateAgentDocument(documentId: string, session: Session | null): Promise<{ documentId: string; content: string } | null> {
+  try {
+    console.log('📄 Attempting to fetch document:', documentId);
+    
+    // Fetch the latest agent data from the document table
+    const document = await getDocumentById({ id: documentId });
+    
+    if (!document) {
+      console.log('❌ Document not found');
+      return null;
+    }
+    
+    if (!document.content) {
+      console.log('❌ Document has no content');
+      return null;
+    }
+    
+    if (document.userId !== session?.user?.id) {
+      console.log('❌ Document access denied (user mismatch)');
+      return null;
+    }
+    
+    console.log('✅ Document found and accessible');
+    
+    // Validate that the content is valid JSON and contains agent-like structure
+    try {
+      const parsed = JSON.parse(document.content);
+      
+      // Check if this looks like valid agent data
+      if (typeof parsed === 'object' && parsed !== null) {
+        // Check for agent data structure (arrays can be empty, so check for presence, not truthiness)
+        if (Array.isArray(parsed.models) && Array.isArray(parsed.actions) && typeof parsed.name === 'string') {
+          console.log('✅ Valid agent document content found with proper structure');
+          console.log(`📊 Agent data: ${parsed.models.length} models, ${parsed.actions.length} actions`);
+          
+          // Migrate actions to have IDs if they don't have them
+          if (parsed.actions && Array.isArray(parsed.actions)) {
+            let hasChanges = false;
+            const migratedActions = parsed.actions.map((action: any, index: number) => {
+              if (!action.id) {
+                hasChanges = true;
+                const newId = `act${index + 1}`;
+                console.log(`🔄 Migrating action "${action.name}" to ID: ${newId}`);
+                return { ...action, id: newId };
+              }
+              return action;
+            });
+            
+            if (hasChanges) {
+              console.log(`🔄 Migrated ${migratedActions.length} actions to have IDs`);
+              parsed.actions = migratedActions;
+              // Update the document with migrated data
+              const updatedContent = JSON.stringify(parsed, null, 2);
+              return { documentId, content: updatedContent };
+            }
+          }
+          
+          return { documentId, content: document.content };
+        }
+        
+        // Fallback check for less strict validation - if it has at least some agent-like properties
+        if ((parsed.hasOwnProperty('models') || parsed.hasOwnProperty('actions')) && parsed.hasOwnProperty('name')) {
+          console.log('✅ Valid agent document content found with basic structure');
+          return { documentId, content: document.content };
+        }
+        
+        // If it's just status/progress data, not the final agent data
+        if (parsed.status || parsed.step) {
+          console.log('📋 Found intermediate agent document (status/progress), skipping...');
+          return null; // This is not the final agent data
+        }
+      }
+      
+      console.log('⚠️ Document content is JSON but not valid agent data:', JSON.stringify(parsed).substring(0, 100));
+      return null;
+    } catch (jsonError) {
+      console.log('⚠️ Document content is not valid JSON, skipping:', document.content.substring(0, 100));
+      return null;
+    }
+  } catch (error) {
+    console.error('❌ Error fetching agent document:', error);
+    return null;
+  }
 }
 
 export async function POST(request: Request) {
@@ -229,32 +388,19 @@ export async function POST(request: Request) {
     console.log('🎯 Active tools for this conversation:', activeTools);
 
     const stream = createDataStream({
-      execute: (dataStream) => {
+      execute: async (dataStream) => {
         const tools: Record<string, any> = {};
 
-        // Add tools based on determination
+        // Add the agent builder tool
         if (activeTools.includes('agentBuilder')) {
-          const existingContext = extractArtifactDataFromMessages(messages);
+          const existingAgentData = await getExistingAgentContext(messages, session);
           tools.agentBuilder = agentBuilder({ 
             messages, 
             dataStream, 
-            existingContext 
-          });
-        }
-        if (activeTools.includes('databaseBuilder')) {
-          const existingContext = extractArtifactDataFromMessages(messages);
-          tools.databaseBuilder = databaseBuilder({ 
-            messages, 
-            dataStream, 
-            existingContext 
-          });
-        }
-        if (activeTools.includes('actionBuilder')) {
-          const existingContext = extractArtifactDataFromMessages(messages);
-          tools.actionBuilder = actionBuilder({ 
-            messages, 
-            dataStream, 
-            existingContext 
+            existingContext: existingAgentData?.content || null,
+            existingDocumentId: existingAgentData?.documentId || null,
+            session,
+            chatId: id
           });
         }
 

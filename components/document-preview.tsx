@@ -293,8 +293,12 @@ const DocumentContent = ({ document }: { document: Document }) => {
               suggestions={[]}
               onSaveContent={() => {}}
               isInline={true}
-              getDocumentContentById={() => ''}
-              isLoading={false}
+              getDocumentContentById={(index: number) => {
+                if (index === 0) {
+                  return document.content ?? '';
+                }
+                return '';
+              }}
               metadata={{
                 selectedTab: 'models',
                 editingModel: null,
@@ -302,6 +306,7 @@ const DocumentContent = ({ document }: { document: Document }) => {
                 editingAction: null,
               }}
               setMetadata={() => {}}
+              isLoading={false}
             />
           </div>
         </div>

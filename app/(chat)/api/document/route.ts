@@ -3,7 +3,7 @@ import type { ArtifactKind } from '@/components/artifact';
 import {
   deleteDocumentsByIdAfterTimestamp,
   getDocumentsById,
-  saveDocument,
+  saveOrUpdateDocument,
 } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
 
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const document = await saveDocument({
+  const document = await saveOrUpdateDocument({
     id,
     content,
     title,

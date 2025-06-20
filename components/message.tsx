@@ -3,88 +3,121 @@
 import type { UIMessage } from 'ai';
 import cx from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';
-import { memo, useState } from 'react';
+import { memo, useState, useMemo } from 'react';
 import type { Vote } from '@/lib/db/schema';
+import type { Document } from '@/lib/db/schema';
 import { DocumentToolCall, DocumentToolResult } from './document';
-import { PencilEditIcon, SparklesIcon, PlayIcon, CodeIcon, BoxIcon, RouteIcon } from './icons';
+import { PencilEditIcon, SparklesIcon, PlayIcon, CodeIcon, BoxIcon, RouteIcon, WarningIcon } from './icons';
 import { Markdown } from './markdown';
 import { MessageActions } from './message-actions';
 import { PreviewAttachment } from './preview-attachment';
 import { Weather } from './weather';
 import equal from 'fast-deep-equal';
-import { cn, sanitizeText } from '@/lib/utils';
-import { Button } from './ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
+import { cn, sanitizeText, generateUUID, fetcher } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { MessageEditor } from './message-editor';
 import { DocumentPreview } from './document-preview';
 import { MessageReasoning } from './message-reasoning';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import { useArtifact } from '@/hooks/use-artifact';
+import { useChat } from '@ai-sdk/react';
+import useSWR from 'swr';
+import { LoaderIcon } from './icons';
 
 // Agent Builder Loading Component
-const AgentBuilderLoading = memo(({ args }: { args: any }) => {
+const AgentBuilderLoading = memo(({ args, message }: { args: any; message?: UIMessage }) => {
   const { metadata } = useArtifact();
   
-  // Define the steps that match the agent builder process
   const steps = [
-    {
-      id: 'overview',
-      label: 'Analyzing requirements and planning architecture...',
-      icon: '🎯',
-      color: 'blue'
-    },
-    {
-      id: 'models',
-      label: 'Creating database models and relationships...',
-      icon: '🗄️',
-      color: 'green'
-    },
-    {
-      id: 'enums',
-      label: 'Defining enumerations and controlled vocabularies...',
-      icon: '🔢',
-      color: 'purple'
-    },
-    {
-      id: 'actions',
-      label: 'Building intelligent workflows and automation...',
-      icon: '⚡',
-      color: 'orange'
-    },
-    {
-      id: 'integration',
-      label: 'Integrating components and finalizing system...',
-      icon: '🔧',
-      color: 'indigo'
-    }
+    { id: 'prompt-understanding', label: 'Understanding Requirements' },
+    { id: 'granular-analysis', label: 'Detailed Planning' },
+    { id: 'analysis', label: 'AI Analysis & Decision Making' },
+    { id: 'change-analysis', label: 'Change Impact Analysis' },
+    { id: 'overview', label: 'System Architecture' },
+    { id: 'models', label: 'Database Models Creation' },
+    { id: 'actions', label: 'Automated Actions Setup' },
+    { id: 'schedules', label: 'Scheduling & Timing' },
+    { id: 'integration', label: 'System Integration' }
   ];
 
-  // Get step status from metadata
+  // Get step status from metadata or tool call parts
   const getStepStatus = (stepId: string) => {
-    // If no metadata or stepProgress exists, show initial state
-    if (!metadata?.stepProgress) {
-      return 'pending';
+    // Check for step data in message parts (for streaming state)
+    if (message?.parts) {
+      for (const part of message.parts) {
+        if (part.type === 'tool-invocation' && part.toolInvocation?.toolName === 'agentBuilder') {
+          // Check if this part has step data
+          const content = part.toolInvocation.state === 'call' ? part.toolInvocation.args : 
+                          part.toolInvocation.state === 'result' ? part.toolInvocation.result : null;
+          
+          if (content && typeof content === 'object') {
+            // Check for step progress in the content
+            if (content.stepProgress && content.stepProgress[stepId]) {
+              return content.stepProgress[stepId];
+            }
+            if (content.currentStep === stepId) {
+              return 'processing';
+            }
+          }
+        }
+      }
     }
     
-    const status = metadata.stepProgress[stepId as keyof typeof metadata.stepProgress];
-    if (status === 'complete') return 'complete';
-    if (status === 'processing') return 'processing';
-    if (status === 'error') return 'error';
+    // Check metadata (real-time streaming state)
+    if (metadata?.stepProgress && metadata.stepProgress[stepId]) {
+      return metadata.stepProgress[stepId];
+    }
     
-    // Check if this is the current step
-    if (metadata.currentStep === stepId) return 'processing';
+    if (metadata?.currentStep === stepId) {
+      return 'processing';
+    }
     
+    // Determine based on step order
+    const stepOrder = ['prompt-understanding', 'granular-analysis', 'analysis', 'change-analysis', 'overview', 'models', 'actions', 'schedules', 'integration'];
+    const currentStepIndex = metadata?.currentStep ? stepOrder.indexOf(metadata.currentStep) : -1;
+    const thisStepIndex = stepOrder.indexOf(stepId);
+    
+    // If we have explicit metadata or are actively streaming
+    if (metadata?.currentStep || metadata?.stepProgress) {
+      if (currentStepIndex >= 0 && thisStepIndex < currentStepIndex) {
+        return 'complete';
+      }
+      if (currentStepIndex >= 0 && thisStepIndex > currentStepIndex) {
+        return 'pending';
+      }
+    }
+    
+    // Default to pending for initial state
     return 'pending';
   };
 
-  // Get step message from metadata
+  // Get step message from metadata or tool call data
   const getStepMessage = (stepId: string) => {
-    const customMessage = metadata?.stepMessages?.[stepId];
-    if (customMessage) return customMessage;
+    // Check metadata first (real-time)
+    if (metadata?.stepMessages && metadata.stepMessages[stepId]) {
+      return metadata.stepMessages[stepId];
+    }
     
-    const step = steps.find(s => s.id === stepId);
-    return step?.label || '';
+    // Check message parts for stored step data
+    if (message?.parts) {
+      for (const part of message.parts) {
+        if (part.type === 'tool-invocation' && part.toolInvocation?.toolName === 'agentBuilder') {
+          const content = part.toolInvocation.state === 'call' ? part.toolInvocation.args : 
+                          part.toolInvocation.state === 'result' ? part.toolInvocation.result : null;
+          
+          if (content && typeof content === 'object' && content.stepMessages && content.stepMessages[stepId]) {
+            return content.stepMessages[stepId];
+          }
+        }
+      }
+    }
+    
+    return '';
   };
+
+  // Determine if we're actively processing
+  const isProcessing = metadata?.currentStep || (metadata?.stepProgress && Object.keys(metadata.stepProgress).length > 0);
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -93,13 +126,21 @@ const AgentBuilderLoading = memo(({ args }: { args: any }) => {
         <div className="bg-gradient-to-r from-green-900/50 to-green-800/50 p-6 border-b border-green-500/20">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-green-500/10 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-green-500/20">
-              <div className="animate-spin">
-                <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full" />
-              </div>
+              {isProcessing ? (
+                <div className="animate-spin">
+                  <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full" />
+                </div>
+              ) : (
+                <span className="text-green-400 text-xl">🤖</span>
+              )}
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-xl font-semibold text-green-100">Building AI Agent</h3>
-              <p className="text-green-300/70 text-sm">Creating your intelligent automation system...</p>
+              <h3 className="text-xl font-semibold text-green-100">
+                {isProcessing ? 'Building AI Agent' : 'AI Agent Builder'}
+              </h3>
+              <p className="text-green-300/70 text-sm">
+                {isProcessing ? 'Creating your intelligent automation system...' : 'Ready to build your agent system'}
+              </p>
             </div>
           </div>
         </div>
@@ -183,98 +224,65 @@ const AgentBuilderLoading = memo(({ args }: { args: any }) => {
 AgentBuilderLoading.displayName = 'AgentBuilderLoading';
 
 // Agent Summary Component
-const AgentSummary = memo(({ result, isReadonly }: { result: any; isReadonly: boolean }) => {
+const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isReadonly: boolean; chatId: string }) => {
   const { setArtifact, setMetadata } = useArtifact();
   
-  const openAgentBuilder = () => {
-    const agentData = result.data;
-    
-    console.log('🚀 Opening agent builder with data:', JSON.stringify(agentData, null, 2));
-    
-    // Ensure the agent data has all required fields with proper structure
-    const normalizedAgentData = {
-      name: agentData?.name || 'AI Agent',
-      description: agentData?.description || '',
-      domain: agentData?.domain || '',
-      models: agentData?.models || [],
-      enums: agentData?.enums || [],
-      actions: agentData?.actions || [],
-      createdAt: agentData?.createdAt || new Date().toISOString(),
-    };
-    
-    console.log('📊 Normalized agent data:', JSON.stringify(normalizedAgentData, null, 2));
-    console.log('📈 Data stats:', {
-      modelsCount: normalizedAgentData.models.length,
-      enumsCount: normalizedAgentData.enums.length,
-      actionsCount: normalizedAgentData.actions.length,
-      totalFields: normalizedAgentData.models.reduce((sum: number, model: any) => sum + (model.fields?.length || 0), 0)
-    });
-    
-    const contentString = JSON.stringify(normalizedAgentData, null, 2);
-    console.log('💾 Content string for artifact:', contentString);
-    
-    // Set artifact with proper data structure
-    setArtifact({
-      documentId: `agent-${Date.now()}`,
-      content: contentString,
-      kind: 'agent',
-      title: normalizedAgentData.name,
-      status: 'idle',
-      isVisible: true,
-      boundingBox: {
-        top: 0,
-        left: 0,
-        width: 0,
-        height: 0,
-      },
-    });
+  // Fetch the document to get the latest agent data
+  const { data: documents, isLoading: isDocumentsFetching, error } = useSWR<Array<Document>>(
+    result?.id ? `/api/document?id=${result.id}` : null,
+    fetcher
+  );
 
-    // Set metadata to sync with agent builder state
-    setMetadata({
-      selectedTab: 'models',
-      editingModel: null,
-      editingEnum: null,
-      editingAction: null,
-      currentStep: 'complete',
-      stepProgress: {
-        overview: 'complete',
-        models: 'complete',
-        enums: 'complete',
-        actions: 'complete',
-      },
-      stepMessages: {
-        overview: `System overview complete: ${normalizedAgentData.name}`,
-        models: `Database models created: ${normalizedAgentData.models.length} entities`,
-        enums: `Enumerations defined: ${normalizedAgentData.enums.length} vocabularies`,
-        actions: `Automated actions created: ${normalizedAgentData.actions.length} workflows`,
-      }
-    });
-    
-    console.log('✅ Agent builder setup complete');
+  // Parse agent data from document content
+  const agentData = useMemo(() => {
+    const content = documents?.[0]?.content;
+    if (!content) return null;
+    try {
+      return JSON.parse(content);
+    } catch (e) {
+      console.error('Failed to parse agent data:', e);
+      return null;
+    }
+  }, [documents]);
+  
+  const openAgentBuilder = () => {
+    if (agentData && result?.id) {
+      setArtifact({
+        documentId: result.id,
+        title: agentData.name || result.title || 'Agent',
+        kind: 'agent',
+        content: documents?.[0]?.content || '',
+        isVisible: true,
+        status: 'idle',
+        boundingBox: {
+          top: 0,
+          left: 0,
+          width: 0,
+          height: 0,
+        },
+      });
+    }
   };
 
-  const agentData = result.data;
-  const isSuccess = result.success;
-
-  if (!agentData) {
+  if (isDocumentsFetching) {
     return (
-      <div className="w-full max-w-2xl mx-auto">
-        <div className="bg-black border border-red-500/30 rounded-2xl p-6 shadow-2xl shadow-red-500/10">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 bg-red-500/20 rounded-xl flex items-center justify-center flex-shrink-0 border border-red-500/30">
-              <span className="text-red-400 text-lg">⚠️</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-red-200 mb-2 font-mono">AGENT CREATION FAILED</h3>
-              <p className="text-red-300/80 text-sm font-mono">
-                {result.message || 'Failed to create the agent. Please try again.'}
-              </p>
-            </div>
-          </div>
-        </div>
+      <div className="flex items-center gap-2 p-4 text-muted-foreground">
+        <LoaderIcon size={16} />
+        Loading agent data...
       </div>
     );
   }
+
+  if (error || !agentData) {
+    return (
+      <div className="flex items-center gap-2 p-4 text-muted-foreground">
+        <WarningIcon size={16} />
+        Failed to load agent data
+      </div>
+    );
+  }
+
+  const isSuccess = !!agentData; // Consider it success if we have valid agent data
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -322,20 +330,20 @@ const AgentSummary = memo(({ result, isReadonly }: { result: any; isReadonly: bo
             <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
               <div className="w-8 h-8 bg-green-500/20 rounded-lg mx-auto mb-2 flex items-center justify-center border border-green-500/30">
                 <div className="text-green-400">
-                  <RouteIcon size={16} />
-                </div>
-              </div>
-              <div className="text-2xl font-bold text-green-400 font-mono">{agentData.enums?.length || 0}</div>
-              <div className="text-xs text-green-300 font-mono">ENUMS</div>
-            </div>
-            <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
-              <div className="w-8 h-8 bg-green-500/20 rounded-lg mx-auto mb-2 flex items-center justify-center border border-green-500/30">
-                <div className="text-green-400">
                   <PlayIcon size={16} />
                 </div>
               </div>
               <div className="text-2xl font-bold text-green-400 font-mono">{agentData.actions?.length || 0}</div>
               <div className="text-xs text-green-300 font-mono">ACTIONS</div>
+            </div>
+            <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
+              <div className="w-8 h-8 bg-green-500/20 rounded-lg mx-auto mb-2 flex items-center justify-center border border-green-500/30">
+                <div className="text-green-400">
+                  <RouteIcon size={16} />
+                </div>
+              </div>
+              <div className="text-2xl font-bold text-green-400 font-mono">{agentData.schedules?.length || 0}</div>
+              <div className="text-xs text-green-300 font-mono">SCHEDULES</div>
             </div>
           </div>
 
@@ -347,15 +355,7 @@ const AgentSummary = memo(({ result, isReadonly }: { result: any; isReadonly: bo
                 <div className="flex items-center gap-2 text-sm">
                   <div className="w-2 h-2 bg-green-400 rounded-full flex-shrink-0 shadow-sm shadow-green-400/50" />
                   <span className="text-green-200/80 font-mono">
-                    <strong className="text-green-100">{agentData.models.length}</strong> database models with relationships
-                  </span>
-                </div>
-              )}
-              {agentData.enums?.length > 0 && (
-                <div className="flex items-center gap-2 text-sm">
-                  <div className="w-2 h-2 bg-green-400 rounded-full flex-shrink-0 shadow-sm shadow-green-400/50" />
-                  <span className="text-green-200/80 font-mono">
-                    <strong className="text-green-100">{agentData.enums.length}</strong> controlled vocabularies
+                    <strong className="text-green-100">{agentData.models.length}</strong> data models
                   </span>
                 </div>
               )}
@@ -429,9 +429,9 @@ const AgentSummary = memo(({ result, isReadonly }: { result: any; isReadonly: bo
           )}
 
           {/* Success Message */}
-          {isSuccess && result.message && (
+          {isSuccess && result.content && (
             <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
-              <p className="text-green-300 text-sm font-mono">{result.message}</p>
+              <p className="text-green-300 text-sm font-mono">{result.content}</p>
             </div>
           )}
 
@@ -635,11 +635,7 @@ const PurePreviewMessage = ({
                           isReadonly={isReadonly}
                         />
                       ) : toolName === 'agentBuilder' ? (
-                        <AgentBuilderLoading args={args} />
-                      ) : toolName === 'databaseBuilder' ? (
-                        <AgentBuilderLoading args={args} />
-                      ) : toolName === 'actionBuilder' ? (
-                        <AgentBuilderLoading args={args} />
+                        <AgentBuilderLoading args={args} message={message} />
                       ) : null}
                     </div>
                   );
@@ -670,11 +666,7 @@ const PurePreviewMessage = ({
                           isReadonly={isReadonly}
                         />
                       ) : toolName === 'agentBuilder' ? (
-                        <AgentSummary result={result} isReadonly={isReadonly} />
-                      ) : toolName === 'databaseBuilder' ? (
-                        <AgentSummary result={result} isReadonly={isReadonly} />
-                      ) : toolName === 'actionBuilder' ? (
-                        <AgentSummary result={result} isReadonly={isReadonly} />
+                        <AgentSummary result={result} isReadonly={isReadonly} chatId={chatId} />
                       ) : (
                         <pre>{JSON.stringify(result, null, 2)}</pre>
                       )}

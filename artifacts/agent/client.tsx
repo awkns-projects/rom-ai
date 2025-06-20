@@ -23,6 +23,10 @@ import {
   ClockRewind,
   UndoIcon,
   RedoIcon,
+  TrashIcon,
+  BoxIcon,
+  SparklesIcon,
+  RouteIcon,
 } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -33,9 +37,23 @@ import { useArtifact } from '@/hooks/use-artifact';
 interface AgentModel {
   id: string;
   name: string;
+  emoji?: string; // AI-generated emoji representing the model
+  description?: string; // AI-generated description for preview
+  hasPublishedField?: boolean; // Whether this model has a published field
   idField: string;
   displayFields: string[];
   fields: AgentField[];
+  enums: AgentEnum[];
+  forms?: AgentForm[]; // Forms for grouping fields during create/update
+  records?: ModelRecord[]; // Store actual data records
+}
+
+interface ModelRecord {
+  id: string;
+  modelId: string;
+  data: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface AgentField {
@@ -68,15 +86,12 @@ interface AgentEnumField {
 }
 
 interface AgentAction {
+  id: string;
   name: string;
+  emoji?: string; // AI-generated emoji representing the action
   description: string;
   type: 'Create' | 'Update';
-  schedule?: {
-    enabled: boolean;
-    pattern: string;
-    timezone?: string;
-    active?: boolean;
-  };
+  role: 'admin' | 'member';
   dataSource: {
     type: 'custom' | 'database';
     customFunction?: {
@@ -132,26 +147,100 @@ interface EnvVar {
 interface AgentData {
   name: string;
   description: string;
-  domain?: string;
+  domain: string;
   models: AgentModel[];
-  enums: AgentEnum[];
   actions: AgentAction[];
+  schedules: AgentSchedule[];
   createdAt: string;
 }
 
 interface AgentArtifactMetadata {
-  selectedTab: 'models' | 'enums' | 'actions';
+  selectedTab: 'models' | 'actions' | 'schedules';
   editingModel: string | null;
-  editingEnum: string | null;
   editingAction: string | null;
+  editingSchedule: string | null;
+  viewingModelData: string | null; // For viewing/editing model records
+  editingRecord: string | null; // For editing specific record
   currentStep?: string;
   stepProgress?: {
+    'prompt-understanding'?: 'processing' | 'complete';
+    'granular-analysis'?: 'processing' | 'complete';
+    analysis?: 'processing' | 'complete';
+    'change-analysis'?: 'processing' | 'complete';
     overview?: 'processing' | 'complete';
     models?: 'processing' | 'complete';
-    enums?: 'processing' | 'complete';
     actions?: 'processing' | 'complete';
+    schedules?: 'processing' | 'complete';
+    integration?: 'processing' | 'complete';
   };
   stepMessages?: Record<string, string>;
+  dataManagement?: {
+    viewingModelId?: string;
+    editingRecordId?: string | null;
+    isAddingRecord?: boolean;
+  } | null;
+}
+
+// Interface for recurring scheduled tasks
+interface AgentSchedule {
+  id: string;
+  name: string;
+  emoji?: string; // AI-generated emoji representing the schedule
+  description: string;
+  type: 'Create' | 'Update';
+  role: 'admin' | 'member';
+  interval: {
+    pattern: string;
+    timezone?: string;
+    active?: boolean;
+  };
+  dataSource: {
+    type: 'custom' | 'database';
+    customFunction?: {
+      code: string;
+      envVars?: EnvVar[];
+    };
+    database?: {
+      models: DatabaseModel[];
+    };
+  };
+  execute: {
+    type: 'code' | 'prompt';
+    code?: {
+      script: string;
+      envVars?: EnvVar[];
+    };
+    prompt?: {
+      template: string; 
+      model?: string;
+      temperature?: number;
+      maxTokens?: number;
+    };
+  };
+  results: {
+    actionType: 'Create' | 'Update';
+    model: string;
+    identifierIds?: string[];
+    fields?: Record<string, any>;
+    fieldsToUpdate?: Record<string, any>;
+  };
+}
+
+interface AgentForm {
+  id: string;
+  name: string;
+  title: string;
+  description?: string;
+  fields: AgentFormField[];
+  order: number;
+}
+
+interface AgentFormField {
+  id: string;
+  fieldId: string; // Reference to AgentField.id
+  required?: boolean; // Override field's required setting for this form
+  hidden?: boolean; // Hide field in this form
+  order: number;
 }
 
 const FIELD_TYPES = [
@@ -177,7 +266,9 @@ function generateNewId(type: string, existingEntities: any[]): string {
     'field': 'fld',
     'enum': 'enm',
     'enumField': 'enf',
-    'action': 'act'
+    'action': 'act',
+    'form': 'frm',
+    'formField': 'ff'
   };
   
   const prefix = prefixMap[type] || type.charAt(0);
@@ -193,64 +284,152 @@ function generateNewId(type: string, existingEntities: any[]): string {
   return `${prefix}${highestId + 1}`;
 }
 
+// Helper function to determine step status consistently across all progress indicators
+const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>, agentData?: any) => {
+  // If we have explicit step progress for this step, use it
+  if (stepProgress && stepProgress[stepId as keyof typeof stepProgress]) {
+    return stepProgress[stepId as keyof typeof stepProgress];
+  }
+
+  // If this is the current step, it's processing
+  if (currentStep === stepId) {
+    return 'processing';
+  }
+
+  // For schedules, check if they exist
+  if (stepId === 'schedules') {
+    return agentData?.schedules && agentData.schedules.length > 0 ? 'complete' : 'pending';
+  }
+  
+  // For models, check if they exist 
+  if (stepId === 'models') {
+    return agentData?.models && agentData.models.length > 0 ? 'complete' : 'pending';
+  }
+  
+  // For actions, check if they exist
+  if (stepId === 'actions') {
+    return agentData?.actions && agentData.actions.length > 0 ? 'complete' : 'pending';
+  }
+  
+  // For overview, check if basic info exists
+  if (stepId === 'overview') {
+    return agentData?.name && agentData?.description && agentData?.domain ? 'complete' : 'pending';
+  }
+  
+  // For integration, check if all components are complete
+  if (stepId === 'integration') {
+    const hasBasicInfo = agentData?.name && agentData?.description && agentData?.domain;
+    const hasModels = agentData?.models && agentData.models.length > 0;
+    const hasActions = agentData?.actions && agentData.actions.length > 0;
+    return hasBasicInfo && hasModels && hasActions ? 'complete' : 'pending';
+  }
+  
+  // For early analysis steps, we rely on stepProgress or currentStep
+  return 'pending';
+};
+
+// Helper function to check if the agent building process is complete
+const isAgentBuildingComplete = (currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>, agentData?: any) => {
+  return currentStep === 'complete' || currentStep === 'integration' && stepProgress?.integration === 'complete';
+};
+
+// Helper function to calculate progress percentage consistently
+const calculateProgressPercentage = (currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>, agentData?: any) => {
+  const steps = ['prompt-understanding', 'granular-analysis', 'analysis', 'change-analysis', 'overview', 'models', 'actions', 'schedules', 'integration'];
+  let completedSteps = 0;
+  
+  steps.forEach(step => {
+    const status = getStepStatus(step, currentStep, stepProgress, agentData);
+    if (status === 'complete') completedSteps++;
+  });
+  
+  // If currently processing a step, add partial progress
+  if (currentStep && currentStep !== 'complete') {
+    const currentStepIndex = steps.indexOf(currentStep);
+    if (currentStepIndex >= 0) {
+      completedSteps += 0.5; // 50% progress for current processing step
+    }
+  }
+  
+  return Math.min(100, (completedSteps / steps.length) * 100);
+};
+
 // Progress Indicator Component
-const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {} }: { 
+const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {}, stepProgress }: { 
   currentStep?: string, 
   agentData: any,
-  stepMessages?: Record<string, string>
+  stepMessages?: Record<string, string>,
+  stepProgress?: {
+    'prompt-understanding'?: 'processing' | 'complete';
+    'granular-analysis'?: 'processing' | 'complete';
+    analysis?: 'processing' | 'complete';
+    'change-analysis'?: 'processing' | 'complete';
+    overview?: 'processing' | 'complete';
+    models?: 'processing' | 'complete';
+    actions?: 'processing' | 'complete';
+    schedules?: 'processing' | 'complete';
+    integration?: 'processing' | 'complete';
+  }
 }) => {
   const steps = [
     { 
+      id: 'prompt-understanding', 
+      title: 'Understanding Requirements',
+      description: 'Analyzing your request in detail',
+      icon: '🧠'
+    },
+    { 
+      id: 'granular-analysis', 
+      title: 'Detailed Planning',
+      description: 'Creating execution strategy',
+      icon: '🔍'
+    },
+    { 
+      id: 'analysis', 
+      title: 'AI Decision Making',
+      description: 'Determining optimal approach',
+      icon: '🤖'
+    },
+    { 
+      id: 'change-analysis', 
+      title: 'Change Impact Analysis',
+      description: 'Analyzing modifications needed',
+      icon: '📋'
+    },
+    { 
       id: 'overview', 
-      label: 'Overview & Planning',
-      shortLabel: 'Overview',
-      description: 'Analyzing requirements and planning system architecture',
-      color: 'blue',
-      icon: '🎯'
+      title: 'System Architecture',
+      description: 'Designing system overview',
+      icon: '🏗️'
     },
     { 
       id: 'models', 
-      label: 'Database Models',
-      shortLabel: 'Models', 
-      description: 'Creating database entities and field definitions',
-      color: 'green',
-      icon: '🗄️'
-    },
-    { 
-      id: 'enums', 
-      label: 'Enumerations',
-      shortLabel: 'Enums',
-      description: 'Defining controlled vocabularies and status types',
-      color: 'purple',
-      icon: '🔢'
+      title: 'Data Models',
+      description: 'Defining data structures',
+      icon: '📊'
     },
     { 
       id: 'actions', 
-      label: 'Automated Actions',
-      shortLabel: 'Actions',
-      description: 'Building workflows and business automation logic',
-      color: 'orange',
+      title: 'Automated Actions',
+      description: 'Creating workflow automations',
       icon: '⚡'
+    },
+    {
+      id: 'schedules',
+      title: 'Schedules & Timing',
+      description: 'Automated execution timing',
+      icon: '⏰'
+    },
+    {
+      id: 'integration',
+      title: 'System Integration',
+      description: 'Finalizing and integrating',
+      icon: '🔧'
     }
   ];
 
-  const getStepStatus = (stepId: string) => {
-    switch (stepId) {
-      case 'overview':
-        return agentData?.name ? 'complete' : (currentStep === 'overview' ? 'processing' : 'inactive');
-      case 'models':
-        return agentData?.models?.length > 0 ? 'complete' : (currentStep === 'models' ? 'processing' : 'inactive');
-      case 'enums':
-        return agentData?.enums?.length > 0 ? 'complete' : (currentStep === 'enums' ? 'processing' : 'inactive');
-      case 'actions':
-        return agentData?.actions?.length > 0 ? 'complete' : (currentStep === 'actions' ? 'processing' : 'inactive');
-      default:
-        return 'inactive';
-    }
-  };
-
-  const completedSteps = steps.filter(step => getStepStatus(step.id) === 'complete').length;
-  const progressPercentage = (completedSteps / steps.length) * 100;
+  const completedSteps = steps.filter(step => getStepStatus(step.id, currentStep, stepProgress, agentData) === 'complete').length;
+  const progressPercentage = calculateProgressPercentage(currentStep, stepProgress, agentData);
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
@@ -261,12 +440,19 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {} 
           <p className="text-sm text-gray-600 mt-1">
             {completedSteps === steps.length 
               ? '🎉 Agent successfully built!' 
-              : `Step ${completedSteps + 1} of ${steps.length} - ${steps.find(s => s.id === currentStep)?.label || 'Processing'}`
+              : (() => {
+                  // Find the current active step or the next pending step
+                  const activeStep = steps.find(s => getStepStatus(s.id, currentStep, stepProgress, agentData) === 'processing');
+                  const nextPendingStep = steps.find(s => getStepStatus(s.id, currentStep, stepProgress, agentData) === 'pending');
+                  const currentStepLabel = activeStep?.title || nextPendingStep?.title || 'Processing';
+                  
+                  return `Step ${completedSteps + 1} of ${steps.length} - ${currentStepLabel}`;
+                })()
             }
           </p>
         </div>
         <div className="text-right">
-          <div className="text-2xl font-bold text-blue-600">{Math.round(progressPercentage)}%</div>
+          <div className="text-2xl font-bold text-blue-600">{Math.round(calculateProgressPercentage(currentStep, stepProgress, agentData))}%</div>
           <div className="text-xs text-gray-500">Complete</div>
         </div>
       </div>
@@ -284,7 +470,7 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {} 
       {/* Steps */}
       <div className="space-y-4">
         {steps.map((step, index) => {
-          const status = getStepStatus(step.id);
+          const status = getStepStatus(step.id, currentStep, stepProgress, agentData);
           const isActive = currentStep === step.id;
           const message = stepMessages[step.id];
           
@@ -317,19 +503,8 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {} 
                     status === 'complete' ? 'text-green-900' : 
                     status === 'processing' ? 'text-blue-900' : 'text-gray-700'
                   }`}>
-                    {step.label}
+                    {step.title}
                   </h4>
-                  
-                  {/* Status Badge */}
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    status === 'complete' 
-                      ? 'bg-green-100 text-green-800' 
-                      : status === 'processing' 
-                        ? 'bg-blue-100 text-blue-800' 
-                        : 'bg-gray-100 text-gray-600'
-                  }`}>
-                    {status === 'complete' ? 'Complete' : status === 'processing' ? 'Processing' : 'Pending'}
-                  </span>
                 </div>
 
                 {/* Step Description/Message */}
@@ -365,14 +540,14 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {} 
                         {agentData.models.length} models created
                       </span>
                     )}
-                    {step.id === 'enums' && agentData.enums && (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
-                        {agentData.enums.length} enumerations defined
-                      </span>
-                    )}
                     {step.id === 'actions' && agentData.actions && (
                       <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
                         {agentData.actions.length} actions automated
+                      </span>
+                    )}
+                    {step.id === 'schedules' && agentData.schedules && (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
+                        {agentData.schedules.length} schedules configured
                       </span>
                     )}
                   </div>
@@ -393,7 +568,7 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {} 
             <div>
               <h4 className="font-semibold text-green-900">Agent Successfully Built!</h4>
               <p className="text-sm text-green-700 mt-1">
-                Your <strong>{agentData.name}</strong> is ready with {agentData.models?.length || 0} models, {agentData.enums?.length || 0} enums, and {agentData.actions?.length || 0} automated actions.
+                Your <strong>{agentData.name}</strong> is ready with {agentData.models?.length || 0} models and {agentData.actions?.length || 0} automated actions.
               </p>
             </div>
           </div>
@@ -409,13 +584,17 @@ const ModelEditor = memo(({
   onUpdate, 
   onDelete,
   allModels,
-  allEnums
+  allEnums,
+  updateModel,
+  allActions
 }: { 
   model: AgentModel;
   onUpdate: (model: AgentModel) => void;
   onDelete: () => void;
   allModels: AgentModel[];
   allEnums: AgentEnum[];
+  updateModel: (model: AgentModel) => void;
+  allActions: AgentAction[];
 }) => {
   const [editingField, setEditingField] = useState<string | null>(null);
 
@@ -454,27 +633,44 @@ const ModelEditor = memo(({
   }, [model, onUpdate]);
 
   const deleteField = useCallback((fieldId: string) => {
+    const field = model.fields.find(f => f.id === fieldId);
+    const fieldName = field?.name || 'this field';
+    
+    if (window.confirm(`Are you sure you want to delete field "${fieldName}"? This action cannot be undone.`)) {
     onUpdate({
       ...model,
       fields: model.fields.filter(field => field.id !== fieldId)
     });
+    }
   }, [model, onUpdate]);
 
   return (
     <div className="space-y-6">
       {/* Model Basic Info */}
       <div className="p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center border border-green-500/30">
-            <div className="text-green-400 text-lg">📊</div>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center border border-green-500/30">
+              <span className="text-green-400 text-xl">🗃️</span>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-green-200 font-mono">Model Configuration</h3>
+              <p className="text-green-400 text-sm font-mono">Define your database entity structure</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-xl font-bold text-green-200 font-mono">Model Configuration</h3>
-            <p className="text-green-400 text-sm font-mono">Define your database entity structure</p>
-          </div>
+          <Button
+            onClick={onDelete}
+            variant="destructive"
+            className="px-4 py-2"
+          >
+            <div className="flex items-center gap-2">
+              <CrossIcon size={16} />
+              <span>Remove Model</span>
+            </div>
+          </Button>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-2">
             <Label htmlFor={`model-name-${model.id}`} className="text-green-300 font-mono font-medium">Model Name</Label>
             <Input
@@ -495,6 +691,33 @@ const ModelEditor = memo(({
               className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
             />
           </div>
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Visibility</Label>
+            <label className="flex items-center space-x-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 transition-colors cursor-pointer">
+              <input
+                type="checkbox"
+                checked={model.hasPublishedField || false}
+                onChange={(e) => onUpdate({ ...model, hasPublishedField: e.target.checked })}
+                className="w-4 h-4 text-green-400 bg-black/50 border-green-500/30 rounded focus:ring-green-400/20"
+              />
+              <span className="text-green-200 text-sm font-mono font-medium">Published</span>
+            </label>
+          </div>
+        </div>
+        
+        <div className="mt-6 space-y-2">
+          <Label className="text-green-300 font-mono font-medium">Description</Label>
+          <Input
+            value={model.description || ''}
+            onChange={(e) => onUpdate({ ...model, description: e.target.value })}
+            placeholder="Model description (optional)"
+            className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+          />
+          {model.description && (
+            <p className="text-green-400 text-sm font-mono italic">
+              {model.description}
+            </p>
+          )}
         </div>
       </div>
 
@@ -691,7 +914,7 @@ const ModelEditor = memo(({
                 >
                   <div className="flex items-center gap-4">
                     <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center border border-green-500/30 group-hover:bg-green-500/30 transition-colors">
-                      <span className="text-green-400 text-sm">🔧</span>
+                      <span className="text-green-400 text-sm">📋</span>
                     </div>
                     <div>
                       <div className="font-medium text-green-200 font-mono group-hover:text-green-100 transition-colors">
@@ -725,7 +948,7 @@ const ModelEditor = memo(({
           {model.fields.length === 0 && (
             <div className="text-center py-8">
               <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-green-800/30 flex items-center justify-center border border-green-500/20">
-                <div className="text-2xl opacity-60">🔧</div>
+                <div className="text-2xl opacity-60">📋</div>
               </div>
               <h4 className="text-lg font-semibold text-green-300 mb-2 font-mono">No Fields Defined</h4>
               <p className="text-green-500 text-sm font-mono mb-4">Add fields to define your model structure</p>
@@ -736,6 +959,208 @@ const ModelEditor = memo(({
                 <div className="flex items-center gap-2">
                   <PlusIcon size={16} />
                   <span>Add First Field</span>
+                </div>
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Forms Section */}
+      <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+              <span className="text-blue-400 text-xl">📝</span>
+            </div>
+            <div>
+              <h4 className="text-lg font-semibold text-green-200 font-mono">Forms Configuration</h4>
+              <p className="text-green-400 text-sm font-mono">Organize fields into forms for create/update operations</p>
+            </div>
+            <div className="px-3 py-1 rounded-lg bg-blue-800/50 border border-blue-700">
+              <span className="text-blue-300 text-xs font-medium font-mono">{model.forms?.length || 0} forms</span>
+            </div>
+          </div>
+          <Button 
+            onClick={() => {
+              const newForm: AgentForm = {
+                id: generateNewId('form', model.forms || []),
+                name: `form_${(model.forms?.length || 0) + 1}`,
+                title: `Form ${(model.forms?.length || 0) + 1}`,
+                description: '',
+                fields: model.fields.map((field, index) => ({
+                  id: generateNewId('formField', []),
+                  fieldId: field.id,
+                  order: index,
+                  required: field.required,
+                  hidden: false
+                })),
+                order: (model.forms?.length || 0) + 1
+              };
+              
+              onUpdate({
+                ...model,
+                forms: [...(model.forms || []), newForm]
+              });
+            }}
+            className="btn-matrix px-4 py-2 text-sm font-mono"
+          >
+            <div className="flex items-center gap-2">
+              <PlusIcon size={16} />
+              <span>Add Form</span>
+            </div>
+          </Button>
+        </div>
+        
+        <div className="space-y-4 max-h-96 overflow-y-auto">
+          {model.forms && model.forms.length > 0 ? (
+            model.forms.map((form) => (
+              <div key={form.id} className="p-4 rounded-xl bg-black/30 border border-blue-500/20 hover:border-blue-500/40 transition-colors">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-green-300 font-mono font-medium">Form Name</Label>
+                      <Input
+                        value={form.name}
+                        onChange={(e) => {
+                          const updatedForms = model.forms!.map(f => 
+                            f.id === form.id ? { ...f, name: e.target.value } : f
+                          );
+                          onUpdate({ ...model, forms: updatedForms });
+                        }}
+                        placeholder="Internal form name"
+                        className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-green-300 font-mono font-medium">Form Title</Label>
+                      <Input
+                        value={form.title}
+                        onChange={(e) => {
+                          const updatedForms = model.forms!.map(f => 
+                            f.id === form.id ? { ...f, title: e.target.value } : f
+                          );
+                          onUpdate({ ...model, forms: updatedForms });
+                        }}
+                        placeholder="Display title"
+                        className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-green-300 font-mono font-medium">Description</Label>
+                    <Input
+                      value={form.description || ''}
+                      onChange={(e) => {
+                        const updatedForms = model.forms!.map(f => 
+                          f.id === form.id ? { ...f, description: e.target.value } : f
+                        );
+                        onUpdate({ ...model, forms: updatedForms });
+                      }}
+                      placeholder="Form description"
+                      className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-green-300 font-mono font-medium">Form Fields</Label>
+                      <span className="text-blue-300 text-xs font-mono">{form.fields.length} fields</span>
+                    </div>
+                    
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {form.fields.map((formField) => {
+                        const modelField = model.fields.find(f => f.id === formField.fieldId);
+                        if (!modelField) return null;
+                        
+                        return (
+                          <div key={`${model.id}-${form.id}-${formField.fieldId}-${formField.id}`} className="flex items-center gap-3 p-3 rounded-lg bg-blue-900/20 border border-blue-500/20">
+                            <div className="flex-1">
+                              <div className="text-green-200 font-mono text-sm">{modelField.name}</div>
+                              <div className="text-green-400 font-mono text-xs">{modelField.type}</div>
+                            </div>
+                            
+                            <label className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                checked={!formField.hidden}
+                                onChange={(e) => {
+                                  const updatedForms = model.forms!.map(f => 
+                                    f.id === form.id ? {
+                                      ...f,
+                                      fields: f.fields.map(ff => 
+                                        ff.id === formField.id && ff.fieldId === formField.fieldId ? { ...ff, hidden: !e.target.checked } : ff
+                                      )
+                                    } : f
+                                  );
+                                  onUpdate({ ...model, forms: updatedForms });
+                                }}
+                                className="w-4 h-4 text-blue-400 bg-black/50 border-blue-500/30 rounded focus:ring-blue-400/20"
+                              />
+                              <span className="text-blue-300 text-xs font-mono">Show</span>
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t border-blue-500/20">
+                    <Button
+                      variant="destructive"
+                      onClick={() => {
+                        if (window.confirm(`Are you sure you want to delete form "${form.title}"?`)) {
+                          const updatedForms = model.forms!.filter(f => f.id !== form.id);
+                          onUpdate({ ...model, forms: updatedForms });
+                        }
+                      }}
+                      className="px-4"
+                    >
+                      <CrossIcon size={16} />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-blue-800/30 flex items-center justify-center border border-blue-500/20">
+                <div className="text-2xl opacity-60">📝</div>
+              </div>
+              <h4 className="text-lg font-semibold text-green-300 mb-2 font-mono">No Forms Configured</h4>
+              <p className="text-green-500 max-w-md mx-auto mb-6 font-mono">
+                Create forms to organize fields for better user experience during create/update operations
+              </p>
+              <Button 
+                onClick={() => {
+                  const tempFormFields: AgentFormField[] = [];
+                  const newForm: AgentForm = {
+                    id: generateNewId('form', []),
+                    name: 'default_form',
+                    title: 'Default Form',
+                    description: 'Main form for creating and editing records',
+                    fields: model.fields.map((field, index) => {
+                      const formField = {
+                        id: generateNewId('formField', tempFormFields),
+                        fieldId: field.id,
+                        order: index,
+                        required: field.required,
+                        hidden: false
+                      };
+                      tempFormFields.push(formField);
+                      return formField;
+                    }),
+                    order: 1
+                  };
+                  
+                  onUpdate({ ...model, forms: [newForm] });
+                }}
+                className="btn-matrix px-4 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <PlusIcon size={16} />
+                  <span>Create First Form</span>
                 </div>
               </Button>
             </div>
@@ -784,10 +1209,15 @@ const EnumEditor = memo(({
   }, [enumItem, onUpdate]);
 
   const deleteField = useCallback((fieldId: string) => {
+    const field = enumItem.fields.find(f => f.id === fieldId);
+    const fieldName = field?.name || 'this field';
+    
+    if (window.confirm(`Are you sure you want to delete field "${fieldName}"? This action cannot be undone.`)) {
     onUpdate({
       ...enumItem,
       fields: enumItem.fields.filter(field => field.id !== fieldId)
     });
+    }
   }, [enumItem, onUpdate]);
 
   return (
@@ -902,7 +1332,9 @@ const EnumEditor = memo(({
                 <div className="text-2xl opacity-60">📝</div>
               </div>
               <h4 className="text-lg font-semibold text-green-300 mb-2 font-mono">No Values Defined</h4>
-              <p className="text-green-500 text-sm font-mono mb-4">Add values to define your enumeration</p>
+              <p className="text-green-500 max-w-md mx-auto mb-6 font-mono">
+                Add values to define your enumeration
+              </p>
               <Button 
                 onClick={addField}
                 className="btn-matrix px-4 py-2"
@@ -938,7 +1370,7 @@ const ActionEditor = memo(({
       <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
-            <div className="text-orange-400 text-lg">⚡</div>
+            <span className="text-orange-400 text-xl">⚡</span>
           </div>
           <div>
             <h3 className="text-xl font-bold text-green-200 font-mono">Action Configuration</h3>
@@ -987,47 +1419,33 @@ const ActionEditor = memo(({
         </div>
       </div>
 
-      {/* Schedule Configuration */}
+      {/* Role Configuration */}
       <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-1 h-6 bg-gradient-to-b from-orange-500 to-red-500 rounded-full" />
-          <h4 className="text-lg font-semibold text-green-200 font-mono">Schedule Configuration</h4>
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Role Configuration</h4>
         </div>
         
         <div className="space-y-4">
-          <label className="flex items-center space-x-3 p-4 rounded-lg bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 transition-colors cursor-pointer">
-            <input
-              type="checkbox"
-              checked={action.schedule?.enabled || false}
-              onChange={(e) => onUpdate({
-                ...action,
-                schedule: {
-                  ...action.schedule,
-                  enabled: e.target.checked,
-                  pattern: action.schedule?.pattern || '',
-                  timezone: action.schedule?.timezone || 'UTC',
-                  active: action.schedule?.active || true
-                }
-              })}
-              className="w-4 h-4 text-green-400 bg-black/50 border-green-500/30 rounded focus:ring-green-400/20"
-            />
-            <span className="text-green-200 font-mono font-medium">Enable Scheduling</span>
-          </label>
-          
-          {action.schedule?.enabled && (
             <div className="space-y-2">
-              <Label className="text-green-300 font-mono font-medium">Schedule Pattern</Label>
-              <Input
-                value={action.schedule.pattern}
-                onChange={(e) => onUpdate({
+            <Label className="text-green-300 font-mono font-medium">Access Role</Label>
+            <Select
+              value={action.role}
+              onValueChange={(value: 'admin' | 'member') => onUpdate({
                   ...action,
-                  schedule: { ...action.schedule!, pattern: e.target.value }
-                })}
-                placeholder="e.g., every 5 minutes, daily at 9am, weekly on monday"
-                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
-              />
+                role: value
+              })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="admin" className="text-green-200 focus:bg-green-500/20 font-mono">Admin Only</SelectItem>
+                <SelectItem value="member" className="text-green-200 focus:bg-green-500/20 font-mono">All Members</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-green-500/70 text-sm font-mono">Control who can trigger this action</p>
             </div>
-          )}
         </div>
       </div>
 
@@ -1102,10 +1520,9 @@ const ActionEditor = memo(({
               onValueChange={(value: 'code' | 'prompt') => 
                 onUpdate({
                   ...action,
-                  execute: {
-                    type: value,
-                    ...(value === 'code' ? { code: { script: '' } } : { prompt: { template: '' } })
-                  }
+                  execute: value === 'code' 
+                    ? { type: 'code', code: { script: '' } }
+                    : { type: 'prompt', prompt: { template: '' } }
                 })
               }
             >
@@ -1212,6 +1629,1432 @@ const ActionEditor = memo(({
   );
 });
 
+// Models List Editor Component
+const ModelsListEditor = memo(({ models, onModelsChange, updateMetadata, status }: {
+  models: AgentModel[];
+  onModelsChange: (models: AgentModel[]) => void;
+  updateMetadata: (updates: Partial<AgentArtifactMetadata>) => void;
+  status: 'streaming' | 'idle';
+}) => {
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [isAddingModel, setIsAddingModel] = useState(false);
+
+  // Helper function to check if a model has a published field
+  const hasPublishedField = useCallback((model: AgentModel): boolean => {
+    return model.fields.some(field => field.name === 'published' && field.type === 'Boolean');
+  }, []);
+
+  const addModel = useCallback(() => {
+    const newModel: AgentModel = {
+      id: generateNewId('model', models || []),
+      name: `Model${(models?.length || 0) + 1}`,
+      emoji: '🗃️', // Default emoji, will be auto-generated by AI
+      idField: 'id',
+      displayFields: [],
+      fields: [
+        {
+          id: 'fld1',
+          name: 'id',
+          type: 'String',
+          isId: true,
+          unique: true,
+          list: false,
+          required: true,
+          kind: 'scalar',
+          relationField: false,
+          title: 'ID',
+          sort: false,
+          order: 1
+        },
+        {
+          id: 'fld2',
+          name: 'published',
+          type: 'Boolean',
+          isId: false,
+          unique: false,
+          list: false,
+          required: false,
+          kind: 'scalar',
+          relationField: false,
+          title: 'Published',
+          sort: false,
+          order: 2,
+          defaultValue: 'false'
+        }
+      ],
+      enums: [],
+      hasPublishedField: true
+    };
+    
+    // Add to top of list and set to editing mode
+    onModelsChange([newModel, ...(models || [])]);
+    setEditingModelId(newModel.id);
+  }, [models, onModelsChange]);
+
+  const updateModel = useCallback((updatedModel: AgentModel) => {
+    const updatedModels = models.map(model => 
+      model.id === updatedModel.id ? updatedModel : model
+    );
+    onModelsChange(updatedModels);
+  }, [models, onModelsChange]);
+
+  const deleteModel = useCallback((modelId: string) => {
+    const model = models.find(m => m.id === modelId);
+    const modelName = model?.name || 'this model';
+    
+    if (window.confirm(`Are you sure you want to delete model "${modelName}"? This action cannot be undone and will remove all associated data.`)) {
+      onModelsChange(models.filter(model => model.id !== modelId));
+      if (editingModelId === modelId) {
+        setEditingModelId(null);
+      }
+    }
+  }, [models, onModelsChange, editingModelId]);
+
+  const viewModelData = useCallback((modelId: string) => {
+    console.log('🔍 Data button clicked for modelId:', modelId);
+    updateMetadata({
+      dataManagement: {
+        viewingModelId: modelId,
+        editingRecordId: null,
+        isAddingRecord: false
+      }
+    });
+    console.log('🔍 Called updateMetadata with viewingModelId:', modelId);
+  }, [updateMetadata]);
+
+  const backToModelsList = useCallback(() => {
+    setEditingModelId(null);
+    updateMetadata({ dataManagement: null });
+  }, [updateMetadata]);
+
+  if (editingModelId && models.find(m => m.id === editingModelId)) {
+    const editingModel = models.find(m => m.id === editingModelId)!;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Model: {editingModel.name}</h3>
+          <Button
+            onClick={backToModelsList}
+            className="btn-matrix px-4 py-2"
+          >
+            ← Back to List
+          </Button>
+        </div>
+        <ModelEditor
+          model={editingModel}
+          onUpdate={updateModel}
+          onDelete={() => deleteModel(editingModel.id)}
+          allModels={models}
+          allEnums={editingModel.enums || []}
+          updateModel={updateModel}
+          allActions={[]}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header - Updated to match Schedules style */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Data Models</h3>
+          <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
+            <span className="text-green-300 text-sm font-medium font-mono">{models.length} models</span>
+          </div>
+        </div>
+        <Button 
+          onClick={addModel}
+          disabled={status === 'streaming'}
+          className="btn-matrix px-3 sm:px-4 py-2"
+        >
+          <div className="flex items-center gap-2">
+            <PlusIcon size={16} />
+            <span>Add Model</span>
+          </div>
+        </Button>
+      </div>
+
+      <div className="grid gap-3 sm:gap-4">
+        {models.map((model) => (
+          <div key={model.id} className="p-4 sm:p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm hover:border-green-500/40 transition-colors">
+            {/* Mobile-first layout */}
+            <div className="flex flex-col gap-4">
+              {/* Top section with icon, title, and stats */}
+              <div className="flex items-start gap-3 sm:gap-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-green-500/20 flex items-center justify-center border border-green-500/30 flex-shrink-0">
+                  <span className="text-lg sm:text-xl">{model.emoji || '🗃️'}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{model.name || 'Unnamed Model'}</h4>
+                  {model.description && (
+                    <p className="text-green-300 text-xs sm:text-sm font-mono mt-1 opacity-80 leading-relaxed">
+                      {/* Truncate on mobile for better layout */}
+                      <span className="sm:hidden">
+                        {model.description.length > 60 
+                          ? `${model.description.substring(0, 60)}...` 
+                          : model.description}
+                      </span>
+                      <span className="hidden sm:inline">
+                        {model.description}
+                      </span>
+                    </p>
+                  )}
+                  {/* Stats row - responsive */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-2">
+                    <span className="text-green-400 text-xs sm:text-sm font-mono">
+                      {model.fields.length} fields • {model.enums?.length || 0} enums
+                    </span>
+                    <span className="text-blue-400 text-xs sm:text-sm font-mono">
+                      {model.records?.length || 0} records
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Action buttons - Full width on mobile */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-green-500/10">
+                <Button
+                  onClick={() => setEditingModelId(model.id)}
+                  size="sm"
+                  className="btn-matrix px-3 py-2 text-xs sm:text-sm w-full sm:w-auto flex-1 sm:flex-none"
+                >
+                  <span>Edit Model</span>
+                </Button>
+                <Button
+                  onClick={() => viewModelData(model.id)}
+                  size="sm"
+                  className="btn-matrix px-3 py-2 text-xs sm:text-sm w-full sm:w-auto flex-1 sm:flex-none"
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <span className="text-sm">📊</span>
+                    <span>View Data</span>
+                  </div>
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {models.length === 0 && (
+          <div className="text-center py-8 sm:py-12">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-green-800/30 flex items-center justify-center border border-green-500/20">
+              <span className="text-2xl sm:text-4xl">🗃️</span>
+            </div>
+            <h4 className="text-lg sm:text-xl font-semibold text-green-300 mb-2 font-mono">No Models Defined</h4>
+            <p className="text-green-500 text-sm font-mono mb-6 px-4">Create your first data model to get started</p>
+            <Button 
+              onClick={addModel}
+              disabled={status === 'streaming'}
+              className="btn-matrix px-4 sm:px-6 py-2 sm:py-3 w-full sm:w-auto max-w-xs"
+            >
+              <div className="flex items-center gap-2 justify-center">
+                <PlusIcon size={16} />
+                <span>Create First Model</span>
+              </div>
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// Actions List Editor Component  
+const ActionsListEditor = memo(({ 
+  actions, 
+  updateActions, 
+  editingId, 
+  setEditingId, 
+  addAction,
+  models,
+  status
+}: { 
+  actions: AgentAction[];
+  updateActions: (actions: AgentAction[]) => void;
+  editingId: string | null;
+  setEditingId: (id: string | null) => void;
+  addAction: () => void;
+  models: AgentModel[];
+  status: 'streaming' | 'idle';
+}) => {
+  const updateAction = useCallback((updatedAction: AgentAction) => {
+    updateActions(actions.map(action => 
+      action.id === updatedAction.id ? updatedAction : action
+    ));
+  }, [actions, updateActions]);
+
+  const deleteAction = useCallback((actionId: string) => {
+    const action = actions.find(a => a.id === actionId);
+    const actionName = action?.name || 'this action';
+    
+    if (window.confirm(`Are you sure you want to delete action "${actionName}"? This action cannot be undone.`)) {
+      updateActions(actions.filter(action => action.id !== actionId));
+      if (editingId === actionId) {
+        setEditingId(null);
+      }
+    }
+  }, [actions, updateActions, editingId, setEditingId]);
+
+  if (editingId && actions.find(a => a.id === editingId)) {
+    const editingAction = actions.find(a => a.id === editingId)!;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Action: {editingAction.name}</h3>
+          <Button
+            onClick={() => setEditingId(null)}
+            className="btn-matrix px-4 py-2"
+          >
+            ← Back to List
+          </Button>
+        </div>
+        <ActionEditor
+          action={editingAction}
+          onUpdate={updateAction}
+          onDelete={() => deleteAction(editingAction.id)}
+          allModels={models}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header - Updated to match Schedules style */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Automated Actions</h3>
+          <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
+            <span className="text-green-300 text-sm font-medium font-mono">{actions.length} actions</span>
+          </div>
+        </div>
+        <Button 
+          onClick={addAction}
+          disabled={status === 'streaming'}
+          className="btn-matrix px-3 sm:px-4 py-2"
+        >
+          <div className="flex items-center gap-2">
+            <PlusIcon size={16} />
+            <span>Add Action</span>
+          </div>
+        </Button>
+      </div>
+
+      <div className="grid gap-4">
+        {actions.map((action) => (
+          <div key={action.id} className="p-4 sm:p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm hover:border-blue-500/40 transition-colors">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-500/20 flex items-center justify-center border border-blue-500/30 flex-shrink-0">
+                  <span className="text-lg sm:text-xl">{action.emoji || '⚡'}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{action.name || 'Unnamed Action'}</h4>
+                  <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
+                    {action.type} • {action.role}
+                  </p>
+                  {action.description && (
+                    <p className="text-green-300/80 text-xs sm:text-sm font-mono leading-relaxed">
+                      {action.description.length > 100 
+                        ? `${action.description.substring(0, 100)}...` 
+                        : action.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2 sm:ml-4">
+                <Button
+                  onClick={() => {
+                    console.log('Running action:', action.id);
+                    alert(`Running action: ${action.name}`);
+                  }}
+                  className="btn-matrix px-3 sm:px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 border-green-500/30"
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <span>▶️</span>
+                    <span className="text-xs sm:text-sm">Run</span>
+                  </div>
+                </Button>
+                <Button
+                  onClick={() => setEditingId(action.id)}
+                  className="btn-matrix px-3 sm:px-4 py-2"
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <PencilEditIcon size={14} />
+                    <span className="text-xs sm:text-sm">Edit</span>
+                  </div>
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {actions.length === 0 && (
+          <div className="text-center py-8 sm:py-12">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-blue-800/30 flex items-center justify-center border border-blue-500/20">
+              <span className="text-3xl sm:text-4xl">⚡</span>
+            </div>
+            <h4 className="text-lg sm:text-xl font-semibold text-green-300 mb-2 font-mono">No Actions Defined</h4>
+            <p className="text-green-500 text-sm font-mono mb-4 sm:mb-6 px-4">Create automated actions for your agent</p>
+            <Button 
+              onClick={addAction}
+              disabled={status === 'streaming'}
+              className="btn-matrix px-4 sm:px-6 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <PlusIcon size={16} />
+                <span>Create First Action</span>
+              </div>
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// Schedules List Editor Component
+const SchedulesListEditor = memo(({ 
+  schedules, 
+  updateSchedules, 
+  editingId, 
+  setEditingId, 
+  addSchedule,
+  models,
+  status
+}: { 
+  schedules: AgentSchedule[];
+  updateSchedules: (schedules: AgentSchedule[]) => void;
+  editingId: string | null;
+  setEditingId: (id: string | null) => void;
+  addSchedule: () => void;
+  models: AgentModel[];
+  status: 'streaming' | 'idle';
+}) => {
+  const updateSchedule = useCallback((updatedSchedule: AgentSchedule) => {
+    updateSchedules(schedules.map(schedule => 
+      schedule.id === updatedSchedule.id ? updatedSchedule : schedule
+    ));
+  }, [schedules, updateSchedules]);
+
+  const deleteSchedule = useCallback((scheduleId: string) => {
+    const schedule = schedules.find(s => s.id === scheduleId);
+    const scheduleName = schedule?.name || 'this schedule';
+    
+    if (window.confirm(`Are you sure you want to delete schedule "${scheduleName}"? This action cannot be undone.`)) {
+      updateSchedules(schedules.filter(schedule => schedule.id !== scheduleId));
+      if (editingId === scheduleId) {
+        setEditingId(null);
+      }
+    }
+  }, [schedules, updateSchedules, editingId, setEditingId]);
+
+  if (editingId && schedules.find(s => s.id === editingId)) {
+    const editingSchedule = schedules.find(s => s.id === editingId)!;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Schedule: {editingSchedule.name}</h3>
+          <Button
+            onClick={() => setEditingId(null)}
+            className="btn-matrix px-4 py-2"
+          >
+            ← Back to List
+          </Button>
+        </div>
+        <div className="p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
+          <ScheduleEditor
+            schedule={editingSchedule}
+            onUpdate={updateSchedule}
+            onDelete={() => deleteSchedule(editingSchedule.id)}
+            allModels={models}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Schedules & Timing</h3>
+          <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
+            <span className="text-green-300 text-sm font-medium font-mono">{schedules.length} schedules</span>
+          </div>
+        </div>
+        <Button 
+          onClick={addSchedule}
+          disabled={status === 'streaming'}
+          className="btn-matrix px-3 sm:px-4 py-2"
+        >
+          <div className="flex items-center gap-2">
+            <PlusIcon size={16} />
+            <span>Add Schedule</span>
+          </div>
+        </Button>
+      </div>
+
+      <div className="grid gap-4">
+        {schedules.map((schedule) => (
+          <div key={schedule.id} className="p-4 sm:p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm hover:border-purple-500/40 transition-colors">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-500/20 flex items-center justify-center border border-purple-500/30 flex-shrink-0">
+                  <span className="text-lg sm:text-xl">{schedule.emoji || '⏰'}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{schedule.name || 'Unnamed Schedule'}</h4>
+                  <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
+                    {schedule.type} • {schedule.interval.pattern} • {schedule.interval.active ? 'Active' : 'Inactive'}
+                  </p>
+                  {schedule.description && (
+                    <p className="text-green-300/80 text-xs sm:text-sm font-mono leading-relaxed">
+                      {schedule.description.length > 100 
+                        ? `${schedule.description.substring(0, 100)}...` 
+                        : schedule.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+              
+              {/* Mobile-optimized controls */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-2">
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      // Toggle activation
+                      const updatedSchedule = {
+                        ...schedule,
+                        interval: { ...schedule.interval, active: !schedule.interval.active }
+                      };
+                      updateSchedule(updatedSchedule);
+                    }}
+                    className={`font-mono px-3 sm:px-4 py-2 flex-1 sm:flex-initial ${
+                      schedule.interval.active 
+                        ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30'
+                        : 'bg-green-500/20 hover:bg-green-500/30 text-green-400 border-green-500/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 justify-center">
+                      <span>{schedule.interval.active ? '⏸️' : '▶️'}</span>
+                      <span className="text-xs sm:text-sm">{schedule.interval.active ? 'Pause' : 'Activate'}</span>
+                    </div>
+                  </Button>
+                  <Button
+                    onClick={() => setEditingId(schedule.id)}
+                    className="btn-matrix px-3 sm:px-4 py-2 flex-1 sm:flex-initial"
+                  >
+                    <div className="flex items-center gap-2 justify-center">
+                      <PencilEditIcon size={14} />
+                      <span className="text-xs sm:text-sm">Edit</span>
+                    </div>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {schedules.length === 0 && (
+          <div className="text-center py-8 sm:py-12">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-purple-800/30 flex items-center justify-center border border-purple-500/20">
+              <span className="text-3xl sm:text-4xl">⏰</span>
+            </div>
+            <h4 className="text-lg sm:text-xl font-semibold text-green-300 mb-2 font-mono">No Schedules Defined</h4>
+            <p className="text-green-500 text-sm font-mono mb-4 sm:mb-6 px-4">Create scheduled tasks for your agent</p>
+            <Button 
+              onClick={addSchedule}
+              disabled={status === 'streaming'}
+              className="btn-matrix px-4 sm:px-6 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <PlusIcon size={16} />
+                <span>Create First Schedule</span>
+              </div>
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// Model Data Viewer Component
+const ModelDataViewer = memo(({ 
+  model, 
+  onUpdateModel, 
+  onBack,
+  allModels
+}: { 
+  model: AgentModel;
+  onUpdateModel: (model: AgentModel) => void;
+  onBack: () => void;
+  allModels: AgentModel[];
+}) => {
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  const [isAddingRecord, setIsAddingRecord] = useState(false);
+
+  const records = model.records || [];
+
+  const addRecord = useCallback(() => {
+    setIsAddingRecord(true);
+    setEditingRecordId(null);
+  }, []);
+
+  const saveRecord = useCallback((recordData: Record<string, any>, recordId?: string) => {
+    const now = new Date().toISOString();
+    
+    if (recordId) {
+      // Update existing record
+      const updatedRecords = records.map(record => 
+        record.id === recordId 
+          ? { ...record, data: recordData, updatedAt: now }
+          : record
+      );
+      onUpdateModel({ ...model, records: updatedRecords });
+    } else {
+      // Add new record
+      const newRecord: ModelRecord = {
+        id: generateNewId('record', records),
+        modelId: model.id,
+        data: recordData,
+        createdAt: now,
+        updatedAt: now
+      };
+      onUpdateModel({ ...model, records: [...records, newRecord] });
+    }
+    
+    setEditingRecordId(null);
+    setIsAddingRecord(false);
+  }, [model, records, onUpdateModel]);
+
+  const deleteRecord = useCallback((recordId: string) => {
+    if (window.confirm('Are you sure you want to delete this record? This action cannot be undone.')) {
+      const updatedRecords = records.filter(record => record.id !== recordId);
+      onUpdateModel({ ...model, records: updatedRecords });
+      setEditingRecordId(null);
+    }
+  }, [model, records, onUpdateModel]);
+
+  const cancelEdit = useCallback(() => {
+    setEditingRecordId(null);
+    setIsAddingRecord(false);
+  }, []);
+
+  // Show record editor when adding or editing
+  if (isAddingRecord || editingRecordId) {
+    const editingRecord = editingRecordId ? records.find(r => r.id === editingRecordId) : null;
+    return (
+      <RecordEditor
+        model={model}
+        allModels={allModels}
+        record={editingRecord}
+        onSave={saveRecord}
+        onCancel={cancelEdit}
+        onDelete={editingRecord ? () => deleteRecord(editingRecord.id) : undefined}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header - Mobile Responsive */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <Button onClick={onBack} className="btn-matrix px-3 py-2 w-fit">
+            ← Back
+          </Button>
+          <div>
+            <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">{model.name} Data</h3>
+            <p className="text-green-400 text-xs sm:text-sm font-mono">
+              {records.length} records • {model.fields.length} fields
+            </p>
+          </div>
+        </div>
+        <Button 
+          onClick={addRecord}
+          className="btn-matrix px-3 sm:px-4 py-2 w-full sm:w-auto"
+        >
+          <div className="flex items-center gap-2 justify-center">
+            <PlusIcon size={16} />
+            <span className="text-sm sm:text-base">Add Record</span>
+          </div>
+        </Button>
+      </div>
+
+      {/* Model Description */}
+      {model.description && (
+        <div className="p-3 sm:p-4 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
+          <p className="text-green-300 text-xs sm:text-sm font-mono leading-relaxed">{model.description}</p>
+        </div>
+      )}
+
+      {/* Records Display */}
+      {records.length > 0 ? (
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden sm:block rounded-xl border border-green-500/20 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-green-500/10 border-b border-green-500/20">
+                  <tr>
+                    {model.fields.slice(0, 4).map(field => (
+                      <th key={field.id} className="px-4 py-3 text-left">
+                        <span className="text-green-300 text-sm font-medium font-mono">
+                          {field.name}
+                          {field.required && <span className="text-red-400 ml-1">*</span>}
+                        </span>
+                      </th>
+                    ))}
+                    <th className="px-4 py-3 text-left">
+                      <span className="text-green-300 text-sm font-medium font-mono">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map(record => (
+                    <tr key={record.id} className="border-b border-green-500/10 hover:bg-green-500/5">
+                      {model.fields.slice(0, 4).map(field => (
+                        <td key={field.id} className="px-4 py-3">
+                          <span className="text-green-200 text-sm font-mono">
+                            {String(record.data[field.name] || '-')}
+                          </span>
+                        </td>
+                      ))}
+                      <td className="px-4 py-3">
+                        <Button
+                          onClick={() => setEditingRecordId(record.id)}
+                          size="sm"
+                          className="btn-matrix px-3 py-1 text-xs"
+                        >
+                          Edit
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="sm:hidden space-y-3">
+            {records.map(record => {
+              // Show first 3 fields + 1 more if available
+              const displayFields = model.fields.slice(0, 3);
+              const hasMoreFields = model.fields.length > 3;
+              
+              return (
+                <div key={record.id} className="p-4 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
+                  <div className="space-y-3">
+                    {/* Record Fields */}
+                    <div className="space-y-2">
+                      {displayFields.map(field => {
+                        const value = record.data[field.name];
+                        const displayValue = value !== undefined && value !== null && value !== '' 
+                          ? String(value) 
+                          : '-';
+                        
+                        return (
+                          <div key={field.id} className="flex justify-between items-start gap-3">
+                            <span className="text-green-300 text-xs font-medium font-mono flex-shrink-0">
+                              {field.name}
+                              {field.required && <span className="text-red-400 ml-1">*</span>}:
+                            </span>
+                            <span className="text-green-200 text-xs font-mono text-right break-words">
+                              {displayValue.length > 30 
+                                ? `${displayValue.substring(0, 30)}...` 
+                                : displayValue}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      
+                      {hasMoreFields && (
+                        <div className="pt-1 border-t border-green-500/10">
+                          <span className="text-green-400 text-xs font-mono opacity-60">
+                            +{model.fields.length - 3} more fields
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Action Button */}
+                    <div className="pt-2 border-t border-green-500/10">
+                      <Button
+                        onClick={() => setEditingRecordId(record.id)}
+                        size="sm"
+                        className="btn-matrix px-3 py-2 text-xs w-full"
+                      >
+                        Edit Record
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <div className="text-center py-8 sm:py-12">
+          <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-green-800/30 flex items-center justify-center border border-green-500/20">
+            <span className="text-2xl sm:text-4xl">📊</span>
+          </div>
+          <h4 className="text-lg sm:text-xl font-semibold text-green-300 mb-2 font-mono">No Records Yet</h4>
+          <p className="text-green-500 text-sm font-mono mb-6 px-4">Add the first record to your {model.name} model</p>
+          <Button 
+            onClick={addRecord}
+            className="btn-matrix px-4 sm:px-6 py-2 sm:py-3 w-full sm:w-auto max-w-xs"
+          >
+            <div className="flex items-center gap-2 justify-center">
+              <PlusIcon size={16} />
+              <span>Add First Record</span>
+            </div>
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+});
+
+// Record Editor Component  
+const RecordEditor = memo(({ 
+  model, 
+  record, 
+  onSave, 
+  onCancel, 
+  onDelete,
+  allModels = [] 
+}: { 
+  model: AgentModel;
+  record?: ModelRecord | null;
+  onSave: (data: Record<string, any>, recordId?: string) => void;
+  onCancel: () => void;
+  onDelete?: () => void;
+  allModels?: AgentModel[];
+}) => {
+  const [formData, setFormData] = useState<Record<string, any>>(
+    record?.data || {}
+  );
+
+  const updateField = useCallback((fieldName: string, value: any) => {
+    setFormData(prev => ({ ...prev, [fieldName]: value }));
+  }, []);
+
+  const getFieldValue = useCallback((field: AgentField) => {
+    return formData[field.name] || (field.list ? [] : '');
+  }, [formData]);
+
+  const handleSave = useCallback(() => {
+    onSave(formData, record?.id);
+  }, [formData, onSave, record?.id]);
+
+  const renderFieldInput = (field: AgentField) => {
+    const fieldId = `field-${field.id}`;
+    
+    // Don't render input for ID fields - they should be auto-generated
+    if (field.isId) {
+      return (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-gray-500/10 border border-gray-500/20">
+          <span className="text-gray-400 text-sm font-mono">
+            {record ? String(record.data[field.name] || record.id) : 'Auto-generated on save'}
+          </span>
+          <span className="text-xs text-gray-500 font-mono bg-gray-700 px-2 py-1 rounded">
+            ID
+          </span>
+        </div>
+      );
+    }
+
+    // Handle relation fields
+    if (field.relationField && field.kind === 'object') {
+      const relatedModel = allModels.find(m => m.name === field.type);
+      
+      if (!relatedModel) {
+        return (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+            <span className="text-red-400 text-sm font-mono">
+              Related model "{field.type}" not found
+            </span>
+          </div>
+        );
+      }
+
+      const relatedRecords = relatedModel.records || [];
+      
+      if (relatedRecords.length === 0) {
+        return (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+            <span className="text-yellow-400 text-sm font-mono">
+              No {field.type} records available
+            </span>
+          </div>
+        );
+      }
+
+      if (field.list) {
+        // Multi-select for list relations
+        const selectedIds = Array.isArray(getFieldValue(field)) ? getFieldValue(field) : [];
+        
+        return (
+          <div className="space-y-2">
+            <div className="text-green-400 text-xs font-mono mb-2">
+              Select multiple {field.type} records ({selectedIds.length} selected)
+            </div>
+            <div className="max-h-40 overflow-y-auto space-y-1 p-2 rounded-lg bg-black/30 border border-green-500/20">
+              {relatedRecords.map(relatedRecord => {
+                const isSelected = selectedIds.includes(relatedRecord.id);
+                const displayField = relatedModel.displayFields[0] || relatedModel.idField;
+                const displayValue = relatedRecord.data[displayField] || relatedRecord.id;
+                
+                return (
+                  <label key={relatedRecord.id} className="flex items-center gap-2 p-2 hover:bg-green-500/10 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => {
+                        const newSelectedIds = e.target.checked
+                          ? [...selectedIds, relatedRecord.id]
+                          : selectedIds.filter((id: string) => id !== relatedRecord.id);
+                        updateField(field.name, newSelectedIds);
+                      }}
+                      className="w-4 h-4 rounded border-green-500/30 bg-black/50 text-green-400 focus:ring-green-400/20"
+                    />
+                    <span className="text-green-200 text-sm font-mono flex-1">
+                      {String(displayValue)}
+                    </span>
+                    <span className="text-green-500 text-xs font-mono">
+                      ID: {relatedRecord.id}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        );
+      } else {
+        // Single select for non-list relations
+        const selectedId = getFieldValue(field);
+        
+        return (
+          <Select
+            value={selectedId || ''}
+            onValueChange={(value) => updateField(field.name, value || null)}
+          >
+            <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+              <SelectValue placeholder={`Select ${field.type}`} />
+            </SelectTrigger>
+            <SelectContent className="bg-black border-green-500/30">
+              <SelectItem value="" className="text-green-200 focus:bg-green-500/20 font-mono">
+                None selected
+              </SelectItem>
+              {relatedRecords.map(relatedRecord => {
+                const displayField = relatedModel.displayFields[0] || relatedModel.idField;
+                const displayValue = relatedRecord.data[displayField] || relatedRecord.id;
+                
+                return (
+                  <SelectItem 
+                    key={relatedRecord.id} 
+                    value={relatedRecord.id} 
+                    className="text-green-200 focus:bg-green-500/20 font-mono"
+                  >
+                    {String(displayValue)} (ID: {relatedRecord.id})
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        );
+      }
+    }
+    
+    if (field.type === 'Boolean') {
+      return (
+        <div className="flex items-center gap-2">
+          <input
+            id={fieldId}
+            type="checkbox"
+            checked={Boolean(getFieldValue(field))}
+            onChange={(e) => updateField(field.name, e.target.checked)}
+            className="w-4 h-4 rounded border-green-500/30 bg-black/50 text-green-400 focus:ring-green-400/20"
+          />
+          <span className="text-green-400 text-sm font-mono">
+            {getFieldValue(field) ? 'True' : 'False'}
+          </span>
+        </div>
+      );
+    } else if (field.type === 'Int' || field.type === 'Float') {
+      return (
+        <Input
+          id={fieldId}
+          type="number"
+          step={field.type === 'Float' ? '0.01' : '1'}
+          value={getFieldValue(field)}
+          onChange={(e) => updateField(field.name, field.type === 'Int' ? parseInt(e.target.value) || 0 : parseFloat(e.target.value) || 0)}
+          placeholder={`Enter ${field.name.toLowerCase()}`}
+          className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+        />
+      );
+    } else if (field.type === 'DateTime') {
+      return (
+        <Input
+          id={fieldId}
+          type="datetime-local"
+          value={getFieldValue(field)}
+          onChange={(e) => updateField(field.name, e.target.value)}
+          className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+        />
+      );
+    } else {
+      return (
+        <Input
+          id={fieldId}
+          type="text"
+          value={getFieldValue(field)}
+          onChange={(e) => updateField(field.name, e.target.value)}
+          placeholder={`Enter ${field.name.toLowerCase()}`}
+          className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+        />
+      );
+    }
+  };
+
+  // If model has forms, display each form as a section in order
+  // If no forms, display all fields in a single section
+  const formsToDisplay = model.forms && model.forms.length > 0 
+    ? model.forms.sort((a, b) => a.order - b.order)
+    : null;
+
+  return (
+    <div className="space-y-6">
+      {/* Header - Mobile Responsive */}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <Button onClick={onCancel} className="btn-matrix px-3 py-2 w-fit">
+            ← Cancel
+          </Button>
+          <div className="flex-1">
+            <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">
+              {record ? 'Edit' : 'Add'} {model.name} Record
+            </h3>
+            <p className="text-green-400 text-xs sm:text-sm font-mono">
+              Fill in the fields below using {formsToDisplay ? `${formsToDisplay.length} forms` : 'all fields'}
+            </p>
+          </div>
+        </div>
+        
+        {/* Action buttons - Responsive layout */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:justify-end">
+          {onDelete && (
+            <Button 
+              onClick={onDelete}
+              variant="destructive"
+              className="px-3 sm:px-4 py-2 w-full sm:w-auto order-2 sm:order-1"
+            >
+              <div className="flex items-center gap-2 justify-center">
+                <CrossIcon size={16} />
+                <span>Delete Record</span>
+              </div>
+            </Button>
+          )}
+          <Button 
+            onClick={handleSave}
+            className="btn-matrix px-3 sm:px-4 py-2 w-full sm:w-auto order-1 sm:order-2"
+          >
+            <span>Save Record</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* Form Sections */}
+      <div className="space-y-6">
+        {formsToDisplay ? (
+          // Display each form as a separate section
+          formsToDisplay.map((form) => {
+            const formFields = form.fields
+              .sort((a, b) => a.order - b.order)
+              .map(formField => {
+                const modelField = model.fields.find(f => f.id === formField.fieldId);
+                return modelField && !formField.hidden ? { ...modelField, formField } : null;
+              })
+              .filter(Boolean) as (AgentField & { formField: AgentFormField })[];
+
+            if (formFields.length === 0) return null;
+
+            return (
+              <div key={form.id} className="p-4 sm:p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+                  <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-green-600 rounded-full" />
+                  <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono">{form.title}</h4>
+                  {form.description && (
+                    <p className="text-green-400 text-xs sm:text-sm font-mono">- {form.description}</p>
+                  )}
+                  <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
+                    <span className="text-green-300 text-xs font-medium font-mono">{formFields.length} fields</span>
+                  </div>
+                </div>
+                
+                <div className="grid gap-4 max-w-4xl mx-auto">
+                  {formFields.map(field => {
+                    const isRequired = field.formField.required !== undefined ? 
+                      field.formField.required : field.required;
+                    
+                    return (
+                      <div key={field.id} className="space-y-2">
+                        <Label htmlFor={`field-${field.id}`} className="text-green-300 font-mono font-medium text-xs sm:text-sm">
+                          {field.title || field.name}
+                          {isRequired && <span className="text-red-400 ml-1">*</span>}
+                          <span className="text-green-500 text-xs ml-2">({field.type})</span>
+                        </Label>
+                        {renderFieldInput(field)}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          // Display all fields in a single section if no forms
+          <div className="p-4 sm:p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+              <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-green-600 rounded-full" />
+              <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono">All Fields</h4>
+              <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
+                <span className="text-green-300 text-xs font-medium font-mono">{model.fields.length} fields</span>
+              </div>
+            </div>
+            
+            <div className="grid gap-4 max-w-4xl mx-auto">
+              {model.fields.map(field => (
+                <div key={field.id} className="space-y-2">
+                  <Label htmlFor={`field-${field.id}`} className="text-green-300 font-mono font-medium text-xs sm:text-sm">
+                    {field.title || field.name}
+                    {field.required && <span className="text-red-400 ml-1">*</span>}
+                    <span className="text-green-500 text-xs ml-2">({field.type})</span>
+                  </Label>
+                  {renderFieldInput(field)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// Schedule Editor Component
+const ScheduleEditor = memo(({ 
+  schedule, 
+  onUpdate, 
+  onDelete,
+  allModels
+}: { 
+  schedule: AgentSchedule;
+  onUpdate: (schedule: AgentSchedule) => void;
+  onDelete: () => void;
+  allModels: AgentModel[];
+}) => {
+  return (
+    <div className="space-y-6">
+      {/* Name and Description */}
+      <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Schedule Configuration</h4>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Schedule Name</Label>
+            <Input
+              value={schedule.name}
+              onChange={(e) => onUpdate({ ...schedule, name: e.target.value })}
+              placeholder="e.g., Daily Report Generation"
+              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Schedule Type</Label>
+            <Select
+              value={schedule.type}
+              onValueChange={(value: 'Create' | 'Update') => onUpdate({ ...schedule, type: value })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="Create" className="text-green-200 focus:bg-green-500/20 font-mono">Create Records</SelectItem>
+                <SelectItem value="Update" className="text-green-200 focus:bg-green-500/20 font-mono">Update Records</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Required Role</Label>
+            <Select
+              value={schedule.role}
+              onValueChange={(value: 'admin' | 'member') => onUpdate({ ...schedule, role: value })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="admin" className="text-green-200 focus:bg-green-500/20 font-mono">Admin Only</SelectItem>
+                <SelectItem value="member" className="text-green-200 focus:bg-green-500/20 font-mono">All Members</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        
+        <div className="space-y-2">
+          <Label className="text-green-300 font-mono font-medium">Description</Label>
+          <Textarea
+            value={schedule.description}
+            onChange={(e) => onUpdate({ ...schedule, description: e.target.value })}
+            placeholder="Describe what this schedule does and its business purpose..."
+            rows={3}
+            className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+          />
+          {schedule.description && (
+            <p className="text-green-400 text-sm font-mono mt-2">{schedule.description}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Schedule Interval */}
+      <div className="p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Schedule Timing</h4>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Schedule Pattern</Label>
+            <Input
+              value={schedule.interval.pattern}
+              onChange={(e) => onUpdate({
+                ...schedule,
+                interval: { ...schedule.interval, pattern: e.target.value }
+              })}
+              placeholder="e.g., daily, weekly, 0 9 * * 1-5"
+              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Timezone</Label>
+            <Input
+              value={schedule.interval.timezone || ''}
+              onChange={(e) => onUpdate({
+                ...schedule,
+                interval: { ...schedule.interval, timezone: e.target.value }
+              })}
+              placeholder="e.g., America/New_York"
+              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Status</Label>
+            <Select
+              value={schedule.interval.active ? 'active' : 'inactive'}
+              onValueChange={(value) => onUpdate({
+                ...schedule,
+                interval: { ...schedule.interval, active: value === 'active' }
+              })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="active" className="text-green-200 focus:bg-green-500/20 font-mono">Active</SelectItem>
+                <SelectItem value="inactive" className="text-green-200 focus:bg-green-500/20 font-mono">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Data Source Configuration */}
+      <div className="p-6 rounded-xl bg-yellow-500/10 border border-yellow-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Data Source Configuration</h4>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Data Source Type</Label>
+            <Select
+              value={schedule.dataSource.type}
+              onValueChange={(value: 'custom' | 'database') => onUpdate({
+                ...schedule,
+                dataSource: { ...schedule.dataSource, type: value }
+              })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="database" className="text-green-200 focus:bg-green-500/20 font-mono">Database Query</SelectItem>
+                <SelectItem value="custom" className="text-green-200 focus:bg-green-500/20 font-mono">Custom Function</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {schedule.dataSource.type === 'custom' && (
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">Custom Function Code</Label>
+              <Textarea
+                value={schedule.dataSource.customFunction?.code || ''}
+                onChange={(e) => onUpdate({
+                  ...schedule,
+                  dataSource: {
+                    ...schedule.dataSource,
+                    customFunction: {
+                      ...schedule.dataSource.customFunction,
+                      code: e.target.value
+                    }
+                  }
+                })}
+                placeholder="// Custom data fetching logic here..."
+                rows={6}
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-sm"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Execution Configuration */}
+      <div className="p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Execution Configuration</h4>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Execution Type</Label>
+            <Select
+              value={schedule.execute.type}
+              onValueChange={(value: 'code' | 'prompt') => onUpdate({
+                ...schedule,
+                execute: value === 'code' 
+                  ? { type: 'code', code: { script: '' } }
+                  : { type: 'prompt', prompt: { template: '' } }
+              })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="code" className="text-green-200 focus:bg-green-500/20 font-mono">JavaScript Code</SelectItem>
+                <SelectItem value="prompt" className="text-green-200 focus:bg-green-500/20 font-mono">AI Prompt</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {schedule.execute.type === 'code' && (
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">Script Code</Label>
+              <Textarea
+                value={schedule.execute.code?.script || ''}
+                onChange={(e) => onUpdate({
+                  ...schedule,
+                  execute: {
+                    ...schedule.execute,
+                    code: {
+                      ...schedule.execute.code,
+                      script: e.target.value
+                    }
+                  }
+                })}
+                placeholder="// Processing script here..."
+                rows={6}
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-sm"
+              />
+            </div>
+          )}
+          
+          {schedule.execute.type === 'prompt' && (
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">AI Prompt Template</Label>
+              <Textarea
+                value={schedule.execute.prompt?.template || ''}
+                onChange={(e) => onUpdate({
+                  ...schedule,
+                  execute: {
+                    ...schedule.execute,
+                    prompt: {
+                      ...schedule.execute.prompt,
+                      template: e.target.value
+                    }
+                  }
+                })}
+                placeholder="Analyze the following data and..."
+                rows={6}
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Results Configuration */}
+      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Results Configuration</h4>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Target Model</Label>
+            <Select
+              value={schedule.results.model}
+              onValueChange={(value) => onUpdate({
+                ...schedule,
+                results: { ...schedule.results, model: value }
+              })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue placeholder="Select model" />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                {allModels.filter(model => model.name.trim() !== '').map(model => (
+                  <SelectItem key={model.id} value={model.name} className="text-green-200 focus:bg-green-500/20 font-mono">
+                    {model.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Schedule Controls */}
+      <div className="flex justify-end pt-4 border-t border-green-500/20">
+        <Button
+          variant="destructive"
+          onClick={onDelete}
+          className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30 font-mono"
+        >
+          <CrossIcon size={16} />
+          <span className="ml-2">Delete Schedule</span>
+        </Button>
+      </div>
+    </div>
+  );
+});
+
 // Main Agent Builder Component
 const AgentBuilderContent = memo(({
   content,
@@ -1241,140 +3084,188 @@ const AgentBuilderContent = memo(({
   const { artifact } = useArtifact();
   
   // Initialize metadata with defaults if null
-  const safeMetadata = metadata || {
-    selectedTab: 'models' as const,
-    editingModel: null,
-    editingEnum: null,
-    editingAction: null,
-    currentStep: 'complete',
-    stepProgress: {
-      overview: 'complete' as const,
-      models: 'complete' as const,
-      enums: 'complete' as const,
-      actions: 'complete' as const,
-    },
-    stepMessages: {}
+  const safeMetadata: AgentArtifactMetadata = {
+    selectedTab: metadata?.selectedTab || 'models',
+    editingModel: metadata?.editingModel || null,
+    editingAction: metadata?.editingAction || null,
+    editingSchedule: metadata?.editingSchedule || null,
+    viewingModelData: metadata?.viewingModelData || null,
+    editingRecord: metadata?.editingRecord || null,
+    currentStep: metadata?.currentStep,
+    stepProgress: metadata?.stepProgress,
+    stepMessages: metadata?.stepMessages,
+    dataManagement: metadata?.dataManagement || null
   };
 
-  // Update metadata safely
+  const [agentData, setAgentData] = useState<AgentData>(() => {
+    console.log('🚀 Initializing agent data with content:', {
+      hasContent: !!content,
+      contentLength: content?.length || 0,
+      contentPreview: content ? content.substring(0, 100) + (content.length > 100 ? '...' : '') : 'none'
+    });
+
+    try {
+      // Handle case where content might be empty, whitespace, or just '{}'
+      if (!content || content.trim() === '' || content.trim() === '{}') {
+        console.log('📝 Using default agent data (no meaningful content)');
+        return {
+          name: 'New Agent',
+          description: '',
+          domain: '',
+          models: [],
+          actions: [],
+          schedules: [],
+          createdAt: new Date().toISOString()
+        };
+      }
+
+      const parsed = JSON.parse(content);
+      
+      // Validate that the parsed content looks like agent data
+      if (typeof parsed === 'object' && parsed !== null) {
+        // Ensure arrays exist and are actually arrays
+        const models = Array.isArray(parsed.models) ? parsed.models : [];
+        const actions = Array.isArray(parsed.actions) ? parsed.actions : [];
+        const schedules = Array.isArray(parsed.schedules) ? parsed.schedules : [];
+        
+        const initialData = {
+          name: typeof parsed.name === 'string' ? parsed.name : 'New Agent',
+          description: typeof parsed.description === 'string' ? parsed.description : '',
+          domain: typeof parsed.domain === 'string' ? parsed.domain : '',
+          models,
+          actions,
+          schedules,
+          createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString()
+        };
+
+        console.log('📥 Initialized agent data from content:', {
+          name: initialData.name,
+          modelCount: initialData.models.length,
+          actionCount: initialData.actions.length
+        });
+
+        return initialData;
+      } else {
+        console.warn('⚠️ Parsed content is not an object, using defaults');
+        return {
+          name: 'New Agent',
+          description: '',
+          domain: '',
+          models: [],
+          actions: [],
+          schedules: [],
+          createdAt: new Date().toISOString()
+        };
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed to parse initial content, using defaults. Error:', (e as Error).message);
+      console.warn('📄 Problematic content (first 200 chars):', content ? content.substring(0, 200) : 'none');
+      return {
+        name: 'New Agent',
+        description: '',
+        domain: '',
+        models: [],
+        actions: [],
+        schedules: [],
+        createdAt: new Date().toISOString()
+      };
+    }
+  });
+
+  // Update metadata safely - moved before other callbacks to maintain hook order
   const updateMetadata = useCallback((updates: Partial<AgentArtifactMetadata>) => {
     if (setMetadata) {
       setMetadata({ ...safeMetadata, ...updates });
     }
   }, [safeMetadata, setMetadata]);
 
-  const [agentData, setAgentData] = useState<AgentData>(() => {
-    console.log('🏗️ Initializing agent data from content:', content);
-    console.log('🏗️ Content type:', typeof content);
-    console.log('🏗️ Content length:', content?.length || 0);
-    
-    try {
-      const parsed = JSON.parse(content || '{}');
-      console.log('✅ Successfully parsed initial content:', JSON.stringify(parsed, null, 2));
-      console.log('🔍 Parsed data structure check:', {
-        hasName: !!parsed.name,
-        hasDescription: !!parsed.description,
-        hasDomain: !!parsed.domain,
-        hasModels: !!parsed.models,
-        modelsIsArray: Array.isArray(parsed.models),
-        modelsLength: parsed.models?.length || 0,
-        hasEnums: !!parsed.enums,
-        enumsIsArray: Array.isArray(parsed.enums),
-        enumsLength: parsed.enums?.length || 0,
-        hasActions: !!parsed.actions,
-        actionsIsArray: Array.isArray(parsed.actions),
-        actionsLength: parsed.actions?.length || 0,
-      });
-      
-      const initialData = {
-        name: parsed.name || 'New Agent',
-        description: parsed.description || '',
-        domain: parsed.domain || '',
-        models: parsed.models || [],
-        enums: parsed.enums || [],
-        actions: parsed.actions || [],
-        createdAt: parsed.createdAt || new Date().toISOString()
-      };
-      console.log('📊 Initial agent data:', JSON.stringify(initialData, null, 2));
-      console.log('📊 Final data stats:', {
-        modelsCount: initialData.models.length,
-        enumsCount: initialData.enums.length,
-        actionsCount: initialData.actions.length,
-        totalFields: initialData.models.reduce((sum: number, model: any) => sum + (model.fields?.length || 0), 0)
-      });
-      return initialData;
-    } catch (e) {
-      console.warn('⚠️ Failed to parse initial content, using defaults:', e);
-      console.warn('⚠️ Problematic content:', content);
-      const defaultData = {
-        name: 'New Agent',
-        description: '',
-        domain: '',
-        models: [],
-        enums: [],
-        actions: [],
-        createdAt: new Date().toISOString()
-      };
-      console.log('📊 Default agent data:', JSON.stringify(defaultData, null, 2));
-      return defaultData;
-    }
-  });
-
-  // Update content when agent data changes
+  // Update content when agent data changes - moved to maintain hook order
   const updateAgentData = useCallback((newData: AgentData) => {
-    console.log('🔄 Updating agent data:', JSON.stringify(newData, null, 2));
     setAgentData(newData);
     const jsonContent = JSON.stringify(newData, null, 2);
-    console.log('💾 Saving content to artifact:', jsonContent);
     onSaveContent(jsonContent, true);
   }, [onSaveContent]);
 
-  // Monitor content changes from external sources (like when opening from chat)
-  useEffect(() => {
-    console.log('👀 Content prop changed, current content:', content);
-    console.log('👀 Content length:', content?.length || 0);
+  // Enhanced save function - moved to maintain consistent hook order
+  const saveAgentToConversation = useCallback(async () => {
+    // Save the current agent data using the standard document saving mechanism
+    const agentContent = JSON.stringify(agentData, null, 2);
+    onSaveContent(agentContent, false);
     
-    if (content && content.trim() !== '{}' && content.trim() !== '') {
-      try {
-        const parsed = JSON.parse(content);
-        console.log('🔄 Parsing updated content:', JSON.stringify(parsed, null, 2));
-        
-        // Only update if the content is different from current state
-        const currentDataString = JSON.stringify(agentData);
-        const newDataString = JSON.stringify({
+    console.log('✅ Agent data saved through standard document mechanism');
+  }, [agentData, onSaveContent]);
+
+  // Monitor content changes from external sources (like when opening from chat or refreshing page)
+  useEffect(() => {
+    // Skip if content is explicitly empty or just whitespace
+    if (!content || content.trim() === '') {
+      return;
+    }
+
+    // Debug logging to track content updates
+    console.log('🔍 Agent builder received content update:', {
+      contentLength: content.length,
+      contentPreview: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
+      currentAgentName: agentData.name,
+      currentModelCount: agentData.models.length
+    });
+
+    try {
+      const parsed = JSON.parse(content);
+      
+      // Check if this is meaningful agent data (not just empty default structure)
+      const hasRealData = (parsed.name && parsed.name !== 'New Agent' && parsed.name.trim() !== '') ||
+                         (parsed.description && parsed.description.trim() !== '') ||
+                         (parsed.domain && parsed.domain.trim() !== '') ||
+                         (parsed.models && parsed.models.length > 0) ||
+                         (parsed.actions && parsed.actions.length > 0);
+
+      // Always update if we have real data, or if current state is just defaults
+      const currentIsDefaults = agentData.name === 'New Agent' && 
+                               !agentData.description && 
+                               !agentData.domain &&
+                               agentData.models.length === 0 && 
+                               agentData.actions.length === 0;
+
+      // Also update if content is not empty JSON object and we have defaults
+      const isEmptyJsonObject = content.trim() === '{}';
+      
+      if (hasRealData || (currentIsDefaults && !isEmptyJsonObject)) {
+        const updatedData = {
           name: parsed.name || 'New Agent',
           description: parsed.description || '',
           domain: parsed.domain || '',
           models: parsed.models || [],
-          enums: parsed.enums || [],
           actions: parsed.actions || [],
+          schedules: parsed.schedules || [],
           createdAt: parsed.createdAt || new Date().toISOString()
-        });
+        };
+        
+        // Only update if the content is actually different
+        const currentDataString = JSON.stringify(agentData);
+        const newDataString = JSON.stringify(updatedData);
         
         if (currentDataString !== newDataString) {
-          console.log('🔄 Content changed, updating agent data');
-          console.log('🔄 Old data:', currentDataString);
-          console.log('🔄 New data:', newDataString);
-          
-          const updatedData = {
-            name: parsed.name || 'New Agent',
-            description: parsed.description || '',
-            domain: parsed.domain || '',
-            models: parsed.models || [],
-            enums: parsed.enums || [],
-            actions: parsed.actions || [],
-            createdAt: parsed.createdAt || new Date().toISOString()
-          };
+          console.log('📥 Updating agent data from fetched content:', {
+            hasRealData,
+            currentIsDefaults,
+            isEmptyJsonObject,
+            newName: updatedData.name,
+            modelCount: updatedData.models.length,
+            actionCount: updatedData.actions.length
+          });
           
           setAgentData(updatedData);
-          console.log('✅ Agent data updated from content change');
-        } else {
-          console.log('📋 Content unchanged, skipping update');
         }
-      } catch (e) {
-        console.warn('⚠️ Failed to parse updated content:', e);
-        console.warn('⚠️ Problematic content:', content);
+      } else {
+        console.log('🔄 Skipping update - no real data and not replacing defaults:', {
+          hasRealData,
+          currentIsDefaults,
+          isEmptyJsonObject
+        });
       }
+    } catch (e) {
+      console.warn('⚠️ Failed to parse updated content:', e);
     }
   }, [content]); // Only depend on content, not agentData to avoid loops
 
@@ -1392,6 +3283,7 @@ const AgentBuilderContent = memo(({
     const newModel: AgentModel = {
       id: generateNewId('model', agentData.models || []),
       name: `Model${(agentData.models?.length || 0) + 1}`,
+      emoji: '🗃️', // Default emoji, will be auto-generated by AI
       idField: 'id',
       displayFields: [],
       fields: [
@@ -1407,37 +3299,26 @@ const AgentBuilderContent = memo(({
           relationField: false,
           title: 'ID',
           sort: false,
-          order: 0
-        },
-        {
-          id: 'fld2',
-          name: 'createdAt',
-          type: 'DateTime',
-          isId: false,
-          unique: false,
-          list: false,
-          required: true,
-          kind: 'scalar',
-          relationField: false,
-          title: 'Created At',
-          sort: true,
           order: 1
         },
         {
-          id: 'fld3',
-          name: 'updatedAt',
-          type: 'DateTime',
+          id: 'fld2',
+          name: 'published',
+          type: 'Boolean',
           isId: false,
           unique: false,
           list: false,
-          required: true,
+          required: false,
           kind: 'scalar',
           relationField: false,
-          title: 'Updated At',
+          title: 'Published',
           sort: false,
-          order: 2
+          order: 2,
+          defaultValue: 'false'
         }
-      ]
+      ],
+      enums: [],
+      hasPublishedField: true
     };
     
     // Add to top of list and set to editing mode
@@ -1448,26 +3329,49 @@ const AgentBuilderContent = memo(({
     updateMetadata({ editingModel: newModel.id });
   };
 
-  const addEnum = () => {
-    const newEnum: AgentEnum = {
-      id: generateNewId('enum', agentData.enums || []),
-      name: `Enum${(agentData.enums?.length || 0) + 1}`,
-      fields: []
+  const addSchedule = () => {
+    const newSchedule: AgentSchedule = {
+      id: generateNewId('schedule', agentData.schedules || []),
+      name: `Schedule${(agentData.schedules?.length || 0) + 1}`,
+      emoji: '⏰', // Default emoji, will be auto-generated by AI
+      description: '',
+      type: 'Create',
+      role: 'admin',
+      interval: {
+        pattern: '0 0 * * *',
+        timezone: 'UTC',
+        active: true
+      },
+      dataSource: {
+        type: 'database',
+        database: { models: [] }
+      },
+      execute: {
+        type: 'code',
+        code: { script: '' }
+      },
+      results: {
+        actionType: 'Create',
+        model: ''
+      }
     };
     
     // Add to top of list and set to editing mode
     updateAgentData({
       ...agentData,
-      enums: [newEnum, ...(agentData.enums || [])]
+      schedules: [newSchedule, ...(agentData.schedules || [])]
     });
-    updateMetadata({ editingEnum: newEnum.id });
+    updateMetadata({ editingSchedule: newSchedule.id });
   };
 
   const addAction = () => {
     const newAction: AgentAction = {
+      id: generateNewId('action', agentData.actions || []),
       name: `Action${(agentData.actions?.length || 0) + 1}`,
+      emoji: '⚡', // Default emoji, will be auto-generated by AI
       description: '',
       type: 'Create',
+      role: 'admin',
       dataSource: {
         type: 'database',
         database: { models: [] }
@@ -1488,7 +3392,7 @@ const AgentBuilderContent = memo(({
       ...agentData,
       actions: updatedActions
     });
-    updateMetadata({ editingAction: '0' }); // First item (index 0)
+    updateMetadata({ editingAction: newAction.id }); // Use actual action ID instead of '0'
   };
 
   // Tab configuration
@@ -1499,99 +3403,16 @@ const AgentBuilderContent = memo(({
       count: agentData.models?.length || 0
     },
     {
-      id: 'enums' as const,
-      label: 'Enums',
-      count: agentData.enums?.length || 0
-    },
-    {
       id: 'actions' as const,
       label: 'Actions',
       count: agentData.actions?.length || 0
+    },
+    {
+      id: 'schedules' as const,
+      label: 'Schedules',
+      count: agentData.schedules?.length || 0
     }
   ];
-
-  // Enhanced save function that updates both artifact and conversation message
-  const saveAgentToConversation = useCallback(async () => {
-    const agentDataJson = JSON.stringify(agentData, null, 2);
-    
-    // Save to artifact
-    onSaveContent(agentDataJson, false);
-    
-    // Save to database via API
-    try {
-      const response = await fetch(`/api/document?id=${artifact.documentId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: agentData.name,
-          content: agentDataJson,
-          kind: 'agent',
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error('Failed to save agent document:', error);
-        // You could add a toast notification here
-        return;
-      }
-
-      console.log('Agent document saved successfully');
-    } catch (error) {
-      console.error('Error saving agent document:', error);
-      // You could add a toast notification here
-      return;
-    }
-    
-    // Update the conversation message if setMessages is available
-    if (setMessages) {
-      setMessages((messages: Message[]) => {
-        // Find the most recent assistant message that contains agent data
-        // Search from the end to find the most recent one
-        for (let i = messages.length - 1; i >= 0; i--) {
-          const msg = messages[i];
-          if (msg.role === 'assistant' && msg.parts) {
-            // Check if this message contains agent artifact data
-            const hasAgentData = msg.parts.some((part: any) => 
-              part.type === 'tool-result' && 
-              part.toolName === 'agentBuilder' &&
-              part.result?.data
-            );
-            
-            if (hasAgentData) {
-              const updatedMessages = [...messages];
-              const message = updatedMessages[i];
-              
-              // Update the tool result with the new agent data
-              const updatedParts = message.parts?.map((part: any) => {
-                if (part.type === 'tool-result' && part.toolName === 'agentBuilder') {
-                  return {
-                    ...part,
-                    result: {
-                      ...part.result,
-                      data: agentData
-                    }
-                  };
-                }
-                return part;
-              }) || [];
-
-              updatedMessages[i] = {
-                ...message,
-                parts: updatedParts
-              };
-
-              return updatedMessages;
-            }
-          }
-        }
-
-        return messages;
-      });
-    }
-  }, [agentData, onSaveContent, setMessages, artifact.documentId]);
 
   return (
     <div className="h-full bg-black text-green-200 flex flex-col relative overflow-hidden font-mono">
@@ -1602,39 +3423,46 @@ const AgentBuilderContent = memo(({
       
       {/* Header */}
       <div className="relative border-b border-green-500/20 backdrop-blur-xl bg-black/50">
-        <div className="px-8 py-6">
-          <div className="flex items-center justify-between">
+        <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-gradient-to-r from-green-600 to-green-700 flex items-center justify-center shadow-lg shadow-green-500/20">
                   <div className="text-black text-lg">🤖</div>
                 </div>
                 <div>
-                  <h1 className="text-2xl font-bold text-matrix-gradient bg-clip-text font-mono">
+                  <h1 className="text-xl sm:text-2xl font-bold text-matrix-gradient bg-clip-text font-mono">
                     Agent Builder
                   </h1>
-                  <p className="text-green-400 text-sm font-medium font-mono">
+                  <p className="text-green-400 text-xs sm:text-sm font-medium font-mono">
                     Design and configure your AI agent system
                   </p>
                 </div>
               </div>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
               {/* Status Indicator */}
-              <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-black/50 border border-green-500/20 backdrop-blur-sm">
+              <div className="flex items-center gap-3 px-3 sm:px-4 py-2 rounded-xl bg-black/50 border border-green-500/20 backdrop-blur-sm">
                 <div className="status-indicator status-online">
-                  <div className="w-3 h-3 bg-green-400 rounded-full animate-matrix-pulse"></div>
+                  <div className={cn(
+                    "w-3 h-3 rounded-full transition-all duration-300",
+                    status === 'streaming'
+                      ? "bg-blue-400 animate-pulse shadow-lg shadow-blue-400/50"
+                      : "bg-green-400 animate-matrix-pulse shadow-lg shadow-green-400/50"
+                  )}></div>
                 </div>
-                <span className="text-sm font-medium text-green-400 font-mono">Ready</span>
+                <span className="text-sm font-medium text-green-400 font-mono">
+                  {status === 'streaming' ? 'Building...' : 'Ready'}
+                </span>
               </div>
               
               {/* Save Button */}
               <Button
                 onClick={saveAgentToConversation}
-                className="btn-matrix px-6 py-2.5 text-sm font-medium font-mono"
+                className="btn-matrix px-4 sm:px-6 py-2.5 text-sm font-medium font-mono"
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 justify-center">
                   <div className="w-4 h-4">💾</div>
                   <span>Save Agent</span>
                 </div>
@@ -1642,79 +3470,91 @@ const AgentBuilderContent = memo(({
             </div>
           </div>
           
-          {/* Enhanced Progress Indicator */}
-          <div className="mt-6 p-4 rounded-2xl bg-black/50 border border-green-500/20 backdrop-blur-sm shadow-lg shadow-green-500/10">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="text-sm font-medium text-green-200 font-mono">Build Progress</div>
-                <div className="px-2 py-1 rounded-lg bg-green-500/20 text-green-300 text-xs font-medium font-mono border border-green-500/30">
-                  {agentData?.name || 'AI Agent System'}
+          {/* Enhanced Progress Indicator - Only show when AI is actually running */}
+          {status === 'streaming' && (
+            <div className="mt-4 sm:mt-6 p-3 sm:p-4 rounded-2xl bg-black/50 border border-green-500/20 backdrop-blur-sm shadow-lg shadow-green-500/10">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                  <div className="text-sm font-medium text-green-200 font-mono">Build Progress</div>
+                  <div className="px-2 py-1 rounded-lg bg-green-500/20 text-green-300 text-xs font-medium font-mono border border-green-500/30 self-start">
+                    {agentData?.name || 'AI Agent System'}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-blue-600">{Math.round(calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData))}%</div>
+                  <div className="text-xs text-gray-500">Complete</div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-xl font-bold text-matrix-gradient bg-clip-text font-mono">
-                  {safeMetadata.stepProgress ? 
-                    Object.values(safeMetadata.stepProgress).filter(status => status === 'complete').length * 25 : 
-                    100}%
-                </div>
-                <div className="text-xs text-green-400 font-mono">Complete</div>
+              
+              {/* Progress Bar */}
+              <div className="relative h-2 bg-green-500/10 rounded-full overflow-hidden border border-green-500/20">
+                <div 
+                  className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-700 rounded-full transition-all duration-1000 ease-out shadow-lg shadow-green-500/30"
+                  style={{ width: `${calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData)}%` }}
+                />
+                {/* Animated shimmer effect for active progress */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
               </div>
+              
+              {/* Progress Steps */}
+              {/* <div className="flex justify-between mt-4 text-xs font-mono">
+                {[
+                  { id: 'overview', label: 'Overview' },
+                  { id: 'models', label: 'Models' },
+                  { id: 'enums', label: 'Enums' },
+                  { id: 'actions', label: 'Actions' },
+                  { id: 'schedules', label: 'Schedules' }
+                ].map((step) => {
+                  const stepStatus = getStepStatus(step.id, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
+                  const isComplete = stepStatus === 'complete';
+                  const isProcessing = stepStatus === 'processing';
+                  
+                  return (
+                    <div key={step.id} className="flex flex-col items-center gap-1">
+                      <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                        isComplete 
+                          ? 'bg-green-400 shadow-lg shadow-green-500/50 animate-matrix-glow' 
+                          : isProcessing 
+                          ? 'bg-yellow-400 shadow-lg shadow-yellow-500/50 animate-pulse'
+                          : 'bg-green-500/20 border border-green-500/30'
+                      }`} />
+                      <span className={`font-medium transition-colors duration-300 ${
+                        isComplete 
+                          ? 'text-green-400' 
+                          : isProcessing 
+                          ? 'text-yellow-400'
+                          : 'text-green-500/50'
+                      }`}>
+                        {step.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div> */}
             </div>
-            
-            {/* Progress Bar */}
-            <div className="relative h-2 bg-green-500/10 rounded-full overflow-hidden border border-green-500/20">
-              <div 
-                className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-700 rounded-full transition-all duration-700 ease-out shadow-lg shadow-green-500/30"
-                style={{ width: `${
-                  safeMetadata.stepProgress ? 
-                    Object.values(safeMetadata.stepProgress).filter(status => status === 'complete').length * 25 : 
-                    100
-                }%` }}
-              />
-            </div>
-            
-            {/* Progress Steps */}
-            <div className="flex justify-between mt-4 text-xs font-mono">
-              <div className="flex flex-col items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-green-400 shadow-lg shadow-green-500/50 animate-matrix-glow" />
-                <span className="text-green-400 font-medium">Overview</span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-green-400 shadow-lg shadow-green-500/50 animate-matrix-glow" />
-                <span className="text-green-400 font-medium">Models</span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-green-400 shadow-lg shadow-green-500/50 animate-matrix-glow" />
-                <span className="text-green-400 font-medium">Enums</span>
-              </div>
-              <div className="flex flex-col items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-green-400 shadow-lg shadow-green-500/50 animate-matrix-glow" />
-                <span className="text-green-400 font-medium">Actions</span>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
       {/* Navigation */}
       <div className="relative border-b border-green-500/20 backdrop-blur-xl bg-black/50">
-        <div className="px-8">
-          <div className="flex gap-2 -mb-px">
+        <div className="px-4 sm:px-6 lg:px-8">
+          <div className="flex gap-1 sm:gap-2 -mb-px overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => updateMetadata({ selectedTab: tab.id })}
                 className={cn(
-                  "relative px-6 py-4 text-sm font-medium font-mono transition-all duration-300 border-b-2 group",
+                  "relative px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium font-mono transition-all duration-300 border-b-2 group whitespace-nowrap flex-shrink-0",
                   safeMetadata.selectedTab === tab.id
                     ? "text-green-300 border-green-400 bg-green-500/10"
                     : "text-green-500 border-transparent hover:text-green-300 hover:bg-green-500/5"
                 )}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   <span className="font-medium">{tab.label}</span>
                   <div className={cn(
-                    "px-2.5 py-1 rounded-full text-xs font-bold font-mono transition-colors border",
+                    "px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-bold font-mono transition-colors border",
                     safeMetadata.selectedTab === tab.id
                       ? "bg-green-500/20 text-green-300 border-green-500/30"
                       : "bg-green-500/10 text-green-400 border-green-500/20 group-hover:bg-green-500/20 group-hover:text-green-300"
@@ -1737,463 +3577,86 @@ const AgentBuilderContent = memo(({
       <div className="flex-1 overflow-auto relative">
         <div className="p-8">
           <div className="max-w-6xl mx-auto space-y-8">
-            {safeMetadata.selectedTab === 'models' && (
-              <div className="space-y-6 animate-fade-in">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold text-green-200 font-mono">Database Models</h2>
-                    <p className="text-green-400 font-mono">Define your data structures and relationships</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
-                      <span className="text-green-400 text-sm font-medium font-mono">
-                        {agentData.models?.length || 0} models created
-                      </span>
-                    </div>
-                    <Button
-                      onClick={addModel}
-                      className="btn-matrix px-4 py-2 text-sm font-medium font-mono"
-                    >
-                      <div className="flex items-center gap-2">
-                        <PlusIcon size={16} />
-                        <span>Add Model</span>
-                      </div>
-                    </Button>
-                  </div>
-                </div>
+            {(() => {
+              console.log('🔍 Render - dataManagement:', safeMetadata.dataManagement);
+              
+              // Check if we should show ModelDataViewer
+              const viewingModelId = safeMetadata.dataManagement?.viewingModelId;
+              if (viewingModelId) {
+                const viewingModel = (agentData.models || []).find(m => m.id === viewingModelId);
                 
-                {agentData.models && agentData.models.length > 0 ? (
-                  <div className="grid gap-6">
-                    {agentData.models.map((model, index) => (
-                      <div key={model.id || index} className={cn(
-                        "card-matrix p-6 animate-slide-up hover:shadow-matrix-lg transition-all duration-300",
-                        safeMetadata.editingModel === model.id && "ring-2 ring-green-400/50 shadow-lg shadow-green-500/20"
-                      )}>
-                        {safeMetadata.editingModel === model.id ? (
-                          <ModelEditor
-                            model={model}
-                            onUpdate={(updatedModel) => {
-                              const updatedModels = agentData.models?.map(m => 
-                                m.id === model.id ? updatedModel : m
-                              ) || [];
+                if (viewingModel) {
+                  console.log('✅ Rendering ModelDataViewer for model:', viewingModel.name);
+                  return (
+                    <ModelDataViewer
+                      key={viewingModel.id}
+                      model={viewingModel}
+                      allModels={agentData.models || []}
+                      onUpdateModel={(updatedModel) => {
+                        console.log('🔄 Updating model:', updatedModel);
+                        const updatedModels = (agentData.models || []).map(m => 
+                          m.id === updatedModel.id ? updatedModel : m
+                        );
                               updateAgentData({ ...agentData, models: updatedModels });
                             }}
-                            onDelete={() => {
-                              const updatedModels = agentData.models?.filter(m => m.id !== model.id) || [];
-                              updateAgentData({ ...agentData, models: updatedModels });
-                              updateMetadata({ editingModel: null });
-                            }}
-                            allModels={agentData.models || []}
-                            allEnums={agentData.enums || []}
-                          />
-                        ) : (
-                          <>
-                            <div className="flex items-start justify-between mb-6">
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-xl bg-green-500/20 flex items-center justify-center border border-green-500/30">
-                                    <div className="text-green-400 text-sm">📊</div>
+                      onBack={() => {
+                        console.log('🔙 Going back from ModelDataViewer');
+                        updateMetadata({ dataManagement: null });
+                      }}
+                    />
+                  );
+                } else {
+                  console.log('❌ No model found for viewingModelId:', viewingModelId);
+                }
+              }
+              
+              // Show appropriate tab content
+              if (safeMetadata.selectedTab === 'models') {
+                return (
+                  <ModelsListEditor
+                    models={agentData.models || []}
+                    onModelsChange={(models) => updateAgentData({ ...agentData, models })}
+                    updateMetadata={updateMetadata}
+                    status={status}
+                  />
+                );
+              }
+              
+              if (safeMetadata.selectedTab === 'actions') {
+                console.log('⚡ Rendering ActionsListEditor');
+                return (
+                  <ActionsListEditor
+                    actions={agentData.actions || []}
+                    updateActions={(actions) => updateAgentData({ ...agentData, actions })}
+                    editingId={safeMetadata.editingAction}
+                    setEditingId={(id) => updateMetadata({ editingAction: id })}
+                    addAction={addAction}
+                    models={agentData.models || []}
+                    status={status}
+                  />
+                );
+              }
+              
+              if (safeMetadata.selectedTab === 'schedules') {
+                console.log('⏰ Rendering SchedulesListEditor');
+                return (
+                  <SchedulesListEditor
+                    schedules={agentData.schedules || []}
+                    updateSchedules={(schedules) => updateAgentData({ ...agentData, schedules })}
+                    editingId={safeMetadata.editingSchedule}
+                    setEditingId={(id) => updateMetadata({ editingSchedule: id })}
+                    addSchedule={addSchedule}
+                    models={agentData.models || []}
+                    status={status}
+                  />
+                );
+              }
+              
+              console.log('❓ No matching tab or condition');
+              return null;
+            })()}
+                                </div>
                                   </div>
-                                  <h3 className="text-xl font-bold text-green-200 font-mono">{model.name || `Model ${index + 1}`}</h3>
-                                </div>
-                                <p className="text-green-400 text-sm font-mono">
-                                  Primary entity with {model.fields?.length || 0} defined fields
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="px-3 py-1 rounded-lg bg-green-500/10 border border-green-500/20">
-                                  <span className="text-green-300 text-xs font-medium font-mono">
-                                    {model.fields?.length || 0} fields
-                                  </span>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  onClick={() => updateMetadata({ editingModel: model.id })}
-                                  className="btn-matrix-secondary"
-                                >
-                                  <PencilEditIcon size={16} />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => {
-                                    const updatedModels = agentData.models?.filter(m => m.id !== model.id) || [];
-                                    updateAgentData({ ...agentData, models: updatedModels });
-                                  }}
-                                >
-                                  <CrossIcon size={16} />
-                                </Button>
-                              </div>
-                            </div>
-                            
-                            {model.fields && model.fields.length > 0 && (
-                              <div className="space-y-4">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-1 h-4 bg-gradient-to-b from-green-500 to-green-600 rounded-full" />
-                                  <h4 className="text-sm font-semibold text-green-200 font-mono">Field Definitions</h4>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                  {model.fields.map((field, fieldIndex) => (
-                                    <div key={field.id || fieldIndex} className="p-4 rounded-xl bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 transition-colors group">
-                                      <div className="flex items-center justify-between mb-2">
-                                        <span className="text-green-200 text-sm font-mono font-medium group-hover:text-green-300 transition-colors">
-                                          {field.name}
-                                        </span>
-                                        <span className="text-green-400 text-xs font-medium px-2 py-1 rounded bg-green-800/50">
-                                          {field.type}
-                                        </span>
-                                      </div>
-                                      {(field.required || field.unique) && (
-                                        <div className="flex gap-2 mt-2">
-                                          {field.required && (
-                                            <span className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded-md border border-red-500/30 font-medium">
-                                              Required
-                                            </span>
-                                          )}
-                                          {field.unique && (
-                                            <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded-md border border-purple-500/30 font-medium">
-                                              Unique
-                                            </span>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        )}
-                        
-                        {safeMetadata.editingModel === model.id && (
-                          <div className="mt-6 flex gap-2">
-                            <Button
-                              onClick={() => updateMetadata({ editingModel: null })}
-                              className="btn-matrix"
-                            >
-                              Done Editing
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-16">
-                    <div className="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-green-800/50 to-green-900/50 flex items-center justify-center border border-green-500/20">
-                      <div className="text-4xl opacity-60">📊</div>
-                    </div>
-                    <h3 className="text-xl font-semibold text-green-300 mb-2 font-mono">No Models Defined</h3>
-                    <p className="text-green-500 max-w-md mx-auto mb-6 font-mono">
-                      Create your first database model to get started with your AI agent system.
-                    </p>
-                    <Button
-                      onClick={addModel}
-                      className="btn-matrix px-6 py-3"
-                    >
-                      <div className="flex items-center gap-2">
-                        <PlusIcon size={18} />
-                        <span>Create First Model</span>
-                      </div>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {safeMetadata.selectedTab === 'enums' && (
-              <div className="space-y-6 animate-fade-in">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold text-green-200 font-mono">Enumerations</h2>
-                    <p className="text-green-400 font-mono">Controlled vocabularies and status types</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="px-4 py-2 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
-                      <span className="text-purple-400 text-sm font-medium font-mono">
-                        {agentData.enums?.length || 0} enums defined
-                      </span>
-                    </div>
-                    <Button
-                      onClick={addEnum}
-                      className="btn-matrix px-4 py-2 text-sm font-medium font-mono"
-                    >
-                      <div className="flex items-center gap-2">
-                        <PlusIcon size={16} />
-                        <span>Add Enum</span>
-                      </div>
-                    </Button>
-                  </div>
-                </div>
-                
-                {agentData.enums && agentData.enums.length > 0 ? (
-                  <div className="grid gap-6">
-                    {agentData.enums.map((enumItem, index) => (
-                      <div key={enumItem.id || index} className={cn(
-                        "card-matrix p-6 animate-slide-up hover:shadow-matrix-lg transition-all duration-300",
-                        safeMetadata.editingEnum === enumItem.id && "ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20"
-                      )}>
-                        {safeMetadata.editingEnum === enumItem.id ? (
-                          <EnumEditor
-                            enumItem={enumItem}
-                            onUpdate={(updatedEnum) => {
-                              const updatedEnums = agentData.enums?.map(e => 
-                                e.id === enumItem.id ? updatedEnum : e
-                              ) || [];
-                              updateAgentData({ ...agentData, enums: updatedEnums });
-                            }}
-                            onDelete={() => {
-                              const updatedEnums = agentData.enums?.filter(e => e.id !== enumItem.id) || [];
-                              updateAgentData({ ...agentData, enums: updatedEnums });
-                              updateMetadata({ editingEnum: null });
-                            }}
-                          />
-                        ) : (
-                          <>
-                            <div className="flex items-start justify-between mb-6">
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-xl bg-purple-500/20 flex items-center justify-center border border-purple-500/30">
-                                    <div className="text-purple-400 text-sm">🔢</div>
-                                  </div>
-                                  <h3 className="text-xl font-bold text-green-200 font-mono">{enumItem.name || `Enum ${index + 1}`}</h3>
-                                </div>
-                                <p className="text-green-400 text-sm font-mono">
-                                  Controlled vocabulary with {enumItem.fields?.length || 0} defined values
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="px-3 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20">
-                                  <span className="text-purple-300 text-xs font-medium font-mono">
-                                    {enumItem.fields?.length || 0} values
-                                  </span>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  onClick={() => updateMetadata({ editingEnum: enumItem.id })}
-                                  className="btn-matrix-secondary"
-                                >
-                                  <PencilEditIcon size={16} />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => {
-                                    const updatedEnums = agentData.enums?.filter(e => e.id !== enumItem.id) || [];
-                                    updateAgentData({ ...agentData, enums: updatedEnums });
-                                  }}
-                                >
-                                  <CrossIcon size={16} />
-                                </Button>
-                              </div>
-                            </div>
-                            
-                            {enumItem.fields && enumItem.fields.length > 0 && (
-                              <div className="space-y-4">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-1 h-4 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" />
-                                  <h4 className="text-sm font-semibold text-green-200 font-mono">Enumeration Values</h4>
-                                </div>
-                                <div className="flex flex-wrap gap-3">
-                                  {enumItem.fields.map((field, fieldIndex) => (
-                                    <span key={field.id || fieldIndex} className="px-4 py-2 bg-green-500/10 border border-green-500/20 text-green-200 text-sm font-mono rounded-xl hover:bg-green-500/20 transition-colors">
-                                      {field.name}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        )}
-                        
-                        {safeMetadata.editingEnum === enumItem.id && (
-                          <div className="mt-6 flex gap-2">
-                            <Button
-                              onClick={() => updateMetadata({ editingEnum: null })}
-                              className="btn-matrix"
-                            >
-                              Done Editing
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-16">
-                    <div className="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-green-800/50 to-green-900/50 flex items-center justify-center border border-green-500/20">
-                      <div className="text-4xl opacity-60">🔢</div>
-                    </div>
-                    <h3 className="text-xl font-semibold text-green-300 mb-2 font-mono">No Enumerations Defined</h3>
-                    <p className="text-green-500 max-w-md mx-auto mb-6 font-mono">
-                      Create your first enumeration to define controlled vocabularies for your system.
-                    </p>
-                    <Button
-                      onClick={addEnum}
-                      className="btn-matrix px-6 py-3"
-                    >
-                      <div className="flex items-center gap-2">
-                        <PlusIcon size={18} />
-                        <span>Create First Enum</span>
-                      </div>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {safeMetadata.selectedTab === 'actions' && (
-              <div className="space-y-6 animate-fade-in">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-1">
-                    <h2 className="text-2xl font-bold text-green-200 font-mono">Automated Actions</h2>
-                    <p className="text-green-400 font-mono">Intelligent workflows and business automation</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="px-4 py-2 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
-                      <span className="text-orange-400 text-sm font-medium font-mono">
-                        {agentData.actions?.length || 0} actions configured
-                      </span>
-                    </div>
-                    <Button
-                      onClick={addAction}
-                      className="btn-matrix px-4 py-2 text-sm font-medium font-mono"
-                    >
-                      <div className="flex items-center gap-2">
-                        <PlusIcon size={16} />
-                        <span>Add Action</span>
-                      </div>
-                    </Button>
-                  </div>
-                </div>
-                
-                {agentData.actions && agentData.actions.length > 0 ? (
-                  <div className="grid gap-6">
-                    {agentData.actions.map((action, index) => (
-                      <div key={index} className={cn(
-                        "card-matrix p-6 animate-slide-up hover:shadow-matrix-lg transition-all duration-300",
-                        safeMetadata.editingAction === index.toString() && "ring-2 ring-orange-400/50 shadow-lg shadow-orange-500/20"
-                      )}>
-                        {safeMetadata.editingAction === index.toString() ? (
-                          <ActionEditor
-                            action={action}
-                            onUpdate={(updatedAction) => {
-                              const updatedActions = [...(agentData.actions || [])];
-                              updatedActions[index] = updatedAction;
-                              updateAgentData({ ...agentData, actions: updatedActions });
-                            }}
-                            onDelete={() => {
-                              const updatedActions = agentData.actions?.filter((_, i) => i !== index) || [];
-                              updateAgentData({ ...agentData, actions: updatedActions });
-                              updateMetadata({ editingAction: null });
-                            }}
-                            allModels={agentData.models || []}
-                          />
-                        ) : (
-                          <>
-                            <div className="flex items-start justify-between mb-6">
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-xl bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
-                                    <div className="text-orange-400 text-sm">⚡</div>
-                                  </div>
-                                  <h3 className="text-xl font-bold text-green-200 font-mono">{action.name || `Action ${index + 1}`}</h3>
-                                </div>
-                                {action.description && (
-                                  <p className="text-green-400 text-sm font-mono leading-relaxed max-w-2xl">
-                                    {action.description}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className={cn(
-                                  "px-3 py-1 rounded-lg text-xs font-medium font-mono border",
-                                  action.type === 'Create' 
-                                    ? "bg-green-500/10 border-green-500/20 text-green-300"
-                                    : "bg-blue-500/10 border-blue-500/20 text-blue-300"
-                                )}>
-                                  {action.type}
-                                </div>
-                                <Button
-                                  size="sm"
-                                  onClick={() => updateMetadata({ editingAction: index.toString() })}
-                                  className="btn-matrix-secondary"
-                                >
-                                  <PencilEditIcon size={16} />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => {
-                                    const updatedActions = agentData.actions?.filter((_, i) => i !== index) || [];
-                                    updateAgentData({ ...agentData, actions: updatedActions });
-                                  }}
-                                >
-                                  <CrossIcon size={16} />
-                                </Button>
-                              </div>
-                            </div>
-                            
-                            {action.execute && (
-                              <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20">
-                                <div className="flex items-center gap-2 mb-3">
-                                  <div className="w-1 h-4 bg-gradient-to-b from-orange-500 to-red-500 rounded-full" />
-                                  <h4 className="text-sm font-semibold text-green-200 font-mono">Execution Configuration</h4>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700 font-mono">
-                                    <span className="text-green-300 text-xs font-medium">Type:</span>
-                                    <span className="text-green-200 text-xs font-mono ml-2">{action.execute.type}</span>
-                                  </div>
-                                  {action.results?.model && (
-                                    <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700 font-mono">
-                                      <span className="text-green-300 text-xs font-medium">Target:</span>
-                                      <span className="text-green-200 text-xs font-mono ml-2">{action.results.model}</span>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        )}
-                        
-                        {safeMetadata.editingAction === index.toString() && (
-                          <div className="mt-6 flex gap-2">
-                            <Button
-                              onClick={() => updateMetadata({ editingAction: null })}
-                              className="btn-matrix"
-                            >
-                              Done Editing
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-16">
-                    <div className="w-24 h-24 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-green-800/50 to-green-900/50 flex items-center justify-center border border-green-500/20">
-                      <div className="text-4xl opacity-60">⚡</div>
-                    </div>
-                    <h3 className="text-xl font-semibold text-green-300 mb-2 font-mono">No Actions Configured</h3>
-                    <p className="text-green-500 max-w-md mx-auto mb-6 font-mono">
-                      Create your first automated action to add intelligent workflows to your system.
-                    </p>
-                    <Button
-                      onClick={addAction}
-                      className="btn-matrix px-6 py-3"
-                    >
-                      <div className="flex items-center gap-2">
-                        <PlusIcon size={18} />
-                        <span>Create First Action</span>
-                      </div>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -2207,25 +3670,21 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
     setMetadata({
       selectedTab: 'models',
       editingModel: null,
-      editingEnum: null,
       editingAction: null,
+      editingSchedule: null,
+      viewingModelData: null,
+      editingRecord: null,
+      dataManagement: null
     });
   },
   
   onStreamPart: ({ streamPart, setMetadata, setArtifact }) => {
-    console.log('🎯 Agent artifact received stream part:', streamPart.type);
-    console.log('📦 Stream part content:', streamPart.content);
-    
     if (streamPart.type === 'agent-data') {
-      console.log('📊 Processing agent-data...');
       const agentData = typeof streamPart.content === 'string' 
         ? JSON.parse(streamPart.content) 
         : streamPart.content;
-      
-      console.log('✅ Parsed agent data:', JSON.stringify(agentData, null, 2));
         
       setArtifact((draftArtifact) => {
-        console.log('🔄 Updating artifact with new data');
         return {
           ...draftArtifact,
           content: JSON.stringify(agentData, null, 2),
@@ -2236,17 +3695,17 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
     }
     
     if (streamPart.type === 'agent-step') {
-      console.log('👣 Processing agent-step...');
       const stepData = typeof streamPart.content === 'string' 
         ? JSON.parse(streamPart.content) 
         : streamPart.content;
-      
-      console.log('✅ Parsed step data:', JSON.stringify(stepData, null, 2));
         
       setMetadata((draftMetadata) => {
-        console.log('🔄 Updating metadata with step progress');
-        const newMetadata = {
+        const newMetadata: AgentArtifactMetadata = {
           ...(draftMetadata || {}),
+          selectedTab: draftMetadata?.selectedTab || 'models',
+          editingModel: draftMetadata?.editingModel || null,
+          editingAction: draftMetadata?.editingAction || null,
+          editingSchedule: draftMetadata?.editingSchedule || null,
           currentStep: stepData.step,
           stepProgress: {
             ...(draftMetadata?.stepProgress || {}),
@@ -2257,12 +3716,10 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
             [stepData.step]: stepData.message || ''
           }
         };
-        console.log('📊 New metadata:', JSON.stringify(newMetadata, null, 2));
         return newMetadata;
       });
       
       if (stepData.status === 'processing') {
-        console.log('👁️ Making artifact visible due to processing step');
         setArtifact((draftArtifact) => ({
           ...draftArtifact,
           isVisible: true,
@@ -2272,7 +3729,6 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
     }
     
     if (streamPart.type === 'text-delta') {
-      console.log('📝 Processing text-delta...');
       setArtifact((draftArtifact) => ({
         ...draftArtifact,
         content: draftArtifact.content + (streamPart.content as string),

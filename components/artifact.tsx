@@ -89,15 +89,85 @@ function PureArtifact({
 }) {
   const { artifact, setArtifact, metadata, setMetadata } = useArtifact();
 
+  const apiEndpoint = artifact.documentId !== 'init' && artifact.status !== 'streaming'
+    ? `/api/document?id=${artifact.documentId}`
+    : null;
+
   const {
     data: documents,
     isLoading: isDocumentsFetching,
     mutate: mutateDocuments,
+    error: documentsError,
   } = useSWR<Array<Document>>(
-    artifact.documentId !== 'init' && artifact.status !== 'streaming'
-      ? `/api/document?id=${artifact.documentId}`
-      : null,
+    apiEndpoint,
     fetcher,
+    {
+      errorRetryCount: 8,
+      errorRetryInterval: 500,
+      onErrorRetry: (error, key, config, revalidate, { retryCount }) => {
+        console.log(`🔄 SWR Retry attempt ${retryCount} for document ${artifact.documentId}:`, {
+          error: error?.message || error,
+          status: error?.status,
+          code: error?.code,
+          retryCount,
+          key,
+          timestamp: new Date().toISOString()
+        });
+
+        if (error?.status >= 400 && error?.status < 500 && error?.status !== 404 && error?.status !== 408) {
+          console.log(`❌ Not retrying for status ${error.status} - client error`);
+          return;
+        }
+
+        if (error?.code && error.code !== 'not_found:document' && error.status >= 400 && error.status < 500) {
+          console.log(`❌ Not retrying for error code ${error.code}`);
+          return;
+        }
+
+        if (retryCount >= 8) {
+          console.log(`❌ Max retries reached for document ${artifact.documentId}`);
+          return;
+        }
+
+        const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(artifact.documentId);
+        const isRaceConditionLikely = isValidUUID && error?.status === 404 && retryCount <= 5;
+        
+        let timeout;
+        if (isRaceConditionLikely) {
+          const fastRetryDelays = [500, 1000, 1500, 2000, 3000];
+          timeout = fastRetryDelays[retryCount - 1] || 3000;
+          console.log(`🏃‍♂️ Fast retry for likely race condition in ${timeout}ms (attempt ${retryCount + 1}/8)`);
+        } else {
+          const baseDelay = 1000;
+          const maxDelay = 8000;
+          const exponentialDelay = Math.min(baseDelay * Math.pow(2, retryCount - 1), maxDelay);
+          const jitter = Math.random() * 0.1 * exponentialDelay;
+          timeout = exponentialDelay + jitter;
+          console.log(`⏱️ Standard retry in ${Math.round(timeout)}ms (attempt ${retryCount + 1}/8)`);
+        }
+        
+        setTimeout(() => revalidate({ retryCount }), timeout);
+      },
+      onError: (error) => {
+        console.error(`🚨 SWR Error for document ${artifact.documentId}:`, {
+          error: error?.message || error,
+          status: error?.status,
+          code: error?.code,
+          timestamp: new Date().toISOString()
+        });
+      },
+      onSuccess: (data) => {
+        console.log(`✅ Successfully fetched document ${artifact.documentId}:`, {
+          versionsCount: data?.length,
+          latestTitle: data?.[data.length - 1]?.title,
+          timestamp: new Date().toISOString()
+        });
+      },
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      shouldRetryOnError: true,
+      dedupingInterval: 1000,
+    }
   );
 
   const [mode, setMode] = useState<'edit' | 'diff'>('edit');
@@ -111,6 +181,12 @@ function PureArtifact({
       const mostRecentDocument = documents.at(-1);
 
       if (mostRecentDocument) {
+        console.log(`📄 Setting artifact content from document ${artifact.documentId}:`, {
+          contentLength: mostRecentDocument.content?.length || 0,
+          contentPreview: mostRecentDocument.content?.substring(0, 100) || 'empty',
+          timestamp: new Date().toISOString()
+        });
+        
         setDocument(mostRecentDocument);
         setCurrentVersionIndex(documents.length - 1);
         setArtifact((currentArtifact) => ({
@@ -125,6 +201,55 @@ function PureArtifact({
     mutateDocuments();
   }, [artifact.status, mutateDocuments]);
 
+  useEffect(() => {
+    if (
+      documentsError?.status === 404 && 
+      !isDocumentsFetching && 
+      !artifact.content && 
+      artifact.documentId !== 'init' &&
+      artifact.status === 'idle'
+    ) {
+      console.log(`🔧 Document not found after retries, initializing with basic content for ${artifact.kind} artifact`);
+      
+      let initialContent = '';
+      if (artifact.kind === 'agent') {
+        initialContent = JSON.stringify({
+          name: 'New Agent',
+          description: '',
+          domain: '',
+          models: [],
+          enums: [],
+          actions: [],
+          createdAt: new Date().toISOString()
+        }, null, 2);
+      }
+      
+      setArtifact((currentArtifact) => ({
+        ...currentArtifact,
+        content: initialContent,
+      }));
+      
+      if (initialContent) {
+        fetch(`/api/document?id=${artifact.documentId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            title: artifact.title,
+            content: initialContent,
+            kind: artifact.kind,
+          }),
+        }).then(() => {
+          console.log(`✅ Created initial document for ${artifact.documentId}`);
+          mutateDocuments();
+        }).catch((error) => {
+          console.warn(`⚠️ Failed to create initial document:`, error);
+        });
+      }
+    }
+  }, [documentsError, isDocumentsFetching, artifact, setArtifact, mutateDocuments]);
+
   const { mutate } = useSWRConfig();
   const [isContentDirty, setIsContentDirty] = useState(false);
 
@@ -132,8 +257,10 @@ function PureArtifact({
     (updatedContent: string) => {
       if (!artifact) return;
 
+      const apiEndpoint = `/api/document?id=${artifact.documentId}`;
+
       mutate<Array<Document>>(
-        `/api/document?id=${artifact.documentId}`,
+        apiEndpoint,
         async (currentDocuments) => {
           if (!currentDocuments) return undefined;
 
@@ -222,12 +349,6 @@ function PureArtifact({
   };
 
   const [isToolbarVisible, setIsToolbarVisible] = useState(false);
-
-  /*
-   * NOTE: if there are no documents, or if
-   * the documents are being fetched, then
-   * we mark it as the current version.
-   */
 
   const isCurrentVersion =
     documents && documents.length > 0
@@ -468,7 +589,11 @@ function PureArtifact({
                 isInline={false}
                 isCurrentVersion={isCurrentVersion}
                 getDocumentContentById={getDocumentContentById}
-                isLoading={isDocumentsFetching && !artifact.content}
+                isLoading={
+                  isDocumentsFetching && 
+                  (!artifact.content || 
+                   (documentsError?.status === 404 || documentsError?.code === 'not_found:document'))
+                }
                 metadata={metadata}
                 setMetadata={setMetadata}
                 setMessages={setMessages}
