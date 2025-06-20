@@ -21,6 +21,7 @@ import { useArtifact } from '@/hooks/use-artifact';
 import equal from 'fast-deep-equal';
 import { SpreadsheetEditor } from './sheet-editor';
 import { ImageEditor } from './image-editor';
+import { agentArtifact } from '@/artifacts/agent/client';
 
 interface DocumentPreviewProps {
   isReadonly: boolean;
@@ -279,6 +280,31 @@ const DocumentContent = ({ document }: { document: Document }) => {
           status={artifact.status}
           isInline={true}
         />
+      ) : document.kind === 'agent' ? (
+        <div className="flex flex-1 relative size-full">
+          <div className="absolute inset-0">
+            <agentArtifact.content
+              title={document.title}
+              content={document.content ?? ''}
+              mode="edit"
+              isCurrentVersion={true}
+              currentVersionIndex={0}
+              status={artifact.status}
+              suggestions={[]}
+              onSaveContent={() => {}}
+              isInline={true}
+              getDocumentContentById={() => ''}
+              isLoading={false}
+              metadata={{
+                selectedTab: 'models',
+                editingModel: null,
+                editingEnum: null,
+                editingAction: null,
+              }}
+              setMetadata={() => {}}
+            />
+          </div>
+        </div>
       ) : null}
     </div>
   );

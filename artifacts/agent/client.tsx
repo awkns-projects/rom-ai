@@ -26,6 +26,9 @@ import {
 } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import type { UseChatHelpers } from '@ai-sdk/react';
+import type { UIMessage, Message } from 'ai';
+import { useArtifact } from '@/hooks/use-artifact';
 
 interface AgentModel {
   id: string;
@@ -419,7 +422,7 @@ const ModelEditor = memo(({
   const addField = useCallback(() => {
     const newField: AgentField = {
       id: generateNewId('field', model.fields),
-      name: '',
+      name: `field${model.fields.length + 1}`,
       type: 'String',
       isId: false,
       unique: false,
@@ -429,13 +432,14 @@ const ModelEditor = memo(({
       relationField: false,
       title: '',
       sort: false,
-      order: model.fields.length,
+      order: 0, // Reset order since we're adding to top
       defaultValue: ''
     };
     
+    // Add to top of list and set to editing mode
     onUpdate({
       ...model,
-      fields: [...model.fields, newField]
+      fields: [newField, ...model.fields]
     });
     setEditingField(newField.id);
   }, [model, onUpdate]);
@@ -457,170 +461,285 @@ const ModelEditor = memo(({
   }, [model, onUpdate]);
 
   return (
-    <div className="space-y-4 p-4 border rounded-lg">
-      <div className="flex items-center justify-between">
-        <div className="flex-1 space-y-2">
+    <div className="space-y-6">
+      {/* Model Basic Info */}
+      <div className="p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center border border-green-500/30">
+            <div className="text-green-400 text-lg">📊</div>
+          </div>
           <div>
-            <Label htmlFor={`model-name-${model.id}`}>Model Name</Label>
+            <h3 className="text-xl font-bold text-green-200 font-mono">Model Configuration</h3>
+            <p className="text-green-400 text-sm font-mono">Define your database entity structure</p>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <Label htmlFor={`model-name-${model.id}`} className="text-green-300 font-mono font-medium">Model Name</Label>
             <Input
               id={`model-name-${model.id}`}
               value={model.name}
               onChange={(e) => onUpdate({ ...model, name: e.target.value })}
               placeholder="Model name (e.g., User, Post, Order)"
+              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
             />
           </div>
-          <div>
-            <Label htmlFor={`model-id-field-${model.id}`}>ID Field</Label>
+          <div className="space-y-2">
+            <Label htmlFor={`model-id-field-${model.id}`} className="text-green-300 font-mono font-medium">ID Field</Label>
             <Input
               id={`model-id-field-${model.id}`}
               value={model.idField}
               onChange={(e) => onUpdate({ ...model, idField: e.target.value })}
               placeholder="ID field name (e.g., id)"
+              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
             />
           </div>
         </div>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={onDelete}
-          className="ml-4"
-        >
-          <CrossIcon size={16} />
-        </Button>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>Fields</Label>
-          <Button size="sm" onClick={addField}>
-            <PlusIcon size={16} />
-            Add Field
+      {/* Fields Section */}
+      <div className="p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-green-600 rounded-full" />
+            <h4 className="text-lg font-semibold text-green-200 font-mono">Field Definitions</h4>
+            <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
+              <span className="text-green-300 text-xs font-medium font-mono">{model.fields.length} fields</span>
+            </div>
+          </div>
+          <Button 
+            onClick={addField}
+            className="btn-matrix px-4 py-2 text-sm font-mono"
+          >
+            <div className="flex items-center gap-2">
+              <PlusIcon size={16} />
+              <span>Add Field</span>
+            </div>
           </Button>
         </div>
         
-        <div className="space-y-2 max-h-96 overflow-y-auto">
+        <div className="space-y-4 max-h-96 overflow-y-auto">
           {model.fields.map((field) => (
-            <div key={field.id} className="border rounded p-3 space-y-2">
+            <div key={field.id} className="p-4 rounded-xl bg-black/30 border border-green-500/20 hover:border-green-500/40 transition-colors">
               {editingField === field.id ? (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label>Field Name</Label>
-                    <Input
-                      value={field.name}
-                      onChange={(e) => updateField(field.id, { name: e.target.value })}
-                      placeholder="Field name"
-                    />
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-green-300 font-mono font-medium">Field Name</Label>
+                      <Input
+                        value={field.name}
+                        onChange={(e) => updateField(field.id, { name: e.target.value })}
+                        placeholder="Field name"
+                        className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-green-300 font-mono font-medium">Type</Label>
+                      <Select
+                        value={field.type}
+                        onValueChange={(value) => updateField(field.id, { type: value })}
+                      >
+                        <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-black border-green-500/30">
+                          {field.kind === 'scalar' && FIELD_TYPES.map(type => (
+                            <SelectItem key={type} value={type} className="text-green-200 focus:bg-green-500/20 font-mono">{type}</SelectItem>
+                          ))}
+                          {field.kind === 'object' && (
+                            allModels.filter(model => model.name.trim() !== '').length > 0 ? (
+                              allModels.filter(model => model.name.trim() !== '').map(model => (
+                                <SelectItem key={model.id} value={model.name} className="text-green-200 focus:bg-green-500/20 font-mono">{model.name}</SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem key="no-models" value="NoModelsAvailable" className="text-gray-400 focus:bg-gray-500/20 font-mono" disabled>
+                                No models available - create a model first
+                              </SelectItem>
+                            )
+                          )}
+                          {field.kind === 'enum' && (
+                            allEnums.filter(enumItem => enumItem.name.trim() !== '').length > 0 ? (
+                              allEnums.filter(enumItem => enumItem.name.trim() !== '').map(enumItem => (
+                                <SelectItem key={enumItem.id} value={enumItem.name} className="text-green-200 focus:bg-green-500/20 font-mono">{enumItem.name}</SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem key="no-enums" value="NoEnumsAvailable" className="text-gray-400 focus:bg-gray-500/20 font-mono" disabled>
+                                No enums available - create an enum first
+                              </SelectItem>
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-green-300 font-mono font-medium">Kind</Label>
+                      <Select
+                        value={field.kind}
+                        onValueChange={(value: 'scalar' | 'object' | 'enum') => {
+                          // Reset type when kind changes since available types are different
+                          let defaultType = 'String'; // Default fallback
+                          
+                          if (value === 'scalar') {
+                            defaultType = 'String';
+                          } else if (value === 'object') {
+                            const availableModels = allModels.filter(model => model.name.trim() !== '');
+                            defaultType = availableModels.length > 0 ? availableModels[0].name : 'NoModelsAvailable';
+                          } else if (value === 'enum') {
+                            const availableEnums = allEnums.filter(enumItem => enumItem.name.trim() !== '');
+                            defaultType = availableEnums.length > 0 ? availableEnums[0].name : 'NoEnumsAvailable';
+                          }
+                          
+                          updateField(field.id, { kind: value, type: defaultType });
+                        }}
+                      >
+                        <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="bg-black border-green-500/30">
+                          {FIELD_KINDS.map(kind => (
+                            <SelectItem key={kind.value} value={kind.value} className="text-green-200 focus:bg-green-500/20 font-mono">
+                              {kind.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-green-300 font-mono font-medium">Title</Label>
+                      <Input
+                        value={field.title}
+                        onChange={(e) => updateField(field.id, { title: e.target.value })}
+                        placeholder="Display title"
+                        className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <Label>Type</Label>
-                    <Select
-                      value={field.type}
-                      onValueChange={(value) => updateField(field.id, { type: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FIELD_TYPES.map(type => (
-                          <SelectItem key={type} value={type}>{type}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Kind</Label>
-                    <Select
-                      value={field.kind}
-                      onValueChange={(value: 'scalar' | 'object' | 'enum') => 
-                        updateField(field.id, { kind: value })
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FIELD_KINDS.map(kind => (
-                          <SelectItem key={kind.value} value={kind.value}>
-                            {kind.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Title</Label>
-                    <Input
-                      value={field.title}
-                      onChange={(e) => updateField(field.id, { title: e.target.value })}
-                      placeholder="Display title"
-                    />
-                  </div>
-                  <div className="col-span-2 flex gap-4">
-                    <label className="flex items-center space-x-2">
+                  
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <label className="flex items-center space-x-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 transition-colors cursor-pointer">
                       <input
                         type="checkbox"
                         checked={field.required}
                         onChange={(e) => updateField(field.id, { required: e.target.checked })}
+                        className="w-4 h-4 text-green-400 bg-black/50 border-green-500/30 rounded focus:ring-green-400/20"
                       />
-                      <span>Required</span>
+                      <span className="text-green-200 text-sm font-mono font-medium">Required</span>
                     </label>
-                    <label className="flex items-center space-x-2">
+                    <label className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors ${
+                      (field.kind === 'scalar' && ['String', 'Int', 'Float', 'DateTime'].includes(field.type))
+                        ? 'bg-green-500/10 border-green-500/20 hover:bg-green-500/20 cursor-pointer' 
+                        : 'bg-gray-500/10 border-gray-500/20 cursor-not-allowed opacity-50'
+                    }`}>
                       <input
                         type="checkbox"
                         checked={field.unique}
                         onChange={(e) => updateField(field.id, { unique: e.target.checked })}
+                        disabled={!(field.kind === 'scalar' && ['String', 'Int', 'Float', 'DateTime'].includes(field.type))}
+                        className="w-4 h-4 text-green-400 bg-black/50 border-green-500/30 rounded focus:ring-green-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
                       />
-                      <span>Unique</span>
+                      <span className="text-green-200 text-sm font-mono font-medium">Unique</span>
                     </label>
-                    <label className="flex items-center space-x-2">
+                    <label className="flex items-center space-x-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 transition-colors cursor-pointer">
                       <input
                         type="checkbox"
                         checked={field.list}
                         onChange={(e) => updateField(field.id, { list: e.target.checked })}
+                        className="w-4 h-4 text-green-400 bg-black/50 border-green-500/30 rounded focus:ring-green-400/20"
                       />
-                      <span>List</span>
+                      <span className="text-green-200 text-sm font-mono font-medium">List</span>
                     </label>
-                    <label className="flex items-center space-x-2">
+                    <label className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors ${
+                      field.kind === 'object' 
+                        ? 'bg-green-500/10 border-green-500/20 hover:bg-green-500/20 cursor-pointer' 
+                        : 'bg-gray-500/10 border-gray-500/20 cursor-not-allowed opacity-50'
+                    }`}>
                       <input
                         type="checkbox"
                         checked={field.relationField}
                         onChange={(e) => updateField(field.id, { relationField: e.target.checked })}
+                        disabled={field.kind !== 'object'}
+                        className="w-4 h-4 text-green-400 bg-black/50 border-green-500/30 rounded focus:ring-green-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
                       />
-                      <span>Relation</span>
+                      <span className="text-green-200 text-sm font-mono font-medium">Relation</span>
                     </label>
                   </div>
-                  <div className="col-span-2 flex gap-2">
+                  
+                  <div className="flex gap-3 pt-4 border-t border-green-500/20">
                     <Button
-                      size="sm"
                       onClick={() => setEditingField(null)}
+                      className="btn-matrix flex-1"
                     >
-                      Done
+                      <div className="flex items-center gap-2">
+                        <span>✓</span>
+                        <span>Done</span>
+                      </div>
                     </Button>
                     <Button
-                      size="sm"
                       variant="destructive"
                       onClick={() => deleteField(field.id)}
+                      className="px-4"
                     >
-                      Delete
+                      <CrossIcon size={16} />
                     </Button>
                   </div>
                 </div>
               ) : (
                 <button 
-                  className="flex items-center justify-between w-full cursor-pointer hover:bg-muted/50 p-2 rounded border-0 bg-transparent text-left"
+                  className="flex items-center justify-between w-full p-3 cursor-pointer hover:bg-green-500/10 rounded-lg border-0 bg-transparent text-left transition-colors group"
                   onClick={() => setEditingField(field.id)}
                 >
-                  <div>
-                    <span className="font-medium">{field.name || 'Unnamed Field'}</span>
-                    <span className="text-sm text-muted-foreground ml-2">
-                      {field.type} {field.required && '(required)'} {field.unique && '(unique)'}
-                    </span>
+                  <div className="flex items-center gap-4">
+                    <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center border border-green-500/30 group-hover:bg-green-500/30 transition-colors">
+                      <span className="text-green-400 text-sm">🔧</span>
+                    </div>
+                    <div>
+                      <div className="font-medium text-green-200 font-mono group-hover:text-green-100 transition-colors">
+                        {field.name || 'Unnamed Field'}
+                      </div>
+                      <div className="text-sm text-green-400 font-mono">
+                        {field.type} {field.required && '• Required'} {field.unique && '• Unique'}
+                      </div>
+                    </div>
                   </div>
-                  <PencilEditIcon size={16} />
+                  <div className="flex items-center gap-2">
+                    {field.required && (
+                      <span className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded-md border border-red-500/30 font-medium">
+                        Required
+                      </span>
+                    )}
+                    {field.unique && (
+                      <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded-md border border-purple-500/30 font-medium">
+                        Unique
+                      </span>
+                    )}
+                    <div className="text-green-400 group-hover:text-green-300 transition-colors">
+                      <PencilEditIcon size={16} />
+                    </div>
+                  </div>
                 </button>
               )}
             </div>
           ))}
+          
+          {model.fields.length === 0 && (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-green-800/30 flex items-center justify-center border border-green-500/20">
+                <div className="text-2xl opacity-60">🔧</div>
+              </div>
+              <h4 className="text-lg font-semibold text-green-300 mb-2 font-mono">No Fields Defined</h4>
+              <p className="text-green-500 text-sm font-mono mb-4">Add fields to define your model structure</p>
+              <Button 
+                onClick={addField}
+                className="btn-matrix px-4 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <PlusIcon size={16} />
+                  <span>Add First Field</span>
+                </div>
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -642,14 +761,15 @@ const EnumEditor = memo(({
   const addField = useCallback(() => {
     const newField: AgentEnumField = {
       id: generateNewId('enumField', enumItem.fields),
-      name: '',
+      name: `VALUE${enumItem.fields.length + 1}`,
       type: 'String',
       defaultValue: ''
     };
     
+    // Add to top of list and set to editing mode
     onUpdate({
       ...enumItem,
-      fields: [...enumItem.fields, newField]
+      fields: [newField, ...enumItem.fields]
     });
     setEditingField(newField.id);
   }, [enumItem, onUpdate]);
@@ -671,76 +791,129 @@ const EnumEditor = memo(({
   }, [enumItem, onUpdate]);
 
   return (
-    <div className="space-y-4 p-4 border rounded-lg">
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          <Label htmlFor={`enum-name-${enumItem.id}`}>Enum Name</Label>
+    <div className="space-y-6">
+      {/* Enum Basic Info */}
+      <div className="p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center border border-purple-500/30">
+            <div className="text-purple-400 text-lg">🔢</div>
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-green-200 font-mono">Enumeration Configuration</h3>
+            <p className="text-green-400 text-sm font-mono">Define controlled vocabulary values</p>
+          </div>
+        </div>
+        
+        <div className="space-y-2">
+          <Label htmlFor={`enum-name-${enumItem.id}`} className="text-green-300 font-mono font-medium">Enum Name</Label>
           <Input
             id={`enum-name-${enumItem.id}`}
             value={enumItem.name}
             onChange={(e) => onUpdate({ ...enumItem, name: e.target.value })}
             placeholder="Enum name (e.g., UserRole, OrderStatus)"
+            className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
           />
         </div>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={onDelete}
-          className="ml-4"
-        >
-          <CrossIcon size={16} />
-        </Button>
       </div>
 
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>Values</Label>
-          <Button size="sm" onClick={addField}>
-            <PlusIcon size={16} />
-            Add Value
+      {/* Values Section */}
+      <div className="p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-1 h-6 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" />
+            <h4 className="text-lg font-semibold text-green-200 font-mono">Enumeration Values</h4>
+            <div className="px-3 py-1 rounded-lg bg-purple-800/50 border border-purple-700">
+              <span className="text-purple-300 text-xs font-medium font-mono">{enumItem.fields.length} values</span>
+            </div>
+          </div>
+          <Button 
+            onClick={addField}
+            className="btn-matrix px-4 py-2 text-sm font-mono"
+          >
+            <div className="flex items-center gap-2">
+              <PlusIcon size={16} />
+              <span>Add Value</span>
+            </div>
           </Button>
         </div>
         
-        <div className="space-y-2 max-h-64 overflow-y-auto">
+        <div className="space-y-4 max-h-64 overflow-y-auto">
           {enumItem.fields.map((field) => (
-            <div key={field.id} className="border rounded p-3">
+            <div key={field.id} className="p-4 rounded-xl bg-black/30 border border-purple-500/20 hover:border-purple-500/40 transition-colors">
               {editingField === field.id ? (
-                <div className="space-y-2">
-                  <div>
-                    <Label>Value Name</Label>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-green-300 font-mono font-medium">Value Name</Label>
                     <Input
                       value={field.name}
                       onChange={(e) => updateField(field.id, { name: e.target.value })}
                       placeholder="Value name (e.g., ADMIN, PENDING)"
+                      className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
                     />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-3 pt-4 border-t border-purple-500/20">
                     <Button
-                      size="sm"
                       onClick={() => setEditingField(null)}
+                      className="btn-matrix flex-1"
                     >
-                      Done
+                      <div className="flex items-center gap-2">
+                        <span>✓</span>
+                        <span>Done</span>
+                      </div>
                     </Button>
                     <Button
-                      size="sm"
                       variant="destructive"
                       onClick={() => deleteField(field.id)}
+                      className="px-4"
                     >
-                      Delete
+                      <CrossIcon size={16} />
                     </Button>
                   </div>
                 </div>
               ) : (
                 <button 
-                  className="flex items-center justify-between w-full cursor-pointer hover:bg-muted/50 p-2 rounded border-0 bg-transparent text-left"
+                  className="flex items-center justify-between w-full p-3 cursor-pointer hover:bg-purple-500/10 rounded-lg border-0 bg-transparent text-left transition-colors group"
                   onClick={() => setEditingField(field.id)}
                 >
-                  <span className="font-medium">{field.name || 'Unnamed Value'}</span>
-                  <PencilEditIcon size={16} />
+                  <div className="flex items-center gap-4">
+                    <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center border border-purple-500/30 group-hover:bg-purple-500/30 transition-colors">
+                      <span className="text-purple-400 text-sm">📝</span>
+                    </div>
+                    <div>
+                      <div className="font-medium text-green-200 font-mono group-hover:text-green-100 transition-colors">
+                        {field.name || 'Unnamed Value'}
+                      </div>
+                      <div className="text-sm text-green-400 font-mono">
+                        Enumeration value
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-green-400 group-hover:text-green-300 transition-colors">
+                    <PencilEditIcon size={16} />
+                  </div>
                 </button>
               )}
             </div>
           ))}
+          
+          {enumItem.fields.length === 0 && (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-purple-800/30 flex items-center justify-center border border-purple-500/20">
+                <div className="text-2xl opacity-60">📝</div>
+              </div>
+              <h4 className="text-lg font-semibold text-green-300 mb-2 font-mono">No Values Defined</h4>
+              <p className="text-green-500 text-sm font-mono mb-4">Add values to define your enumeration</p>
+              <Button 
+                onClick={addField}
+                className="btn-matrix px-4 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <PlusIcon size={16} />
+                  <span>Add First Value</span>
+                </div>
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -760,59 +933,69 @@ const ActionEditor = memo(({
   allModels: AgentModel[];
 }) => {
   return (
-    <div className="space-y-4 p-4 border rounded-lg">
-      <div className="flex items-center justify-between">
-        <div className="flex-1 space-y-2">
+    <div className="space-y-6">
+      {/* Action Basic Info */}
+      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
+            <div className="text-orange-400 text-lg">⚡</div>
+          </div>
           <div>
-            <Label>Action Name</Label>
+            <h3 className="text-xl font-bold text-green-200 font-mono">Action Configuration</h3>
+            <p className="text-green-400 text-sm font-mono">Define automated workflow behavior</p>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Action Name</Label>
             <Input
               value={action.name}
               onChange={(e) => onUpdate({ ...action, name: e.target.value })}
               placeholder="Action name (e.g., createUser, processOrder)"
+              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
             />
           </div>
-          <div>
-            <Label>Description</Label>
-            <Textarea
-              value={action.description}
-              onChange={(e) => onUpdate({ ...action, description: e.target.value })}
-              placeholder="Describe what this action does..."
-              rows={2}
-            />
-          </div>
-          <div>
-            <Label>Action Type</Label>
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Action Type</Label>
             <Select
               value={action.type}
               onValueChange={(value: 'Create' | 'Update') => 
                 onUpdate({ ...action, type: value })
               }
             >
-              <SelectTrigger>
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Create">Create</SelectItem>
-                <SelectItem value="Update">Update</SelectItem>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="Create" className="text-green-200 focus:bg-green-500/20 font-mono">Create</SelectItem>
+                <SelectItem value="Update" className="text-green-200 focus:bg-green-500/20 font-mono">Update</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={onDelete}
-          className="ml-4"
-        >
-          <CrossIcon size={16} />
-        </Button>
+        
+        <div className="mt-4 space-y-2">
+          <Label className="text-green-300 font-mono font-medium">Description</Label>
+          <Textarea
+            value={action.description}
+            onChange={(e) => onUpdate({ ...action, description: e.target.value })}
+            placeholder="Describe what this action does..."
+            rows={3}
+            className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+          />
+        </div>
       </div>
 
       {/* Schedule Configuration */}
-      <div className="space-y-2">
-        <Label>Schedule (Optional)</Label>
-        <div className="space-y-2 p-3 border rounded">
-          <label className="flex items-center space-x-2">
+      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-orange-500 to-red-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Schedule Configuration</h4>
+        </div>
+        
+        <div className="space-y-4">
+          <label className="flex items-center space-x-3 p-4 rounded-lg bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 transition-colors cursor-pointer">
             <input
               type="checkbox"
               checked={action.schedule?.enabled || false}
@@ -826,12 +1009,14 @@ const ActionEditor = memo(({
                   active: action.schedule?.active || true
                 }
               })}
+              className="w-4 h-4 text-green-400 bg-black/50 border-green-500/30 rounded focus:ring-green-400/20"
             />
-            <span>Enable Scheduling</span>
+            <span className="text-green-200 font-mono font-medium">Enable Scheduling</span>
           </label>
+          
           {action.schedule?.enabled && (
-            <div>
-              <Label>Schedule Pattern</Label>
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">Schedule Pattern</Label>
               <Input
                 value={action.schedule.pattern}
                 onChange={(e) => onUpdate({
@@ -839,6 +1024,7 @@ const ActionEditor = memo(({
                   schedule: { ...action.schedule!, pattern: e.target.value }
                 })}
                 placeholder="e.g., every 5 minutes, daily at 9am, weekly on monday"
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
               />
             </div>
           )}
@@ -846,126 +1032,149 @@ const ActionEditor = memo(({
       </div>
 
       {/* Data Source Configuration */}
-      <div className="space-y-2">
-        <Label>Data Source</Label>
-        <Select
-          value={action.dataSource.type}
-          onValueChange={(value: 'custom' | 'database') => 
-            onUpdate({
-              ...action,
-              dataSource: {
-                type: value,
-                ...(value === 'database' ? { database: { models: [] } } : { customFunction: { code: '' } })
-              }
-            })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="database">Database Query</SelectItem>
-            <SelectItem value="custom">Custom Function</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-cyan-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Data Source</h4>
+        </div>
         
-        {action.dataSource.type === 'custom' && (
-          <div>
-            <Label>Custom Code</Label>
-            <Textarea
-              value={action.dataSource.customFunction?.code || ''}
-              onChange={(e) => onUpdate({
-                ...action,
-                dataSource: {
-                  ...action.dataSource,
-                  customFunction: {
-                    ...action.dataSource.customFunction,
-                    code: e.target.value
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Source Type</Label>
+            <Select
+              value={action.dataSource.type}
+              onValueChange={(value: 'custom' | 'database') => 
+                onUpdate({
+                  ...action,
+                  dataSource: {
+                    type: value,
+                    ...(value === 'database' ? { database: { models: [] } } : { customFunction: { code: '' } })
                   }
-                }
-              })}
-              placeholder="// Custom function code here..."
-              rows={4}
-              className="font-mono text-sm"
-            />
+                })
+              }
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="database" className="text-green-200 focus:bg-green-500/20 font-mono">Database Query</SelectItem>
+                <SelectItem value="custom" className="text-green-200 focus:bg-green-500/20 font-mono">Custom Function</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        )}
+          
+          {action.dataSource.type === 'custom' && (
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">Custom Code</Label>
+              <Textarea
+                value={action.dataSource.customFunction?.code || ''}
+                onChange={(e) => onUpdate({
+                  ...action,
+                  dataSource: {
+                    ...action.dataSource,
+                    customFunction: {
+                      ...action.dataSource.customFunction,
+                      code: e.target.value
+                    }
+                  }
+                })}
+                placeholder="// Custom function code here..."
+                rows={6}
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-sm"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Execute Configuration */}
-      <div className="space-y-2">
-        <Label>Execute</Label>
-        <Select
-          value={action.execute.type}
-          onValueChange={(value: 'code' | 'prompt') => 
-            onUpdate({
-              ...action,
-              execute: {
-                type: value,
-                ...(value === 'code' ? { code: { script: '' } } : { prompt: { template: '' } })
+      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Execution Logic</h4>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Execution Type</Label>
+            <Select
+              value={action.execute.type}
+              onValueChange={(value: 'code' | 'prompt') => 
+                onUpdate({
+                  ...action,
+                  execute: {
+                    type: value,
+                    ...(value === 'code' ? { code: { script: '' } } : { prompt: { template: '' } })
+                  }
+                })
               }
-            })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="code">Code Script</SelectItem>
-            <SelectItem value="prompt">AI Prompt</SelectItem>
-          </SelectContent>
-        </Select>
-        
-        {action.execute.type === 'code' && (
-          <div>
-            <Label>Script Code</Label>
-            <Textarea
-              value={action.execute.code?.script || ''}
-              onChange={(e) => onUpdate({
-                ...action,
-                execute: {
-                  ...action.execute,
-                  code: {
-                    ...action.execute.code,
-                    script: e.target.value
-                  }
-                }
-              })}
-              placeholder="// Processing script here..."
-              rows={4}
-              className="font-mono text-sm"
-            />
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="code" className="text-green-200 focus:bg-green-500/20 font-mono">Code Script</SelectItem>
+                <SelectItem value="prompt" className="text-green-200 focus:bg-green-500/20 font-mono">AI Prompt</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        )}
-        
-        {action.execute.type === 'prompt' && (
-          <div>
-            <Label>AI Prompt Template</Label>
-            <Textarea
-              value={action.execute.prompt?.template || ''}
-              onChange={(e) => onUpdate({
-                ...action,
-                execute: {
-                  ...action.execute,
-                  prompt: {
-                    ...action.execute.prompt,
-                    template: e.target.value
+          
+          {action.execute.type === 'code' && (
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">Script Code</Label>
+              <Textarea
+                value={action.execute.code?.script || ''}
+                onChange={(e) => onUpdate({
+                  ...action,
+                  execute: {
+                    ...action.execute,
+                    code: {
+                      ...action.execute.code,
+                      script: e.target.value
+                    }
                   }
-                }
-              })}
-              placeholder="Analyze the following data and..."
-              rows={4}
-            />
-          </div>
-        )}
+                })}
+                placeholder="// Processing script here..."
+                rows={6}
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-sm"
+              />
+            </div>
+          )}
+          
+          {action.execute.type === 'prompt' && (
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">AI Prompt Template</Label>
+              <Textarea
+                value={action.execute.prompt?.template || ''}
+                onChange={(e) => onUpdate({
+                  ...action,
+                  execute: {
+                    ...action.execute,
+                    prompt: {
+                      ...action.execute.prompt,
+                      template: e.target.value
+                    }
+                  }
+                })}
+                placeholder="Analyze the following data and..."
+                rows={6}
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Results Configuration */}
-      <div className="space-y-2">
-        <Label>Results</Label>
-        <div className="space-y-2 p-3 border rounded">
-          <div>
-            <Label>Target Model</Label>
+      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Results Configuration</h4>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Target Model</Label>
             <Select
               value={action.results.model}
               onValueChange={(value) => onUpdate({
@@ -973,12 +1182,12 @@ const ActionEditor = memo(({
                 results: { ...action.results, model: value }
               })}
             >
-              <SelectTrigger>
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
                 <SelectValue placeholder="Select model" />
               </SelectTrigger>
-              <SelectContent>
-                {allModels.map(model => (
-                  <SelectItem key={model.id} value={model.name}>
+              <SelectContent className="bg-black border-green-500/30">
+                {allModels.filter(model => model.name.trim() !== '').map(model => (
+                  <SelectItem key={model.id} value={model.name} className="text-green-200 focus:bg-green-500/20 font-mono">
                     {model.name}
                   </SelectItem>
                 ))}
@@ -986,6 +1195,18 @@ const ActionEditor = memo(({
             </Select>
           </div>
         </div>
+      </div>
+
+      {/* Action Controls */}
+      <div className="flex justify-end pt-4 border-t border-green-500/20">
+        <Button
+          variant="destructive"
+          onClick={onDelete}
+          className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30 font-mono"
+        >
+          <CrossIcon size={16} />
+          <span className="ml-2">Delete Action</span>
+        </Button>
       </div>
     </div>
   );
@@ -1002,7 +1223,8 @@ const AgentBuilderContent = memo(({
   getDocumentContentById,
   isLoading,
   metadata,
-  setMetadata
+  setMetadata,
+  setMessages,
 }: {
   content: string;
   onSaveContent: (content: string, debounce: boolean) => void;
@@ -1014,7 +1236,10 @@ const AgentBuilderContent = memo(({
   isLoading: boolean;
   metadata: AgentArtifactMetadata | null;
   setMetadata: (metadata: AgentArtifactMetadata) => void;
+  setMessages?: UseChatHelpers['setMessages'];
 }) => {
+  const { artifact } = useArtifact();
+  
   // Initialize metadata with defaults if null
   const safeMetadata = metadata || {
     selectedTab: 'models' as const,
@@ -1166,7 +1391,7 @@ const AgentBuilderContent = memo(({
   const addModel = () => {
     const newModel: AgentModel = {
       id: generateNewId('model', agentData.models || []),
-      name: '',
+      name: `Model${(agentData.models?.length || 0) + 1}`,
       idField: 'id',
       displayFields: [],
       fields: [
@@ -1215,28 +1440,32 @@ const AgentBuilderContent = memo(({
       ]
     };
     
+    // Add to top of list and set to editing mode
     updateAgentData({
       ...agentData,
-      models: [...(agentData.models || []), newModel]
+      models: [newModel, ...(agentData.models || [])]
     });
+    updateMetadata({ editingModel: newModel.id });
   };
 
   const addEnum = () => {
     const newEnum: AgentEnum = {
       id: generateNewId('enum', agentData.enums || []),
-      name: '',
+      name: `Enum${(agentData.enums?.length || 0) + 1}`,
       fields: []
     };
     
+    // Add to top of list and set to editing mode
     updateAgentData({
       ...agentData,
-      enums: [...(agentData.enums || []), newEnum]
+      enums: [newEnum, ...(agentData.enums || [])]
     });
+    updateMetadata({ editingEnum: newEnum.id });
   };
 
   const addAction = () => {
     const newAction: AgentAction = {
-      name: '',
+      name: `Action${(agentData.actions?.length || 0) + 1}`,
       description: '',
       type: 'Create',
       dataSource: {
@@ -1253,10 +1482,13 @@ const AgentBuilderContent = memo(({
       }
     };
     
+    // Add to top of list and set to editing mode
+    const updatedActions = [newAction, ...(agentData.actions || [])];
     updateAgentData({
       ...agentData,
-      actions: [...(agentData.actions || []), newAction]
+      actions: updatedActions
     });
+    updateMetadata({ editingAction: '0' }); // First item (index 0)
   };
 
   // Tab configuration
@@ -1277,6 +1509,89 @@ const AgentBuilderContent = memo(({
       count: agentData.actions?.length || 0
     }
   ];
+
+  // Enhanced save function that updates both artifact and conversation message
+  const saveAgentToConversation = useCallback(async () => {
+    const agentDataJson = JSON.stringify(agentData, null, 2);
+    
+    // Save to artifact
+    onSaveContent(agentDataJson, false);
+    
+    // Save to database via API
+    try {
+      const response = await fetch(`/api/document?id=${artifact.documentId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: agentData.name,
+          content: agentDataJson,
+          kind: 'agent',
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        console.error('Failed to save agent document:', error);
+        // You could add a toast notification here
+        return;
+      }
+
+      console.log('Agent document saved successfully');
+    } catch (error) {
+      console.error('Error saving agent document:', error);
+      // You could add a toast notification here
+      return;
+    }
+    
+    // Update the conversation message if setMessages is available
+    if (setMessages) {
+      setMessages((messages: Message[]) => {
+        // Find the most recent assistant message that contains agent data
+        // Search from the end to find the most recent one
+        for (let i = messages.length - 1; i >= 0; i--) {
+          const msg = messages[i];
+          if (msg.role === 'assistant' && msg.parts) {
+            // Check if this message contains agent artifact data
+            const hasAgentData = msg.parts.some((part: any) => 
+              part.type === 'tool-result' && 
+              part.toolName === 'agentBuilder' &&
+              part.result?.data
+            );
+            
+            if (hasAgentData) {
+              const updatedMessages = [...messages];
+              const message = updatedMessages[i];
+              
+              // Update the tool result with the new agent data
+              const updatedParts = message.parts?.map((part: any) => {
+                if (part.type === 'tool-result' && part.toolName === 'agentBuilder') {
+                  return {
+                    ...part,
+                    result: {
+                      ...part.result,
+                      data: agentData
+                    }
+                  };
+                }
+                return part;
+              }) || [];
+
+              updatedMessages[i] = {
+                ...message,
+                parts: updatedParts
+              };
+
+              return updatedMessages;
+            }
+          }
+        }
+
+        return messages;
+      });
+    }
+  }, [agentData, onSaveContent, setMessages, artifact.documentId]);
 
   return (
     <div className="h-full bg-black text-green-200 flex flex-col relative overflow-hidden font-mono">
@@ -1316,7 +1631,7 @@ const AgentBuilderContent = memo(({
               
               {/* Save Button */}
               <Button
-                onClick={() => onSaveContent(JSON.stringify(agentData, null, 2), false)}
+                onClick={saveAgentToConversation}
                 className="btn-matrix px-6 py-2.5 text-sm font-medium font-mono"
               >
                 <div className="flex items-center gap-2">
@@ -1435,68 +1750,129 @@ const AgentBuilderContent = memo(({
                         {agentData.models?.length || 0} models created
                       </span>
                     </div>
+                    <Button
+                      onClick={addModel}
+                      className="btn-matrix px-4 py-2 text-sm font-medium font-mono"
+                    >
+                      <div className="flex items-center gap-2">
+                        <PlusIcon size={16} />
+                        <span>Add Model</span>
+                      </div>
+                    </Button>
                   </div>
                 </div>
                 
                 {agentData.models && agentData.models.length > 0 ? (
                   <div className="grid gap-6">
                     {agentData.models.map((model, index) => (
-                      <div key={model.id || index} className="card-matrix p-6 animate-slide-up hover:shadow-matrix-lg transition-all duration-300">
-                        <div className="flex items-start justify-between mb-6">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-xl bg-green-500/20 flex items-center justify-center border border-green-500/30">
-                                <div className="text-green-400 text-sm">📊</div>
-                              </div>
-                              <h3 className="text-xl font-bold text-green-200 font-mono">{model.name || `Model ${index + 1}`}</h3>
-                            </div>
-                            <p className="text-green-400 text-sm font-mono">
-                              Primary entity with {model.fields?.length || 0} defined fields
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="px-3 py-1 rounded-lg bg-green-500/10 border border-green-500/20">
-                              <span className="text-green-300 text-xs font-medium font-mono">
-                                {model.fields?.length || 0} fields
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {model.fields && model.fields.length > 0 && (
-                          <div className="space-y-4">
-                            <div className="flex items-center gap-2">
-                              <div className="w-1 h-4 bg-gradient-to-b from-green-500 to-green-600 rounded-full" />
-                              <h4 className="text-sm font-semibold text-green-200 font-mono">Field Definitions</h4>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {model.fields.map((field, fieldIndex) => (
-                                <div key={field.id || fieldIndex} className="p-4 rounded-xl bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 transition-colors group">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <span className="text-green-200 text-sm font-mono font-medium group-hover:text-green-300 transition-colors">
-                                      {field.name}
-                                    </span>
-                                    <span className="text-green-400 text-xs font-medium px-2 py-1 rounded bg-green-800/50">
-                                      {field.type}
-                                    </span>
+                      <div key={model.id || index} className={cn(
+                        "card-matrix p-6 animate-slide-up hover:shadow-matrix-lg transition-all duration-300",
+                        safeMetadata.editingModel === model.id && "ring-2 ring-green-400/50 shadow-lg shadow-green-500/20"
+                      )}>
+                        {safeMetadata.editingModel === model.id ? (
+                          <ModelEditor
+                            model={model}
+                            onUpdate={(updatedModel) => {
+                              const updatedModels = agentData.models?.map(m => 
+                                m.id === model.id ? updatedModel : m
+                              ) || [];
+                              updateAgentData({ ...agentData, models: updatedModels });
+                            }}
+                            onDelete={() => {
+                              const updatedModels = agentData.models?.filter(m => m.id !== model.id) || [];
+                              updateAgentData({ ...agentData, models: updatedModels });
+                              updateMetadata({ editingModel: null });
+                            }}
+                            allModels={agentData.models || []}
+                            allEnums={agentData.enums || []}
+                          />
+                        ) : (
+                          <>
+                            <div className="flex items-start justify-between mb-6">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-green-500/20 flex items-center justify-center border border-green-500/30">
+                                    <div className="text-green-400 text-sm">📊</div>
                                   </div>
-                                  {(field.required || field.unique) && (
-                                    <div className="flex gap-2 mt-2">
-                                      {field.required && (
-                                        <span className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded-md border border-red-500/30 font-medium">
-                                          Required
+                                  <h3 className="text-xl font-bold text-green-200 font-mono">{model.name || `Model ${index + 1}`}</h3>
+                                </div>
+                                <p className="text-green-400 text-sm font-mono">
+                                  Primary entity with {model.fields?.length || 0} defined fields
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="px-3 py-1 rounded-lg bg-green-500/10 border border-green-500/20">
+                                  <span className="text-green-300 text-xs font-medium font-mono">
+                                    {model.fields?.length || 0} fields
+                                  </span>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={() => updateMetadata({ editingModel: model.id })}
+                                  className="btn-matrix-secondary"
+                                >
+                                  <PencilEditIcon size={16} />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => {
+                                    const updatedModels = agentData.models?.filter(m => m.id !== model.id) || [];
+                                    updateAgentData({ ...agentData, models: updatedModels });
+                                  }}
+                                >
+                                  <CrossIcon size={16} />
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            {model.fields && model.fields.length > 0 && (
+                              <div className="space-y-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-1 h-4 bg-gradient-to-b from-green-500 to-green-600 rounded-full" />
+                                  <h4 className="text-sm font-semibold text-green-200 font-mono">Field Definitions</h4>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                  {model.fields.map((field, fieldIndex) => (
+                                    <div key={field.id || fieldIndex} className="p-4 rounded-xl bg-green-500/10 border border-green-500/20 hover:bg-green-500/20 transition-colors group">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-green-200 text-sm font-mono font-medium group-hover:text-green-300 transition-colors">
+                                          {field.name}
                                         </span>
-                                      )}
-                                      {field.unique && (
-                                        <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded-md border border-purple-500/30 font-medium">
-                                          Unique
+                                        <span className="text-green-400 text-xs font-medium px-2 py-1 rounded bg-green-800/50">
+                                          {field.type}
                                         </span>
+                                      </div>
+                                      {(field.required || field.unique) && (
+                                        <div className="flex gap-2 mt-2">
+                                          {field.required && (
+                                            <span className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded-md border border-red-500/30 font-medium">
+                                              Required
+                                            </span>
+                                          )}
+                                          {field.unique && (
+                                            <span className="text-xs bg-purple-500/20 text-purple-400 px-2 py-1 rounded-md border border-purple-500/30 font-medium">
+                                              Unique
+                                            </span>
+                                          )}
+                                        </div>
                                       )}
                                     </div>
-                                  )}
+                                  ))}
                                 </div>
-                              ))}
-                            </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        
+                        {safeMetadata.editingModel === model.id && (
+                          <div className="mt-6 flex gap-2">
+                            <Button
+                              onClick={() => updateMetadata({ editingModel: null })}
+                              className="btn-matrix"
+                            >
+                              Done Editing
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -1508,9 +1884,18 @@ const AgentBuilderContent = memo(({
                       <div className="text-4xl opacity-60">📊</div>
                     </div>
                     <h3 className="text-xl font-semibold text-green-300 mb-2 font-mono">No Models Defined</h3>
-                    <p className="text-green-500 max-w-md mx-auto font-mono">
-                      Your database models will appear here once they're created by the AI agent builder.
+                    <p className="text-green-500 max-w-md mx-auto mb-6 font-mono">
+                      Create your first database model to get started with your AI agent system.
                     </p>
+                    <Button
+                      onClick={addModel}
+                      className="btn-matrix px-6 py-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <PlusIcon size={18} />
+                        <span>Create First Model</span>
+                      </div>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -1529,47 +1914,106 @@ const AgentBuilderContent = memo(({
                         {agentData.enums?.length || 0} enums defined
                       </span>
                     </div>
+                    <Button
+                      onClick={addEnum}
+                      className="btn-matrix px-4 py-2 text-sm font-medium font-mono"
+                    >
+                      <div className="flex items-center gap-2">
+                        <PlusIcon size={16} />
+                        <span>Add Enum</span>
+                      </div>
+                    </Button>
                   </div>
                 </div>
                 
                 {agentData.enums && agentData.enums.length > 0 ? (
                   <div className="grid gap-6">
                     {agentData.enums.map((enumItem, index) => (
-                      <div key={enumItem.id || index} className="card-matrix p-6 animate-slide-up hover:shadow-matrix-lg transition-all duration-300">
-                        <div className="flex items-start justify-between mb-6">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-xl bg-purple-500/20 flex items-center justify-center border border-purple-500/30">
-                                <div className="text-purple-400 text-sm">🔢</div>
+                      <div key={enumItem.id || index} className={cn(
+                        "card-matrix p-6 animate-slide-up hover:shadow-matrix-lg transition-all duration-300",
+                        safeMetadata.editingEnum === enumItem.id && "ring-2 ring-purple-400/50 shadow-lg shadow-purple-500/20"
+                      )}>
+                        {safeMetadata.editingEnum === enumItem.id ? (
+                          <EnumEditor
+                            enumItem={enumItem}
+                            onUpdate={(updatedEnum) => {
+                              const updatedEnums = agentData.enums?.map(e => 
+                                e.id === enumItem.id ? updatedEnum : e
+                              ) || [];
+                              updateAgentData({ ...agentData, enums: updatedEnums });
+                            }}
+                            onDelete={() => {
+                              const updatedEnums = agentData.enums?.filter(e => e.id !== enumItem.id) || [];
+                              updateAgentData({ ...agentData, enums: updatedEnums });
+                              updateMetadata({ editingEnum: null });
+                            }}
+                          />
+                        ) : (
+                          <>
+                            <div className="flex items-start justify-between mb-6">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-purple-500/20 flex items-center justify-center border border-purple-500/30">
+                                    <div className="text-purple-400 text-sm">🔢</div>
+                                  </div>
+                                  <h3 className="text-xl font-bold text-green-200 font-mono">{enumItem.name || `Enum ${index + 1}`}</h3>
+                                </div>
+                                <p className="text-green-400 text-sm font-mono">
+                                  Controlled vocabulary with {enumItem.fields?.length || 0} defined values
+                                </p>
                               </div>
-                              <h3 className="text-xl font-bold text-green-200 font-mono">{enumItem.name || `Enum ${index + 1}`}</h3>
+                              <div className="flex items-center gap-2">
+                                <div className="px-3 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                                  <span className="text-purple-300 text-xs font-medium font-mono">
+                                    {enumItem.fields?.length || 0} values
+                                  </span>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={() => updateMetadata({ editingEnum: enumItem.id })}
+                                  className="btn-matrix-secondary"
+                                >
+                                  <PencilEditIcon size={16} />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => {
+                                    const updatedEnums = agentData.enums?.filter(e => e.id !== enumItem.id) || [];
+                                    updateAgentData({ ...agentData, enums: updatedEnums });
+                                  }}
+                                >
+                                  <CrossIcon size={16} />
+                                </Button>
+                              </div>
                             </div>
-                            <p className="text-green-400 text-sm font-mono">
-                              Controlled vocabulary with {enumItem.fields?.length || 0} defined values
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="px-3 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20">
-                              <span className="text-purple-300 text-xs font-medium font-mono">
-                                {enumItem.fields?.length || 0} values
-                              </span>
-                            </div>
-                          </div>
-                        </div>
+                            
+                            {enumItem.fields && enumItem.fields.length > 0 && (
+                              <div className="space-y-4">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-1 h-4 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" />
+                                  <h4 className="text-sm font-semibold text-green-200 font-mono">Enumeration Values</h4>
+                                </div>
+                                <div className="flex flex-wrap gap-3">
+                                  {enumItem.fields.map((field, fieldIndex) => (
+                                    <span key={field.id || fieldIndex} className="px-4 py-2 bg-green-500/10 border border-green-500/20 text-green-200 text-sm font-mono rounded-xl hover:bg-green-500/20 transition-colors">
+                                      {field.name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
                         
-                        {enumItem.fields && enumItem.fields.length > 0 && (
-                          <div className="space-y-4">
-                            <div className="flex items-center gap-2">
-                              <div className="w-1 h-4 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" />
-                              <h4 className="text-sm font-semibold text-green-200 font-mono">Enumeration Values</h4>
-                            </div>
-                            <div className="flex flex-wrap gap-3">
-                              {enumItem.fields.map((field, fieldIndex) => (
-                                <span key={field.id || fieldIndex} className="px-4 py-2 bg-green-500/10 border border-green-500/20 text-green-200 text-sm font-mono rounded-xl hover:bg-green-500/20 transition-colors">
-                                  {field.name}
-                                </span>
-                              ))}
-                            </div>
+                        {safeMetadata.editingEnum === enumItem.id && (
+                          <div className="mt-6 flex gap-2">
+                            <Button
+                              onClick={() => updateMetadata({ editingEnum: null })}
+                              className="btn-matrix"
+                            >
+                              Done Editing
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -1581,9 +2025,18 @@ const AgentBuilderContent = memo(({
                       <div className="text-4xl opacity-60">🔢</div>
                     </div>
                     <h3 className="text-xl font-semibold text-green-300 mb-2 font-mono">No Enumerations Defined</h3>
-                    <p className="text-green-500 max-w-md mx-auto font-mono">
-                      Your controlled vocabularies will appear here once they're created by the AI agent builder.
+                    <p className="text-green-500 max-w-md mx-auto mb-6 font-mono">
+                      Create your first enumeration to define controlled vocabularies for your system.
                     </p>
+                    <Button
+                      onClick={addEnum}
+                      className="btn-matrix px-6 py-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <PlusIcon size={18} />
+                        <span>Create First Enum</span>
+                      </div>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -1602,57 +2055,116 @@ const AgentBuilderContent = memo(({
                         {agentData.actions?.length || 0} actions configured
                       </span>
                     </div>
+                    <Button
+                      onClick={addAction}
+                      className="btn-matrix px-4 py-2 text-sm font-medium font-mono"
+                    >
+                      <div className="flex items-center gap-2">
+                        <PlusIcon size={16} />
+                        <span>Add Action</span>
+                      </div>
+                    </Button>
                   </div>
                 </div>
                 
                 {agentData.actions && agentData.actions.length > 0 ? (
                   <div className="grid gap-6">
                     {agentData.actions.map((action, index) => (
-                      <div key={index} className="card-matrix p-6 animate-slide-up hover:shadow-matrix-lg transition-all duration-300">
-                        <div className="flex items-start justify-between mb-6">
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-xl bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
-                                <div className="text-orange-400 text-sm">⚡</div>
-                              </div>
-                              <h3 className="text-xl font-bold text-green-200 font-mono">{action.name || `Action ${index + 1}`}</h3>
-                            </div>
-                            {action.description && (
-                              <p className="text-green-400 text-sm font-mono leading-relaxed max-w-2xl">
-                                {action.description}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className={cn(
-                              "px-3 py-1 rounded-lg text-xs font-medium font-mono border",
-                              action.type === 'Create' 
-                                ? "bg-green-500/10 border-green-500/20 text-green-300"
-                                : "bg-blue-500/10 border-blue-500/20 text-blue-300"
-                            )}>
-                              {action.type}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {action.execute && (
-                          <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20">
-                            <div className="flex items-center gap-2 mb-3">
-                              <div className="w-1 h-4 bg-gradient-to-b from-orange-500 to-red-500 rounded-full" />
-                              <h4 className="text-sm font-semibold text-green-200 font-mono">Execution Configuration</h4>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700 font-mono">
-                                <span className="text-green-300 text-xs font-medium">Type:</span>
-                                <span className="text-green-200 text-xs font-mono ml-2">{action.execute.type}</span>
-                              </div>
-                              {action.results?.model && (
-                                <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700 font-mono">
-                                  <span className="text-green-300 text-xs font-medium">Target:</span>
-                                  <span className="text-green-200 text-xs font-mono ml-2">{action.results.model}</span>
+                      <div key={index} className={cn(
+                        "card-matrix p-6 animate-slide-up hover:shadow-matrix-lg transition-all duration-300",
+                        safeMetadata.editingAction === index.toString() && "ring-2 ring-orange-400/50 shadow-lg shadow-orange-500/20"
+                      )}>
+                        {safeMetadata.editingAction === index.toString() ? (
+                          <ActionEditor
+                            action={action}
+                            onUpdate={(updatedAction) => {
+                              const updatedActions = [...(agentData.actions || [])];
+                              updatedActions[index] = updatedAction;
+                              updateAgentData({ ...agentData, actions: updatedActions });
+                            }}
+                            onDelete={() => {
+                              const updatedActions = agentData.actions?.filter((_, i) => i !== index) || [];
+                              updateAgentData({ ...agentData, actions: updatedActions });
+                              updateMetadata({ editingAction: null });
+                            }}
+                            allModels={agentData.models || []}
+                          />
+                        ) : (
+                          <>
+                            <div className="flex items-start justify-between mb-6">
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-xl bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
+                                    <div className="text-orange-400 text-sm">⚡</div>
+                                  </div>
+                                  <h3 className="text-xl font-bold text-green-200 font-mono">{action.name || `Action ${index + 1}`}</h3>
                                 </div>
-                              )}
+                                {action.description && (
+                                  <p className="text-green-400 text-sm font-mono leading-relaxed max-w-2xl">
+                                    {action.description}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className={cn(
+                                  "px-3 py-1 rounded-lg text-xs font-medium font-mono border",
+                                  action.type === 'Create' 
+                                    ? "bg-green-500/10 border-green-500/20 text-green-300"
+                                    : "bg-blue-500/10 border-blue-500/20 text-blue-300"
+                                )}>
+                                  {action.type}
+                                </div>
+                                <Button
+                                  size="sm"
+                                  onClick={() => updateMetadata({ editingAction: index.toString() })}
+                                  className="btn-matrix-secondary"
+                                >
+                                  <PencilEditIcon size={16} />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => {
+                                    const updatedActions = agentData.actions?.filter((_, i) => i !== index) || [];
+                                    updateAgentData({ ...agentData, actions: updatedActions });
+                                  }}
+                                >
+                                  <CrossIcon size={16} />
+                                </Button>
+                              </div>
                             </div>
+                            
+                            {action.execute && (
+                              <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-1 h-4 bg-gradient-to-b from-orange-500 to-red-500 rounded-full" />
+                                  <h4 className="text-sm font-semibold text-green-200 font-mono">Execution Configuration</h4>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700 font-mono">
+                                    <span className="text-green-300 text-xs font-medium">Type:</span>
+                                    <span className="text-green-200 text-xs font-mono ml-2">{action.execute.type}</span>
+                                  </div>
+                                  {action.results?.model && (
+                                    <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700 font-mono">
+                                      <span className="text-green-300 text-xs font-medium">Target:</span>
+                                      <span className="text-green-200 text-xs font-mono ml-2">{action.results.model}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                        
+                        {safeMetadata.editingAction === index.toString() && (
+                          <div className="mt-6 flex gap-2">
+                            <Button
+                              onClick={() => updateMetadata({ editingAction: null })}
+                              className="btn-matrix"
+                            >
+                              Done Editing
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -1664,9 +2176,18 @@ const AgentBuilderContent = memo(({
                       <div className="text-4xl opacity-60">⚡</div>
                     </div>
                     <h3 className="text-xl font-semibold text-green-300 mb-2 font-mono">No Actions Configured</h3>
-                    <p className="text-green-500 max-w-md mx-auto font-mono">
-                      Your automated workflows will appear here once they're created by the AI agent builder.
+                    <p className="text-green-500 max-w-md mx-auto mb-6 font-mono">
+                      Create your first automated action to add intelligent workflows to your system.
                     </p>
+                    <Button
+                      onClick={addAction}
+                      className="btn-matrix px-6 py-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <PlusIcon size={18} />
+                        <span>Create First Action</span>
+                      </div>
+                    </Button>
                   </div>
                 )}
               </div>

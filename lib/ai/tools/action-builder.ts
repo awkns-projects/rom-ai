@@ -174,7 +174,15 @@ const convertToAgentFormat = (actions: any[], existingData?: any): AgentData => 
   );
 };
 
-export const actionBuilder = ({ messages, dataStream }: { messages: Message[]; dataStream: DataStreamWriter }) => tool({
+export const actionBuilder = ({ 
+  messages, 
+  dataStream, 
+  existingContext 
+}: { 
+  messages: Message[]; 
+  dataStream: DataStreamWriter;
+  existingContext?: string | null;
+}) => tool({
   description: `A specialized action builder that creates intelligent automated workflows and business logic processes.
   
   This tool focuses specifically on:

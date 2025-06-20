@@ -34,9 +34,10 @@ export function AppSidebar({ user }: { user: User | undefined }) {
               }}
               className="flex flex-row gap-3 items-center"
             >
-              <span className="text-lg font-semibold font-mono px-2 hover:bg-green-500/10 text-green-200 rounded-md cursor-pointer transition-all duration-200 hover:text-green-100">
-                MATRIX CHAT
-              </span>
+              {/* <span className="text-lg font-semibold font-mono px-2 hover:bg-green-500/10 text-green-200 rounded-md cursor-pointer transition-all duration-200 hover:text-green-100">
+                Rom Cards
+              </span> */}
+              <img src="/images/logo.png" className="w-10 h-10" />
             </Link>
             <Tooltip>
               <TooltipTrigger asChild>

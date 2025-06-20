@@ -185,7 +185,15 @@ const agentOverviewSchema = z.object({
   architecture: z.string().describe('High-level architecture approach'),
 });
 
-export const agentBuilder = ({ messages, dataStream }: { messages: Message[]; dataStream: DataStreamWriter }) => tool({
+export const agentBuilder = ({ 
+  messages, 
+  dataStream, 
+  existingContext 
+}: { 
+  messages: Message[]; 
+  dataStream: DataStreamWriter;
+  existingContext?: string | null;
+}) => tool({
   description: `A comprehensive AI agent builder that creates complete application systems with database schemas and automated workflows.
   
   This is the main orchestrator tool that:
@@ -202,9 +210,9 @@ export const agentBuilder = ({ messages, dataStream }: { messages: Message[]; da
   - "Design a CRM system with customer tracking and automated communications"
   `,
   parameters: z.object({
-    command: z.string().describe('The natural language command describing what complete system to build'),
-    operation: z.enum(['create', 'update', 'analyze']).optional().describe('Operation type - create new, update existing, or analyze current'),
-    context: z.string().optional().describe('Current agent state for incremental updates'),
+    command: z.string().describe('High-level description of the agent system to build'),
+    operation: z.enum(['create', 'update', 'extend']).optional().default('create').describe('Whether to create new, update existing, or extend current agent system'),
+    context: z.string().optional().describe('Existing agent context to build upon')
   }),
   execute: async ({ command, operation = 'create', context }) => {
     console.log(`🤖 Agent Builder: Processing "${command}" - Operation: ${operation}`);
@@ -219,12 +227,15 @@ export const agentBuilder = ({ messages, dataStream }: { messages: Message[]; da
       const conversationContext = analyzeConversationContext(messages);
       console.log('📋 Conversation context analyzed:', conversationContext.length, 'characters');
 
-      // Parse existing context if provided
+      // Parse existing context - prioritize passed context, then existingContext from conversation
       let existingAgent: AgentData | null = null;
-      if (context) {
+      const contextToUse = context || existingContext;
+      
+      if (contextToUse) {
         try {
-          existingAgent = JSON.parse(context);
+          existingAgent = JSON.parse(contextToUse);
           console.log('✅ Successfully parsed existing agent context');
+          console.log('📊 Existing agent data:', JSON.stringify(existingAgent, null, 2));
         } catch (e) {
           console.warn('⚠️ Failed to parse context, starting fresh:', e);
           existingAgent = null;
@@ -253,12 +264,27 @@ export const agentBuilder = ({ messages, dataStream }: { messages: Message[]; da
 CONVERSATION CONTEXT:
 ${conversationContext}
 
-TASK: Analyze the conversation and user request to create a comprehensive system architecture plan.
+TASK: ${existingAgent ? 'Analyze the conversation and user request to update/extend the existing agent system.' : 'Analyze the conversation and user request to create a comprehensive system architecture plan.'}
 
 REQUEST: "${command}"
 OPERATION: ${operation}
-EXISTING AGENT: ${existingAgent ? JSON.stringify(existingAgent) : 'None'}
+EXISTING AGENT: ${existingAgent ? JSON.stringify(existingAgent, null, 2) : 'None'}
 
+${existingAgent ? `
+EXISTING SYSTEM ANALYSIS:
+- Current Name: ${existingAgent.name}
+- Current Domain: ${existingAgent.domain}
+- Current Models: ${existingAgent.models.length} (${existingAgent.models.map(m => m.name).join(', ')})
+- Current Enums: ${existingAgent.enums.length} (${existingAgent.enums.map(e => e.name).join(', ')})
+- Current Actions: ${existingAgent.actions.length} (${existingAgent.actions.map(a => a.name).join(', ')})
+
+When updating/extending:
+1. Preserve existing functionality and data structures
+2. Build upon the current system architecture
+3. Ensure compatibility with existing models and workflows
+4. Focus on the specific improvements or additions requested
+5. Maintain consistency with the existing domain and naming conventions
+` : `
 Your analysis should:
 1. Identify the core business domain and system requirements
 2. Define the main features and capabilities needed
@@ -266,8 +292,9 @@ Your analysis should:
 4. Consider scalability, security, and maintainability
 5. Understand data requirements and business workflows
 6. Plan for user experience and system integration
+`}
 
-Focus on creating a complete system overview that will guide both database design and workflow automation.
+Focus on creating a ${existingAgent ? 'comprehensive update plan' : 'complete system overview'} that will guide both database design and workflow automation.
 
 Consider these aspects:
 - User management and authentication
@@ -277,7 +304,10 @@ Consider these aspects:
 - Performance and scalability needs
 - Security and compliance requirements
 
-Provide a clear, comprehensive system overview that serves as the foundation for building a complete application.`
+${existingAgent ? 
+  'Provide a clear update plan that enhances the existing system while maintaining backward compatibility.' :
+  'Provide a clear, comprehensive system overview that serves as the foundation for building a complete application.'
+}`
           }
         ],
         temperature: 0.2,
@@ -375,14 +405,49 @@ Provide a clear, comprehensive system overview that serves as the foundation for
       });
 
       // Combine all results into final agent data
-      const finalAgent = createAgentData(
-        overview.object.name,
-        overview.object.description,
-        overview.object.domain,
-        databaseResult.data?.models || [],
-        databaseResult.data?.enums || [],
-        actionResult.data?.actions || []
-      );
+      let finalAgent: AgentData;
+      
+      if (existingAgent && operation !== 'create') {
+        // Merge with existing agent data
+        console.log('🔄 Merging with existing agent data...');
+        finalAgent = {
+          ...existingAgent,
+          name: overview.object.name || existingAgent.name,
+          description: overview.object.description || existingAgent.description,
+          domain: overview.object.domain || existingAgent.domain,
+          models: [
+            ...existingAgent.models,
+            ...(databaseResult.data?.models || []).filter((newModel: AgentModel) => 
+              !existingAgent.models.some(existing => existing.name === newModel.name)
+            )
+          ],
+          enums: [
+            ...existingAgent.enums,
+            ...(databaseResult.data?.enums || []).filter((newEnum: AgentEnum) => 
+              !existingAgent.enums.some(existing => existing.name === newEnum.name)
+            )
+          ],
+          actions: [
+            ...existingAgent.actions,
+            ...(actionResult.data?.actions || []).filter((newAction: AgentAction) => 
+              !existingAgent.actions.some(existing => existing.name === newAction.name)
+            )
+          ],
+          createdAt: existingAgent.createdAt // Keep original creation date
+        };
+        console.log('✅ Merged agent data successfully');
+      } else {
+        // Create new agent data
+        console.log('🆕 Creating new agent data...');
+        finalAgent = createAgentData(
+          overview.object.name,
+          overview.object.description,
+          overview.object.domain,
+          databaseResult.data?.models || [],
+          databaseResult.data?.enums || [],
+          actionResult.data?.actions || []
+        );
+      }
 
       console.log('🎉 Final agent system assembled:', JSON.stringify(finalAgent, null, 2));
 
@@ -406,7 +471,9 @@ Provide a clear, comprehensive system overview that serves as the foundation for
 
       const result = {
         success: true,
-        message: `🎉 Successfully built complete agent system: ${overview.object.name}! Created ${finalAgent.models.length} database models, ${finalAgent.enums.length} enums, and ${finalAgent.actions.length} automated workflows for your ${overview.object.domain} system.`,
+        message: existingAgent && operation !== 'create' 
+          ? `🔄 Successfully updated agent system: ${finalAgent.name}! Now has ${finalAgent.models.length} database models, ${finalAgent.enums.length} enums, and ${finalAgent.actions.length} automated workflows.`
+          : `🎉 Successfully built complete agent system: ${overview.object.name}! Created ${finalAgent.models.length} database models, ${finalAgent.enums.length} enums, and ${finalAgent.actions.length} automated workflows for your ${overview.object.domain} system.`,
         data: finalAgent,
         steps: {
           overview: overview.object,

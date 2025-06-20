@@ -317,6 +317,8 @@ export async function getDocumentsById({ id }: { id: string }) {
 
     return documents;
   } catch (error) {
+    console.error('Database error in getDocumentsById:', error);
+    console.error('Query parameters:', { id });
     throw new ChatSDKError(
       'bad_request:database',
       'Failed to get documents by id',

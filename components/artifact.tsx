@@ -471,6 +471,7 @@ function PureArtifact({
                 isLoading={isDocumentsFetching && !artifact.content}
                 metadata={metadata}
                 setMetadata={setMetadata}
+                setMessages={setMessages}
               />
 
               <AnimatePresence>

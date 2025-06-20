@@ -117,6 +117,29 @@ function determineToolsForConversation(messages: any[], isNewConversation: boole
   return tools;
 }
 
+function extractArtifactDataFromMessages(messages: any[]): string | null {
+  // Look for the most recent agent artifact data in the conversation
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    
+    // Check if this is an assistant message with tool calls
+    if (message.role === 'assistant' && message.parts) {
+      for (const part of message.parts) {
+        if (part.type === 'tool-result' && part.toolName === 'agentBuilder') {
+          // Extract agent data from the tool result
+          if (part.result && part.result.data) {
+            console.log('🔍 Found existing agent data in conversation:', JSON.stringify(part.result.data, null, 2));
+            return JSON.stringify(part.result.data);
+          }
+        }
+      }
+    }
+  }
+  
+  console.log('🔍 No existing agent data found in conversation');
+  return null;
+}
+
 export async function POST(request: Request) {
   let requestBody: PostRequestBody;
 
@@ -211,13 +234,28 @@ export async function POST(request: Request) {
 
         // Add tools based on determination
         if (activeTools.includes('agentBuilder')) {
-          tools.agentBuilder = agentBuilder({ messages, dataStream });
+          const existingContext = extractArtifactDataFromMessages(messages);
+          tools.agentBuilder = agentBuilder({ 
+            messages, 
+            dataStream, 
+            existingContext 
+          });
         }
         if (activeTools.includes('databaseBuilder')) {
-          tools.databaseBuilder = databaseBuilder({ messages, dataStream });
+          const existingContext = extractArtifactDataFromMessages(messages);
+          tools.databaseBuilder = databaseBuilder({ 
+            messages, 
+            dataStream, 
+            existingContext 
+          });
         }
         if (activeTools.includes('actionBuilder')) {
-          tools.actionBuilder = actionBuilder({ messages, dataStream });
+          const existingContext = extractArtifactDataFromMessages(messages);
+          tools.actionBuilder = actionBuilder({ 
+            messages, 
+            dataStream, 
+            existingContext 
+          });
         }
 
         const result = streamText({

@@ -46,6 +46,7 @@ interface ArtifactContent<M = any> {
   isLoading: boolean;
   metadata: M;
   setMetadata: Dispatch<SetStateAction<M>>;
+  setMessages?: UseChatHelpers['setMessages'];
 }
 
 interface InitializeParameters<M = any> {

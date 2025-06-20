@@ -140,7 +140,15 @@ const convertToAgentFormat = (schema: any): AgentData => {
   );
 };
 
-export const databaseBuilder = ({ messages, dataStream }: { messages: Message[]; dataStream: DataStreamWriter }) => tool({
+export const databaseBuilder = ({ 
+  messages, 
+  dataStream, 
+  existingContext 
+}: { 
+  messages: Message[]; 
+  dataStream: DataStreamWriter;
+  existingContext?: string | null;
+}) => tool({
   description: `A specialized database builder that creates comprehensive database schemas with models, relationships, and enumerations. 
   
   This tool focuses specifically on:
