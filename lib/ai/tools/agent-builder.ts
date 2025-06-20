@@ -272,7 +272,7 @@ const unifiedActionsSchema = z.object({
         model: z.string().optional().describe('AI model to use'),
         temperature: z.number().optional().describe('Temperature for AI generation'),
         maxTokens: z.number().optional().describe('Maximum tokens for AI response')
-      }).optional().describe('AI prompt configuration if type is prompt')
+      }).nullable().optional().describe('AI prompt configuration if type is prompt')
     }).describe('Configuration for how the action is executed'),
     results: z.object({
       actionType: z.enum(['Create', 'Update']).describe('Type of action result'),
@@ -280,7 +280,7 @@ const unifiedActionsSchema = z.object({
       identifierIds: z.array(z.string()).optional().describe('Fields that identify existing records for updates'),
       fields: z.record(z.any()).optional().describe('Fields to set for Create actions'),
       fieldsToUpdate: z.record(z.any()).optional().describe('Fields to update for Update actions')
-    }).describe('Configuration for how results are processed')
+    }).optional().describe('Configuration for how results are processed')
   }))
 });
 
@@ -348,7 +348,7 @@ const promptUnderstandingSchema = z.object({
     relationships: z.array(z.object({
       from: z.string(),
       to: z.string(),
-      type: z.enum(['one-to-one', 'one-to-many', 'many-to-many']),
+      type: z.enum(['one-to-one', 'one-to-many', 'many-to-one', 'many-to-many']),
       purpose: z.string()
     })).describe('Relationships between models')
   }),
@@ -1216,6 +1216,51 @@ function mergeSchedulesIntelligently(existing: AgentSchedule[], incoming: AgentS
   }
   
   return mergedSchedules;
+}
+
+function cleanNullValues(obj: any): any {
+  if (obj === null || obj === undefined) {
+    return undefined;
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(cleanNullValues);
+  }
+  
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      const cleanedValue = cleanNullValues(value);
+      if (cleanedValue !== undefined && cleanedValue !== null) {
+        cleaned[key] = cleanedValue;
+      }
+    }
+    return cleaned;
+  }
+  
+  return obj;
+}
+
+function ensureRequiredActionFields(action: any): any {
+  // Ensure the action has all required fields with defaults
+  if (!action.results || typeof action.results !== 'object') {
+    action.results = {
+      actionType: action.type || 'Create',
+      model: action.results?.model || 'Unknown',
+      ...(action.results || {})
+    };
+  }
+  
+  // Ensure results has required fields
+  if (!action.results.actionType) {
+    action.results.actionType = action.type || 'Create';
+  }
+  
+  if (!action.results.model) {
+    action.results.model = 'Unknown';
+  }
+  
+  return action;
 }
 
 export const agentBuilder = ({ 
@@ -2305,6 +2350,14 @@ Be creative but practical. Focus on actions that would genuinely help users acco
 
         actionsResults = rawActionsResults.object;
 
+        // Clean null values from actions and ensure required fields
+        if (actionsResults && actionsResults.actions) {
+          actionsResults.actions = actionsResults.actions.map((action: any) => {
+            const cleaned = cleanNullValues(action);
+            return ensureRequiredActionFields(cleaned);
+          });
+        }
+
         console.log(`🔧 Actions generation complete: ${actionsResults.actions.length} actions`);
         console.log('🔍 Raw AI actions results:', JSON.stringify({
           actionsCount: actionsResults.actions.length,
@@ -2411,7 +2464,7 @@ Be creative but practical. Focus on actions that would genuinely help users acco
                 model: z.string().optional().describe('AI model to use'),
                 temperature: z.number().optional().describe('Temperature for AI generation'),
                 maxTokens: z.number().optional().describe('Maximum tokens for AI response')
-              }).optional().describe('AI prompt configuration if type is prompt')
+              }).nullable().optional().describe('AI prompt configuration if type is prompt')
             }).describe('Configuration for how the schedule is executed'),
             results: z.object({
               actionType: z.enum(['Create', 'Update']).describe('Type of action result'),
@@ -2419,7 +2472,7 @@ Be creative but practical. Focus on actions that would genuinely help users acco
               identifierIds: z.array(z.string()).optional().describe('Fields that identify existing records for updates'),
               fields: z.record(z.any()).optional().describe('Fields to set for Create actions'),
               fieldsToUpdate: z.record(z.any()).optional().describe('Fields to update for Update actions')
-            }).describe('Configuration for how results are processed')
+            }).optional().describe('Configuration for how results are processed')
           })),
         });
 
