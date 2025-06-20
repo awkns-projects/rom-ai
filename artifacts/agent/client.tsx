@@ -1726,14 +1726,15 @@ const ModelsListEditor = memo(({ models, onModelsChange, updateMetadata, status 
     const editingModel = models.find(m => m.id === editingModelId)!;
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Model: {editingModel.name}</h3>
+        <div className="flex items-center">
           <Button
             onClick={backToModelsList}
-            className="btn-matrix px-4 py-2"
+            className="btn-matrix px-4 py-2 mx-4"
           >
-            ← Back to List
+            ← Back
           </Button>
+          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Model: {editingModel.name}</h3>
+         
         </div>
         <ModelEditor
           model={editingModel}
@@ -1895,14 +1896,15 @@ const ActionsListEditor = memo(({
     const editingAction = actions.find(a => a.id === editingId)!;
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Action: {editingAction.name}</h3>
+        <div className="flex items-center">
           <Button
             onClick={() => setEditingId(null)}
-            className="btn-matrix px-4 py-2"
+            className="btn-matrix px-4 py-2 mx-4"
           >
-            ← Back to List
+            ← Back
           </Button>
+          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Action: {editingAction.name}</h3>
+         
         </div>
         <ActionEditor
           action={editingAction}
@@ -2049,14 +2051,15 @@ const SchedulesListEditor = memo(({
     const editingSchedule = schedules.find(s => s.id === editingId)!;
     return (
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Schedule: {editingSchedule.name}</h3>
+        <div className="flex items-center">
           <Button
             onClick={() => setEditingId(null)}
-            className="btn-matrix px-4 py-2"
+            className="btn-matrix px-4 py-2 mx-4"
           >
-            ← Back to List
+            ← Back
           </Button>
+          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Schedule: {editingSchedule.name}</h3>
+
         </div>
         <div className="p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
           <ScheduleEditor
@@ -3538,7 +3541,10 @@ const AgentBuilderContent = memo(({
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => updateMetadata({ selectedTab: tab.id })}
+                onClick={() => updateMetadata({ 
+                  selectedTab: tab.id,
+                  dataManagement: null // Clear dataManagement when switching tabs
+                })}
                 className={cn(
                   "relative px-3 sm:px-6 py-3 sm:py-4 text-xs sm:text-sm font-medium font-mono transition-all duration-300 border-b-2 group whitespace-nowrap flex-shrink-0",
                   safeMetadata.selectedTab === tab.id
