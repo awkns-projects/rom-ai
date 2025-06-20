@@ -11,7 +11,7 @@ export const agentDocumentHandler = createDocumentHandler({
       // Try to get the document from the document table
       const document = await getDocumentById({ id });
       
-      if (document && document.content) {
+      if (document?.content) {
         console.log(`✅ Found agent document in database: ${document.title}`);
         
         // Parse the agent data from document content

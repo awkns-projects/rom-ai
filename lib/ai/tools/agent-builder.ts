@@ -1,7 +1,6 @@
-import { generateObject, type Message, tool } from 'ai';
+import { generateObject, type Message, tool , type DataStreamWriter } from 'ai';
 import { z } from 'zod';
 import { myProvider } from '../providers';
-import type { DataStreamWriter } from 'ai';
 import { generateUUID } from '@/lib/utils';
 import { saveOrUpdateDocument, getDocumentById } from '@/lib/db/queries';
 import type { Session } from 'next-auth';
@@ -2055,7 +2054,7 @@ ${granularChanges ? `
 🎯 IMPLEMENTATION GUIDANCE FROM GRANULAR ANALYSIS:
 Execute these specific database changes: ${granularChanges.object.specificChanges
   .filter((c: any) => c.type.includes('model') || c.type.includes('enum') || c.type.includes('field'))
-  .map((c: any) => c.type + ':' + c.target).join(', ')}
+  .map((c: any) => `${c.type}:${c.target}`).join(', ')}
 
 Follow the execution phases: ${granularChanges.object.executionPlan.phases.map((p: any) => p.name).join(' -> ')}
 ` : ''}
@@ -2063,7 +2062,7 @@ Follow the execution phases: ${granularChanges.object.executionPlan.phases.map((
 Design ${existingAgent ? `NEW database models that extend the existing system${changeAnalysis ? ` (specifically: ${changeAnalysis.object.expectedResult.newItems.join(', ')})` : ''}` : 'comprehensive database models that support the complete system'}. 
 
 IMPLEMENTATION REQUIREMENTS:
-1. ${existingAgent ? `ONLY ${changeAnalysis ? changeAnalysis.object.expectedResult.newItems.join(', ') + ' models/enums' : 'new models/enums specifically requested by the user'}` : 'Core entity models based on the detailed analysis above'}
+1. ${existingAgent ? `ONLY ${changeAnalysis ? `${changeAnalysis.object.expectedResult.newItems.join(', ')} models/enums` : 'new models/enums specifically requested by the user'}` : 'Core entity models based on the detailed analysis above'}
 2. Use the EXACT field specifications from the prompt understanding analysis
 3. Implement the specified relationships from the analysis
 4. ${existingAgent ? 'Do NOT duplicate existing models - they are preserved automatically' : 'Complete data model for the system'}
@@ -2351,7 +2350,7 @@ Be creative but practical. Focus on actions that would genuinely help users acco
         actionsResults = rawActionsResults.object;
 
         // Clean null values from actions and ensure required fields
-        if (actionsResults && actionsResults.actions) {
+        if (actionsResults?.actions) {
           actionsResults.actions = actionsResults.actions.map((action: any) => {
             const cleaned = cleanNullValues(action);
             return ensureRequiredActionFields(cleaned);
@@ -2537,7 +2536,7 @@ Focus on creating 1-3 high-impact schedules that would genuinely help automate b
         schedulesResults = rawSchedulesResults.object;
 
         // Ensure all schedules have valid results fields
-        if (schedulesResults && schedulesResults.schedules) {
+        if (schedulesResults?.schedules) {
           schedulesResults.schedules = schedulesResults.schedules.map((schedule: any) => {
             // If results is missing or invalid, add a default one
             if (!schedule.results || typeof schedule.results !== 'object') {
@@ -2644,7 +2643,7 @@ Focus on creating 1-3 high-impact schedules that would genuinely help automate b
       );
 
       // Add schedules if they were generated
-      if (schedulesResults && schedulesResults.schedules) {
+      if (schedulesResults?.schedules) {
         finalAgent.schedules = mergeSchedulesIntelligently(finalAgent.schedules || [], schedulesResults.schedules);
       }
 

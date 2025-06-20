@@ -23,15 +23,10 @@ import {
   ClockRewind,
   UndoIcon,
   RedoIcon,
-  TrashIcon,
-  BoxIcon,
-  SparklesIcon,
-  RouteIcon,
 } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { UseChatHelpers } from '@ai-sdk/react';
-import type { UIMessage, Message } from 'ai';
 import { useArtifact } from '@/hooks/use-artifact';
 
 interface AgentModel {
@@ -287,7 +282,7 @@ function generateNewId(type: string, existingEntities: any[]): string {
 // Helper function to determine step status consistently across all progress indicators
 const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>, agentData?: any) => {
   // If we have explicit step progress for this step, use it
-  if (stepProgress && stepProgress[stepId as keyof typeof stepProgress]) {
+  if (stepProgress?.[stepId as keyof typeof stepProgress]) {
     return stepProgress[stepId as keyof typeof stepProgress];
   }
 
@@ -1023,7 +1018,7 @@ const ModelEditor = memo(({
                       <Input
                         value={form.name}
                         onChange={(e) => {
-                          const updatedForms = model.forms!.map(f => 
+                          const updatedForms = model.forms?.map(f => 
                             f.id === form.id ? { ...f, name: e.target.value } : f
                           );
                           onUpdate({ ...model, forms: updatedForms });
@@ -1037,7 +1032,7 @@ const ModelEditor = memo(({
                       <Input
                         value={form.title}
                         onChange={(e) => {
-                          const updatedForms = model.forms!.map(f => 
+                          const updatedForms = model.forms?.map(f => 
                             f.id === form.id ? { ...f, title: e.target.value } : f
                           );
                           onUpdate({ ...model, forms: updatedForms });
@@ -1053,7 +1048,7 @@ const ModelEditor = memo(({
                     <Input
                       value={form.description || ''}
                       onChange={(e) => {
-                        const updatedForms = model.forms!.map(f => 
+                        const updatedForms = model.forms?.map(f => 
                           f.id === form.id ? { ...f, description: e.target.value } : f
                         );
                         onUpdate({ ...model, forms: updatedForms });
@@ -1086,7 +1081,7 @@ const ModelEditor = memo(({
                                 type="checkbox"
                                 checked={!formField.hidden}
                                 onChange={(e) => {
-                                  const updatedForms = model.forms!.map(f => 
+                                  const updatedForms = model.forms?.map(f => 
                                     f.id === form.id ? {
                                       ...f,
                                       fields: f.fields.map(ff => 
@@ -1111,7 +1106,7 @@ const ModelEditor = memo(({
                       variant="destructive"
                       onClick={() => {
                         if (window.confirm(`Are you sure you want to delete form "${form.title}"?`)) {
-                          const updatedForms = model.forms!.filter(f => f.id !== form.id);
+                          const updatedForms = model.forms?.filter(f => f.id !== form.id);
                           onUpdate({ ...model, forms: updatedForms });
                         }
                       }}
@@ -2593,7 +2588,7 @@ const RecordEditor = memo(({
           type="number"
           step={field.type === 'Float' ? '0.01' : '1'}
           value={getFieldValue(field)}
-          onChange={(e) => updateField(field.name, field.type === 'Int' ? parseInt(e.target.value) || 0 : parseFloat(e.target.value) || 0)}
+          onChange={(e) => updateField(field.name, field.type === 'Int' ? Number.parseInt(e.target.value) || 0 : Number.parseFloat(e.target.value) || 0)}
           placeholder={`Enter ${field.name.toLowerCase()}`}
           className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
         />
@@ -3450,7 +3445,7 @@ const AgentBuilderContent = memo(({
                     status === 'streaming'
                       ? "bg-blue-400 animate-pulse shadow-lg shadow-blue-400/50"
                       : "bg-green-400 animate-matrix-pulse shadow-lg shadow-green-400/50"
-                  )}></div>
+                  )} />
                 </div>
                 <span className="text-sm font-medium text-green-400 font-mono">
                   {status === 'streaming' ? 'Building...' : 'Ready'}

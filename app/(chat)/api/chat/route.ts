@@ -128,7 +128,7 @@ async function getExistingAgentContext(messages: any[], session: Session | null)
         if (part.type === 'tool-call' && part.toolName === 'agentBuilder') {
           console.log('✅ Found legacy agentBuilder tool call');
           
-          if (part.result && part.result.id && part.result.kind === 'agent') {
+          if (part.result?.id && part.result.kind === 'agent') {
             const documentId = part.result.id;
             console.log('🎯 Found agent document ID from legacy tool result:', documentId);
             
@@ -141,7 +141,7 @@ async function getExistingAgentContext(messages: any[], session: Session | null)
         if (part.type === 'tool-result' && part.toolName === 'agentBuilder') {
           console.log('✅ Found agentBuilder tool result');
           
-          if (part.result && part.result.id && part.result.kind === 'agent') {
+          if (part.result?.id && part.result.kind === 'agent') {
             const documentId = part.result.id;
             console.log('🎯 Found agent document ID from tool result part:', documentId);
             
@@ -164,7 +164,7 @@ async function getExistingAgentContext(messages: any[], session: Session | null)
         }
         
         // Method 5: Look for streaming data that might contain document IDs
-        if (part.experimental_providerMetadata && part.experimental_providerMetadata.cursor) {
+        if (part.experimental_providerMetadata?.cursor) {
           console.log('🔍 Checking provider metadata for document references...');
           const metadata = part.experimental_providerMetadata;
           

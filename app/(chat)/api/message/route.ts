@@ -1,7 +1,6 @@
 import { auth } from '@/app/(auth)/auth';
 import { getChatById, updateMessage } from '@/lib/db/queries';
 import { ChatSDKError } from '@/lib/errors';
-import type { UIMessage } from 'ai';
 
 export async function PUT(request: Request) {
   const session = await auth();
