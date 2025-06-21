@@ -397,7 +397,7 @@ export async function generateActions(
   console.log('⚡ Starting actions generation with real AI...');
   
   const businessRulesContext = promptUnderstanding.featureImagination.businessRules || 'Standard business rules apply';
-  const userRolesContext = promptUnderstanding.featureImagination.userExperience || 'General users and administrators';
+  const userExperienceContext = promptUnderstanding.featureImagination.userExperience || 'General users and administrators';
   
   const existingActionsContext = existingAgent ? `
 EXISTING ACTIONS:
@@ -425,7 +425,7 @@ ${(databaseResult.enums || []).map(enumItem => `- ${enumItem.name}: ${(enumItem.
 
 Business Rules: ${Array.isArray(businessRulesContext) ? businessRulesContext.join(', ') : businessRulesContext}
 
-User Roles: ${Array.isArray(userRolesContext) ? userRolesContext.join(', ') : userRolesContext}
+User Experience: ${Array.isArray(userExperienceContext) ? userExperienceContext.join(', ') : userExperienceContext}
 
 ${existingActionsContext}
 

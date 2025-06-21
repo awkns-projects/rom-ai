@@ -84,6 +84,7 @@ export const document = pgTable(
     userId: uuid('userId')
       .notNull()
       .references(() => user.id),
+    metadata: json('metadata'),
   },
   (table) => {
     return {

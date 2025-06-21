@@ -100,6 +100,8 @@ export async function saveChat({
       visibility,
     });
   } catch (error) {
+    console.error('❌ Database error in saveChat:', error);
+    console.error('❌ Chat data being saved:', { id, userId, title, visibility });
     throw new ChatSDKError('bad_request:database', 'Failed to save chat');
   }
 }
@@ -216,6 +218,8 @@ export async function saveMessages({
   try {
     return await db.insert(message).values(messages);
   } catch (error) {
+    console.error('❌ Database error in saveMessages:', error);
+    console.error('❌ Messages being saved:', JSON.stringify(messages, null, 2));
     throw new ChatSDKError('bad_request:database', 'Failed to save messages');
   }
 }
@@ -301,12 +305,14 @@ export async function saveDocument({
   kind,
   content,
   userId,
+  metadata,
 }: {
   id: string;
   title: string;
   kind: ArtifactKind;
   content: string;
   userId: string;
+  metadata?: any;
 }) {
   try {
     return await db
@@ -317,6 +323,7 @@ export async function saveDocument({
         kind,
         content,
         userId,
+        metadata,
         createdAt: new Date(),
       })
       .returning();
@@ -330,11 +337,13 @@ export async function updateDocument({
   title,
   content,
   userId,
+  metadata,
 }: {
   id: string;
   title?: string;
   content?: string;
   userId: string;
+  metadata?: any;
 }) {
   try {
     const [existingDocument] = await db
@@ -353,6 +362,7 @@ export async function updateDocument({
       .set({
         ...(title && { title }),
         ...(content && { content }),
+        ...(metadata !== undefined && { metadata }),
       })
       .where(
         and(
@@ -378,12 +388,14 @@ export async function saveOrUpdateDocument({
   kind,
   content,
   userId,
+  metadata,
 }: {
   id: string;
   title: string;
   kind: ArtifactKind;
   content: string;
   userId: string;
+  metadata?: any;
 }) {
   try {
     const [existingDocument] = await db
@@ -399,6 +411,7 @@ export async function saveOrUpdateDocument({
         title,
         content,
         userId,
+        metadata,
       });
     } else {
       return await saveDocument({
@@ -407,6 +420,7 @@ export async function saveOrUpdateDocument({
         kind,
         content,
         userId,
+        metadata,
       });
     }
   } catch (error) {

@@ -126,12 +126,15 @@ export const Greeting = () => {
                 <img src="/images/logo.png" className="mx-auto size-16 text-black dark:text-white lg:size-24" />
               {/* <HeartHandshake className="mx-auto size-16 text-black dark:text-white lg:size-24" /> */}
             </div>
-            <div className="z-10 mt-4 flex flex-col items-center text-center text-black dark:text-white w-full max-w-4xl mx-auto px-4">
-              <h1 className="text-4xl font-bold lg:text-6xl text-center text-black dark:text-white">
-                No-Code AI App Builder
+            <div className="z-10 mt-8 flex flex-col items-center text-center text-black dark:text-white w-full max-w-5xl mx-auto px-6">
+              <h1 className="text-2xl font-extralight sm:text-3xl lg:text-4xl text-center text-black dark:text-white font-mono tracking-[0.2em] mb-8 opacity-90">
+                Rom Cards
               </h1>
-              <p className="mt-4 text-xl lg:text-2xl text-center max-w-3xl mx-auto font-medium">
-                Build powerful AI applications without coding - with built-in licensing to monetize your creations
+              <p className="text-base sm:text-lg lg:text-xl text-center max-w-4xl mx-auto font-extralight font-mono text-matrix-gradient leading-loose tracking-wide opacity-85 px-4">
+                The easiest no-code tool to build apps, AI agents, CRMs & automations. 
+                <span className="block mt-3 text-sm sm:text-base lg:text-lg text-gray-400 dark:text-green-300/50 font-light tracking-wider">
+                  Build anything, then license it for profit — all built in.
+                </span>
               </p>
             </div>
             <div className="absolute inset-x-0 bottom-0 h-full bg-gradient-to-b from-transparent to-white to-70% dark:to-black" />

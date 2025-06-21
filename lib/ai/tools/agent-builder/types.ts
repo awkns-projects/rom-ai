@@ -224,11 +224,6 @@ export interface PromptUnderstanding {
       priority: 'critical' | 'high' | 'medium' | 'low';
     }>;
     
-    userRoles: Array<{
-      name: string;
-      permissions: string[];
-    }>;
-    
     oneTimeActions: Array<{
       name: string;
       purpose: string;

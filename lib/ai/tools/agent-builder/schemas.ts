@@ -243,10 +243,6 @@ export const promptUnderstandingSchema = z.object({
       action: z.string(),
       priority: z.enum(['critical', 'high', 'medium', 'low'])
     })),
-    userRoles: z.array(z.object({
-      name: z.string(),
-      permissions: z.array(z.string())
-    })),
     oneTimeActions: z.array(z.object({
       name: z.string(),
       purpose: z.string(),

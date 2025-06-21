@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS "Document" (
 	"content" text,
 	"kind" varchar DEFAULT 'text' NOT NULL,
 	"userId" uuid NOT NULL,
+	"metadata" json,
 	CONSTRAINT "Document_id_createdAt_pk" PRIMARY KEY("id","createdAt")
 );
 --> statement-breakpoint
@@ -48,7 +49,11 @@ CREATE TABLE IF NOT EXISTS "Suggestion" (
 CREATE TABLE IF NOT EXISTS "User" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"email" varchar(64) NOT NULL,
-	"password" varchar(64)
+	"password" varchar(64),
+	"openaiApiKey" text,
+	"xaiApiKey" text,
+	"createdAt" timestamp DEFAULT now() NOT NULL,
+	"updatedAt" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "Vote" (

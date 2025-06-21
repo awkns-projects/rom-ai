@@ -26,8 +26,23 @@ import useSWR from 'swr';
 import { LoaderIcon } from './icons';
 
 // Agent Builder Loading Component
-const AgentBuilderLoading = memo(({ args, message }: { args: any; message?: UIMessage }) => {
+const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; message?: UIMessage; isLoading?: boolean }) => {
   const { metadata } = useArtifact();
+  
+  // Fetch the document to get persisted metadata
+  const { data: documents } = useSWR<Array<Document>>(
+    args?.documentId ? `/api/document?id=${args.documentId}` : null,
+    fetcher
+  );
+
+  // Get persisted metadata from document
+  const persistedMetadata = useMemo(() => {
+    const document = documents?.[0];
+    if (document?.metadata && typeof document.metadata === 'object') {
+      return document.metadata as any;
+    }
+    return null;
+  }, [documents]);
   
   const steps = [
     { id: 'prompt-understanding', label: 'Understanding Requirements' },
@@ -41,7 +56,7 @@ const AgentBuilderLoading = memo(({ args, message }: { args: any; message?: UIMe
     { id: 'integration', label: 'System Integration' }
   ];
 
-  // Get step status from metadata or tool call parts
+  // Get step status from metadata or tool call parts or persisted metadata
   const getStepStatus = (stepId: string) => {
     // Check for step data in message parts (for streaming state)
     if (message?.parts) {
@@ -73,13 +88,23 @@ const AgentBuilderLoading = memo(({ args, message }: { args: any; message?: UIMe
       return 'processing';
     }
     
-    // Determine based on step order
+    // Check persisted metadata from database
+    if (persistedMetadata?.stepProgress && persistedMetadata.stepProgress[stepId]) {
+      return persistedMetadata.stepProgress[stepId];
+    }
+    
+    if (persistedMetadata?.currentStep === stepId) {
+      return 'processing';
+    }
+    
+    // Determine based on step order and persisted data
     const stepOrder = ['prompt-understanding', 'granular-analysis', 'analysis', 'change-analysis', 'overview', 'models', 'actions', 'schedules', 'integration'];
-    const currentStepIndex = metadata?.currentStep ? stepOrder.indexOf(metadata.currentStep) : -1;
+    const currentStepIndex = (metadata?.currentStep || persistedMetadata?.currentStep) ? 
+      stepOrder.indexOf(metadata?.currentStep || persistedMetadata?.currentStep) : -1;
     const thisStepIndex = stepOrder.indexOf(stepId);
     
-    // If we have explicit metadata or are actively streaming
-    if (metadata?.currentStep || metadata?.stepProgress) {
+    // If we have explicit metadata or are actively streaming or have persisted state
+    if (metadata?.currentStep || metadata?.stepProgress || persistedMetadata?.currentStep || persistedMetadata?.stepProgress) {
       if (currentStepIndex >= 0 && thisStepIndex < currentStepIndex) {
         return 'complete';
       }
@@ -92,11 +117,16 @@ const AgentBuilderLoading = memo(({ args, message }: { args: any; message?: UIMe
     return 'pending';
   };
 
-  // Get step message from metadata or tool call data
+  // Get step message from metadata or tool call data or persisted metadata
   const getStepMessage = (stepId: string) => {
     // Check metadata first (real-time)
     if (metadata?.stepMessages && metadata.stepMessages[stepId]) {
       return metadata.stepMessages[stepId];
+    }
+    
+    // Check persisted metadata
+    if (persistedMetadata?.stepMessages && persistedMetadata.stepMessages[stepId]) {
+      return persistedMetadata.stepMessages[stepId];
     }
     
     // Check message parts for stored step data
@@ -116,8 +146,26 @@ const AgentBuilderLoading = memo(({ args, message }: { args: any; message?: UIMe
     return '';
   };
 
-  // Determine if we're actively processing
-  const isProcessing = metadata?.currentStep || (metadata?.stepProgress && Object.keys(metadata.stepProgress).length > 0);
+  // Check if process was incomplete and can be resumed
+  const canResume = useMemo(() => {
+    if (!persistedMetadata) return false;
+    
+    // Check if any step is marked as processing or if not all steps are complete
+    const hasProcessingStep = steps.some(step => {
+      const status = getStepStatus(step.id);
+      return status === 'processing';
+    });
+    
+    const allStepsComplete = steps.every(step => {
+      const status = getStepStatus(step.id);
+      return status === 'complete';
+    });
+    
+    return !allStepsComplete && (hasProcessingStep || persistedMetadata.currentStep);
+  }, [persistedMetadata, steps]);
+
+  // Determine if we're actively processing - should be based on whether AI is working
+  const isProcessing = isLoading || false;
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -136,12 +184,26 @@ const AgentBuilderLoading = memo(({ args, message }: { args: any; message?: UIMe
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-xl font-semibold text-green-100">
-                {isProcessing ? 'Building AI Agent' : 'AI Agent Builder'}
+                {isProcessing ? 'Building AI Agent' : canResume ? 'Resume Agent Building' : 'AI Agent Builder'}
               </h3>
               <p className="text-green-300/70 text-sm">
-                {isProcessing ? 'Creating your intelligent automation system...' : 'Ready to build your agent system'}
+                {isProcessing ? 'Creating your intelligent automation system...' : 
+                 canResume ? 'Continue building your interrupted agent system' : 
+                 'Ready to build your agent system'}
               </p>
             </div>
+            {canResume && !isProcessing && (
+              <button 
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+                onClick={() => {
+                  // Trigger resume by sending a continue message
+                  // This would need to be implemented in the parent component
+                  console.log('Resume agent building clicked');
+                }}
+              >
+                Resume Building
+              </button>
+            )}
           </div>
         </div>
 
@@ -151,6 +213,13 @@ const AgentBuilderLoading = memo(({ args, message }: { args: any; message?: UIMe
             <p className="text-sm text-green-200/80">
               <span className="font-medium text-green-100">Request:</span> {args.command}
             </p>
+            {canResume && !isProcessing && (
+              <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
+                <p className="text-xs text-yellow-300">
+                  ⚠️ Previous building process was interrupted. You can resume from where it left off.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -472,11 +541,12 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
 AgentSummary.displayName = 'AgentSummary';
 
 // Agent Builder with Streaming Summary Component
-const AgentBuilderWithStreamingSummary = memo(({ args, message, isReadonly, chatId }: { 
+const AgentBuilderWithStreamingSummary = memo(({ args, message, isReadonly, chatId, isLoading }: { 
   args: any; 
   message?: UIMessage; 
   isReadonly: boolean; 
   chatId: string; 
+  isLoading?: boolean;
 }) => {
   const { artifact } = useArtifact();
   
@@ -489,7 +559,7 @@ const AgentBuilderWithStreamingSummary = memo(({ args, message, isReadonly, chat
   
   // Don't show partial summary if we have a completed result
   if (hasCompletedResult) {
-    return <AgentBuilderLoading args={args} message={message} />;
+    return <AgentBuilderLoading args={args} message={message} isLoading={false} />;
   }
   
   // Show partial agent summary during streaming if we have agent data
@@ -522,7 +592,7 @@ const AgentBuilderWithStreamingSummary = memo(({ args, message, isReadonly, chat
   
   return (
     <div>
-      <AgentBuilderLoading args={args} message={message} />
+      <AgentBuilderLoading args={args} message={message} isLoading={isLoading} />
       {partialResult && (
         <div className="mt-4">
           <AgentSummary result={partialResult} isReadonly={isReadonly} chatId={chatId} />
@@ -702,6 +772,7 @@ const PurePreviewMessage = ({
                           message={message} 
                           isReadonly={isReadonly} 
                           chatId={chatId} 
+                          isLoading={isLoading}
                         />
                       ) : null}
                     </div>

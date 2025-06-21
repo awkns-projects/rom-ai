@@ -493,8 +493,17 @@ export async function POST(request: Request) {
                     },
                   ],
                 });
-              } catch (_) {
-                console.error('Failed to save chat');
+              } catch (error: any) {
+                console.error('❌ Failed to save chat - Full error details:', error);
+                console.error('❌ Error name:', error?.name);
+                console.error('❌ Error message:', error?.message);
+                console.error('❌ Error stack:', error?.stack);
+                if (error?.code) {
+                  console.error('❌ Error code:', error.code);
+                }
+                if (error?.severity) {
+                  console.error('❌ Database severity:', error.severity);
+                }
               }
             }
           },

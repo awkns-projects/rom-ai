@@ -103,7 +103,8 @@ async function intelligentDocumentUpdate(
   newTitle: string,
   newContent: string,
   session?: Session | null,
-  deletionOperations?: any
+  deletionOperations?: any,
+  metadata?: any
 ): Promise<boolean> {
   if (!session?.user?.id) {
     console.log('❌ No session or user ID available, skipping document save');
@@ -127,7 +128,8 @@ async function intelligentDocumentUpdate(
         title: newTitle,
         kind: 'agent',
         content: newContent,
-        userId: session.user.id
+        userId: session.user.id,
+        metadata
       });
       return true;
     }
@@ -146,7 +148,8 @@ async function intelligentDocumentUpdate(
         title: newTitle,
         kind: 'agent',
         content: newContent,
-        userId: session.user.id
+        userId: session.user.id,
+        metadata
       });
       return true;
     }
@@ -155,8 +158,14 @@ async function intelligentDocumentUpdate(
     const mergedData = performDeepMerge(existingData, newData, deletionOperations);
     const hasChanges = !deepEqual(existingData, mergedData);
     
-    if (hasChanges) {
-      console.log('🔄 Content changes detected, updating document');
+    // Merge metadata - preserve existing metadata and merge with new
+    const mergedMetadata = {
+      ...(existingDoc.metadata || {}),
+      ...(metadata || {})
+    };
+    
+    if (hasChanges || metadata) {
+      console.log('🔄 Content or metadata changes detected, updating document');
       console.log('📊 Changes summary:');
       logContentChanges(existingData, mergedData);
       
@@ -165,11 +174,12 @@ async function intelligentDocumentUpdate(
         title: newTitle,
         kind: 'agent',
         content: JSON.stringify(mergedData, null, 2),
-        userId: session.user.id
+        userId: session.user.id,
+        metadata: mergedMetadata
       });
       return true;
     } else {
-      console.log('✅ No content changes detected, skipping update');
+      console.log('✅ No content or metadata changes detected, skipping update');
       return false;
     }
     
@@ -183,7 +193,8 @@ async function intelligentDocumentUpdate(
           title: newTitle,
           kind: 'agent',
           content: newContent,
-          userId: session.user.id
+          userId: session.user.id,
+          metadata
         });
         return true;
       } catch (fallbackError) {
@@ -202,10 +213,11 @@ async function saveDocumentWithContent(
   title: string,
   content: string,
   session?: Session | null,
-  deletionOperations?: any
+  deletionOperations?: any,
+  metadata?: any
 ) {
   // Use intelligent document update for merging
-  return await intelligentDocumentUpdate(documentId, title, content, session, deletionOperations);
+  return await intelligentDocumentUpdate(documentId, title, content, session, deletionOperations, metadata);
 }
 
 function migrateActionsWithIds(existingAgent: AgentData): AgentData {
@@ -312,6 +324,13 @@ export const agentBuilder = ({
     
     console.log(`📄 Created document with ID: ${documentId}`);
 
+    // Initialize step metadata for persistence
+    let stepMetadata = {
+      currentStep: 'prompt-understanding',
+      stepProgress: {},
+      stepMessages: {}
+    };
+
     try {
       // Analyze conversation context
       const conversationContext = analyzeConversationContext(messages);
@@ -379,8 +398,8 @@ export const agentBuilder = ({
         console.log('🔄 Auto-adjusted operation from "create" to "extend" since existing agent data was found');
       }
 
-      // Step 0: Comprehensive prompt understanding and feature imagination
-      console.log('🎯 Step 0: Comprehensive Prompt Understanding and Feature Imagination');
+      // Step 0: Prompt Understanding (matching old version)
+      console.log('🧠 Step 0: Prompt Understanding and Feature Analysis');
       dataStream.writeData({
         type: 'agent-step',
         content: JSON.stringify({ 
@@ -390,11 +409,25 @@ export const agentBuilder = ({
         })
       });
 
+      // Update step metadata
+      stepMetadata = {
+        ...stepMetadata,
+        currentStep: 'prompt-understanding',
+        stepProgress: {
+          ...stepMetadata.stepProgress,
+          'prompt-understanding': 'processing'
+        },
+        stepMessages: {
+          ...stepMetadata.stepMessages,
+          'prompt-understanding': 'Analyzing your request and imagining comprehensive features...'
+        }
+      };
+
       await saveDocumentWithContent(documentId, isUpdatingExisting ? 'Updating Agent System' : 'AI Agent System', JSON.stringify({
         status: 'analyzing',
         step: 'prompt-understanding',
         message: 'Analyzing your request and imagining comprehensive features...'
-      }, null, 2), session);
+      }, null, 2), session, undefined, stepMetadata);
 
       const promptUnderstanding = await generatePromptUnderstanding(command, existingAgent || undefined);
       
@@ -410,11 +443,24 @@ export const agentBuilder = ({
         })
       });
 
+      // Update step metadata for completion
+      stepMetadata = {
+        ...stepMetadata,
+        stepProgress: {
+          ...stepMetadata.stepProgress,
+          'prompt-understanding': 'complete'
+        },
+        stepMessages: {
+          ...stepMetadata.stepMessages,
+          'prompt-understanding': `Analysis complete: ${promptUnderstanding.userRequestAnalysis.complexity} ${promptUnderstanding.userRequestAnalysis.businessContext} system with ${promptUnderstanding.dataModelingNeeds.requiredModels.length} models and ${promptUnderstanding.workflowAutomationNeeds.requiredActions.length} actions planned`
+        }
+      };
+
       await saveDocumentWithContent(documentId, isUpdatingExisting ? 'Updating Agent System' : 'AI Agent System', JSON.stringify({
         status: 'planning',
         step: 'prompt-understanding',
         promptUnderstanding: promptUnderstanding
-      }, null, 2), session);
+      }, null, 2), session, undefined, stepMetadata);
 
       // Step 0.5: Granular Change Analysis (if needed)
       let granularChanges: any = null;
@@ -462,13 +508,27 @@ export const agentBuilder = ({
         })
       });
 
+      // Update step metadata
+      stepMetadata = {
+        ...stepMetadata,
+        currentStep: 'analysis',
+        stepProgress: {
+          ...stepMetadata.stepProgress,
+          'analysis': 'processing'
+        },
+        stepMessages: {
+          ...stepMetadata.stepMessages,
+          'analysis': 'AI determining the best technical approach based on feature analysis...'
+        }
+      };
+
       await saveDocumentWithContent(documentId, isUpdatingExisting ? 'Updating Agent System' : 'AI Agent System', JSON.stringify({
         status: 'analyzing',
         step: 'analysis',
         message: 'AI determining the best technical approach based on feature analysis...',
         promptUnderstanding: promptUnderstanding,
         granularChanges: granularChanges?.object
-      }, null, 2), session);
+      }, null, 2), session, undefined, stepMetadata);
 
       const decision = await generateDecision(command, conversationContext, promptUnderstanding as PromptUnderstanding, existingAgent || undefined, granularChanges, currentOperation);
       
@@ -486,6 +546,30 @@ export const agentBuilder = ({
             decision.object.needsActions ? 'Focusing on actions' : 'Analyzing existing system'}`
         })
       });
+
+      // Update step metadata for completion
+      stepMetadata = {
+        ...stepMetadata,
+        stepProgress: {
+          ...stepMetadata.stepProgress,
+          'analysis': 'complete'
+        },
+        stepMessages: {
+          ...stepMetadata.stepMessages,
+          'analysis': `Analysis complete: ${decision.object.needsFullAgent ? 'Building complete system' : 
+            decision.object.needsDatabase && decision.object.needsActions ? 'Building database and actions' :
+            decision.object.needsDatabase ? 'Focusing on database' : 
+            decision.object.needsActions ? 'Focusing on actions' : 'Analyzing existing system'}`
+        }
+      };
+
+      await saveDocumentWithContent(documentId, isUpdatingExisting ? 'Updating Agent System' : 'AI Agent System', JSON.stringify({
+        status: 'planning',
+        step: 'analysis',
+        analysis: decision.object,
+        promptUnderstanding: promptUnderstanding,
+        granularChanges: granularChanges?.object
+      }, null, 2), session, undefined, stepMetadata);
 
       // Initialize results
       let finalAgent: AgentData;
@@ -938,6 +1022,20 @@ export const agentBuilder = ({
         })
       });
 
+      // Update step metadata
+      stepMetadata = {
+        ...stepMetadata,
+        currentStep: 'integration',
+        stepProgress: {
+          ...stepMetadata.stepProgress,
+          'integration': 'processing'
+        },
+        stepMessages: {
+          ...stepMetadata.stepMessages,
+          'integration': 'Integrating all components and finalizing system...'
+        }
+      };
+
       // Create final agent with comprehensive metadata - matching old implementation
       console.log('🆕 Creating agent data with raw AI results for intelligent merging...');
 
@@ -998,6 +1096,19 @@ export const agentBuilder = ({
           message: `Raw AI results ready: ${finalAgent.models.length} models, ${finalAgent.actions.length} actions, ${finalAgent.schedules.length} schedules${existingAgent ? ' (will merge with existing data)' : ''}`
         })
       });
+
+      // Update step metadata for completion
+      stepMetadata = {
+        ...stepMetadata,
+        stepProgress: {
+          ...stepMetadata.stepProgress,
+          'integration': 'complete'
+        },
+        stepMessages: {
+          ...stepMetadata.stepMessages,
+          'integration': `Raw AI results ready: ${finalAgent.models.length} models, ${finalAgent.actions.length} actions, ${finalAgent.schedules.length} schedules${existingAgent ? ' (will merge with existing data)' : ''}`
+        }
+      };
 
       // Stream the final agent data to UI
       dataStream.writeData({
@@ -1072,7 +1183,19 @@ export const agentBuilder = ({
         mergedData.name,
         JSON.stringify(mergedData, null, 2),
         session,
-        deletionOperations
+        deletionOperations,
+        {
+          ...stepMetadata,
+          currentStep: 'complete',
+          stepProgress: {
+            ...stepMetadata.stepProgress,
+            'complete': 'complete'
+          },
+          stepMessages: {
+            ...stepMetadata.stepMessages,
+            'complete': 'Agent building completed successfully'
+          }
+        }
       );
 
       // Generate success message based on decision object
@@ -1098,7 +1221,18 @@ export const agentBuilder = ({
       await saveDocumentWithContent(documentId, 'Error Agent System', JSON.stringify({
         error: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date().toISOString()
-      }, null, 2), session);
+      }, null, 2), session, undefined, {
+        ...stepMetadata,
+        currentStep: 'error',
+        stepProgress: {
+          ...stepMetadata.stepProgress,
+          'error': 'failed'
+        },
+        stepMessages: {
+          ...stepMetadata.stepMessages,
+          'error': error instanceof Error ? error.message : 'Unknown error occurred'
+        }
+      });
 
       dataStream.writeData({ type: 'agent-step', content: JSON.stringify({ step: 'error', status: 'failed', message: 'System error occurred' }) });
       dataStream.writeData({ type: 'finish', content: errorMessage });
