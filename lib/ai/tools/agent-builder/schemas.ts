@@ -259,7 +259,7 @@ export const promptUnderstandingSchema = z.object({
       name: z.string(),
       purpose: z.string(),
       role: z.enum(['admin', 'member']),
-      frequency: z.enum(['daily', 'weekly', 'monthly', 'quarterly', 'custom']),
+      frequency: z.enum(['hourly', 'daily', 'weekly', 'monthly', 'quarterly', 'custom']),
       timing: z.string(),
       priority: z.enum(['critical', 'high', 'medium', 'low']),
       complexity: z.enum(['simple', 'moderate', 'complex']),

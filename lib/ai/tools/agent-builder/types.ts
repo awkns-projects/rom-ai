@@ -241,7 +241,7 @@ export interface PromptUnderstanding {
       name: string;
       purpose: string;
       role: 'admin' | 'member';
-      frequency: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'custom';
+      frequency: 'hourly' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'custom';
       timing: string;
       priority: 'critical' | 'high' | 'medium' | 'low';
       complexity: 'simple' | 'moderate' | 'complex';
