@@ -1,5 +1,4 @@
-import * as React from 'react';
-import { useState, useCallback, useEffect, memo, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, memo, useMemo } from 'react';
 import { Artifact } from '@/components/create-artifact';
 import { DocumentSkeleton } from '@/components/document-skeleton';
 import { DiffView } from '@/components/diffview';
@@ -29,10 +28,9 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import { useArtifact } from '@/hooks/use-artifact';
-import { RunActionModal } from './action-runner';
 
 // Add new imports for action running
-// import { executeActionWithUI, getDatabaseDataForStep, createMockDatabase, ActionRunState } from '../../../lib/ai/tools/agent-builder/utils';
+import { executeActionWithUI, getDatabaseDataForStep, createMockDatabase, ActionRunState } from '../../../lib/ai/tools/agent-builder/utils';
 
 interface AgentModel {
   id: string;
@@ -91,6 +89,7 @@ interface AgentAction {
   name: string;
   emoji?: string; // AI-generated emoji representing the action
   description: string;
+  type: 'Create' | 'Update';
   role: 'admin' | 'member';
   dataSource: {
     type: 'custom' | 'database';
@@ -121,27 +120,6 @@ interface AgentAction {
     identifierIds?: string[];
     fields?: Record<string, any>;
     fieldsToUpdate?: Record<string, any>;
-  };
-  uiComponents?: {
-    stepForms: Array<{
-      stepNumber: number;
-      title: string;
-      description: string;
-      reactCode: string;
-      propsInterface: Record<string, any>;
-      validationLogic: string;
-      dataRequirements: Array<{
-        modelName: string;
-        fields: string[];
-        purpose: string;
-      }>;
-    }>;
-    resultView: {
-      title: string;
-      description: string;
-      reactCode: string;
-      propsInterface: Record<string, any>;
-    };
   };
 }
 
@@ -320,22 +298,22 @@ const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Reco
 
   // For schedules, check if they exist
   if (stepId === 'schedules') {
-    return agentData?.schedules && agentData.schedules?.length > 0 ? 'complete' : 'pending';
+    return agentData?.schedules && agentData.schedules.length > 0 ? 'complete' : 'pending';
   }
   
   // For models, check if they exist 
   if (stepId === 'models') {
-    return agentData?.models && agentData.models?.length > 0 ? 'complete' : 'pending';
+    return agentData?.models && agentData.models.length > 0 ? 'complete' : 'pending';
   }
   
   // For examples, check if they exist (only for new models)
   if (stepId === 'examples') {
-    return agentData?.models && agentData.models?.some((model: any) => model.records && model.records.length > 0) ? 'complete' : 'pending';
+    return agentData?.models && agentData.models.some((model: any) => model.records && model.records.length > 0) ? 'complete' : 'pending';
   }
   
   // For actions, check if they exist
   if (stepId === 'actions') {
-    return agentData?.actions && agentData.actions?.length > 0 ? 'complete' : 'pending';
+    return agentData?.actions && agentData.actions.length > 0 ? 'complete' : 'pending';
   }
   
   // For overview, check if basic info exists
@@ -346,8 +324,8 @@ const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Reco
   // For integration, check if all components are complete
   if (stepId === 'integration') {
     const hasBasicInfo = agentData?.name && agentData?.description && agentData?.domain;
-    const hasModels = agentData?.models && agentData.models?.length > 0;
-    const hasActions = agentData?.actions && agentData.actions?.length > 0;
+    const hasModels = agentData?.models && agentData.models.length > 0;
+    const hasActions = agentData?.actions && agentData.actions.length > 0;
     return hasBasicInfo && hasModels && hasActions ? 'complete' : 'pending';
   }
   
@@ -563,22 +541,22 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {},
                     )}
                     {step.id === 'models' && agentData.models && (
                       <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
-                        {agentData.models?.length} models created
+                        {agentData.models.length} models created
                       </span>
                     )}
-                    {step.id === 'examples' && agentData.models && agentData.models?.some((model: any) => model.records && model.records.length > 0) && (
+                    {step.id === 'examples' && agentData.models && agentData.models.some((model: any) => model.records && model.records.length > 0) && (
                       <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
-                        {agentData.models?.reduce((sum: number, model: any) => sum + (model.records?.length || 0), 0)} example records generated
+                        {agentData.models.reduce((sum: number, model: any) => sum + (model.records?.length || 0), 0)} example records generated
                       </span>
                     )}
                     {step.id === 'actions' && agentData.actions && (
                       <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
-                        {agentData.actions?.length} actions automated
+                        {agentData.actions.length} actions automated
                       </span>
                     )}
                     {step.id === 'schedules' && agentData.schedules && (
                       <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
-                        {agentData.schedules?.length} schedules configured
+                        {agentData.schedules.length} schedules configured
                       </span>
                     )}
                   </div>
@@ -1433,7 +1411,23 @@ const ActionEditor = memo(({
               className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
             />
           </div>
-
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Action Type</Label>
+            <Select
+              value={action.type}
+              onValueChange={(value: 'Create' | 'Update') => 
+                onUpdate({ ...action, type: value })
+              }
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="Create" className="text-green-200 focus:bg-green-500/20 font-mono">Create</SelectItem>
+                <SelectItem value="Update" className="text-green-200 focus:bg-green-500/20 font-mono">Update</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         
         <div className="mt-4 space-y-2">
@@ -1478,88 +1472,169 @@ const ActionEditor = memo(({
         </div>
       </div>
 
-      {/* Execution Logic */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <span className="text-green-400 text-lg">⚡</span>
-          <h3 className="text-lg font-semibold text-green-300 font-mono">Execution Logic</h3>
+      {/* Data Source Configuration */}
+      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-cyan-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Data Source</h4>
         </div>
         
-        <div className="space-y-3">
-          <label className="block text-sm font-medium text-green-300 font-mono">
-            Execution Type
-          </label>
-          <select
-            value={action.execute?.type || 'prompt'}
-            onChange={(e) => onUpdate({
-              ...action,
-              execute: {
-                ...action.execute,
-                type: e.target.value as 'code' | 'prompt'
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Source Type</Label>
+            <Select
+              value={action.dataSource.type}
+              onValueChange={(value: 'custom' | 'database') => 
+                onUpdate({
+                  ...action,
+                  dataSource: {
+                    type: value,
+                    ...(value === 'database' ? { database: { models: [] } } : { customFunction: { code: '' } })
+                  }
+                })
               }
-            })}
-            className="w-full px-3 py-2 bg-black/50 border border-green-500/30 rounded-lg text-green-100 font-mono focus:outline-none focus:border-green-400"
-          >
-            <option value="code">Code Script</option>
-            <option value="prompt">AI Prompt</option>
-          </select>
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="database" className="text-green-200 focus:bg-green-500/20 font-mono">Database Query</SelectItem>
+                <SelectItem value="custom" className="text-green-200 focus:bg-green-500/20 font-mono">Custom Function</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {action.dataSource.type === 'custom' && (
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">Custom Code</Label>
+              <Textarea
+                value={action.dataSource.customFunction?.code || ''}
+                onChange={(e) => onUpdate({
+                  ...action,
+                  dataSource: {
+                    ...action.dataSource,
+                    customFunction: {
+                      ...action.dataSource.customFunction,
+                      code: e.target.value
+                    }
+                  }
+                })}
+                placeholder="// Custom function code here..."
+                rows={6}
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-sm"
+              />
+            </div>
+          )}
         </div>
+      </div>
 
-        {action.execute?.type === 'code' && (
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-green-300 font-mono">
-              Script Code
-            </label>
-            <textarea
-              value={action.execute.code?.script || ''}
-              onChange={(e) => onUpdate({
-                ...action,
-                execute: {
-                  ...action.execute,
-                  code: {
-                    ...action.execute.code,
-                    script: e.target.value
-                  }
-                }
-              })}
-              rows={8}
-              className="w-full px-3 py-2 bg-black/50 border border-green-500/30 rounded-lg text-green-100 font-mono text-sm focus:outline-none focus:border-green-400"
-              placeholder="// Enter your JavaScript code here
-// Available parameters: database, input, member
-// Example:
-// try {
-//   const result = database['Model'].find(item => item.id === input.id);
-//   return { output: { result }, data: [] };
-// } catch (error) {
-//   throw new Error('Action failed: ' + error.message);
-// }"
-            />
+      {/* Execute Configuration */}
+      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Execution Logic</h4>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Execution Type</Label>
+            <Select
+              value={action.execute.type}
+              onValueChange={(value: 'code' | 'prompt') => 
+                onUpdate({
+                  ...action,
+                  execute: value === 'code' 
+                    ? { type: 'code', code: { script: '' } }
+                    : { type: 'prompt', prompt: { template: '' } }
+                })
+              }
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="code" className="text-green-200 focus:bg-green-500/20 font-mono">Code Script</SelectItem>
+                <SelectItem value="prompt" className="text-green-200 focus:bg-green-500/20 font-mono">AI Prompt</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        )}
+          
+          {action.execute.type === 'code' && (
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">Script Code</Label>
+              <Textarea
+                value={action.execute.code?.script || ''}
+                onChange={(e) => onUpdate({
+                  ...action,
+                  execute: {
+                    ...action.execute,
+                    code: {
+                      ...action.execute.code,
+                      script: e.target.value
+                    }
+                  }
+                })}
+                placeholder="// Processing script here..."
+                rows={6}
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-sm"
+              />
+            </div>
+          )}
+          
+          {action.execute.type === 'prompt' && (
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">AI Prompt Template</Label>
+              <Textarea
+                value={action.execute.prompt?.template || ''}
+                onChange={(e) => onUpdate({
+                  ...action,
+                  execute: {
+                    ...action.execute,
+                    prompt: {
+                      ...action.execute.prompt,
+                      template: e.target.value
+                    }
+                  }
+                })}
+                placeholder="Analyze the following data and..."
+                rows={6}
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+              />
+            </div>
+          )}
+        </div>
+      </div>
 
-        {action.execute?.type === 'prompt' && (
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-green-300 font-mono">
-              AI Prompt Template
-            </label>
-            <textarea
-              value={action.execute.prompt?.template || ''}
-              onChange={(e) => onUpdate({
+      {/* Results Configuration */}
+      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Results Configuration</h4>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Target Model</Label>
+            <Select
+              value={action.results.model}
+              onValueChange={(value) => onUpdate({
                 ...action,
-                execute: {
-                  ...action.execute,
-                  prompt: {
-                    ...action.execute.prompt,
-                    template: e.target.value
-                  }
-                }
+                results: { ...action.results, model: value }
               })}
-              rows={6}
-              className="w-full px-3 py-2 bg-black/50 border border-green-500/30 rounded-lg text-green-100 font-mono text-sm focus:outline-none focus:border-green-400"
-              placeholder="Enter your AI prompt template here..."
-            />
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue placeholder="Select model" />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                {allModels.filter(model => model.name.trim() !== '').map(model => (
+                  <SelectItem key={model.id} value={model.name} className="text-green-200 focus:bg-green-500/20 font-mono">
+                    {model.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Action Controls */}
@@ -1827,8 +1902,6 @@ const ActionsListEditor = memo(({
   models: AgentModel[];
   status: 'streaming' | 'idle';
 }) => {
-  const [runActionId, setRunActionId] = useState<string | null>(null);
-  
   const updateAction = useCallback((updatedAction: AgentAction) => {
     updateActions(actions.map(action => 
       action.id === updatedAction.id ? updatedAction : action
@@ -1904,7 +1977,7 @@ const ActionsListEditor = memo(({
                 <div className="flex-1 min-w-0">
                   <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{action.name || 'Unnamed Action'}</h4>
                   <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
-                    {action.role}
+                    {action.type} • {action.role}
                   </p>
                   {action.description && (
                     <p className="text-green-300/80 text-xs sm:text-sm font-mono leading-relaxed">
@@ -1917,7 +1990,10 @@ const ActionsListEditor = memo(({
               </div>
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2 sm:ml-4">
                 <Button
-                  onClick={() => setRunActionId(action.id)}
+                  onClick={() => {
+                    console.log('Running action:', action.id);
+                    alert(`Running action: ${action.name}`);
+                  }}
                   className="btn-matrix px-3 sm:px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 border-green-500/30"
                 >
                   <div className="flex items-center gap-2 justify-center">
@@ -1959,15 +2035,6 @@ const ActionsListEditor = memo(({
           </div>
         )}
       </div>
-      
-      {/* Run Action Modal */}
-      {runActionId && (
-        <RunActionModal
-          action={actions.find(a => a.id === runActionId)!}
-          models={models}
-          onClose={() => setRunActionId(null)}
-        />
-      )}
     </div>
   );
 });
@@ -2841,6 +2908,57 @@ const ScheduleEditor = memo(({
         </div>
       </div>
 
+      {/* Data Source Configuration */}
+      <div className="p-6 rounded-xl bg-yellow-500/10 border border-yellow-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Data Source Configuration</h4>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Data Source Type</Label>
+            <Select
+              value={schedule.dataSource.type}
+              onValueChange={(value: 'custom' | 'database') => onUpdate({
+                ...schedule,
+                dataSource: { ...schedule.dataSource, type: value }
+              })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="database" className="text-green-200 focus:bg-green-500/20 font-mono">Database Query</SelectItem>
+                <SelectItem value="custom" className="text-green-200 focus:bg-green-500/20 font-mono">Custom Function</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {schedule.dataSource.type === 'custom' && (
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">Custom Function Code</Label>
+              <Textarea
+                value={schedule.dataSource.customFunction?.code || ''}
+                onChange={(e) => onUpdate({
+                  ...schedule,
+                  dataSource: {
+                    ...schedule.dataSource,
+                    customFunction: {
+                      ...schedule.dataSource.customFunction,
+                      code: e.target.value
+                    }
+                  }
+                })}
+                placeholder="// Custom data fetching logic here..."
+                rows={6}
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-sm"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Execution Configuration */}
       <div className="p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
         <div className="flex items-center gap-3 mb-6">
@@ -2913,6 +3031,38 @@ const ScheduleEditor = memo(({
               />
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Results Configuration */}
+      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Results Configuration</h4>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Target Model</Label>
+            <Select
+              value={schedule.results.model}
+              onValueChange={(value) => onUpdate({
+                ...schedule,
+                results: { ...schedule.results, model: value }
+              })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue placeholder="Select model" />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                {allModels.filter(model => model.name.trim() !== '').map(model => (
+                  <SelectItem key={model.id} value={model.name} className="text-green-200 focus:bg-green-500/20 font-mono">
+                    {model.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -3085,7 +3235,7 @@ const AgentBuilderContent = memo(({
       contentLength: content.length,
       contentPreview: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
       currentAgentName: agentData.name,
-      currentModelCount: agentData.models?.length || 0
+      currentModelCount: agentData.models.length
     });
 
     try {
@@ -3102,8 +3252,8 @@ const AgentBuilderContent = memo(({
       const currentIsDefaults = agentData.name === 'New Agent' && 
                                !agentData.description && 
                                !agentData.domain &&
-                               agentData.models?.length === 0 && 
-                               agentData.actions?.length === 0;
+                               agentData.models.length === 0 && 
+                               agentData.actions.length === 0;
 
       // Also update if content is not empty JSON object and we have defaults
       const isEmptyJsonObject = content.trim() === '{}';
@@ -3248,33 +3398,19 @@ const AgentBuilderContent = memo(({
       name: `Action${(agentData.actions?.length || 0) + 1}`,
       emoji: '⚡', // Default emoji, will be auto-generated by AI
       description: '',
+      type: 'Create',
       role: 'admin',
       dataSource: {
         type: 'database',
-        database: {
-          models: []
-        }
+        database: { models: [] }
       },
       execute: {
         type: 'code',
-        code: {
-          script: '',
-          envVars: []
-        }
+        code: { script: '' }
       },
       results: {
         actionType: 'Create',
-        model: '',
-        fields: {}
-      },
-      uiComponents: {
-        stepForms: [],
-        resultView: {
-          title: 'Action Results',
-          description: 'View the results of the action execution',
-          reactCode: '',
-          propsInterface: {}
-        }
+        model: ''
       }
     };
     

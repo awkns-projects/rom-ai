@@ -138,17 +138,41 @@ export function Chat({
 
   // Event listener for automatic retry
   useEffect(() => {
-    const handleAutoRetry = () => {
-      console.log('🔄 Automatic retry triggered');
-      experimental_resume();
+    const handleAutoRetry = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      console.log('🔄 Automatic retry triggered', customEvent.detail);
+      console.log('🔄 Event type:', event.type);
+      console.log('🔄 Event listener called successfully');
+      
+      // Instead of experimental_resume, send a new message to continue building
+      const { documentId, command, operation } = customEvent.detail;
+      
+      let continueMessage = '';
+      if (operation === 'resume') {
+        continueMessage = `Continue building the agent system from where it left off. Document ID: ${documentId}`;
+      } else if (operation === 'continue') {
+        continueMessage = `Continue building the agent system. Document ID: ${documentId}`;
+      } else {
+        continueMessage = `Resume the agent building process. Document ID: ${documentId}`;
+      }
+      
+      console.log('🔄 Sending continue message:', continueMessage);
+      
+      // Send a new message to continue the process
+      append({
+        role: 'user',
+        content: continueMessage,
+      });
     };
 
-    window.addEventListener('agent-builder-retry', handleAutoRetry);
+    console.log('🔄 Setting up agent-builder-auto-retry event listener');
+    window.addEventListener('agent-builder-auto-retry', handleAutoRetry);
 
     return () => {
-      window.removeEventListener('agent-builder-retry', handleAutoRetry);
+      console.log('🔄 Cleaning up agent-builder-auto-retry event listener');
+      window.removeEventListener('agent-builder-auto-retry', handleAutoRetry);
     };
-  }, [experimental_resume]);
+  }, [append]);
 
   const { data: votes } = useSWR<Array<Vote>>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,

@@ -29,7 +29,10 @@ import {
   changeAnalysisSchema,
   databaseGenerationSchema,
   actionGenerationSchema,
-  scheduleGenerationSchema
+  scheduleGenerationSchema,
+  enhancedActionAnalysisSchema,
+  enhancedActionCodeSchema,
+  enhancedActionSchema
 } from './schemas';
 
 import {
@@ -61,7 +64,16 @@ import {
   generateDecision,
   generateGranularChangeAnalysis,
   generateDeletionOperations,
-  generateExampleRecords
+  generateExampleRecords,
+  generateEnhancedActionAnalysis,
+  generateEnhancedActionCode,
+  generateCompleteEnhancedAction,
+  generateBatchEnhancedActions,
+  generateActionsWithEnhancedAnalysis,
+  executeGeneratedAction,
+  validateGeneratedFunctionBody,
+  createFunctionExecutionExample,
+  createEnhancedActionExample
 } from './generation';
 
 import {
@@ -90,7 +102,24 @@ export type {
 export {
   generateNewId,
   analyzeConversationContext,
-  createAgentData
+  createAgentData,
+  // Enhanced action generation functions
+  generateEnhancedActionAnalysis,
+  generateEnhancedActionCode,
+  generateCompleteEnhancedAction,
+  generateBatchEnhancedActions,
+  generateActionsWithEnhancedAnalysis,
+  executeGeneratedAction,
+  validateGeneratedFunctionBody,
+  createFunctionExecutionExample,
+  createEnhancedActionExample
+};
+
+// Re-export enhanced schemas for external usage
+export {
+  enhancedActionAnalysisSchema,
+  enhancedActionCodeSchema,
+  enhancedActionSchema
 };
 
 // Helper functions that were in the original file
@@ -981,6 +1010,66 @@ export const agentBuilder = ({
         await saveDocumentWithContent(documentId, agentOverview?.object?.name || existingAgent?.name || 'AI Agent System', JSON.stringify(partialAgent, null, 2), session);
 
         actionsResults = finalActionsResult;
+      }
+
+      // Step 4.25: Generate Execution Logic and UI Components
+      if (actionsResults && actionsResults.actions.length > 0) {
+        console.log('⚡ Step 4.25: Execution Logic and UI Components Generation');
+        dataStream.writeData({
+          type: 'agent-step',
+          content: JSON.stringify({ 
+            step: 'execution', 
+            status: 'processing',
+            message: 'Generating execution logic and UI components for actions...'
+          })
+        });
+
+        // Generate enhanced action analysis for all actions to get proper UI components
+        const enhancedActionsResults = await generateActionsWithEnhancedAnalysis(
+          promptUnderstanding as PromptUnderstanding,
+          databaseResults || { models: [], enums: [] },
+          true, // Use enhanced generation
+          existingAgent || undefined,
+          `${agentOverview?.object?.description || ''} ${promptUnderstanding?.userRequestAnalysis?.businessContext || ''}`.trim()
+        );
+
+        // Update actions with enhanced UI components and execution logic
+        if (enhancedActionsResults.actions && enhancedActionsResults.actions.length > 0) {
+          actionsResults.actions = enhancedActionsResults.actions;
+          console.log(`✅ Enhanced ${enhancedActionsResults.actions.length} actions with UI components and execution logic`);
+        }
+
+        console.log('🔧 Execution logic generation complete');
+        
+        dataStream.writeData({
+          type: 'agent-step',
+          content: JSON.stringify({ 
+            step: 'execution', 
+            status: 'complete',
+            data: { object: { executionLogic: 'Generated', uiComponents: 'Generated' } },
+            message: `Execution logic complete: Enhanced ${actionsResults.actions.length} actions with UI components`
+          })
+        });
+
+        // Stream partial agent data after execution logic completion
+        const partialAgent = createAgentData(
+          agentOverview?.object?.name || existingAgent?.name || 'AI Agent System',
+          agentOverview?.object?.description || existingAgent?.description || 'AI-generated agent system',
+          agentOverview?.object?.domain || existingAgent?.domain || '',
+          databaseResults?.models || [],
+          databaseResults?.enums || [],
+          actionsResults.actions || [],
+          existingAgent?.schedules || [],
+          { step: 'execution', completed: true }
+        );
+        
+        dataStream.writeData({
+          type: 'agent-data',
+          content: JSON.stringify(partialAgent)
+        });
+
+        // Save the actual partial agent data to document
+        await saveDocumentWithContent(documentId, agentOverview?.object?.name || existingAgent?.name || 'AI Agent System', JSON.stringify(partialAgent, null, 2), session);
       }
 
       // Step 4.5: Schedules Generation (if actions were created)

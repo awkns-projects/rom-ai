@@ -121,6 +121,28 @@ export interface AgentAction {
     fields?: Record<string, any>;
     fieldsToUpdate?: Record<string, any>;
   };
+  // UI Components for running the action
+  uiComponents?: {
+    stepForms: Array<{
+      stepNumber: number;
+      title: string;
+      description: string;
+      reactCode: string; // React component code as string
+      propsInterface: Record<string, any>; // TypeScript interface for props
+      validationLogic: string; // Client-side validation
+      dataRequirements: Array<{
+        modelName: string;
+        fields: string[];
+        purpose: string;
+      }>; // Database data needed for this step
+    }>;
+    resultView: {
+      title: string;
+      description: string;
+      reactCode: string; // React component code for displaying results
+      propsInterface: Record<string, any>;
+    };
+  };
 }
 
 export interface DatabaseModel {

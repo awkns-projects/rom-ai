@@ -354,4 +354,290 @@ export function createInitialAgentData(
       ...metadata
     }
   };
+}
+
+/**
+ * Run Action with UI Components
+ * Executes an action with generated step forms and result view
+ */
+export interface ActionRunState {
+  currentStep: number;
+  stepData: Record<number, any>;
+  isLoading: boolean;
+  error: string | null;
+  result: any;
+  isComplete: boolean;
+}
+
+/**
+ * Execute action with step forms
+ */
+export async function executeActionWithUI(
+  action: any, // AgentAction with uiComponents
+  database: Record<string, any[]>,
+  member: Record<string, any>
+): Promise<{
+  stepForms: Array<{
+    stepNumber: number;
+    title: string;
+    description: string;
+    component: string; // React component code
+    dataRequirements: Array<{
+      modelName: string;
+      fields: string[];
+      purpose: string;
+    }>;
+  }>;
+  executeAction: (stepData: Record<number, any>) => Promise<any>;
+  resultView: {
+    title: string;
+    description: string;
+    component: string; // React component code
+  };
+}> {
+  if (!action.uiComponents) {
+    throw new Error('Action does not have UI components configured');
+  }
+
+  // Prepare step forms with database data
+  const stepForms = action.uiComponents.stepForms.map((step: any) => ({
+    stepNumber: step.stepNumber,
+    title: step.title,
+    description: step.description,
+    component: step.reactCode,
+    dataRequirements: step.dataRequirements
+  }));
+
+  // Function to execute the action with collected step data
+  const executeAction = async (stepData: Record<number, any>) => {
+    try {
+      // Merge all step data into input object
+      const input = Object.values(stepData).reduce((acc, data) => ({ ...acc, ...data }), {});
+      
+      // Execute the action function
+      if (action.execute.type === 'code' && action.execute.code?.script) {
+        const actionFunction = new Function('database', 'input', 'member', action.execute.code.script);
+        const result = await actionFunction(database, input, member);
+        return result;
+      } else {
+        throw new Error('Action execution type not supported');
+      }
+    } catch (error) {
+      throw new Error(`Action execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  return {
+    stepForms,
+    executeAction,
+    resultView: {
+      title: action.uiComponents.resultView.title,
+      description: action.uiComponents.resultView.description,
+      component: action.uiComponents.resultView.reactCode
+    }
+  };
+}
+
+/**
+ * Get database data for step form requirements
+ */
+export function getDatabaseDataForStep(
+  database: Record<string, any[]>,
+  dataRequirements: Array<{
+    modelName: string;
+    fields: string[];
+    purpose: string;
+  }>
+): Record<string, any[]> {
+  const stepData: Record<string, any[]> = {};
+  
+  dataRequirements.forEach(requirement => {
+    const modelData = database[requirement.modelName] || [];
+    // Filter to only include required fields
+    const filteredData = modelData.map(record => {
+      const filtered: any = {};
+      requirement.fields.forEach(field => {
+        if (record[field] !== undefined) {
+          filtered[field] = record[field];
+        }
+      });
+      return filtered;
+    });
+    stepData[requirement.modelName] = filteredData;
+  });
+  
+  return stepData;
+}
+
+/**
+ * Validate step form data
+ */
+export function validateStepData(
+  stepData: any,
+  validationLogic: string
+): { isValid: boolean; errors: string[] } {
+  try {
+    // Create validation function from string
+    const validationFunction = new Function('data', validationLogic);
+    const validationResult = validationFunction(stepData);
+    
+    if (typeof validationResult === 'boolean') {
+      return { isValid: validationResult, errors: validationResult ? [] : ['Validation failed'] };
+    } else if (typeof validationResult === 'object' && validationResult !== null) {
+      return {
+        isValid: validationResult.isValid || false,
+        errors: validationResult.errors || []
+      };
+    } else {
+      return { isValid: true, errors: [] };
+    }
+  } catch (error) {
+    return {
+      isValid: false,
+      errors: [`Validation error: ${error instanceof Error ? error.message : 'Unknown error'}`]
+    };
+  }
+}
+
+/**
+ * Create a mock database for testing actions
+ */
+export function createMockDatabase(models: any[]): Record<string, any[]> {
+  const mockDB: Record<string, any[]> = {};
+  
+  models.forEach(model => {
+    mockDB[model.name] = model.records || [];
+  });
+  
+  return mockDB;
+}
+
+/**
+ * Generate step form component template
+ */
+export function generateStepFormTemplate(
+  stepTitle: string,
+  fields: Array<{
+    name: string;
+    type: string;
+    required: boolean;
+    options?: string[];
+    databaseModel?: string;
+  }>
+): string {
+  return `
+import React, { useState, useEffect } from 'react';
+
+interface ${stepTitle.replace(/\s+/g, '')}Props {
+  onNext: (data: any) => void;
+  onPrevious?: () => void;
+  databaseData?: Record<string, any[]>;
+  initialData?: any;
+}
+
+export default function ${stepTitle.replace(/\s+/g, '')}({ onNext, onPrevious, databaseData, initialData }: ${stepTitle.replace(/\s+/g, '')}Props) {
+  const [formData, setFormData] = useState(initialData || {
+    ${fields.map(field => `${field.name}: ${field.type === 'boolean' ? 'false' : field.type === 'number' ? '0' : "''"}`).join(',\n    ')}
+  });
+  
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validation
+    const newErrors: Record<string, string> = {};
+    ${fields.filter(f => f.required).map(field => `
+    if (!formData.${field.name}) {
+      newErrors.${field.name} = '${field.name} is required';
+    }`).join('')}
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+    
+    onNext(formData);
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto p-6">
+      <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-6">
+        <h2 className="text-xl font-bold text-green-200 font-mono mb-4">${stepTitle}</h2>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
+          ${fields.map(field => `
+          <div className="space-y-2">
+            <label className="text-green-300 font-mono font-medium block">
+              ${field.name.charAt(0).toUpperCase() + field.name.slice(1)}
+              ${field.required ? ' *' : ''}
+            </label>
+            ${field.databaseModel ? `
+            <select
+              value={formData.${field.name}}
+              onChange={(e) => setFormData(prev => ({ ...prev, ${field.name}: e.target.value }))}
+              className="w-full bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono rounded-lg px-3 py-2"
+            >
+              <option value="">Select ${field.databaseModel}</option>
+              {(databaseData?.${field.databaseModel} || []).map((item: any) => (
+                <option key={item.id} value={item.id}>
+                  {item.name || item.title || item.id}
+                </option>
+              ))}
+            </select>
+            ` : field.options ? `
+            <select
+              value={formData.${field.name}}
+              onChange={(e) => setFormData(prev => ({ ...prev, ${field.name}: e.target.value }))}
+              className="w-full bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono rounded-lg px-3 py-2"
+            >
+              <option value="">Select option</option>
+              ${field.options.map(option => `<option value="${option}">${option}</option>`).join('\n              ')}
+            </select>
+            ` : field.type === 'textarea' ? `
+            <textarea
+              value={formData.${field.name}}
+              onChange={(e) => setFormData(prev => ({ ...prev, ${field.name}: e.target.value }))}
+              placeholder="Enter ${field.name}"
+              rows={4}
+              className="w-full bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono rounded-lg px-3 py-2"
+            />
+            ` : `
+            <input
+              type="${field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'}"
+              value={formData.${field.name}}
+              onChange={(e) => setFormData(prev => ({ ...prev, ${field.name}: e.target.value }))}
+              placeholder="Enter ${field.name}"
+              className="w-full bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono rounded-lg px-3 py-2"
+            />
+            `}
+            {errors.${field.name} && (
+              <p className="text-red-400 text-sm font-mono">{errors.${field.name}}</p>
+            )}
+          </div>
+          `).join('')}
+          
+          <div className="flex justify-between pt-4">
+            {onPrevious && (
+              <button
+                type="button"
+                onClick={onPrevious}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg font-mono"
+              >
+                Previous
+              </button>
+            )}
+            <button
+              type="submit"
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-mono ml-auto"
+            >
+              Next
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+`;
 } 

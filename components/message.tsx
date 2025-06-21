@@ -54,7 +54,13 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
         !isAutoRetrying &&
         (persistedMetadata?.status === 'timeout' || persistedMetadata?.currentStep === 'timeout')) {
       
-      console.log('🔄 Timeout detected, starting auto-retry countdown...');
+      console.log('🔄 Timeout detected, starting auto-retry countdown...', {
+        autoRetryAttempted,
+        isLoading,
+        isAutoRetrying,
+        persistedMetadata: persistedMetadata?.status,
+        currentStep: persistedMetadata?.currentStep
+      });
       setAutoRetryAttempted(true);
       
       // Start 10-second countdown
@@ -68,17 +74,22 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
         
         if (countdown <= 0) {
           clearInterval(countdownInterval);
-          console.log('🔄 Auto-retrying agent builder after timeout...');
+          console.log('🔄 Auto-retrying agent builder after timeout...', {
+            documentId: args?.documentId,
+            command: args?.command,
+            operation: 'resume'
+          });
           
           // Trigger retry by simulating a resume action
           // This would need to be connected to the parent chat component
-          const retryEvent = new CustomEvent('agent-builder-retry', {
+          const retryEvent = new CustomEvent('agent-builder-auto-retry', {
             detail: { 
               documentId: args?.documentId,
               command: args?.command,
               operation: 'resume'
             }
           });
+          console.log('🔄 Dispatching agent-builder-auto-retry event...', retryEvent.detail);
           window.dispatchEvent(retryEvent);
           
           setIsAutoRetrying(false);
@@ -116,6 +127,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
       { id: 'overview', label: 'System Architecture' },
       { id: 'models', label: 'Database Models Creation' },
       { id: 'actions', label: 'Automated Actions Setup' },
+      { id: 'execution', label: 'Execution Logic & UI Components' },
       { id: 'schedules', label: 'Scheduling & Timing' },
       { id: 'integration', label: 'System Integration' }
     ];
@@ -189,7 +201,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
     }
     
     // Determine based on step order and persisted data
-    const stepOrder = ['prompt-understanding', 'granular-analysis', 'analysis', 'change-analysis', 'overview', 'models', 'actions', 'schedules', 'integration'];
+    const stepOrder = ['prompt-understanding', 'granular-analysis', 'analysis', 'change-analysis', 'overview', 'models', 'actions', 'execution', 'schedules', 'integration'];
     const currentStepIndex = (metadata?.currentStep || persistedMetadata?.currentStep) ? 
       stepOrder.indexOf(metadata?.currentStep || persistedMetadata?.currentStep) : -1;
     const thisStepIndex = stepOrder.indexOf(stepId);
@@ -335,7 +347,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
                 onClick={() => {
                   // Reset the auto-retry completed flag and trigger continue
                   setAutoRetryCompleted(false);
-                  const retryEvent = new CustomEvent('agent-builder-retry', {
+                  const retryEvent = new CustomEvent('agent-builder-auto-retry', {
                     detail: { 
                       documentId: args?.documentId,
                       command: args?.command,
@@ -359,7 +371,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
                 )}
                 onClick={() => {
                   // Trigger resume by sending a continue message
-                  const retryEvent = new CustomEvent('agent-builder-retry', {
+                  const retryEvent = new CustomEvent('agent-builder-auto-retry', {
                     detail: { 
                       documentId: args?.documentId,
                       command: args?.command,
