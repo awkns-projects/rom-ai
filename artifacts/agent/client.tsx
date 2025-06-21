@@ -2564,14 +2564,14 @@ const RecordEditor = memo(({
         
         return (
           <Select
-            value={selectedId || ''}
-            onValueChange={(value) => updateField(field.name, value || null)}
+            value={selectedId || 'none'}
+            onValueChange={(value) => updateField(field.name, value === 'none' ? null : value)}
           >
             <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
               <SelectValue placeholder={`Select ${field.type}`} />
             </SelectTrigger>
             <SelectContent className="bg-black border-green-500/30">
-              <SelectItem value="" className="text-green-200 focus:bg-green-500/20 font-mono">
+              <SelectItem value="none" className="text-green-200 focus:bg-green-500/20 font-mono">
                 None selected
               </SelectItem>
               {relatedRecords.map(relatedRecord => {
