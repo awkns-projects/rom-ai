@@ -45,15 +45,16 @@ export function escapeForTemplate(str: string): string {
 }
 
 /**
- * Creates a new AgentData object with the provided components
+ * Creates a complete AgentData object with all required fields
  * @param name - Agent name
  * @param description - Agent description
- * @param domain - Business domain
- * @param models - Array of data models
+ * @param domain - Agent domain
+ * @param models - Array of models
  * @param enums - Array of enums
  * @param actions - Array of actions
  * @param schedules - Array of schedules
  * @param metadata - Optional metadata
+ * @param exampleRecords - Optional example records for new models
  * @returns Complete AgentData object
  */
 export function createAgentData(
@@ -64,7 +65,8 @@ export function createAgentData(
   enums: AgentEnum[] = [],
   actions: AgentAction[] = [],
   schedules: AgentSchedule[] = [],
-  metadata?: any
+  metadata?: any,
+  exampleRecords?: { modelName: string; records: Record<string, any>[] }[]
 ): AgentData {
   return {
     id: generateUUID(),
@@ -76,7 +78,8 @@ export function createAgentData(
     actions,
     schedules,
     createdAt: new Date().toISOString(),
-    metadata
+    metadata,
+    ...(exampleRecords && exampleRecords.length > 0 && { exampleRecords })
   };
 }
 

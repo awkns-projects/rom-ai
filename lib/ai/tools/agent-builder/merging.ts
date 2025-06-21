@@ -45,8 +45,17 @@ export function performDeepMerge(
     createdAt: existing.createdAt || incoming.createdAt || new Date().toISOString(),
     // Merge metadata intelligently
     metadata: {
+      // Start with existing metadata
       ...(existing.metadata || {}),
+      // Then merge in incoming metadata
       ...(incoming.metadata || {}),
+      // Then ensure required fields are present with final values
+      createdAt: existing.metadata?.createdAt || incoming.metadata?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      version: String(parseInt(existing.metadata?.version || '0') + 1),
+      lastModifiedBy: 'ai-agent-builder',
+      tags: existing.metadata?.tags || [],
+      status: existing.metadata?.status || 'active',
       // Preserve comprehensive analysis from latest update
       promptUnderstanding: incoming.metadata?.promptUnderstanding || existing.metadata?.promptUnderstanding,
       granularChanges: incoming.metadata?.granularChanges || existing.metadata?.granularChanges,

@@ -480,6 +480,18 @@ const AgentBuilderWithStreamingSummary = memo(({ args, message, isReadonly, chat
 }) => {
   const { artifact } = useArtifact();
   
+  // Check if the message has a completed agentBuilder tool result
+  const hasCompletedResult = message?.parts?.some(part => 
+    part.type === 'tool-invocation' && 
+    part.toolInvocation?.toolName === 'agentBuilder' && 
+    part.toolInvocation?.state === 'result'
+  );
+  
+  // Don't show partial summary if we have a completed result
+  if (hasCompletedResult) {
+    return <AgentBuilderLoading args={args} message={message} />;
+  }
+  
   // Show partial agent summary during streaming if we have agent data
   const showPartialSummary = artifact?.kind === 'agent' && 
                              artifact?.content && 

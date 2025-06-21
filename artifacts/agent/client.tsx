@@ -41,6 +41,7 @@ interface AgentModel {
   enums: AgentEnum[];
   forms?: AgentForm[]; // Forms for grouping fields during create/update
   records?: ModelRecord[]; // Store actual data records
+  exampleRecords?: ModelRecord[]; // Store example data records
 }
 
 interface ModelRecord {
@@ -164,6 +165,7 @@ interface AgentArtifactMetadata {
     'change-analysis'?: 'processing' | 'complete';
     overview?: 'processing' | 'complete';
     models?: 'processing' | 'complete';
+    examples?: 'processing' | 'complete';
     actions?: 'processing' | 'complete';
     schedules?: 'processing' | 'complete';
     integration?: 'processing' | 'complete';
@@ -301,6 +303,11 @@ const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Reco
     return agentData?.models && agentData.models.length > 0 ? 'complete' : 'pending';
   }
   
+  // For examples, check if they exist (only for new models)
+  if (stepId === 'examples') {
+    return agentData?.models && agentData.models.some((model: any) => model.records && model.records.length > 0) ? 'complete' : 'pending';
+  }
+  
   // For actions, check if they exist
   if (stepId === 'actions') {
     return agentData?.actions && agentData.actions.length > 0 ? 'complete' : 'pending';
@@ -331,8 +338,9 @@ const calculateProgressPercentage = (currentStep?: string, stepProgress?: Record
     { id: 'analysis', name: 'Analysis' },
     { id: 'change-analysis', name: 'Change Analysis' },
     { id: 'overview', name: 'Overview' },
-    { id: 'models', name: 'Models' },
-    { id: 'actions', name: 'Actions' },
+    { id: 'models', name: 'Data Models' },
+    { id: 'examples', name: 'Example Records' },
+    { id: 'actions', name: 'Automated Actions' },
     { id: 'schedules', name: 'Schedules' },
     { id: 'integration', name: 'Integration' }
   ];
@@ -395,6 +403,12 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {},
       title: 'Data Models',
       description: 'Defining data structures',
       icon: '📊'
+    },
+    { 
+      id: 'examples', 
+      title: 'Example Records',
+      description: 'Generating sample data',
+      icon: '📝'
     },
     { 
       id: 'actions', 
@@ -525,6 +539,11 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {},
                     {step.id === 'models' && agentData.models && (
                       <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
                         {agentData.models.length} models created
+                      </span>
+                    )}
+                    {step.id === 'examples' && agentData.models && agentData.models.some((model: any) => model.records && model.records.length > 0) && (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
+                        {agentData.models.reduce((sum: number, model: any) => sum + (model.records?.length || 0), 0)} example records generated
                       </span>
                     )}
                     {step.id === 'actions' && agentData.actions && (

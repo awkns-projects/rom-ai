@@ -459,16 +459,18 @@ Each action should:
     dataSource: {
       type: action.dataSource?.type || 'database',
       customFunction: action.dataSource?.customFunction || undefined,
-      database: action.dataSource?.database || {
-        models: (databaseResult.models || []).slice(0, 1).map(model => ({
-          id: model.id,
-          name: model.name,
-          fields: (model.fields || []).slice(0, 3).map(field => ({
-            id: field.id,
-            name: field.name
-          }))
-        }))
-      }
+      database: action.dataSource?.type === 'custom' 
+        ? (action.dataSource?.database || null)
+        : (action.dataSource?.database || {
+            models: (databaseResult.models || []).slice(0, 1).map(model => ({
+              id: model.id,
+              name: model.name,
+              fields: (model.fields || []).slice(0, 3).map(field => ({
+                id: field.id,
+                name: field.name
+              }))
+            }))
+          })
     },
     execute: {
       type: action.execute?.type || 'prompt',
@@ -558,16 +560,18 @@ Each schedule should:
     dataSource: {
       type: schedule.dataSource?.type || 'database',
       customFunction: schedule.dataSource?.customFunction || undefined,
-      database: schedule.dataSource?.database || {
-        models: databaseSchema?.models?.slice(0, 1).map((model: any) => ({
-          id: model.id,
-          name: model.name,
-          fields: model.fields?.slice(0, 3).map((field: any) => ({
-            id: field.id,
-            name: field.name
-          })) || []
-        })) || []
-      }
+      database: schedule.dataSource?.type === 'custom' 
+        ? (schedule.dataSource?.database || null)
+        : (schedule.dataSource?.database || {
+            models: databaseSchema?.models?.slice(0, 1).map((model: any) => ({
+              id: model.id,
+              name: model.name,
+              fields: model.fields?.slice(0, 3).map((field: any) => ({
+                id: field.id,
+                name: field.name
+              })) || []
+            })) || []
+          })
     },
     execute: {
       type: schedule.execute?.type || 'prompt',
@@ -814,4 +818,100 @@ Be conservative - when in doubt, preserve existing data.`
 
   console.log('✅ Deletion operations generation complete');
   return result;
+}
+
+/**
+ * Generate example records for newly created models
+ */
+export async function generateExampleRecords(
+  models: AgentModel[],
+  existingModels: AgentModel[] = [],
+  businessContext: string = ''
+): Promise<Record<string, any[]>> {
+  // Identify newly created models (not in existing models)
+  const newModels = models.filter(model => 
+    !existingModels.some(existing => existing.name === model.name)
+  );
+
+  if (newModels.length === 0) {
+    return {};
+  }
+
+  const modelNames = newModels.map(m => m.name).join(', ');
+  console.log(`🎯 Generating example records for new models: ${modelNames}`);
+
+  const prompt = `You are an expert data generator. Generate realistic example records for the following newly created models.
+
+BUSINESS CONTEXT:
+${businessContext}
+
+NEW MODELS TO GENERATE EXAMPLES FOR:
+${newModels.map(model => `
+Model: ${model.name}
+Description: ${model.description || 'No description provided'}
+Fields: ${model.fields.map(f => `${f.name} (${f.type}${f.required ? ', required' : ''}${f.list ? ', list' : ''}${f.relationField ? ', relation' : ''})`).join(', ')}
+Display Fields: ${model.displayFields.join(', ')}
+`).join('\n')}
+
+GENERATION RULES:
+1. Generate 3-5 realistic example records for each model
+2. Use realistic, diverse data that fits the business context
+3. For relation fields, use realistic IDs (e.g., "user_123", "product_456")
+4. For list fields, provide arrays with 1-3 items
+5. For enum fields, use values that make sense for the context
+6. Ensure required fields are always populated
+7. Make display fields meaningful and unique
+8. Use consistent ID formats (e.g., "modelname_001", "modelname_002")
+
+RESPONSE FORMAT:
+Return a JSON object where each key is the model name and the value is an array of record objects.
+
+Example format:
+{
+  "User": [
+    {
+      "id": "user_001",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "role": "admin"
+    }
+  ],
+  "Product": [
+    {
+      "id": "product_001", 
+      "name": "Widget A",
+      "price": 29.99,
+      "userId": "user_001"
+    }
+  ]
+}
+
+Generate realistic, contextually appropriate example data:`;
+
+  try {
+    const model = await getAgentBuilderModel();
+    
+    // Create a dynamic schema based on the new models
+    const exampleRecordsSchema = z.object(
+      newModels.reduce((acc, model) => {
+        acc[model.name] = z.array(z.object({
+          id: z.string(),
+        }).passthrough());
+        return acc;
+      }, {} as Record<string, any>)
+    );
+    
+    const result = await generateObject({
+      model,
+      prompt,
+      schema: exampleRecordsSchema
+    });
+
+    console.log(`✅ Generated example records for ${Object.keys(result.object).length} models`);
+    
+    return result.object;
+  } catch (error) {
+    console.error('❌ Failed to generate example records:', error);
+    return {};
+  }
 }

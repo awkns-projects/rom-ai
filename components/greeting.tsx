@@ -5,40 +5,34 @@ import { ChevronRight, HeartHandshake } from "lucide-react";
 
 const reviews = [
   {
-    name: "Customer Support AI",
-    username: "@support_bot",
-    body: "24/7 intelligent customer service that handles inquiries, resolves issues, and escalates complex cases to human agents.",
-    img: "https://avatar.vercel.sh/customer-support",
+    name: "🛒 Auto-Selling Store",
+    body: "\"Build me an online store\" → AI agent that handles customer inquiries, processes orders, manages inventory, and upsells products while I sleep.",
+    img: "https://avatar.vercel.sh/ecommerce",
   },
   {
-    name: "Sales Lead Qualifier",
-    username: "@sales_ai",
-    body: "Automatically qualifies leads, schedules meetings, and nurtures prospects through personalized email sequences.",
-    img: "https://avatar.vercel.sh/sales-ai",
+    name: "💰 Deal-Closing Machine",
+    body: "\"Help me sell consulting\" → AI agent that qualifies leads, books discovery calls, sends proposals, and follows up until deals close.",
+    img: "https://avatar.vercel.sh/crm-user",
   },
   {
-    name: "Content Creator AI",
-    username: "@content_bot",
-    body: "Generates blog posts, social media content, and marketing copy tailored to your brand voice and audience.",
-    img: "https://avatar.vercel.sh/content-ai",
+    name: "📝 Content Empire Builder",
+    body: "\"I need social media content\" → AI agent that researches trends, creates posts, schedules content, and engages with followers across all platforms.",
+    img: "https://avatar.vercel.sh/content-manager",
   },
   {
-    name: "Data Analyst Agent",
-    username: "@data_ai",
-    body: "Analyzes business metrics, generates insights, and creates automated reports with actionable recommendations.",
-    img: "https://avatar.vercel.sh/data-analyst",
+    name: "📅 Appointment Autopilot",
+    body: "\"Manage my calendar\" → AI agent that handles bookings, sends reminders, reschedules conflicts, and optimizes my daily schedule automatically.",
+    img: "https://avatar.vercel.sh/booking-system",
   },
   {
-    name: "HR Recruitment Bot",
-    username: "@hr_ai",
-    body: "Screens resumes, schedules interviews, and matches candidates to job requirements using AI-powered assessment.",
-    img: "https://avatar.vercel.sh/hr-bot",
+    name: "📊 Profit Prophet",
+    body: "\"Track my business metrics\" → AI agent that monitors KPIs, predicts trends, alerts me to opportunities, and generates weekly strategy reports.",
+    img: "https://avatar.vercel.sh/analytics-tool",
   },
   {
-    name: "Inventory Manager AI",
-    username: "@inventory_ai",
-    body: "Tracks stock levels, predicts demand, automates reordering, and optimizes supply chain operations.",
-    img: "https://avatar.vercel.sh/inventory-ai",
+    name: "🎓 Teaching Titan",
+    body: "\"Create an online course\" → AI agent that teaches students, answers questions, grades assignments, and provides personalized learning paths.",
+    img: "https://avatar.vercel.sh/learning-platform",
   },
 ];
 
@@ -48,34 +42,29 @@ const secondRow = reviews.slice(reviews.length / 2);
 const ReviewCard = ({
   img,
   name,
-  username,
   body,
 }: {
   img: string;
   name: string;
-  username: string;
   body: string;
 }) => {
   return (
     <figure
       className={cn(
-        "relative w-64 cursor-pointer overflow-hidden rounded-[2rem] border p-4",
+        "relative w-80 cursor-pointer overflow-hidden rounded-[2rem] border p-6",
         // light styles
         "border-gray-950/[.1] bg-gray-950/[.01] hover:bg-gray-950/[.05]",
         // dark styles
         "dark:border-gray-50/[.1] dark:bg-gray-50/[.10] dark:hover:bg-gray-50/[.15]",
       )}
     >
-      <div className="flex flex-row items-center gap-2">
-        <img className="rounded-full" width="32" height="32" alt="" src={img} />
-        <div className="flex flex-col">
-          <figcaption className="text-sm font-medium dark:text-white">
-            {name}
-          </figcaption>
-          <p className="text-xs font-medium dark:text-white/40">{username}</p>
-        </div>
+      <div className="flex flex-row items-center gap-3 mb-3">
+        <img className="rounded-full" width="40" height="40" alt="" src={img} />
+        <figcaption className="text-base font-bold dark:text-white">
+          {name}
+        </figcaption>
       </div>
-      <blockquote className="mt-2 text-sm">{body}</blockquote>
+      <blockquote className="text-sm leading-relaxed">{body}</blockquote>
     </figure>
   );
 };
@@ -89,7 +78,7 @@ export const Greeting = () => {
             <div className="absolute rotate-[35deg]">
               <Marquee pauseOnHover className="[--duration:20s]" repeat={3}>
                 {firstRow.map((review) => (
-                  <ReviewCard key={review.username} {...review} />
+                  <ReviewCard key={review.name} {...review} />
                 ))}
               </Marquee>
               <Marquee
@@ -99,12 +88,12 @@ export const Greeting = () => {
                 repeat={3}
               >
                 {secondRow.map((review) => (
-                  <ReviewCard key={review.username} {...review} />
+                  <ReviewCard key={review.name} {...review} />
                 ))}
               </Marquee>
               <Marquee pauseOnHover className="[--duration:20s]" repeat={3}>
                 {firstRow.map((review) => (
-                  <ReviewCard key={review.username} {...review} />
+                  <ReviewCard key={review.name} {...review} />
                 ))}
               </Marquee>
               <Marquee
@@ -114,12 +103,12 @@ export const Greeting = () => {
                 repeat={3}
               >
                 {secondRow.map((review) => (
-                  <ReviewCard key={review.username} {...review} />
+                  <ReviewCard key={review.name} {...review} />
                 ))}
               </Marquee>
               <Marquee pauseOnHover className="[--duration:20s]" repeat={3}>
                 {firstRow.map((review) => (
-                  <ReviewCard key={review.username} {...review} />
+                  <ReviewCard key={review.name} {...review} />
                 ))}
               </Marquee>
               <Marquee
@@ -129,7 +118,7 @@ export const Greeting = () => {
                 repeat={3}
               >
                 {secondRow.map((review) => (
-                  <ReviewCard key={review.username} {...review} />
+                  <ReviewCard key={review.name} {...review} />
                 ))}
               </Marquee>
             </div>
@@ -138,13 +127,12 @@ export const Greeting = () => {
               {/* <HeartHandshake className="mx-auto size-16 text-black dark:text-white lg:size-24" /> */}
             </div>
             <div className="z-10 mt-4 flex flex-col items-center text-center text-black dark:text-white w-full max-w-4xl mx-auto px-4">
-              <h1 className="text-3xl font-bold lg:text-4xl text-center">
-                Build, Deploy & Monetize AI-Powered Business Apps
+              <h1 className="text-4xl font-bold lg:text-6xl text-center text-black dark:text-white">
+                No-Code AI App Builder
               </h1>
-              <p className="mt-2 text-center max-w-2xl mx-auto">
-                The no-code platform for creating intelligent CRM systems, AI agents, and data-driven applications that you can license to others.
+              <p className="mt-4 text-xl lg:text-2xl text-center max-w-3xl mx-auto font-medium">
+                Build powerful AI applications without coding - with built-in licensing to monetize your creations
               </p>
-              
             </div>
             <div className="absolute inset-x-0 bottom-0 h-full bg-gradient-to-b from-transparent to-white to-70% dark:to-black" />
           </div>

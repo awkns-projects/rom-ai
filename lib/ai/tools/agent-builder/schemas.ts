@@ -101,7 +101,7 @@ export const unifiedActionsSchema = z.object({
           where: z.record(z.any()).optional(),
           limit: z.number().optional()
         }))
-      }).optional().describe('Database models configuration if type is database')
+      }).nullable().optional().describe('Database models configuration if type is database')
     }).describe('Configuration for how data is sourced'),
     execute: z.object({
       type: z.enum(['code', 'prompt']).describe('Execution type - code or AI prompt'),
@@ -120,7 +120,7 @@ export const unifiedActionsSchema = z.object({
         temperature: z.number().optional().describe('Temperature for AI generation'),
         maxTokens: z.number().optional().describe('Maximum tokens for AI response')
       }).nullable().optional().describe('AI prompt configuration if type is prompt')
-    }).describe('Configuration for how the action is executed'),
+    }).optional().describe('Configuration for how the action is executed'),
     results: z.object({
       actionType: z.enum(['Create', 'Update']).describe('Type of action result'),
       model: z.string().describe('Target model for the results'),
@@ -335,7 +335,7 @@ export const unifiedSchedulesSchema = z.object({
           where: z.record(z.any()).optional(),
           limit: z.number().optional()
         }))
-      }).optional().describe('Database models configuration if type is database')
+      }).nullable().optional().describe('Database models configuration if type is database')
     }).describe('Configuration for how data is sourced'),
     execute: z.object({
       type: z.enum(['code', 'prompt']).describe('Execution type - code or AI prompt'),
@@ -354,7 +354,7 @@ export const unifiedSchedulesSchema = z.object({
         temperature: z.number().optional().describe('Temperature for AI generation'),
         maxTokens: z.number().optional().describe('Maximum tokens for AI response')
       }).nullable().optional().describe('AI prompt configuration if type is prompt')
-    }).describe('Configuration for how the schedule is executed'),
+    }).optional().describe('Configuration for how the schedule is executed'),
     results: z.object({
       actionType: z.enum(['Create', 'Update']).describe('Type of action result'),
       model: z.string().describe('Target model for the results'),

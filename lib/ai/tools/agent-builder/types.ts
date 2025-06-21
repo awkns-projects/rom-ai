@@ -8,6 +8,7 @@ export interface AgentModel {
   displayFields: string[];
   fields: AgentField[];
   enums: AgentEnum[];
+  records?: ModelRecord[];
 }
 
 export interface AgentField {
@@ -140,6 +141,14 @@ export interface EnvVar {
   description: string;
   required: boolean;
   sensitive: boolean;
+}
+
+export interface ModelRecord {
+  id: string;
+  modelId: string;
+  data: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AgentData {

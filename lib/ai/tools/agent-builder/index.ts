@@ -60,7 +60,8 @@ import {
   generateSchedules,
   generateDecision,
   generateGranularChangeAnalysis,
-  generateDeletionOperations
+  generateDeletionOperations,
+  generateExampleRecords
 } from './generation';
 
 import {
@@ -723,6 +724,73 @@ export const agentBuilder = ({
         await saveDocumentWithContent(documentId, agentOverview?.object?.name || existingAgent?.name || 'AI Agent System', JSON.stringify(partialAgent, null, 2), session);
 
         databaseResults = finalDatabaseResult;
+      }
+
+      // Step 3.5: Generate Example Records for New Models
+      let exampleRecords: Record<string, any[]> = {};
+      if (databaseResults && databaseResults.models.length > 0) {
+        console.log('📝 Step 3.5: Example Records Generation');
+        dataStream.writeData({
+          type: 'agent-step',
+          content: JSON.stringify({ 
+            step: 'examples', 
+            status: 'processing',
+            message: 'Generating example records for new models...'
+          })
+        });
+
+        try {
+          const businessContext = `${agentOverview?.object?.description || ''} ${promptUnderstanding?.userRequestAnalysis?.businessContext || ''}`.trim();
+          exampleRecords = await generateExampleRecords(
+            databaseResults.models,
+            existingAgent?.models || [],
+            businessContext
+          );
+
+          const recordCount = Object.values(exampleRecords).reduce((sum, records) => sum + records.length, 0);
+          console.log(`✅ Generated ${recordCount} example records for ${Object.keys(exampleRecords).length} new models`);
+
+          dataStream.writeData({
+            type: 'agent-step',
+            content: JSON.stringify({ 
+              step: 'examples', 
+              status: 'complete',
+              data: { object: { exampleRecords } },
+              message: `Example records complete: ${recordCount} records for ${Object.keys(exampleRecords).length} models`
+            })
+          });
+
+          // Add example records directly to models' records field
+          if (databaseResults && Object.keys(exampleRecords).length > 0) {
+            databaseResults.models = databaseResults.models.map((model: AgentModel) => {
+              if (exampleRecords[model.name]) {
+                return {
+                  ...model,
+                  records: exampleRecords[model.name].map((record, index) => ({
+                    id: `record_${model.name.toLowerCase()}_${index + 1}`,
+                    modelId: model.id,
+                    data: record,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                  }))
+                };
+              }
+              return model;
+            });
+            console.log(`✅ Added example records directly to ${Object.keys(exampleRecords).length} models`);
+          }
+        } catch (error) {
+          console.error('❌ Failed to generate example records:', error);
+          dataStream.writeData({
+            type: 'agent-step',
+            content: JSON.stringify({ 
+              step: 'examples', 
+              status: 'complete',
+              data: { object: { exampleRecords: {} } },
+              message: 'Example records skipped due to error'
+            })
+          });
+        }
       }
 
       // Step 4: Generate Actions (was Step 3, now matching old version)

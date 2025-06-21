@@ -10,12 +10,12 @@ import { generateNewId } from './utils';
 import { generateUUID } from '../../../utils';
 
 /**
- * Creates complete agent data structure - matching old implementation signature
+ * Creates a complete AgentData object with all required fields
  * @param name - Agent name
  * @param description - Agent description
- * @param domain - Business domain
- * @param models - Database models
- * @param enums - Database enums
+ * @param domain - Agent domain
+ * @param models - Agent models
+ * @param enums - Agent enums
  * @param actions - Agent actions
  * @param schedules - Agent schedules
  * @param metadata - Additional metadata for the agent
