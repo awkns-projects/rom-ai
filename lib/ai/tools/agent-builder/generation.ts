@@ -458,7 +458,10 @@ Each action should:
     role: action.role || 'member',
     dataSource: {
       type: action.dataSource?.type || 'database',
-      customFunction: action.dataSource?.customFunction || undefined,
+      customFunction: action.dataSource?.customFunction ? {
+        code: action.dataSource.customFunction.code,
+        envVars: Array.isArray(action.dataSource.customFunction.envVars) ? action.dataSource.customFunction.envVars : undefined
+      } : undefined,
       database: action.dataSource?.type === 'custom' 
         ? (action.dataSource?.database || null)
         : (action.dataSource?.database || {
@@ -474,7 +477,10 @@ Each action should:
     },
     execute: {
       type: action.execute?.type || 'prompt',
-      code: action.execute?.code || undefined,
+      code: action.execute?.code ? {
+        script: action.execute.code.script,
+        envVars: Array.isArray(action.execute.code.envVars) ? action.execute.code.envVars : undefined
+      } : undefined,
       prompt: action.execute?.prompt || {
         template: `Process ${action.name} request`,
         model: 'gpt-4o-mini',
@@ -559,7 +565,10 @@ Each schedule should:
     },
     dataSource: {
       type: schedule.dataSource?.type || 'database',
-      customFunction: schedule.dataSource?.customFunction || undefined,
+      customFunction: schedule.dataSource?.customFunction ? {
+        code: schedule.dataSource.customFunction.code,
+        envVars: Array.isArray(schedule.dataSource.customFunction.envVars) ? schedule.dataSource.customFunction.envVars : undefined
+      } : undefined,
       database: schedule.dataSource?.type === 'custom' 
         ? (schedule.dataSource?.database || null)
         : (schedule.dataSource?.database || {
@@ -575,7 +584,10 @@ Each schedule should:
     },
     execute: {
       type: schedule.execute?.type || 'prompt',
-      code: schedule.execute?.code || undefined,
+      code: schedule.execute?.code ? {
+        script: schedule.execute.code.script,
+        envVars: Array.isArray(schedule.execute.code.envVars) ? schedule.execute.code.envVars : undefined
+      } : undefined,
       prompt: schedule.execute?.prompt || {
         template: `Execute ${schedule.name} schedule`,
         model: 'gpt-4o-mini',

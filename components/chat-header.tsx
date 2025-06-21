@@ -74,7 +74,7 @@ function PureChatHeader({
         />
       )}
 
-      <Button
+      {/* <Button
         className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-black border border-green-500/30 shadow-lg shadow-green-500/20 hover:shadow-green-500/40 hidden md:flex py-1.5 px-2 h-fit md:h-[34px] order-4 md:ml-auto font-mono font-medium"
         asChild
       >
@@ -85,7 +85,7 @@ function PureChatHeader({
           <VercelIcon size={16} />
           DEPLOY WITH VERCEL
         </Link>
-      </Button>
+      </Button> */}
     </header>
   );
 }
