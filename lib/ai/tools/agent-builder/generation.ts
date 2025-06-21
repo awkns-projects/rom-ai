@@ -1,5 +1,5 @@
 import { generateObject } from 'ai';
-import { createProviderForModel } from '../../providers';
+import { getProvider } from '../../providers';
 import { getBestModelFor } from '../../models';
 import type { 
   AgentData, 
@@ -41,7 +41,8 @@ async function getAgentBuilderModel() {
   if (!bestModel) {
     throw new Error('No compatible model found for agent builder tasks');
   }
-  return createProviderForModel(bestModel);
+  const provider = await getProvider(bestModel);
+  return provider(bestModel);
 }
 
 /**

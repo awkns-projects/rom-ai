@@ -1172,3 +1172,44 @@ export const WarningIcon = ({ size = 16 }: { size?: number }) => {
     </svg>
   );
 };
+
+export const EyeOffIcon = ({ size = 16 }: { size?: number }) => {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="m1 1 22 22M9.584 9.587a2 2 0 1 0 2.828 2.826M21 12c-1.889 2.991-5.282 6-9 6a9.26 9.26 0 0 1-1.516-.124l-1.965-1.965A11.36 11.36 0 0 1 3 12c1.889-2.991 5.282-6 9-6 .619 0 1.216.074 1.789.217l-1.965 1.965A2 2 0 0 0 9.584 9.587Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};
+
+export const KeyIcon = ({ size = 16 }: { size?: number }) => {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <circle cx="7.5" cy="15.5" r="5.5" stroke="currentColor" strokeWidth="2" />
+      <path
+        d="m21 2-9.6 9.6M15.5 7.5l-1-1M20.5 2.5l-1-1"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};

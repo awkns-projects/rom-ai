@@ -7,10 +7,8 @@ const textPartSchema = z.object({
 
 // Valid model IDs that can be selected
 const validModelIds = [
-  // Specific model IDs
-  'grok-2-vision-1212',
-  'grok-3-mini-beta', 
-  'grok-2-1212',
+  // Specific model IDs - Using grok-3
+  'grok-3',
   'gpt-4o',
   'gpt-4o-mini',
   // Legacy model IDs for backward compatibility

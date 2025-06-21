@@ -15,6 +15,11 @@ export const user = pgTable('User', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
   email: varchar('email', { length: 64 }).notNull(),
   password: varchar('password', { length: 64 }),
+  // Encrypted API keys for AI providers
+  openaiApiKey: text('openaiApiKey'), // Encrypted OpenAI API key
+  xaiApiKey: text('xaiApiKey'), // Encrypted xAI API key
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 });
 
 export type User = InferSelectModel<typeof user>;

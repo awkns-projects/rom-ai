@@ -702,13 +702,8 @@ export const agentBuilder = ({
           content: JSON.stringify(partialAgent)
         });
 
-        await saveDocumentWithContent(documentId, agentOverview?.object?.name || existingAgent?.name || 'AI Agent System', JSON.stringify({
-          status: 'processing',
-          step: 'database',
-          overview: agentOverview?.object,
-          database: databaseResult,
-          message: `Database schema complete: ${databaseResult.models.length} models`
-        }, null, 2), session);
+        // Save the actual partial agent data to document
+        await saveDocumentWithContent(documentId, agentOverview?.object?.name || existingAgent?.name || 'AI Agent System', JSON.stringify(partialAgent, null, 2), session);
 
         databaseResults = databaseResult;
       }
@@ -765,14 +760,8 @@ export const agentBuilder = ({
           content: JSON.stringify(partialAgent)
         });
 
-        await saveDocumentWithContent(documentId, agentOverview?.object?.name || existingAgent?.name || 'AI Agent System', JSON.stringify({
-          status: 'processing',
-          step: 'actions',
-          overview: agentOverview?.object,
-          database: databaseResults,
-          actions: actionsResult,
-          message: `Workflows complete: ${actionsResult.actions.length} automated actions`
-        }, null, 2), session);
+        // Save the actual partial agent data to document
+        await saveDocumentWithContent(documentId, agentOverview?.object?.name || existingAgent?.name || 'AI Agent System', JSON.stringify(partialAgent, null, 2), session);
 
         actionsResults = actionsResult;
       }
@@ -819,6 +808,9 @@ export const agentBuilder = ({
           type: 'agent-data',
           content: JSON.stringify(partialAgent)
         });
+
+        // Save the actual partial agent data to document
+        await saveDocumentWithContent(documentId, agentOverview?.object?.name || existingAgent?.name || 'AI Agent System', JSON.stringify(partialAgent, null, 2), session);
 
         schedulesResults = schedulesResult;
       } else {

@@ -3173,7 +3173,9 @@ const AgentBuilderContent = memo(({
   const updateAgentData = useCallback((newData: AgentData) => {
     setAgentData(newData);
     const jsonContent = JSON.stringify(newData, null, 2);
-    onSaveContent(jsonContent, true);
+    // Save without debouncing to ensure document versions are created for navigation
+    // This allows the back/forward version navigation to work properly
+    onSaveContent(jsonContent, false);
   }, [onSaveContent]);
 
   // Enhanced save function - moved to maintain consistent hook order

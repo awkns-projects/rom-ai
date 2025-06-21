@@ -65,7 +65,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
 
   // Determine the initial model and provider
   let initialChatModel = DEFAULT_CHAT_MODEL;
-  let initialProvider: 'xai' | 'openai' = 'openai'; // Default to OpenAI since xAI models are disabled
+  let initialProvider: 'xai' | 'openai' = 'openai'; // Default to OpenAI (xAI models re-enabled for testing)
 
   if (chatModelFromCookie?.value) {
     // Migrate potentially disabled models to enabled alternatives

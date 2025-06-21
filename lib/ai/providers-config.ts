@@ -4,11 +4,11 @@ export const AVAILABLE_PROVIDERS = {
     name: 'xAI',
     description: 'Grok models by xAI',
     models: {
-      chat: 'grok-2-vision-1212',
-      reasoning: 'grok-3-mini-beta', 
-      title: 'grok-2-1212',
-      artifact: 'grok-2-1212',
-      image: 'grok-2-image'
+      chat: 'grok-3',
+      reasoning: 'grok-3', 
+      title: 'grok-3',
+      artifact: 'grok-3',
+      image: 'grok-3-image'
     }
   },
   openai: {

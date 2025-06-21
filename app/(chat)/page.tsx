@@ -22,7 +22,7 @@ export default async function Page() {
 
   // Determine the initial model and provider
   let initialChatModel = DEFAULT_CHAT_MODEL;
-  let initialProvider: 'xai' | 'openai' = 'openai'; // Default to OpenAI since xAI models are disabled
+  let initialProvider: 'xai' | 'openai' = 'openai'; // Default to OpenAI (xAI models re-enabled for testing)
 
   if (modelIdFromCookie?.value) {
     // Migrate potentially disabled models to enabled alternatives

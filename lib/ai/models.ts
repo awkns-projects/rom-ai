@@ -19,53 +19,20 @@ export interface ChatModel {
 }
 
 export const chatModels: Array<ChatModel> = [
-  // xAI (Grok) models - DISABLED due to agent builder incompatibility
+  // xAI (Grok) models - Using grok-3
   {
-    id: 'grok-2-vision-1212',
-    name: 'Grok 2 Vision',
-    description: 'Latest Grok model with vision capabilities',
+    id: 'grok-3',
+    name: 'Grok 3',
+    description: 'Latest Grok 3 model with advanced capabilities',
     providerId: 'xai',
-    disabled: true,
-    disabledReason: 'Agent builder system requires OpenAI models for generateObject functions',
+    disabled: false,
     compatibility: {
-      streamText: false,
-      generateText: false,
-      generateObject: false,
-      streamObject: false,
-      toolCalling: false,
-      reasoning: false,
-    },
-  },
-  {
-    id: 'grok-3-mini-beta',
-    name: 'Grok 3 Mini',
-    description: 'Advanced reasoning model with faster responses',
-    providerId: 'xai',
-    disabled: true,
-    disabledReason: 'Agent builder system requires OpenAI models for generateObject functions',
-    compatibility: {
-      streamText: false,
-      generateText: false,
-      generateObject: false,
-      streamObject: false,
-      toolCalling: false,
-      reasoning: false,
-    },
-  },
-  {
-    id: 'grok-2-1212',
-    name: 'Grok 2',
-    description: 'High-performance Grok model for general tasks',
-    providerId: 'xai',
-    disabled: true,
-    disabledReason: 'Agent builder system requires OpenAI models for generateObject functions',
-    compatibility: {
-      streamText: false,
-      generateText: false,
-      generateObject: false,
-      streamObject: false,
-      toolCalling: false,
-      reasoning: false,
+      streamText: true,
+      generateText: true,
+      generateObject: true,
+      streamObject: true,
+      toolCalling: true,
+      reasoning: true,
     },
   },
   
@@ -105,15 +72,15 @@ export const chatModels: Array<ChatModel> = [
     name: 'Chat Model',
     description: 'Primary model for all-purpose chat',
     providerId: 'xai', // Default provider
-    disabled: true,
-    disabledReason: 'Agent builder system requires OpenAI models for generateObject functions',
+    disabled: true, // Hidden from UI - users should select specific models
+    disabledReason: 'Legacy model - please select a specific model like Grok 3 or GPT-4o',
     compatibility: {
-      streamText: false,
-      generateText: false,
-      generateObject: false,
-      streamObject: false,
-      toolCalling: false,
-      reasoning: false,
+      streamText: true,
+      generateText: true,
+      generateObject: true,
+      streamObject: true,
+      toolCalling: true,
+      reasoning: true,
     },
   },
   {
@@ -121,15 +88,15 @@ export const chatModels: Array<ChatModel> = [
     name: 'Reasoning Model',
     description: 'Uses advanced reasoning capabilities',
     providerId: 'xai', // Default provider
-    disabled: true,
-    disabledReason: 'Agent builder system requires OpenAI models for generateObject functions',
+    disabled: true, // Hidden from UI - users should select specific models
+    disabledReason: 'Legacy model - please select a specific model like Grok 3 or GPT-4o',
     compatibility: {
-      streamText: false,
-      generateText: false,
-      generateObject: false,
-      streamObject: false,
-      toolCalling: false,
-      reasoning: false,
+      streamText: true,
+      generateText: true,
+      generateObject: true,
+      streamObject: true,
+      toolCalling: true,
+      reasoning: true,
     },
   },
 ];

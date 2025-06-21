@@ -23,6 +23,10 @@ import { generateUUID, getTrailingMessageId } from '@/lib/utils';
 import { generateTitleFromUserMessage } from '../../actions';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
+import { getUserApiKeys } from '@/lib/db/api-keys';
+import { openai, createOpenAI } from '@ai-sdk/openai';
+import { xai, createXai } from '@ai-sdk/xai';
+import { chatModels } from '@/lib/ai/models';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
 import { postRequestBodySchema, type PostRequestBody } from './schema';
 import { geolocation } from '@vercel/functions';
@@ -299,6 +303,48 @@ async function fetchAndValidateAgentDocument(documentId: string, session: Sessio
   }
 }
 
+// Helper function to get the appropriate provider for a model with user API keys
+async function getModelProvider(modelId: string, session: Session | null) {
+  // Find the model configuration
+  const model = chatModels.find(m => m.id === modelId);
+  
+  if (!model) {
+    // Fallback to default provider for unknown models
+    return myProvider.languageModel(modelId);
+  }
+
+  // Try to get user API keys if session exists
+  let userApiKeys: { openaiApiKey?: string; xaiApiKey?: string } = {};
+  
+  if (session?.user?.id) {
+    try {
+      userApiKeys = await getUserApiKeys(session.user.id);
+    } catch (error) {
+      console.warn('Failed to get user API keys:', error);
+    }
+  }
+
+  // Create provider based on model's provider and user API keys
+  if (model.providerId === 'openai') {
+    const apiKey = userApiKeys.openaiApiKey || process.env.OPENAI_API_KEY;
+    if (apiKey) {
+      // Use user's API key or environment variable
+      const provider = createOpenAI({ apiKey });
+      return provider(modelId);
+    }
+  } else if (model.providerId === 'xai') {
+    const apiKey = userApiKeys.xaiApiKey || process.env.XAI_API_KEY;
+    if (apiKey) {
+      // Use user's API key or environment variable
+      const provider = createXai({ apiKey });
+      return provider(modelId);
+    }
+  }
+
+  // Fallback to default provider
+  return myProvider.languageModel(modelId);
+}
+
 export async function POST(request: Request) {
   let requestBody: PostRequestBody;
 
@@ -405,7 +451,7 @@ export async function POST(request: Request) {
         }
 
         const result = streamText({
-          model: myProvider.languageModel(selectedChatModel),
+          model: await getModelProvider(selectedChatModel, session),
           system: systemPrompt({ selectedChatModel, requestHints }),
           messages,
           maxSteps: 5,
