@@ -3,7 +3,7 @@
 import type { UIMessage } from 'ai';
 import cx from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';
-import { memo, useState, useMemo } from 'react';
+import { memo, useState, useMemo, useEffect } from 'react';
 import type { Vote } from '@/lib/db/schema';
 import type { Document } from '@/lib/db/schema';
 import { DocumentToolCall, DocumentToolResult } from './document';
@@ -28,6 +28,9 @@ import { LoaderIcon } from './icons';
 // Agent Builder Loading Component
 const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; message?: UIMessage; isLoading?: boolean }) => {
   const { metadata } = useArtifact();
+  const [autoRetryAttempted, setAutoRetryAttempted] = useState(false);
+  const [isAutoRetrying, setIsAutoRetrying] = useState(false);
+  const [retryCountdown, setRetryCountdown] = useState(0);
   
   // Fetch the document to get persisted metadata
   const { data: documents } = useSWR<Array<Document>>(
@@ -43,6 +46,60 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
     }
     return null;
   }, [documents]);
+
+  // Auto-retry logic for timeout
+  useEffect(() => {
+    // Only auto-retry once, and only if we haven't already attempted it
+    if (!autoRetryAttempted && 
+        !isLoading && 
+        !isAutoRetrying &&
+        (persistedMetadata?.status === 'timeout' || persistedMetadata?.currentStep === 'timeout')) {
+      
+      console.log('🔄 Timeout detected, starting auto-retry countdown...');
+      setAutoRetryAttempted(true);
+      
+      // Start 10-second countdown
+      let countdown = 10;
+      setRetryCountdown(countdown);
+      setIsAutoRetrying(true);
+      
+      const countdownInterval = setInterval(() => {
+        countdown--;
+        setRetryCountdown(countdown);
+        
+        if (countdown <= 0) {
+          clearInterval(countdownInterval);
+          console.log('🔄 Auto-retrying agent builder after timeout...');
+          
+          // Trigger retry by simulating a resume action
+          // This would need to be connected to the parent chat component
+          const retryEvent = new CustomEvent('agent-builder-retry', {
+            detail: { 
+              documentId: args?.documentId,
+              command: args?.command,
+              operation: 'resume'
+            }
+          });
+          window.dispatchEvent(retryEvent);
+          
+          setIsAutoRetrying(false);
+        }
+      }, 1000);
+      
+      // Store interval ID for cleanup
+      return () => {
+        clearInterval(countdownInterval);
+        setIsAutoRetrying(false);
+      };
+    }
+  }, [persistedMetadata, autoRetryAttempted, isLoading, isAutoRetrying, args]);
+
+  // Cancel auto-retry function
+  const cancelAutoRetry = () => {
+    setIsAutoRetrying(false);
+    setRetryCountdown(0);
+    console.log('🚫 Auto-retry canceled by user');
+  };
   
   const steps = [
     { id: 'prompt-understanding', label: 'Understanding Requirements' },
@@ -55,6 +112,15 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
     { id: 'schedules', label: 'Scheduling & Timing' },
     { id: 'integration', label: 'System Integration' }
   ];
+
+  // Add timeout/error steps if they exist in metadata
+  const dynamicSteps = [...steps];
+  if (persistedMetadata?.status === 'timeout' || persistedMetadata?.currentStep === 'timeout') {
+    dynamicSteps.push({ id: 'timeout', label: 'Process Timeout' });
+  }
+  if (persistedMetadata?.status === 'error' || persistedMetadata?.currentStep === 'error') {
+    dynamicSteps.push({ id: 'error', label: 'Process Error' });
+  }
 
   // Get step status from metadata or tool call parts or persisted metadata
   const getStepStatus = (stepId: string) => {
@@ -94,7 +160,24 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
     }
     
     if (persistedMetadata?.currentStep === stepId) {
+      // Check if this step was interrupted by timeout or error
+      if (persistedMetadata.status === 'timeout' && stepId === 'timeout') {
+        return 'timeout';
+      }
+      if (persistedMetadata.status === 'error' && stepId === 'error') {
+        return 'error';
+      }
       return 'processing';
+    }
+    
+    // Check for timeout state
+    if (stepId === 'timeout' && (persistedMetadata?.status === 'timeout' || persistedMetadata?.currentStep === 'timeout')) {
+      return 'timeout';
+    }
+    
+    // Check for error state
+    if (stepId === 'error' && (persistedMetadata?.status === 'error' || persistedMetadata?.currentStep === 'error')) {
+      return 'error';
     }
     
     // Determine based on step order and persisted data
@@ -151,21 +234,33 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
     if (!persistedMetadata) return false;
     
     // Check if any step is marked as processing or if not all steps are complete
-    const hasProcessingStep = steps.some(step => {
+    const hasProcessingStep = dynamicSteps.some(step => {
       const status = getStepStatus(step.id);
       return status === 'processing';
     });
     
-    const allStepsComplete = steps.every(step => {
+    const allStepsComplete = dynamicSteps.every(step => {
       const status = getStepStatus(step.id);
       return status === 'complete';
     });
     
-    return !allStepsComplete && (hasProcessingStep || persistedMetadata.currentStep);
-  }, [persistedMetadata, steps]);
+    // Check for timeout or error states that can be resumed
+    const hasTimeoutOrError = persistedMetadata.status === 'timeout' || 
+                              persistedMetadata.status === 'error' ||
+                              persistedMetadata.canResume === true;
+    
+    return !allStepsComplete && (hasProcessingStep || persistedMetadata.currentStep || hasTimeoutOrError);
+  }, [persistedMetadata, dynamicSteps]);
+
+  // Check if process timed out
+  const isTimedOut = useMemo(() => {
+    return persistedMetadata?.status === 'timeout' || 
+           persistedMetadata?.currentStep === 'timeout' ||
+           dynamicSteps.some(step => getStepStatus(step.id) === 'timeout');
+  }, [persistedMetadata, dynamicSteps]);
 
   // Determine if we're actively processing - should be based on whether AI is working
-  const isProcessing = isLoading || false;
+  const isProcessing = isLoading || isAutoRetrying;
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -178,30 +273,60 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
                 <div className="animate-spin">
                   <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full" />
                 </div>
+              ) : isAutoRetrying ? (
+                <span className="text-blue-400 text-xl">🔄</span>
+              ) : isTimedOut ? (
+                <span className="text-yellow-400 text-xl">⏱️</span>
               ) : (
                 <span className="text-green-400 text-xl">🤖</span>
               )}
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-xl font-semibold text-green-100">
-                {isProcessing ? 'Building AI Agent' : canResume ? 'Resume Agent Building' : 'AI Agent Builder'}
+                {isAutoRetrying ? 'Auto-Retrying Agent Builder' :
+                 isProcessing ? 'Building AI Agent' : 
+                 isTimedOut ? 'Agent Building Timed Out' :
+                 canResume ? 'Resume Agent Building' : 'AI Agent Builder'}
               </h3>
               <p className="text-green-300/70 text-sm">
-                {isProcessing ? 'Creating your intelligent automation system...' : 
+                {isAutoRetrying ? `Automatically retrying in ${retryCountdown}s...` :
+                 isProcessing ? 'Creating your intelligent automation system...' : 
+                 isTimedOut ? 'Process timed out but can be resumed' :
                  canResume ? 'Continue building your interrupted agent system' : 
                  'Ready to build your agent system'}
               </p>
             </div>
-            {canResume && !isProcessing && (
+            {isAutoRetrying && (
               <button 
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors"
+                onClick={cancelAutoRetry}
+              >
+                Cancel ({retryCountdown}s)
+              </button>
+            )}
+            {(canResume || isTimedOut) && !isProcessing && !isAutoRetrying && (
+              <button 
+                className={cn(
+                  "px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors",
+                  isTimedOut 
+                    ? "bg-yellow-600 hover:bg-yellow-700"
+                    : "bg-green-600 hover:bg-green-700"
+                )}
                 onClick={() => {
                   // Trigger resume by sending a continue message
-                  // This would need to be implemented in the parent component
-                  console.log('Resume agent building clicked');
+                  const retryEvent = new CustomEvent('agent-builder-retry', {
+                    detail: { 
+                      documentId: args?.documentId,
+                      command: args?.command,
+                      operation: 'resume'
+                    }
+                  });
+                  window.dispatchEvent(retryEvent);
+                  console.log('Manual resume agent building clicked');
                 }}
               >
-                Resume Building
+                {isTimedOut && !autoRetryAttempted ? 'Retry Now' : 
+                 isTimedOut ? 'Manual Retry' : 'Resume Building'}
               </button>
             )}
           </div>
@@ -213,7 +338,23 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
             <p className="text-sm text-green-200/80">
               <span className="font-medium text-green-100">Request:</span> {args.command}
             </p>
-            {canResume && !isProcessing && (
+            {isAutoRetrying && (
+              <div className="mt-2 p-2 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+                <p className="text-xs text-blue-300">
+                  🔄 Automatically retrying in {retryCountdown} seconds. Click "Cancel" to stop.
+                </p>
+              </div>
+            )}
+            {isTimedOut && !isAutoRetrying && (
+              <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
+                <p className="text-xs text-yellow-300">
+                  {autoRetryAttempted 
+                    ? "⏱️ Process timed out. Auto-retry was attempted. You can try manual retry."
+                    : "⏱️ Process timed out but progress was saved. Auto-retry will start in a moment."}
+                </p>
+              </div>
+            )}
+            {canResume && !isTimedOut && !isProcessing && !isAutoRetrying && (
               <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
                 <p className="text-xs text-yellow-300">
                   ⚠️ Previous building process was interrupted. You can resume from where it left off.
@@ -223,7 +364,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
           </div>
 
           <div className="space-y-4">
-            {steps.map((step) => {
+            {dynamicSteps.map((step) => {
               const status = getStepStatus(step.id);
               const message = getStepMessage(step.id);
               
@@ -235,6 +376,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
                       'bg-green-500/20 border-green-500/40': status === 'complete',
                       'bg-green-400/10 border-green-400/30': status === 'processing',
                       'bg-red-500/20 border-red-500/40': status === 'error',
+                      'bg-yellow-500/20 border-yellow-500/40': status === 'timeout',
                       'bg-zinc-800/50 border-zinc-700/50': status === 'pending'
                     }
                   )}>
@@ -244,6 +386,8 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
                       <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse shadow-sm shadow-green-400/50" />
                     ) : status === 'error' ? (
                       <div className="w-3 h-3 bg-red-400 rounded-full" />
+                    ) : status === 'timeout' ? (
+                      <div className="w-3 h-3 bg-yellow-400 rounded-full" />
                     ) : (
                       <div className="w-3 h-3 bg-zinc-600 rounded-full" />
                     )}
@@ -255,6 +399,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
                         'text-green-300': status === 'complete',
                         'text-green-200': status === 'processing',
                         'text-red-300': status === 'error',
+                        'text-yellow-300': status === 'timeout',
                         'text-zinc-500': status === 'pending'
                       }
                     )}>
@@ -278,6 +423,11 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
                     {status === 'error' && (
                       <div className="mt-1">
                         <span className="text-xs text-red-400 font-medium font-mono">✗ ERROR</span>
+                      </div>
+                    )}
+                    {status === 'timeout' && (
+                      <div className="mt-1">
+                        <span className="text-xs text-yellow-400 font-medium font-mono">⏱️ TIMEOUT</span>
                       </div>
                     )}
                   </div>

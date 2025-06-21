@@ -136,6 +136,20 @@ export function Chat({
     }
   }, [query, append, hasAppendedQuery, id]);
 
+  // Event listener for automatic retry
+  useEffect(() => {
+    const handleAutoRetry = () => {
+      console.log('🔄 Automatic retry triggered');
+      experimental_resume();
+    };
+
+    window.addEventListener('agent-builder-auto-retry', handleAutoRetry);
+
+    return () => {
+      window.removeEventListener('agent-builder-auto-retry', handleAutoRetry);
+    };
+  }, [experimental_resume]);
+
   const { data: votes } = useSWR<Array<Vote>>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
     fetcher,

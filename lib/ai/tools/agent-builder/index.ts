@@ -324,73 +324,105 @@ export const agentBuilder = ({
     
     console.log(`📄 Created document with ID: ${documentId}`);
 
-    // Initialize step metadata for persistence
+    // Initialize step metadata for persistence with error recovery
     let stepMetadata = {
       currentStep: 'prompt-understanding',
       stepProgress: {},
-      stepMessages: {}
+      stepMessages: {},
+      lastUpdateTimestamp: new Date().toISOString(),
+      processId: generateUUID(), // Add unique process ID for tracking
+      status: 'active'
     };
+
+    // Parse existing context
+    let existingAgent: AgentData | null = null;
+    const contextToUse = context || existingContext;
+    
+    console.log('🔍 Context Analysis:');
+    console.log('  - contextToUse source:', context ? 'parameter' : existingContext ? 'existingContext' : 'none');
+    console.log('  - contextToUse length:', contextToUse ? contextToUse.length : 0);
+
+    if (contextToUse) {
+      try {
+        const parsed = JSON.parse(contextToUse);
+        
+        if (typeof parsed === 'object' && parsed !== null) {
+          console.log('✅ Context is a valid object');
+          
+          // Check if it's already agent data
+          if (parsed.models && Array.isArray(parsed.models) && parsed.actions && Array.isArray(parsed.actions)) {
+            console.log('✅ Context contains valid agent data structure');
+            existingAgent = parsed as AgentData;
+            console.log(`📊 Existing agent data: ${existingAgent.models.length} models, ${existingAgent.actions.length} actions`);
+          } else {
+            console.log('⚠️ Context is valid JSON but not agent data structure');
+            existingAgent = null;
+          }
+        } else {
+          console.log('⚠️ Context is not a valid object, starting fresh');
+          existingAgent = null;
+        }
+      } catch (e) {
+        console.warn('⚠️ Failed to parse context, starting fresh. Error:', (e as Error).message);
+        console.warn('📄 Problematic context content (first 200 chars):', contextToUse.substring(0, 200));
+        existingAgent = null;
+      }
+    } else {
+      console.log('📋 No context provided, starting fresh');
+    }
+
+    // Add timeout protection with better error handling (after existingAgent is defined)
+    const processTimeout = setTimeout(() => {
+      console.warn('⚠️ Agent builder process timeout detected');
+      
+      // Update metadata to indicate timeout
+      stepMetadata = {
+        ...stepMetadata,
+        status: 'timeout',
+        currentStep: 'timeout',
+        stepProgress: {
+          ...stepMetadata.stepProgress,
+          'timeout': 'failed'
+        },
+        stepMessages: {
+          ...stepMetadata.stepMessages,
+          'timeout': 'Process timed out - can be resumed'
+        },
+        lastUpdateTimestamp: new Date().toISOString()
+      };
+
+      // Save timeout state to allow recovery
+      saveDocumentWithContent(
+        documentId, 
+        'Agent Building Timeout', 
+        JSON.stringify({
+          status: 'timeout',
+          step: 'timeout',
+          message: 'Process timed out - can be resumed',
+          partialData: existingAgent || null,
+          canResume: true
+        }, null, 2), 
+        session, 
+        undefined, 
+        stepMetadata
+      ).catch(err => {
+        console.error('Failed to save timeout state:', err);
+      });
+
+      dataStream.writeData({
+        type: 'agent-step',
+        content: JSON.stringify({ 
+          step: 'timeout', 
+          status: 'failed',
+          message: 'Process timed out - refresh to resume'
+        })
+      });
+    }, 270000); // 270 seconds (4.5 minutes)
 
     try {
       // Analyze conversation context
       const conversationContext = analyzeConversationContext(messages);
       console.log('📋 Conversation context analyzed:', conversationContext.length, 'characters');
-
-      // Parse existing context
-      let existingAgent: AgentData | null = null;
-      const contextToUse = context || existingContext;
-      
-      console.log('🔍 Context Analysis:');
-      console.log('  - contextToUse source:', context ? 'parameter' : existingContext ? 'existingContext' : 'none');
-      console.log('  - contextToUse length:', contextToUse ? contextToUse.length : 0);
-      
-      if (contextToUse) {
-        console.log('📋 Attempting to parse context...');
-        try {
-          const parsed = JSON.parse(contextToUse);
-          console.log('✅ Context parsed as valid JSON');
-          console.log('📊 Parsed object keys:', Object.keys(parsed));
-          
-          // Validate that the parsed content looks like agent data
-          if (typeof parsed === 'object' && parsed !== null) {
-            console.log('📝 Object validation:');
-            console.log('  - has models array:', Array.isArray(parsed.models));
-            console.log('  - has actions array:', Array.isArray(parsed.actions));
-            console.log('  - has name string:', typeof parsed.name === 'string');
-            
-            // Check if it has agent-like properties
-            if (parsed.models && Array.isArray(parsed.models) && 
-                parsed.actions && Array.isArray(parsed.actions)) {
-              existingAgent = parsed as AgentData;
-              
-              // Migrate actions to have IDs if they don't have them
-              existingAgent = migrateActionsWithIds(existingAgent);
-              
-              console.log('✅ Successfully parsed existing agent context');
-              console.log(`📊 Existing agent data: ${existingAgent.models.length} models, ${existingAgent.actions.length} actions`);
-              console.log('📝 Agent details:');
-              console.log('  - name:', existingAgent.name);
-              console.log('  - description:', existingAgent.description);
-              console.log('  - domain:', existingAgent.domain);
-              console.log('  - models:', (existingAgent.models || []).map(m => m.name));
-              console.log('  - actions:', (existingAgent.actions || []).map(a => `${a.id}:${a.name}`));
-            } else {
-              console.log('⚠️ Context is valid JSON but not valid agent data structure, starting fresh');
-              console.log('📋 Missing required properties or wrong types');
-              existingAgent = null;
-            }
-          } else {
-            console.log('⚠️ Context is not a valid object, starting fresh');
-            existingAgent = null;
-          }
-        } catch (e) {
-          console.warn('⚠️ Failed to parse context, starting fresh. Error:', (e as Error).message);
-          console.warn('📄 Problematic context content (first 200 chars):', contextToUse.substring(0, 200));
-          existingAgent = null;
-        }
-      } else {
-        console.log('📋 No context provided, starting fresh');
-      }
 
       // Auto-adjust operation if we have existing data but operation is 'create'
       if (existingAgent && currentOperation === 'create') {
@@ -1177,6 +1209,9 @@ export const agentBuilder = ({
         console.error('🚨 CRITICAL: Action count decreased without explicit deletion operations');
       }
 
+      // Clear timeout on successful completion
+      clearTimeout(processTimeout);
+
       // Save document with intelligent merging to preserve existing data
       await saveDocumentWithContent(
         documentId,
@@ -1186,6 +1221,7 @@ export const agentBuilder = ({
         deletionOperations,
         {
           ...stepMetadata,
+          status: 'complete',
           currentStep: 'complete',
           stepProgress: {
             ...stepMetadata.stepProgress,
@@ -1194,7 +1230,8 @@ export const agentBuilder = ({
           stepMessages: {
             ...stepMetadata.stepMessages,
             'complete': 'Agent building completed successfully'
-          }
+          },
+          lastUpdateTimestamp: new Date().toISOString()
         }
       );
 
@@ -1216,30 +1253,49 @@ export const agentBuilder = ({
     } catch (error) {
       console.error('❌ Agent Builder Error:', error);
       
-      const errorMessage = generateErrorMessage(error, 'Agent Building');
+      // Enhanced error handling with better metadata preservation
+      const isTimeout = error instanceof Error && error.message.includes('timeout');
+      const errorStep = isTimeout ? 'timeout' : 'error';
       
-      await saveDocumentWithContent(documentId, 'Error Agent System', JSON.stringify({
-        error: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString()
-      }, null, 2), session, undefined, {
+      const errorMetadata = {
         ...stepMetadata,
-        currentStep: 'error',
+        status: isTimeout ? 'timeout' : 'error',
+        currentStep: errorStep,
         stepProgress: {
           ...stepMetadata.stepProgress,
-          'error': 'failed'
+          [errorStep]: 'failed'
         },
         stepMessages: {
           ...stepMetadata.stepMessages,
-          'error': error instanceof Error ? error.message : 'Unknown error occurred'
-        }
-      });
+          [errorStep]: isTimeout ? 'Process timed out - refresh to resume' : (error instanceof Error ? error.message : 'Unknown error occurred')
+        },
+        lastUpdateTimestamp: new Date().toISOString(),
+        canResume: isTimeout || stepMetadata.currentStep !== 'prompt-understanding' // Can resume if timeout or past first step
+      };
+      
+      const errorMessage = generateErrorMessage(error, 'Agent Building');
+      
+      await saveDocumentWithContent(documentId, isTimeout ? 'Agent Building Timeout' : 'Error Agent System', JSON.stringify({
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        canResume: errorMetadata.canResume,
+        partialData: existingAgent || null
+      }, null, 2), session, undefined, errorMetadata);
 
-      dataStream.writeData({ type: 'agent-step', content: JSON.stringify({ step: 'error', status: 'failed', message: 'System error occurred' }) });
+      dataStream.writeData({ 
+        type: 'agent-step', 
+        content: JSON.stringify({ 
+          step: errorStep, 
+          status: 'failed', 
+          message: isTimeout ? 'Process timed out - refresh to resume' : 'System error occurred',
+          canResume: errorMetadata.canResume
+        }) 
+      });
       dataStream.writeData({ type: 'finish', content: errorMessage });
       
       return {
         id: documentId,
-        title: 'Error Agent System',
+        title: isTimeout ? 'Agent Building Timeout' : 'Error Agent System',
         kind: 'agent' as const,
         content: error instanceof Error ? error.message : 'An unexpected error occurred'
       };

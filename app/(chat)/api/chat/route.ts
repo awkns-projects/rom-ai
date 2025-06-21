@@ -41,7 +41,6 @@ import { ChatSDKError } from '@/lib/errors';
 import { agentBuilder } from '@/lib/ai/tools/agent-builder';
 
 export const maxDuration = 60;
-
 let globalStreamContext: ResumableStreamContext | null = null;
 
 function getStreamContext() {
@@ -435,92 +434,113 @@ export async function POST(request: Request) {
 
     const stream = createDataStream({
       execute: async (dataStream) => {
-        const tools: Record<string, any> = {};
-
-        // Add the agent builder tool
-        if (activeTools.includes('agentBuilder')) {
-          const existingAgentData = await getExistingAgentContext(messages, session);
-          tools.agentBuilder = agentBuilder({ 
-            messages, 
-            dataStream, 
-            existingContext: existingAgentData?.content || null,
-            existingDocumentId: existingAgentData?.documentId || null,
-            session,
-            chatId: id
+        // Add timeout protection
+        const timeoutId = setTimeout(() => {
+          console.warn('⚠️ Stream execution approaching timeout, gracefully ending...');
+          dataStream.writeData({
+            type: 'error',
+            content: 'Response generation timed out. Please try again with a shorter message.',
           });
-        }
+        }, 280000); // 280 seconds (20 seconds before maxDuration)
 
-        const result = streamText({
-          model: await getModelProvider(selectedChatModel, session),
-          system: systemPrompt({ selectedChatModel, requestHints }),
-          messages,
-          maxSteps: 5,
-          experimental_activeTools:
-            selectedChatModel === 'chat-model-reasoning'
-              ? []
-              : activeTools,
-          experimental_transform: smoothStream({ chunking: 'word' }),
-          experimental_generateMessageId: generateUUID,
-          tools,
-          onFinish: async ({ response }) => {
-            if (session.user?.id) {
-              try {
-                const assistantId = getTrailingMessageId({
-                  messages: response.messages.filter(
-                    (message) => message.role === 'assistant',
-                  ),
-                });
+        try {
+          const tools: Record<string, any> = {};
 
-                if (!assistantId) {
-                  throw new Error('No assistant message found!');
-                }
+          // Add the agent builder tool
+          if (activeTools.includes('agentBuilder')) {
+            const existingAgentData = await getExistingAgentContext(messages, session);
+            tools.agentBuilder = agentBuilder({ 
+              messages, 
+              dataStream, 
+              existingContext: existingAgentData?.content || null,
+              existingDocumentId: existingAgentData?.documentId || null,
+              session,
+              chatId: id
+            });
+          }
 
-                const [, assistantMessage] = appendResponseMessages({
-                  messages: [message],
-                  responseMessages: response.messages,
-                });
+          const result = streamText({
+            model: await getModelProvider(selectedChatModel, session),
+            system: systemPrompt({ selectedChatModel, requestHints }),
+            messages,
+            maxSteps: 5,
+            experimental_activeTools:
+              selectedChatModel === 'chat-model-reasoning'
+                ? []
+                : activeTools,
+            experimental_transform: smoothStream({ chunking: 'word' }),
+            experimental_generateMessageId: generateUUID,
+            tools,
+            onFinish: async ({ response }) => {
+              clearTimeout(timeoutId); // Clear timeout on successful completion
+              
+              if (session.user?.id) {
+                try {
+                  const assistantId = getTrailingMessageId({
+                    messages: response.messages.filter(
+                      (message) => message.role === 'assistant',
+                    ),
+                  });
 
-                await saveMessages({
-                  messages: [
-                    {
-                      id: assistantId,
-                      chatId: id,
-                      role: assistantMessage.role,
-                      parts: assistantMessage.parts,
-                      attachments:
-                        assistantMessage.experimental_attachments ?? [],
-                      createdAt: new Date(),
-                    },
-                  ],
-                });
-              } catch (error: any) {
-                console.error('❌ Failed to save chat - Full error details:', error);
-                console.error('❌ Error name:', error?.name);
-                console.error('❌ Error message:', error?.message);
-                console.error('❌ Error stack:', error?.stack);
-                if (error?.code) {
-                  console.error('❌ Error code:', error.code);
-                }
-                if (error?.severity) {
-                  console.error('❌ Database severity:', error.severity);
+                  if (!assistantId) {
+                    throw new Error('No assistant message found!');
+                  }
+
+                  const [, assistantMessage] = appendResponseMessages({
+                    messages: [message],
+                    responseMessages: response.messages,
+                  });
+
+                  await saveMessages({
+                    messages: [
+                      {
+                        id: assistantId,
+                        chatId: id,
+                        role: assistantMessage.role,
+                        parts: assistantMessage.parts,
+                        attachments:
+                          assistantMessage.experimental_attachments ?? [],
+                        createdAt: new Date(),
+                      },
+                    ],
+                  });
+                } catch (error: any) {
+                  console.error('❌ Failed to save chat - Full error details:', error);
+                  console.error('❌ Error name:', error?.name);
+                  console.error('❌ Error message:', error?.message);
+                  console.error('❌ Error stack:', error?.stack);
+                  if (error?.code) {
+                    console.error('❌ Error code:', error.code);
+                  }
+                  if (error?.severity) {
+                    console.error('❌ Database severity:', error.severity);
+                  }
                 }
               }
-            }
-          },
-          experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: 'stream-text',
-          },
-        });
+            },
+            experimental_telemetry: {
+              isEnabled: isProductionEnvironment,
+              functionId: 'stream-text',
+            },
+          });
 
-        result.consumeStream();
+          result.consumeStream();
 
-        result.mergeIntoDataStream(dataStream, {
-          sendReasoning: true,
-        });
+          result.mergeIntoDataStream(dataStream, {
+            sendReasoning: true,
+          });
+        } catch (error) {
+          clearTimeout(timeoutId);
+          console.error('Stream execution error:', error);
+          dataStream.writeData({
+            type: 'error',
+            content: 'An error occurred during response generation. Please try again.',
+          });
+        }
       },
-      onError: () => {
-        return 'Oops, an error occurred!';
+      onError: (error) => {
+        console.error('DataStream error:', error);
+        return 'Oops, an error occurred! Please try again.';
       },
     });
 
