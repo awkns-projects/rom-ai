@@ -95,6 +95,7 @@ export function DocumentPreview({
           id: artifact.documentId,
           createdAt: new Date(),
           userId: 'noop',
+          metadata: null,
         }
       : null;
 
