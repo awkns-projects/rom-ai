@@ -4,10 +4,9 @@ import type { UIMessage } from 'ai';
 import cx from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';
 import { memo, useState, useMemo, useEffect } from 'react';
-import type { Vote } from '@/lib/db/schema';
-import type { Document } from '@/lib/db/schema';
+import type { Vote, Document } from '@/lib/db/schema';
 import { DocumentToolCall, DocumentToolResult } from './document';
-import { PencilEditIcon, SparklesIcon, PlayIcon, CodeIcon, BoxIcon, RouteIcon, WarningIcon } from './icons';
+import { PencilEditIcon, SparklesIcon, PlayIcon, CodeIcon, BoxIcon, RouteIcon, WarningIcon, LoaderIcon } from './icons';
 import { Markdown } from './markdown';
 import { MessageActions } from './message-actions';
 import { PreviewAttachment } from './preview-attachment';
@@ -23,7 +22,6 @@ import type { UseChatHelpers } from '@ai-sdk/react';
 import { useArtifact } from '@/hooks/use-artifact';
 import { useChat } from '@ai-sdk/react';
 import useSWR from 'swr';
-import { LoaderIcon } from './icons';
 
 // Agent Builder Loading Component
 const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; message?: UIMessage; isLoading?: boolean }) => {
@@ -250,14 +248,14 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
                               persistedMetadata.canResume === true;
     
     return !allStepsComplete && (hasProcessingStep || persistedMetadata.currentStep || hasTimeoutOrError);
-  }, [persistedMetadata, dynamicSteps]);
+  }, [persistedMetadata, dynamicSteps, getStepStatus]);
 
   // Check if process timed out
   const isTimedOut = useMemo(() => {
     return persistedMetadata?.status === 'timeout' || 
            persistedMetadata?.currentStep === 'timeout' ||
            dynamicSteps.some(step => getStepStatus(step.id) === 'timeout');
-  }, [persistedMetadata, dynamicSteps]);
+  }, [persistedMetadata, dynamicSteps, getStepStatus]);
 
   // Determine if we're actively processing - should be based on whether AI is working
   const isProcessing = isLoading || isAutoRetrying;
@@ -268,10 +266,10 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
         {/* Header */}
         <div className="bg-gradient-to-r from-green-900/50 to-green-800/50 p-6 border-b border-green-500/20">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-green-500/10 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-green-500/20">
+            <div className="size-12 bg-green-500/10 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-green-500/20">
               {isProcessing ? (
                 <div className="animate-spin">
-                  <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full" />
+                  <div className="size-6 border-2 border-green-400 border-t-transparent rounded-full" />
                 </div>
               ) : isAutoRetrying ? (
                 <span className="text-blue-400 text-xl">🔄</span>
@@ -341,7 +339,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
             {isAutoRetrying && (
               <div className="mt-2 p-2 bg-blue-900/20 border border-blue-500/30 rounded-lg">
                 <p className="text-xs text-blue-300">
-                  🔄 Automatically retrying in {retryCountdown} seconds. Click "Cancel" to stop.
+                  🔄 Automatically retrying in {retryCountdown} seconds. Click &quot;Cancel&quot; to stop.
                 </p>
               </div>
             )}
@@ -371,7 +369,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
               return (
                 <div key={step.id} className="flex items-center gap-3">
                   <div className={cn(
-                    "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300 border",
+                    "size-8 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 border",
                     {
                       'bg-green-500/20 border-green-500/40': status === 'complete',
                       'bg-green-400/10 border-green-400/30': status === 'processing',
@@ -381,15 +379,15 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
                     }
                   )}>
                     {status === 'complete' ? (
-                      <div className="w-3 h-3 bg-green-400 rounded-full shadow-sm shadow-green-400/50" />
+                      <div className="size-3 bg-green-400 rounded-full shadow-sm shadow-green-400/50" />
                     ) : status === 'processing' ? (
-                      <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse shadow-sm shadow-green-400/50" />
+                      <div className="size-3 bg-green-400 rounded-full animate-pulse shadow-sm shadow-green-400/50" />
                     ) : status === 'error' ? (
-                      <div className="w-3 h-3 bg-red-400 rounded-full" />
+                      <div className="size-3 bg-red-400 rounded-full" />
                     ) : status === 'timeout' ? (
-                      <div className="w-3 h-3 bg-yellow-400 rounded-full" />
+                      <div className="size-3 bg-yellow-400 rounded-full" />
                     ) : (
-                      <div className="w-3 h-3 bg-zinc-600 rounded-full" />
+                      <div className="size-3 bg-zinc-600 rounded-full" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -408,9 +406,9 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
                     {status === 'processing' && (
                       <div className="mt-2 flex items-center gap-2">
                         <div className="flex space-x-1">
-                          <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce shadow-sm shadow-green-400/50" style={{ animationDelay: '0ms' }} />
-                          <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce shadow-sm shadow-green-400/50" style={{ animationDelay: '150ms' }} />
-                          <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-bounce shadow-sm shadow-green-400/50" style={{ animationDelay: '300ms' }} />
+                          <div className="size-1.5 bg-green-400 rounded-full animate-bounce shadow-sm shadow-green-400/50" style={{ animationDelay: '0ms' }} />
+                          <div className="size-1.5 bg-green-400 rounded-full animate-bounce shadow-sm shadow-green-400/50" style={{ animationDelay: '150ms' }} />
+                          <div className="size-1.5 bg-green-400 rounded-full animate-bounce shadow-sm shadow-green-400/50" style={{ animationDelay: '300ms' }} />
                         </div>
                         <span className="text-xs text-green-400/80 font-medium font-mono">PROCESSING...</span>
                       </div>
@@ -510,7 +508,7 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
         <div className="bg-gradient-to-r from-green-900/50 to-green-800/50 p-6 border-b border-green-500/20">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className="w-12 h-12 bg-green-500/10 backdrop-blur-sm rounded-2xl flex items-center justify-center flex-shrink-0 border border-green-500/20">
+              <div className="size-12 bg-green-500/10 backdrop-blur-sm rounded-2xl flex items-center justify-center shrink-0 border border-green-500/20">
                 <span className="text-green-400 text-xl">🤖</span>
               </div>
               <div className="flex-1 min-w-0">
@@ -519,7 +517,7 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
               </div>
             </div>
             {isSuccess && (
-              <div className="bg-green-500/20 backdrop-blur-sm px-3 py-1.5 rounded-full flex-shrink-0 border border-green-500/30">
+              <div className="bg-green-500/20 backdrop-blur-sm px-3 py-1.5 rounded-full shrink-0 border border-green-500/30">
                 <span className="text-green-200 text-xs font-medium font-mono">✅ READY</span>
               </div>
             )}
@@ -538,7 +536,7 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
           {/* Statistics */}
           <div className="grid grid-cols-3 gap-4">
             <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
-              <div className="w-8 h-8 bg-green-500/20 rounded-lg mx-auto mb-2 flex items-center justify-center border border-green-500/30">
+              <div className="size-8 bg-green-500/20 rounded-lg mx-auto mb-2 flex items-center justify-center border border-green-500/30">
                 <div className="text-green-400">
                   <BoxIcon size={16} />
                 </div>
@@ -547,7 +545,7 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
               <div className="text-xs text-green-300 font-mono">MODELS</div>
             </div>
             <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
-              <div className="w-8 h-8 bg-green-500/20 rounded-lg mx-auto mb-2 flex items-center justify-center border border-green-500/30">
+              <div className="size-8 bg-green-500/20 rounded-lg mx-auto mb-2 flex items-center justify-center border border-green-500/30">
                 <div className="text-green-400">
                   <PlayIcon size={16} />
                 </div>
@@ -556,7 +554,7 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
               <div className="text-xs text-green-300 font-mono">ACTIONS</div>
             </div>
             <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4 text-center">
-              <div className="w-8 h-8 bg-green-500/20 rounded-lg mx-auto mb-2 flex items-center justify-center border border-green-500/30">
+              <div className="size-8 bg-green-500/20 rounded-lg mx-auto mb-2 flex items-center justify-center border border-green-500/30">
                 <div className="text-green-400">
                   <RouteIcon size={16} />
                 </div>
@@ -572,7 +570,7 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
             <div className="space-y-2">
               {agentData.models?.length > 0 && (
                 <div className="flex items-center gap-2 text-sm">
-                  <div className="w-2 h-2 bg-green-400 rounded-full flex-shrink-0 shadow-sm shadow-green-400/50" />
+                  <div className="size-2 bg-green-400 rounded-full shrink-0 shadow-sm shadow-green-400/50" />
                   <span className="text-green-200/80 font-mono">
                     <strong className="text-green-100">{agentData.models.length}</strong> data models
                   </span>
@@ -580,14 +578,14 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
               )}
               {agentData.actions?.length > 0 && (
                 <div className="flex items-center gap-2 text-sm">
-                  <div className="w-2 h-2 bg-green-400 rounded-full flex-shrink-0 shadow-sm shadow-green-400/50" />
+                  <div className="size-2 bg-green-400 rounded-full shrink-0 shadow-sm shadow-green-400/50" />
                   <span className="text-green-200/80 font-mono">
                     <strong className="text-green-100">{agentData.actions.length}</strong> automated workflows
                   </span>
                 </div>
               )}
               <div className="flex items-center gap-2 text-sm">
-                <div className="w-2 h-2 bg-green-400 rounded-full flex-shrink-0 shadow-sm shadow-green-400/50" />
+                <div className="size-2 bg-green-400 rounded-full shrink-0 shadow-sm shadow-green-400/50" />
                 <span className="text-green-200/80 font-mono">Enterprise-grade architecture</span>
               </div>
             </div>
@@ -625,7 +623,7 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
                   <div className="space-y-2">
                     {agentData.actions.slice(0, 2).map((action: any, index: number) => (
                       <div key={index} className="flex items-center gap-3 p-3 bg-zinc-900/50 border border-green-500/10 rounded-xl">
-                        <div className="w-6 h-6 bg-green-500/20 rounded-md flex items-center justify-center flex-shrink-0 border border-green-500/30">
+                        <div className="size-6 bg-green-500/20 rounded-md flex items-center justify-center shrink-0 border border-green-500/30">
                           <div className="text-green-400">
                             <PlayIcon size={12} />
                           </div>
