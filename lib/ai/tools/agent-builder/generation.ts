@@ -1874,228 +1874,258 @@ export async function generateEnhancedActionCode(
       schema: enhancedActionCodeSchema,
       messages: [
         {
+          role: 'system',
+          content: `You are an expert full-stack developer generating production-ready code. 
+
+CRITICAL REQUIREMENT: Every field in the schema must be provided with the correct data type. Never return undefined for any required field.
+
+OBJECT FIELD REQUIREMENTS:
+- All "object" fields must contain actual objects with key-value pairs
+- All "array" fields must contain actual arrays with elements
+- Never use undefined, null, or string placeholders for object/array fields
+
+Generate complete, working code with proper error handling.`
+        },
+        {
           role: 'user',
-          content: `Generate production-ready code for this action analysis:
+          content: `Generate enhanced action code for:
 
-${JSON.stringify(actionAnalysis, null, 2)}
+Action Analysis: ${JSON.stringify(actionAnalysis, null, 2)}
 
-Available database models:
-${JSON.stringify(availableModels, null, 2)}
+Database Models: ${JSON.stringify(availableModels, null, 2)}
 
-CRITICAL REQUIREMENTS FOR ALL OBJECT FIELDS:
-- ALL required fields must be provided as ACTUAL OBJECTS, not strings or undefined
-- codeComponents MUST be an object with all required fields
-- uiComponents MUST be an array of objects with all required fields
-- integrationCode MUST be an object with all required fields
-- testCases MUST be an array of objects with all required fields
+Requirements:
+1. Generate complete working code
+2. Include comprehensive error handling
+3. Create modern React UI components with matrix green theme
+4. Provide complete test cases with mock data
+5. Include proper integration code
 
-SPECIFIC OBJECT REQUIREMENTS:
-
-1. codeComponents.mainFunction MUST include:
-   - functionBody: actual JavaScript function code as string
-   - parameters: array of parameter objects with name, type, description
-   - returnType: object with type and output (as actual object, not string)
-   - usage: object with parameterExample (actual parameter values object)
-
-2. uiComponents MUST be array of objects, each with:
-   - componentName: string
-   - description: string
-   - architecturePlan: object with propsInterface (actual TypeScript interface object)
-   - implementation: object with reactCode (actual React component string)
-   - usage: object with propsExamples and stateExamples (actual example objects)
-
-3. testCases MUST be array of at least 3 objects, each with:
-   - testName: string
-   - mockData: actual object with test data
-   - expectedResult: actual object with expected output
-
-EXAMPLE STRUCTURE FOR REFERENCE:
-{
-  "actionId": "unique-action-id",
-  "codeComponents": {
-    "mainFunction": {
-      "functionBody": "async function processData(database, input, member) { /* actual code */ }",
-      "parameters": [{"name": "database", "type": "object", "description": "Database connection"}],
-      "returnType": {"type": "object", "output": {"success": true, "data": {}}},
-      "usage": {"parameterExample": {"userId": "123", "message": "Hello"}}
-    }
-  },
-  "uiComponents": [{
-    "componentName": "DataForm",
-    "description": "Form for data input",
-    "architecturePlan": {"propsInterface": {"onSubmit": "function", "values": "object"}},
-    "implementation": {"reactCode": "export default function DataForm() { return <div>Form</div>; }"},
-    "usage": {"propsExamples": {"values": {"name": "John"}}, "stateExamples": {"isLoading": false}}
-  }],
-  "testCases": [{
-    "testName": "Basic functionality test",
-    "mockData": {"input": "test", "userId": "123"},
-    "expectedResult": {"success": true, "message": "Processed"}
-  }]
-}
-
-Generate comprehensive, production-ready code that includes:
-- Complete error handling with try-catch blocks
-- Input validation for all parameters
-- Proper TypeScript interfaces
-- At least 3 comprehensive test cases with ACTUAL objects for mockData and expectedResult
-- Beautiful, modern React components with proper props and state management
-- Integration code for database operations and external APIs
-
-CRITICAL: Every required field must be an actual object/array, never undefined or string placeholders.
-
-Generate production-ready React component strings that create exceptional user experiences and EXACTLY match the input/output parameters from the analysis.`
+Focus on creating production-ready, functional code that can be immediately used.`
         }
       ],
       temperature: 0.1
     });
 
-    console.log('✅ Enhanced action code generation complete with matched UI components');
+    console.log('✅ Enhanced action code generation complete');
     return result.object;
   } catch (error: any) {
-    console.log('⚠️ Enhanced action code generation encountered validation error, attempting fix...');
+    console.log('⚠️ Enhanced action code generation failed, attempting recovery...');
     
-    // Check if this is a validation error related to undefined object fields
-    if (error.message && error.message.includes('undefined')) {
-      console.log('🔧 Detected undefined object fields, applying automatic fix...');
+    // Check if this is a validation error
+    if (error.message && (error.message.includes('undefined') || error.message.includes('Required'))) {
+      console.log('🔧 Applying validation error fix...');
       
       try {
-        // Retry with more explicit object requirements
-        const retryResult = await generateObject({
+        // Generate with explicit structure to avoid validation errors
+        const fixedResult = await generateObject({
           model,
           schema: enhancedActionCodeSchema,
           messages: [
             {
+              role: 'system',
+              content: `Generate code with EXACT structure requirements. Every object field must be filled.
+
+MANDATORY OBJECT FIXES:
+1. returnType.output must be object like: {"success": true, "data": {}, "message": ""}
+2. usage.parameterExample must be object like: {"key": "value"}
+3. testCases[].mockData must be object like: {"input": {}, "database": {}, "member": {}}
+4. testCases[].expectedResult must be object like: {"success": true, "data": {}}
+5. architecturePlan.propsInterface must be object like: {"prop": "type"}
+6. usage.propsExamples must be object like: {"prop": "value"}
+7. usage.stateExamples must be object like: {"state": "value"}
+
+Never use undefined for any field.`
+            },
+            {
               role: 'user',
-              content: `Generate production-ready code for this action analysis:
+              content: `Generate complete structure for action: ${actionAnalysis.imagination?.title || 'Data Action'}
 
-${JSON.stringify(actionAnalysis, null, 2)}
-
-Available database models:
-${JSON.stringify(availableModels, null, 2)}
-
-MANDATORY OBJECT STRUCTURE - EVERY FIELD MUST BE PROVIDED:
+Use this EXACT template structure:
 
 {
-  "actionId": "unique-action-id-string",
+  "actionId": "data-action-${Date.now()}",
+  "actionName": "Data Processing Action",
   "codeComponents": {
     "mainFunction": {
-      "functionBody": "async function processData(database, input, member) { /* ACTUAL WORKING CODE HERE */ return { success: true, data: {} }; }",
-      "parameters": [
-        {"name": "database", "type": "object", "description": "Database connection object"},
-        {"name": "input", "type": "object", "description": "Input parameters object"},
-        {"name": "member", "type": "object", "description": "Member context object"}
-      ],
+      "name": "processData",
+      "parameterNames": ["database", "input", "member"],
+      "functionBody": "try { const result = await database.create('Data', input); return { output: { success: true, data: result, message: 'Success' }, data: [{ modelId: 'Data', createdRecords: [result] }] }; } catch (error) { throw new Error('Failed: ' + error.message); }",
+      "parameterDescriptions": {
+        "database": "Database connection object",
+        "input": "Input data from user",
+        "member": "User context and permissions"
+      },
       "returnType": {
-        "type": "object",
-        "output": {"success": true, "data": {}, "message": "Operation completed"}
+        "output": {"success": true, "data": {"id": "123"}, "message": "Operation completed"},
+        "data": [{"modelId": "Data", "createdRecords": [{"id": "123"}]}]
       },
       "usage": {
-        "parameterExample": {"userId": "example-123", "message": "Hello World", "data": {"key": "value"}}
+        "example": "const fn = new Function('database', 'input', 'member', functionBody); await fn(db, data, user);",
+        "parameterExample": {"userId": "123", "content": "test data"}
       }
-    }
+    },
+    "validationFunctions": [
+      {
+        "name": "validateInput",
+        "purpose": "Validate input data",
+        "parameterNames": ["input"],
+        "functionBody": "if (!input) throw new Error('Input required'); return true;"
+      }
+    ],
+    "apiHelpers": [
+      {
+        "name": "callAPI",
+        "purpose": "Call external API",
+        "apiName": "DataAPI",
+        "parameterNames": ["data"],
+        "functionBody": "const response = await fetch('/api/data', {method: 'POST', body: JSON.stringify(data)}); return response.json();"
+      }
+    ],
+    "databaseHelpers": [
+      {
+        "name": "saveData",
+        "purpose": "Save to database",
+        "modelName": "Data",
+        "operation": "create",
+        "parameterNames": ["database", "data"],
+        "functionBody": "return await database.create('Data', data);"
+      }
+    ],
+    "testCases": [
+      {
+        "name": "Success test",
+        "description": "Test successful operation",
+        "testFunctionBody": "const result = await processData(mockDb, mockInput, mockMember); return result.output.success;",
+        "mockData": {"input": {"content": "test"}, "database": {"create": "function"}, "member": {"id": "123"}},
+        "expectedResult": {"success": true, "data": {"id": "123"}, "message": "Success"},
+        "executionExample": "Run with mock data"
+      },
+      {
+        "name": "Error test",
+        "description": "Test error handling",
+        "testFunctionBody": "try { await processData(null, null, null); return false; } catch (e) { return true; }",
+        "mockData": {"input": null, "database": null, "member": null},
+        "expectedResult": {"success": false, "error": "Validation failed"},
+        "executionExample": "Test error scenarios"
+      },
+      {
+        "name": "Validation test",
+        "description": "Test input validation",
+        "testFunctionBody": "return validateInput({content: 'test'});",
+        "mockData": {"input": {"content": "test"}},
+        "expectedResult": {"valid": true},
+        "executionExample": "Test validation logic"
+      }
+    ]
   },
   "uiComponents": [
     {
-      "componentName": "InputFormComponent",
-      "description": "Form component for user input",
+      "componentName": "DataForm",
+      "componentType": "input-form",
+      "uxAnalysis": {
+        "userJourney": "User inputs data and submits",
+        "informationHierarchy": "Form fields with clear labels",
+        "interactionPatterns": ["hover", "focus", "validation"],
+        "visualHierarchy": "Primary form with submit button",
+        "errorStates": ["validation errors", "network errors"],
+        "loadingStates": ["form submission", "data loading"]
+      },
       "architecturePlan": {
-        "propsInterface": {
-          "onSubmit": "function",
-          "values": "object",
-          "onChange": "function",
-          "isLoading": "boolean",
-          "error": "string | null"
+        "componentComposition": "Form with inputs and validation",
+        "stateManagement": "useState for form state",
+        "propsInterface": {"onSubmit": "function", "values": "object", "onChange": "function"},
+        "validationStrategy": "Real-time validation",
+        "accessibilityFeatures": ["ARIA labels", "keyboard nav"],
+        "performanceOptimizations": ["debounced validation"]
+      },
+      "designSystem": {
+        "colorPalette": {
+          "primary": ["#00ff00", "#00cc00"],
+          "secondary": ["#ffffff", "#f0f0f0"],
+          "feedback": {"success": "#00ff00", "error": "#ff0000", "warning": "#ffa500", "info": "#0066cc"}
+        },
+        "typography": {
+          "headings": ["text-xl font-bold"],
+          "body": ["text-base"],
+          "mono": ["font-mono text-sm"]
+        },
+        "spacing": {
+          "padding": ["p-4", "p-2"],
+          "margin": ["m-4", "m-2"],
+          "gap": ["gap-4", "gap-2"]
+        },
+        "effects": {
+          "borderRadius": ["rounded-lg"],
+          "shadows": ["shadow-lg"],
+          "animations": ["transition-all"]
+        },
+        "interactiveStates": {
+          "hover": ["hover:bg-green-600"],
+          "focus": ["focus:ring-2"],
+          "active": ["active:bg-green-700"],
+          "disabled": ["disabled:opacity-50"]
         }
+      },
+      "interactionDesign": {
+        "inputMethods": ["text input", "validation"],
+        "keyboardNavigation": "Tab navigation",
+        "touchInteractions": "Touch-friendly",
+        "loadingFeedback": "Loading spinner",
+        "successStates": "Success animation",
+        "errorRecovery": "Clear error messages"
+      },
+      "advancedPatterns": {
+        "inputEnhancements": ["floating labels"],
+        "selectionInterfaces": ["dropdowns"],
+        "layoutFeatures": ["responsive grid"],
+        "feedbackComponents": ["toast notifications"]
       },
       "implementation": {
-        "reactCode": "import React, { useState } from 'react'; export default function InputFormComponent({ onSubmit, values, onChange, isLoading, error }) { return <div className=\"p-4\"><form onSubmit={onSubmit}>{/* Form content */}</form></div>; }"
+        "reactCode": "import React, { useState } from 'react'; export default function DataForm({ onSubmit, values = {}, onChange }) { const [isSubmitting, setIsSubmitting] = useState(false); return (<div className=\"p-6 bg-black border border-green-500 rounded-lg\"><form onSubmit={onSubmit}><input className=\"w-full p-3 bg-gray-900 border border-green-500 rounded text-green-400\" placeholder=\"Enter data\" /><button type=\"submit\" className=\"mt-4 px-6 py-2 bg-green-600 text-black rounded hover:bg-green-700\">Submit</button></form></div>); }",
+        "hookUsage": ["useState for form state"],
+        "eventHandlers": ["onSubmit", "onChange"],
+        "validationLogic": "Real-time validation",
+        "responsiveDesign": "Mobile-first design",
+        "animationCode": "CSS transitions"
       },
       "usage": {
-        "propsExamples": {
-          "values": {"name": "John Doe", "email": "john@example.com"},
-          "onChange": "function(field, value) { setFormData(prev => ({...prev, [field]: value})); }",
-          "onSubmit": "function() { submitForm(); }"
-        },
-        "stateExamples": {
-          "formData": {"name": "", "email": ""},
-          "isSubmitting": false,
-          "errors": {}
-        }
-      }
+        "integrationExample": "<DataForm onSubmit={handleSubmit} values={data} onChange={handleChange} />",
+        "propsExamples": {"values": {"content": "test"}, "onSubmit": "function", "onChange": "function"},
+        "stateExamples": {"formData": {"content": ""}, "isSubmitting": false, "errors": {}},
+        "eventHandlingExamples": "Handle form events with validation"
+      },
+      "description": "Modern data input form with matrix green theme"
     }
   ],
   "integrationCode": {
-    "databaseOperations": "const result = await database.create('ModelName', data);",
-    "externalAPIIntegration": "const response = await fetch('/api/endpoint', { method: 'POST', body: JSON.stringify(data) });",
-    "errorHandling": "try { /* operation */ } catch (error) { console.error('Error:', error); throw error; }"
+    "actionRegistration": "system.registerAction({id: 'data-action', handler: processData});",
+    "routeHandler": "app.post('/api/data', async (req, res) => { const result = await processData(db, req.body, req.user); res.json(result); });",
+    "permissionChecks": "function checkPermissions(user) { return user.role === 'admin' || user.role === 'user'; }",
+    "errorHandling": "try { await processData(); } catch (error) { console.error(error); throw error; }"
   },
-  "testCases": [
-    {
-      "testName": "Successful data processing",
-      "mockData": {
-        "input": {"userId": "test-123", "message": "Test message"},
-        "database": {"create": "mockFunction", "update": "mockFunction"},
-        "member": {"id": "member-123", "role": "user"}
-      },
-      "expectedResult": {
-        "success": true,
-        "data": {"id": "created-123", "status": "processed"},
-        "message": "Data processed successfully"
-      }
-    },
-    {
-      "testName": "Input validation error",
-      "mockData": {
-        "input": {"userId": "", "message": ""},
-        "database": {"create": "mockFunction"},
-        "member": {"id": "member-123", "role": "user"}
-      },
-      "expectedResult": {
-        "success": false,
-        "error": "Validation failed: userId and message are required",
-        "data": null
-      }
-    },
-    {
-      "testName": "Database operation error",
-      "mockData": {
-        "input": {"userId": "test-123", "message": "Test message"},
-        "database": {"create": "mockErrorFunction"},
-        "member": {"id": "member-123", "role": "user"}
-      },
-      "expectedResult": {
-        "success": false,
-        "error": "Database operation failed",
-        "data": null
-      }
-    }
-  ]
+  "executionInstructions": {
+    "mainFunctionUsage": "const fn = new Function('database', 'input', 'member', functionBody); await fn(db, data, user);",
+    "parameterSetup": "const db = getDatabase(); const input = req.body; const member = req.user;",
+    "errorHandling": "try { const result = await execute(); } catch (error) { handleError(error); }",
+    "testingInstructions": "Run test cases to verify functionality"
+  }
 }
 
-CRITICAL REQUIREMENTS:
-- NEVER return undefined for any required field
-- ALL objects must be actual objects with proper structure
-- ALL arrays must contain actual objects, not empty or undefined
-- testCases MUST have exactly 3 test cases with real mockData and expectedResult objects
-- uiComponents MUST have at least 1 component with all required fields
-- integrationCode MUST be an object with actual code strings
-
-Generate ONLY valid objects that match this exact structure. Do not use placeholders, undefined values, or string descriptions where objects are required.`
+Generate using this exact structure with all object fields properly filled.`
             }
           ],
           temperature: 0.1
         });
 
-        console.log('✅ Enhanced action code generation recovered successfully with proper object structure');
-        return retryResult.object;
+        console.log('✅ Enhanced action code generation recovered successfully');
+        return fixedResult.object;
       } catch (retryError) {
-        console.error('❌ Enhanced action code generation failed even after retry:', retryError);
-        throw error; // Throw original error
+        console.error('❌ Enhanced action code generation retry failed:', retryError);
+        throw error; // Throw original error for debugging
       }
     }
     
-    // If it's not a validation error we can handle, throw the original error
     throw error;
   }
 }

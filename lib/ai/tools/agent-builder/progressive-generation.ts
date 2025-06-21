@@ -149,7 +149,7 @@ async function generateActionCore(
   options: ProgressiveGenerationOptions,
   context: { fallbackLevel: number }
 ): Promise<ActionCodeCore> {
-  const model = getAgentBuilderModel();
+  const model = await getAgentBuilderModel();
   
   try {
     const result = await generateObject({
@@ -206,7 +206,7 @@ async function generateActionUI(
   options: ProgressiveGenerationOptions,
   context: { core: ActionCodeCore; fallbackLevel: number }
 ): Promise<ActionUIComponents> {
-  const model = getAgentBuilderModel();
+  const model = await getAgentBuilderModel();
   
   try {
     const result = await generateObject({
@@ -263,7 +263,7 @@ async function generateActionHelpers(
   options: ProgressiveGenerationOptions,
   context: { core: ActionCodeCore; ui: ActionUIComponents; fallbackLevel: number }
 ): Promise<ActionHelpers> {
-  const model = getAgentBuilderModel();
+  const model = await getAgentBuilderModel();
   
   try {
     const result = await generateObject({
@@ -320,7 +320,7 @@ async function generateActionTests(
   options: ProgressiveGenerationOptions,
   context: { core: ActionCodeCore; ui: ActionUIComponents; helpers: ActionHelpers; fallbackLevel: number }
 ): Promise<ActionTestCases> {
-  const model = getAgentBuilderModel();
+  const model = await getAgentBuilderModel();
   
   try {
     const result = await generateObject({
@@ -382,7 +382,7 @@ async function generateActionIntegration(
     fallbackLevel: number 
   }
 ): Promise<ActionIntegration> {
-  const model = getAgentBuilderModel();
+  const model = await getAgentBuilderModel();
   
   try {
     const result = await generateObject({
@@ -440,7 +440,7 @@ Create production-ready integration code including registration, deployment, and
 async function generateSimplifiedEnhancedAction(
   options: ProgressiveGenerationOptions
 ): Promise<ProgressiveGenerationResult> {
-  const model = getAgentBuilderModel();
+  const model = await getAgentBuilderModel();
   
   console.log('🔄 Using simplified fallback generation');
   

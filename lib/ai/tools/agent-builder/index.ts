@@ -354,7 +354,7 @@ export const agentBuilder = ({
     console.log(`📄 Created document with ID: ${documentId}`);
 
     // Initialize step metadata for persistence with error recovery
-    let stepMetadata = {
+    let stepMetadata: any = {
       currentStep: 'prompt-understanding',
       stepProgress: {},
       stepMessages: {},
@@ -401,8 +401,12 @@ export const agentBuilder = ({
     }
 
     // Add timeout protection with better error handling (after existingAgent is defined)
+    let isProcessCancelled = false;
+    let timeoutId: NodeJS.Timeout | null = null;
+    
     const processTimeout = setTimeout(() => {
       console.warn('⚠️ Agent builder process timeout detected');
+      isProcessCancelled = true;
       
       // Update metadata to indicate timeout
       stepMetadata = {
@@ -411,42 +415,121 @@ export const agentBuilder = ({
         currentStep: 'timeout',
         stepProgress: {
           ...stepMetadata.stepProgress,
-          'timeout': 'failed'
+          'timeout': 'timeout'
         },
         stepMessages: {
           ...stepMetadata.stepMessages,
           'timeout': 'Process timed out - can be resumed'
         },
-        lastUpdateTimestamp: new Date().toISOString()
+        lastUpdateTimestamp: new Date().toISOString(),
+        canResume: true,
+        timeoutOccurred: true
       };
 
-      // Save timeout state to allow recovery
+      // Preserve existing agent data if available to prevent corruption
+      const timeoutContent = {
+        status: 'timeout',
+        step: 'timeout',
+        message: 'Process timed out - can be resumed',
+        partialData: existingAgent || null,
+        canResume: true,
+        timeoutTimestamp: new Date().toISOString(),
+        originalCommand: command,
+        operation: currentOperation,
+        // Preserve any progress made so far
+        ...(existingAgent && {
+          name: existingAgent.name || 'Agent Building Timeout',
+          description: existingAgent.description || '',
+          domain: existingAgent.domain || '',
+          models: existingAgent.models || [],
+          actions: existingAgent.actions || [],
+          schedules: existingAgent.schedules || [],
+          enums: existingAgent.enums || []
+        })
+      };
+
+      // Save timeout state to allow recovery - use a more robust approach
       saveDocumentWithContent(
         documentId, 
-        'Agent Building Timeout', 
-        JSON.stringify({
-          status: 'timeout',
-          step: 'timeout',
-          message: 'Process timed out - can be resumed',
-          partialData: existingAgent || null,
-          canResume: true
-        }, null, 2), 
+        existingAgent?.name || 'Agent Building Timeout', 
+        JSON.stringify(timeoutContent, null, 2), 
         session, 
         undefined, 
         stepMetadata
-      ).catch(err => {
-        console.error('Failed to save timeout state:', err);
+      ).then(() => {
+        console.log('✅ Timeout state saved successfully');
+      }).catch(err => {
+        console.error('❌ Failed to save timeout state:', err);
+        // Try a simpler fallback save with valid agent structure
+        try {
+          const fallbackAgent = {
+            name: existingAgent?.name || 'Agent Building Timeout',
+            description: existingAgent?.description || 'Agent building process timed out',
+            domain: existingAgent?.domain || '',
+            models: existingAgent?.models || [],
+            actions: existingAgent?.actions || [],
+            schedules: existingAgent?.schedules || [],
+            enums: existingAgent?.enums || [],
+            createdAt: existingAgent?.createdAt || new Date().toISOString(),
+            // Add timeout metadata within the agent structure
+            _timeout: {
+              status: 'timeout',
+              canResume: true,
+              timeoutTimestamp: new Date().toISOString(),
+              originalCommand: command,
+              operation: currentOperation
+            }
+          };
+          
+          saveDocumentWithContent(
+            documentId,
+            fallbackAgent.name,
+            JSON.stringify(fallbackAgent, null, 2),
+            session,
+            undefined,
+            stepMetadata
+          );
+          console.log('✅ Fallback timeout state saved with valid agent structure');
+        } catch (fallbackError) {
+          console.error('❌ Fallback timeout save also failed:', fallbackError);
+        }
       });
 
       dataStream.writeData({
         type: 'agent-step',
         content: JSON.stringify({ 
           step: 'timeout', 
-          status: 'failed',
-          message: 'Process timed out - refresh to resume'
+          status: 'timeout',
+          message: 'Process timed out - refresh to resume',
+          canResume: true,
+          documentId: documentId
         })
       });
+      
+      // Send completion signal to stop the stream
+      dataStream.writeData({ type: 'finish', content: 'Process timed out. Your progress has been saved and you can resume by refreshing the page.' });
+      
     }, 270000); // 270 seconds (4.5 minutes)
+    
+    timeoutId = processTimeout;
+
+    // Helper function to check if process should continue
+    const shouldContinueProcessing = () => {
+      if (isProcessCancelled) {
+        console.log('🛑 Process cancelled due to timeout');
+        return false;
+      }
+      return true;
+    };
+
+    // Helper function to clear timeout on successful completion
+    const clearProcessTimeout = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+        console.log('✅ Process timeout cleared');
+      }
+    };
 
     try {
       // Analyze conversation context
@@ -491,6 +574,16 @@ export const agentBuilder = ({
       }, null, 2), session, undefined, stepMetadata);
 
       const promptUnderstanding = await generatePromptUnderstanding(command, existingAgent || undefined);
+      
+      // Check if process was cancelled during generation
+      if (!shouldContinueProcessing()) {
+        return {
+          id: documentId,
+          title: 'Agent Building Timeout',
+          kind: 'agent' as const,
+          content: 'Process timed out during prompt understanding phase'
+        };
+      }
       
       console.log('🎯 Prompt Understanding Complete:', JSON.stringify(promptUnderstanding, null, 2));
       
@@ -537,6 +630,16 @@ export const agentBuilder = ({
         });
 
         granularChanges = await generateGranularChangeAnalysis(command, promptUnderstanding as PromptUnderstanding, existingAgent || undefined);
+
+        // Check if process was cancelled during generation
+        if (!shouldContinueProcessing()) {
+          return {
+            id: documentId,
+            title: 'Agent Building Timeout',
+            kind: 'agent' as const,
+            content: 'Process timed out during granular analysis phase'
+          };
+        }
 
         console.log('🎯 Granular Change Analysis Complete:', JSON.stringify(granularChanges.object, null, 2));
         
@@ -592,6 +695,16 @@ export const agentBuilder = ({
       }, null, 2), session, undefined, stepMetadata);
 
       const decision = await generateDecision(command, conversationContext, promptUnderstanding as PromptUnderstanding, existingAgent || undefined, granularChanges, currentOperation);
+      
+      // Check if process was cancelled during generation
+      if (!shouldContinueProcessing()) {
+        return {
+          id: documentId,
+          title: 'Agent Building Timeout',
+          kind: 'agent' as const,
+          content: 'Process timed out during decision analysis phase'
+        };
+      }
       
       console.log('🎯 AI Decision made:', JSON.stringify(decision.object, null, 2));
       
@@ -810,6 +923,16 @@ export const agentBuilder = ({
 
         const databaseResult = await generateDatabase(promptUnderstanding as PromptUnderstanding, existingAgent || undefined, changeAnalysis, agentOverview, conversationContext, command);
         
+        // Check if process was cancelled during generation
+        if (!shouldContinueProcessing()) {
+          return {
+            id: documentId,
+            title: 'Agent Building Timeout',
+            kind: 'agent' as const,
+            content: 'Process timed out during database generation phase'
+          };
+        }
+        
         // Critical safety check: If AI generated empty results but we have existing data,
         // and the user was expecting new items, don't proceed with empty results
         let finalDatabaseResult = databaseResult;
@@ -951,6 +1074,16 @@ export const agentBuilder = ({
         });
 
         const actionsResult = await generateActions(promptUnderstanding as PromptUnderstanding, databaseResults || { models: [], enums: [] }, existingAgent || undefined, changeAnalysis, agentOverview, conversationContext, command);
+        
+        // Check if process was cancelled during generation
+        if (!shouldContinueProcessing()) {
+          return {
+            id: documentId,
+            title: 'Agent Building Timeout',
+            kind: 'agent' as const,
+            content: 'Process timed out during actions generation phase'
+          };
+        }
         
         // Critical safety check: If AI generated empty results but we have existing data,
         // and the user was expecting new items, don't proceed with empty results
@@ -1299,7 +1432,7 @@ export const agentBuilder = ({
       }
 
       // Clear timeout on successful completion
-      clearTimeout(processTimeout);
+      clearProcessTimeout();
 
       // Save document with intelligent merging to preserve existing data
       await saveDocumentWithContent(

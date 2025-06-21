@@ -59,8 +59,20 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
         isLoading,
         isAutoRetrying,
         persistedMetadata: persistedMetadata?.status,
-        currentStep: persistedMetadata?.currentStep
+        currentStep: persistedMetadata?.currentStep,
+        timeoutOccurred: persistedMetadata?.timeoutOccurred
       });
+      
+      // Only auto-retry if timeout actually occurred (not just old timeout state)
+      const timeoutTimestamp = persistedMetadata?.timeoutTimestamp;
+      const isRecentTimeout = timeoutTimestamp && 
+        (new Date().getTime() - new Date(timeoutTimestamp).getTime()) < 300000; // 5 minutes
+      
+      if (!isRecentTimeout && !persistedMetadata?.timeoutOccurred) {
+        console.log('⚠️ Timeout state detected but not recent or confirmed, skipping auto-retry');
+        return;
+      }
+      
       setAutoRetryAttempted(true);
       
       // Start 10-second countdown
@@ -81,7 +93,6 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
           });
           
           // Trigger retry by simulating a resume action
-          // This would need to be connected to the parent chat component
           const retryEvent = new CustomEvent('agent-builder-auto-retry', {
             detail: { 
               documentId: args?.documentId,
@@ -521,7 +532,39 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
     const content = documents?.[0]?.content;
     if (!content) return null;
     try {
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      
+      // Check if this is a timeout state document
+      if (parsed.status === 'timeout' || parsed._timeout) {
+        console.log('🔄 Detected timeout state in document:', {
+          status: parsed.status,
+          hasTimeoutMeta: !!parsed._timeout,
+          canResume: parsed.canResume || parsed._timeout?.canResume
+        });
+        
+        // If it has partial agent data, use that
+        if (parsed.partialData) {
+          return {
+            ...parsed.partialData,
+            _timeout: parsed._timeout || {
+              status: 'timeout',
+              canResume: parsed.canResume,
+              timeoutTimestamp: parsed.timeoutTimestamp,
+              originalCommand: parsed.originalCommand
+            }
+          };
+        }
+        
+        // If it's already a valid agent structure with timeout metadata
+        if (parsed.name && (parsed.models || parsed.actions)) {
+          return parsed;
+        }
+        
+        // Otherwise, it's just timeout metadata
+        return null;
+      }
+      
+      return parsed;
     } catch (e) {
       console.error('Failed to parse agent data:', e);
       return null;
@@ -566,6 +609,7 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
   }
 
   const isSuccess = !!agentData; // Consider it success if we have valid agent data
+  const isTimeoutState = agentData?._timeout || agentData?.status === 'timeout';
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -575,16 +619,28 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-4 flex-1 min-w-0">
               <div className="size-12 bg-green-500/10 backdrop-blur-sm rounded-2xl flex items-center justify-center shrink-0 border border-green-500/20">
-                <span className="text-green-400 text-xl">🤖</span>
+                <span className="text-green-400 text-xl">
+                  {isTimeoutState ? '⏱️' : '🤖'}
+                </span>
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-xl font-semibold text-green-100">{agentData.name}</h3>
-                <p className="text-green-300/70 text-sm">{agentData.domain || 'AI Agent System'}</p>
+                <h3 className="text-xl font-semibold text-green-100">
+                  {agentData.name}
+                  {isTimeoutState && <span className="text-yellow-400 ml-2">(Timeout)</span>}
+                </h3>
+                <p className="text-green-300/70 text-sm">
+                  {isTimeoutState ? 'Building process timed out - can be resumed' : (agentData.domain || 'AI Agent System')}
+                </p>
               </div>
             </div>
-            {isSuccess && (
+            {isSuccess && !isTimeoutState && (
               <div className="bg-green-500/20 backdrop-blur-sm px-3 py-1.5 rounded-full shrink-0 border border-green-500/30">
                 <span className="text-green-200 text-xs font-medium font-mono">✅ READY</span>
+              </div>
+            )}
+            {isTimeoutState && (
+              <div className="bg-yellow-500/20 backdrop-blur-sm px-3 py-1.5 rounded-full shrink-0 border border-yellow-500/30">
+                <span className="text-yellow-200 text-xs font-medium font-mono">⏱️ TIMEOUT</span>
               </div>
             )}
           </div>
@@ -592,6 +648,31 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
 
         {/* Content */}
         <div className="p-6 space-y-6 bg-black">
+          {/* Timeout Warning */}
+          {isTimeoutState && (
+            <div className="bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <span className="text-yellow-400 text-lg">⏱️</span>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-yellow-100 text-sm mb-2">Building Process Timed Out</h4>
+                  <p className="text-yellow-300/80 text-sm mb-2">
+                    The agent building process was interrupted but your progress has been saved.
+                  </p>
+                  {agentData._timeout?.originalCommand && (
+                    <p className="text-yellow-300/60 text-xs">
+                      <strong>Original request:</strong> {agentData._timeout.originalCommand}
+                    </p>
+                  )}
+                  {agentData._timeout?.timeoutTimestamp && (
+                    <p className="text-yellow-300/60 text-xs mt-1">
+                      <strong>Timeout occurred:</strong> {new Date(agentData._timeout.timeoutTimestamp).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Description */}
           {agentData.description && (
             <div className="bg-zinc-900/50 border border-green-500/10 rounded-xl p-4">
@@ -720,24 +801,59 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-3">
-            <Button
-              onClick={openAgentBuilder}
-              className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-black border-0 rounded-xl h-11 shadow-lg shadow-green-500/20 font-mono font-medium"
-              disabled={isReadonly}
-            >
-              <CodeIcon size={16} />
-              <span className="ml-2">OPEN BUILDER</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="sm:w-auto border-green-500/30 text-green-300 hover:bg-green-500/10 hover:text-green-200 hover:border-green-500/50 rounded-xl h-11 font-mono"
-              onClick={() => {
-                const agentJson = JSON.stringify(agentData, null, 2);
-                navigator.clipboard.writeText(agentJson);
-              }}
-            >
-              📋 COPY CONFIG
-            </Button>
+            {isTimeoutState ? (
+              <>
+                <Button
+                  onClick={() => {
+                    // Trigger resume by sending a continue message
+                    const retryEvent = new CustomEvent('agent-builder-auto-retry', {
+                      detail: { 
+                        documentId: result.id,
+                        command: agentData._timeout?.originalCommand || 'Resume agent building',
+                        operation: 'resume'
+                      }
+                    });
+                    window.dispatchEvent(retryEvent);
+                    console.log('Manual resume agent building clicked from AgentSummary');
+                  }}
+                  className="flex-1 bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-700 hover:to-yellow-800 text-black border-0 rounded-xl h-11 shadow-lg shadow-yellow-500/20 font-mono font-medium"
+                  disabled={isReadonly}
+                >
+                  <span className="mr-2">⏯️</span>
+                  <span>RESUME BUILDING</span>
+                </Button>
+                <Button
+                  onClick={openAgentBuilder}
+                  variant="outline"
+                  className="sm:w-auto border-green-500/30 text-green-300 hover:bg-green-500/10 hover:text-green-200 hover:border-green-500/50 rounded-xl h-11 font-mono"
+                  disabled={isReadonly}
+                >
+                  <CodeIcon size={16} />
+                  <span className="ml-2">VIEW PROGRESS</span>
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button
+                  onClick={openAgentBuilder}
+                  className="flex-1 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-black border-0 rounded-xl h-11 shadow-lg shadow-green-500/20 font-mono font-medium"
+                  disabled={isReadonly}
+                >
+                  <CodeIcon size={16} />
+                  <span className="ml-2">OPEN BUILDER</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="sm:w-auto border-green-500/30 text-green-300 hover:bg-green-500/10 hover:text-green-200 hover:border-green-500/50 rounded-xl h-11 font-mono"
+                  onClick={() => {
+                    const agentJson = JSON.stringify(agentData, null, 2);
+                    navigator.clipboard.writeText(agentJson);
+                  }}
+                >
+                  📋 COPY CONFIG
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Footer */}

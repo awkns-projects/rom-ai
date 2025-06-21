@@ -30,7 +30,7 @@ import type { UseChatHelpers } from '@ai-sdk/react';
 import { useArtifact } from '@/hooks/use-artifact';
 
 // Add new imports for action running
-import { executeActionWithUI, getDatabaseDataForStep, createMockDatabase, ActionRunState } from '../../../lib/ai/tools/agent-builder/utils';
+import { executeActionWithUI, getDatabaseDataForStep, createMockDatabase, ActionRunState } from '../../lib/ai/tools/agent-builder/utils';
 
 interface AgentModel {
   id: string;
