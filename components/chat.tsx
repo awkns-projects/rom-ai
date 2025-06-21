@@ -143,10 +143,10 @@ export function Chat({
       experimental_resume();
     };
 
-    window.addEventListener('agent-builder-auto-retry', handleAutoRetry);
+    window.addEventListener('agent-builder-retry', handleAutoRetry);
 
     return () => {
-      window.removeEventListener('agent-builder-auto-retry', handleAutoRetry);
+      window.removeEventListener('agent-builder-retry', handleAutoRetry);
     };
   }, [experimental_resume]);
 
