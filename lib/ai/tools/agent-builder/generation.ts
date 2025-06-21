@@ -182,12 +182,61 @@ CHANGE ANALYSIS:
 ${JSON.stringify(changeAnalysis, null, 2)}
 ` : ''}
 
+CRITICAL ID FIELD NAMING RULES:
+1. Every model MUST have "id" as the primary key field name (NOT productId, userId, etc.)
+2. The idField property MUST always be set to "id"
+3. Relationship fields (foreign keys) CAN use descriptive names like "userId", "productId", etc.
+4. Primary key fields should have type "String", isId: true, unique: true, required: true
+
+CRITICAL RELATION FIELD RULES:
+1. Relation fields MUST have relationField: true
+2. Relation fields MUST have kind: "object" (NOT "scalar")
+3. Relation fields MUST have type set to the target model name (e.g., "User", "Product")
+4. Foreign key fields like "userId" should reference the "User" model
+5. LIST RELATION FIELDS: If list: true AND relationField: true, field name should be plural (e.g., "productIds", "userIds")
+6. LIST RELATION FIELDS: Should have defaultValue: [] to indicate empty array
+
+EXAMPLE CORRECT MODELS:
+{
+  "name": "Order",
+  "idField": "id",
+  "fields": [
+    {
+      "name": "id",
+      "type": "String",
+      "isId": true,
+      "unique": true,
+      "required": true,
+      "kind": "scalar",
+      "relationField": false
+    },
+    {
+      "name": "userId", 
+      "type": "User",
+      "isId": false,
+      "kind": "object",
+      "relationField": true,
+      "list": false
+    },
+    {
+      "name": "productIds",
+      "type": "Product", 
+      "isId": false,
+      "kind": "object",
+      "relationField": true,
+      "list": true,
+      "defaultValue": []
+    }
+  ]
+}
+
 Design models that:
 1. Support all the required business features
 2. Have proper relationships and constraints
 3. Include appropriate enums for predefined values
 4. Follow database best practices
 5. Are optimized for the intended use cases
+6. ALWAYS use "id" as the primary key field name
 
 Each model should have:
 - A clear purpose and description
@@ -195,6 +244,7 @@ Each model should have:
 - All necessary fields with correct types
 - Proper relationships to other models
 - Display fields for UI purposes
+- PRIMARY KEY FIELD ALWAYS NAMED "id"
 
 Each enum should have:
 - A clear purpose
@@ -207,29 +257,113 @@ Each enum should have:
 
   console.log('✅ Database generation complete');
   
-  // Fix models to ensure they have all required fields
-  const fixedModels = (result.object.models || []).map((model: any) => ({
-    ...model,
-    id: model.id || `model_${model.name.toLowerCase().replace(/\s+/g, '_')}`,
-    emoji: model.emoji || '📊',
-    description: model.description || `${model.name} data model`,
-    hasPublishedField: model.hasPublishedField || false,
-    idField: model.idField || 'id',
-    displayFields: model.displayFields || [model.idField || 'id'],
-    fields: (model.fields || []).map((field: any) => ({
-      ...field,
-      id: field.id || `field_${field.name.toLowerCase().replace(/\s+/g, '_')}`,
-      title: field.title || field.name,
-      kind: field.kind || 'scalar',
-      relationField: field.relationField || false,
-      sort: field.sort !== undefined ? field.sort : true,
-      order: field.order || 0,
-      defaultValue: field.defaultValue || undefined
-    })),
-    enums: model.enums || [],
-    forms: model.forms || [],
-    records: model.records || []
-  }));
+  // Helper function to intelligently select display fields
+  function selectDisplayFields(fields: any[]): string[] {
+    const priorityFields = ['name', 'title', 'label', 'email', 'username'];
+    const fallbackFields = ['description', 'text', 'content', 'value'];
+    
+    // Look for priority fields first
+    for (const priority of priorityFields) {
+      const field = fields.find(f => f.name.toLowerCase() === priority);
+      if (field) {
+        return [field.name];
+      }
+    }
+    
+    // Look for fallback fields
+    for (const fallback of fallbackFields) {
+      const field = fields.find(f => f.name.toLowerCase().includes(fallback));
+      if (field) {
+        return [field.name];
+      }
+    }
+    
+    // If no suitable field found, look for non-ID string fields
+    const stringFields = fields.filter(f => 
+      !f.isId && 
+      f.type === 'String' && 
+      !f.relationField &&
+      !f.name.toLowerCase().includes('id')
+    );
+    
+    if (stringFields.length > 0) {
+      return [stringFields[0].name];
+    }
+    
+    // Last resort: use 'id' only if no other suitable fields exist
+    return ['id'];
+  }
+
+  // Fix models to ensure they have all required fields and FORCE idField to be "id"
+  const fixedModels = (result.object.models || []).map((model: any) => {
+    const modelFields = (model.fields || []).map((field: any) => {
+      // If this is the primary key field, ensure it's named "id"
+      if (field.isId || field.name === model.idField) {
+        return {
+          ...field,
+          id: field.id || `field_id`,
+          name: 'id', // Force primary key field name to be "id"
+          title: field.title || 'ID',
+          type: 'String',
+          isId: true,
+          unique: true,
+          required: true,
+          kind: 'scalar',
+          relationField: false,
+          sort: field.sort !== undefined ? field.sort : true,
+          order: field.order || 0,
+          defaultValue: field.defaultValue || undefined
+        };
+      }
+      
+      // For other fields, keep their names as-is (allows userId, productId, etc. for relationships)
+      return {
+        ...field,
+        id: field.id || `field_${field.name.toLowerCase().replace(/\s+/g, '_')}`,
+        title: field.title || field.name,
+        kind: field.relationField ? 'object' : (field.kind || 'scalar'), // Force relation fields to have kind: 'object'
+        relationField: field.relationField || false,
+        list: field.list || false,
+        // Handle list relation fields with proper naming and structure
+        ...(field.relationField && field.list ? {
+          // For list relation fields, ensure plural naming (e.g., productIds, userIds)
+          name: field.name.endsWith('Ids') || field.name.endsWith('ids') 
+            ? field.name 
+            : field.name.endsWith('Id') 
+              ? field.name + 's'  // Convert "productId" to "productIds"
+              : field.name.endsWith('id')
+                ? field.name + 's'  // Convert "productid" to "productids"
+                : field.name + 'Ids', // Add "Ids" suffix for other cases
+          defaultValue: field.defaultValue !== undefined ? field.defaultValue : []
+        } : {}),
+        // For relation fields, ensure type is a model name, not a primitive type
+        type: field.relationField && field.type && ['String', 'Int', 'Float', 'Boolean'].includes(field.type) 
+          ? field.name.replace(/Id$/, '') // Convert "userId" to "User", "categoryId" to "Category"
+          : field.type,
+        sort: field.sort !== undefined ? field.sort : true,
+        order: field.order || 0,
+        defaultValue: field.relationField && field.list 
+          ? (field.defaultValue !== undefined ? field.defaultValue : [])
+          : (field.defaultValue || undefined)
+      };
+    });
+
+    return {
+      ...model,
+      id: model.id || `model_${model.name.toLowerCase().replace(/\s+/g, '_')}`,
+      emoji: model.emoji || '📊',
+      description: model.description || `${model.name} data model`,
+      hasPublishedField: model.hasPublishedField || false,
+      idField: 'id', // ALWAYS force this to be "id", regardless of what AI generated
+      displayFields: model.displayFields && model.displayFields.length > 0 
+        ? model.displayFields 
+        : selectDisplayFields(modelFields), // Use intelligent selection instead of ['id']
+      fields: modelFields,
+      enums: model.enums || [],
+      forms: model.forms || [],
+      records: model.records || []
+    };
+  });
 
   const fixedEnums = (result.object.enums || []).map((enumItem: any) => ({
     ...enumItem,

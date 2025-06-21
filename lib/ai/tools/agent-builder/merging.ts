@@ -76,13 +76,38 @@ export function performDeepMerge(
   // Intelligent array merging for models
   merged.models = mergeModelsIntelligently(safeExistingModels, safeIncomingModels);
   
+  // Critical safety check: If merged result has fewer items than existing and incoming was empty,
+  // this indicates a potential data loss scenario - preserve existing data
+  if (safeExistingModels.length > 0 && safeIncomingModels.length === 0 && merged.models.length === 0) {
+    console.log('🚨 CRITICAL SAFETY CHECK: Merged models resulted in empty array when existing data exists');
+    console.log('🛡️ Preserving existing models to prevent data loss');
+    merged.models = safeExistingModels;
+  }
+  
   // Intelligent array merging for actions
   merged.actions = mergeActionsIntelligently(safeExistingActions, safeIncomingActions);
+  
+  // Critical safety check: If merged result has fewer items than existing and incoming was empty,
+  // this indicates a potential data loss scenario - preserve existing data
+  if (safeExistingActions.length > 0 && safeIncomingActions.length === 0 && merged.actions.length === 0) {
+    console.log('🚨 CRITICAL SAFETY CHECK: Merged actions resulted in empty array when existing data exists');
+    console.log('🛡️ Preserving existing actions to prevent data loss');
+    merged.actions = safeExistingActions;
+  }
   
   // Intelligent array merging for schedules
   merged.schedules = mergeSchedulesIntelligently(safeExistingSchedules, safeIncomingSchedules);
   
   console.log('📊 Deep merge completed with comprehensive metadata preservation');
+  console.log(`📊 Final result: ${merged.models?.length || 0} models, ${merged.actions?.length || 0} actions, ${merged.schedules?.length || 0} schedules`);
+  
+  // Final validation: Ensure we never have fewer items than we started with unless explicitly deleted
+  if ((merged.models?.length || 0) < (existing.models?.length || 0) && !deletionOperations?.modelsToDelete?.length) {
+    console.warn(`⚠️ WARNING: Model count decreased from ${existing.models?.length || 0} to ${merged.models?.length || 0} without explicit deletion operations`);
+  }
+  if ((merged.actions?.length || 0) < (existing.actions?.length || 0) && !deletionOperations?.actionsToDelete?.length) {
+    console.warn(`⚠️ WARNING: Action count decreased from ${existing.actions?.length || 0} to ${merged.actions?.length || 0} without explicit deletion operations`);
+  }
   
   return merged;
 }
@@ -169,18 +194,95 @@ export function mergeFieldsIntelligently(existing: AgentField[], incoming: Agent
     if (existingById) {
       // Update existing field by ID
       const index = merged.findIndex(f => f.id === incomingField.id);
-      merged[index] = { ...existingById, ...incomingField };
+      const updatedField = { ...existingById, ...incomingField };
+      // Apply relation field fixes
+      if (updatedField.relationField) {
+        updatedField.kind = 'object';
+        // For relation fields, ensure type is a model name, not a primitive type
+        if (updatedField.type && ['String', 'Int', 'Float', 'Boolean'].includes(updatedField.type)) {
+          updatedField.type = updatedField.name.replace(/Id$/, ''); // Convert "userId" to "User"
+        }
+        // Handle list relation fields with proper naming and structure
+        if (updatedField.list) {
+          // Ensure plural naming for list relation fields
+          if (!updatedField.name.endsWith('Ids') && !updatedField.name.endsWith('ids')) {
+            if (updatedField.name.endsWith('Id')) {
+              updatedField.name = updatedField.name + 's'; // Convert "productId" to "productIds"
+            } else if (updatedField.name.endsWith('id')) {
+              updatedField.name = updatedField.name + 's'; // Convert "productid" to "productids"
+            } else {
+              updatedField.name = updatedField.name + 'Ids'; // Add "Ids" suffix for other cases
+            }
+          }
+          // Ensure default value is an empty array
+          if (updatedField.defaultValue === undefined) {
+            updatedField.defaultValue = [];
+          }
+        }
+      }
+      merged[index] = updatedField;
       
     } else if (existingByName && !incomingField.id) {
       // Update existing field by name
       const index = merged.findIndex(f => f.name === incomingField.name);
-      merged[index] = { ...existingByName, ...incomingField, id: existingByName.id };
+      const updatedField = { ...existingByName, ...incomingField, id: existingByName.id };
+      // Apply relation field fixes
+      if (updatedField.relationField) {
+        updatedField.kind = 'object';
+        // For relation fields, ensure type is a model name, not a primitive type
+        if (updatedField.type && ['String', 'Int', 'Float', 'Boolean'].includes(updatedField.type)) {
+          updatedField.type = updatedField.name.replace(/Id$/, ''); // Convert "userId" to "User"
+        }
+        // Handle list relation fields with proper naming and structure
+        if (updatedField.list) {
+          // Ensure plural naming for list relation fields
+          if (!updatedField.name.endsWith('Ids') && !updatedField.name.endsWith('ids')) {
+            if (updatedField.name.endsWith('Id')) {
+              updatedField.name = updatedField.name + 's'; // Convert "productId" to "productIds"
+            } else if (updatedField.name.endsWith('id')) {
+              updatedField.name = updatedField.name + 's'; // Convert "productid" to "productids"
+            } else {
+              updatedField.name = updatedField.name + 'Ids'; // Add "Ids" suffix for other cases
+            }
+          }
+          // Ensure default value is an empty array
+          if (updatedField.defaultValue === undefined) {
+            updatedField.defaultValue = [];
+          }
+        }
+      }
+      merged[index] = updatedField;
       
     } else if (!existingIds.has(incomingField.id) && !existingNames.has(incomingField.name)) {
       // Add new field
       const newField = { ...incomingField };
       if (!newField.id) {
         newField.id = generateUUID();
+      }
+      // Apply relation field fixes
+      if (newField.relationField) {
+        newField.kind = 'object';
+        // For relation fields, ensure type is a model name, not a primitive type
+        if (newField.type && ['String', 'Int', 'Float', 'Boolean'].includes(newField.type)) {
+          newField.type = newField.name.replace(/Id$/, ''); // Convert "userId" to "User"
+        }
+        // Handle list relation fields with proper naming and structure
+        if (newField.list) {
+          // Ensure plural naming for list relation fields
+          if (!newField.name.endsWith('Ids') && !newField.name.endsWith('ids')) {
+            if (newField.name.endsWith('Id')) {
+              newField.name = newField.name + 's'; // Convert "productId" to "productIds"
+            } else if (newField.name.endsWith('id')) {
+              newField.name = newField.name + 's'; // Convert "productid" to "productids"
+            } else {
+              newField.name = newField.name + 'Ids'; // Add "Ids" suffix for other cases
+            }
+          }
+          // Ensure default value is an empty array
+          if (newField.defaultValue === undefined) {
+            newField.defaultValue = [];
+          }
+        }
       }
       merged.push(newField);
     }

@@ -471,6 +471,56 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
 });
 AgentSummary.displayName = 'AgentSummary';
 
+// Agent Builder with Streaming Summary Component
+const AgentBuilderWithStreamingSummary = memo(({ args, message, isReadonly, chatId }: { 
+  args: any; 
+  message?: UIMessage; 
+  isReadonly: boolean; 
+  chatId: string; 
+}) => {
+  const { artifact } = useArtifact();
+  
+  // Show partial agent summary during streaming if we have agent data
+  const showPartialSummary = artifact?.kind === 'agent' && 
+                             artifact?.content && 
+                             artifact?.status === 'streaming';
+  
+  let partialResult = null;
+  if (showPartialSummary) {
+    try {
+      const agentData = JSON.parse(artifact.content);
+      // Only show if we have some meaningful data (not just defaults)
+      if (agentData && (
+        (agentData.name && agentData.name !== 'New Agent' && agentData.name !== 'AI Agent System') ||
+        (agentData.models && agentData.models.length > 0) ||
+        (agentData.actions && agentData.actions.length > 0)
+      )) {
+        // Create a partial result object for the AgentSummary component
+        partialResult = {
+          id: artifact.documentId,
+          title: agentData.name || 'AI Agent System',
+          kind: 'agent',
+          content: `Building in progress: ${agentData.name || 'AI Agent System'}`
+        };
+      }
+    } catch (e) {
+      // Ignore parsing errors during streaming
+    }
+  }
+  
+  return (
+    <div>
+      <AgentBuilderLoading args={args} message={message} />
+      {partialResult && (
+        <div className="mt-4">
+          <AgentSummary result={partialResult} isReadonly={isReadonly} chatId={chatId} />
+        </div>
+      )}
+    </div>
+  );
+});
+AgentBuilderWithStreamingSummary.displayName = 'AgentBuilderWithStreamingSummary';
+
 const PurePreviewMessage = ({
   chatId,
   message,
@@ -635,7 +685,12 @@ const PurePreviewMessage = ({
                           isReadonly={isReadonly}
                         />
                       ) : toolName === 'agentBuilder' ? (
-                        <AgentBuilderLoading args={args} message={message} />
+                        <AgentBuilderWithStreamingSummary 
+                          args={args} 
+                          message={message} 
+                          isReadonly={isReadonly} 
+                          chatId={chatId} 
+                        />
                       ) : null}
                     </div>
                   );

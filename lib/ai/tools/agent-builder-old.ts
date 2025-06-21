@@ -789,14 +789,55 @@ function mergeEnumFieldsIntelligently(existing: AgentEnumField[], incoming: Agen
   return merged;
 }
 
+// Helper function to intelligently select display fields
+function selectDisplayFields(fields: any[]): string[] {
+  const priorityFields = ['name', 'title', 'label', 'email', 'username'];
+  const fallbackFields = ['description', 'text', 'content', 'value'];
+  
+  // Look for priority fields first
+  for (const priority of priorityFields) {
+    const field = fields.find(f => f.name.toLowerCase() === priority);
+    if (field) {
+      return [field.name];
+    }
+  }
+  
+  // Look for fallback fields
+  for (const fallback of fallbackFields) {
+    const field = fields.find(f => f.name.toLowerCase().includes(fallback));
+    if (field) {
+      return [field.name];
+    }
+  }
+  
+  // If no suitable field found, look for non-ID string fields
+  const stringFields = fields.filter(f => 
+    !f.isId && 
+    f.type === 'String' && 
+    !f.relationField &&
+    !f.name.toLowerCase().includes('id')
+  );
+  
+  if (stringFields.length > 0) {
+    return [stringFields[0].name];
+  }
+  
+  // Last resort: use 'id' only if no other suitable fields exist
+  return ['id'];
+}
+
 // Merge individual model fields intelligently
 function mergeModelFields(existing: AgentModel, incoming: AgentModel): AgentModel {
   const merged: AgentModel = {
     ...existing,
     // Update basic properties if they've changed
     name: incoming.name || existing.name,
-    idField: incoming.idField || existing.idField,
-    displayFields: incoming.displayFields && incoming.displayFields.length > 0 ? incoming.displayFields : existing.displayFields
+    idField: 'id', // ALWAYS force this to be "id", regardless of incoming value
+    displayFields: incoming.displayFields && incoming.displayFields.length > 0 
+      ? incoming.displayFields 
+      : existing.displayFields && existing.displayFields.length > 0
+        ? existing.displayFields
+        : selectDisplayFields(existing.fields || []) // Use intelligent selection as fallback
   };
   
   // Intelligent field merging
@@ -1924,6 +1965,22 @@ Your overview should be ${currentOperation === 'create' ? 'a complete new system
           })
         });
 
+        // Stream partial agent data after overview completion
+        const partialAgent = createAgentData(
+          agentOverview.object.name,
+          agentOverview.object.description,
+          agentOverview.object.domain,
+          existingAgent?.models || [],
+          existingAgent?.enums || [],
+          existingAgent?.actions || [],
+          { step: 'overview', completed: true }
+        );
+        
+        dataStream.writeData({
+          type: 'agent-data',
+          content: JSON.stringify(partialAgent)
+        });
+
         await saveDocumentWithContent(documentId, agentOverview.object.name, JSON.stringify({
           status: 'processing',
           step: 'overview',
@@ -2221,6 +2278,22 @@ Use next available IDs: models start from mdl${existingAgent.models.length + 1}
             data: { object: databaseResults },
             message: `Database schema complete: ${databaseResults.models.length} models`
           })
+        });
+
+        // Stream partial agent data after models completion
+        const partialAgent = createAgentData(
+          agentOverview?.object?.name || existingAgent?.name || 'AI Agent System',
+          agentOverview?.object?.description || existingAgent?.description || 'AI-generated agent system',
+          agentOverview?.object?.domain || existingAgent?.domain || '',
+          databaseResults.models || [],
+          databaseResults.enums || [],
+          existingAgent?.actions || [],
+          { step: 'models', completed: true }
+        );
+        
+        dataStream.writeData({
+          type: 'agent-data',
+          content: JSON.stringify(partialAgent)
         });
 
         await saveDocumentWithContent(documentId, agentOverview?.object?.name || existingAgent?.name || 'AI Agent System', JSON.stringify({

@@ -23,7 +23,7 @@ export interface AgentField {
   title: string;
   sort: boolean;
   order: number;
-  defaultValue?: string;
+  defaultValue?: string | any[]; // String for scalar fields, array for list fields (e.g., list relation fields like productIds: [])
 }
 
 export interface AgentEnum {

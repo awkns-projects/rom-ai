@@ -669,14 +669,28 @@ const ModelEditor = memo(({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`model-id-field-${model.id}`} className="text-green-300 font-mono font-medium">ID Field</Label>
-            <Input
-              id={`model-id-field-${model.id}`}
-              value={model.idField}
-              onChange={(e) => onUpdate({ ...model, idField: e.target.value })}
-              placeholder="ID field name (e.g., id)"
-              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
-            />
+            <Label htmlFor={`model-id-field-${model.id}`} className="text-green-300 font-mono font-medium">
+              ID Field
+              <span className="text-xs text-gray-400 ml-2">(Protected)</span>
+            </Label>
+            <div className="relative">
+              <Input
+                id={`model-id-field-${model.id}`}
+                value={model.idField}
+                readOnly
+                disabled
+                placeholder="ID field name (e.g., id)"
+                className="bg-gray-800/50 border-gray-500/30 text-gray-400 placeholder-gray-500/50 cursor-not-allowed font-mono"
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <span className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded font-mono">
+                  🔒
+                </span>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 font-mono">
+              Primary key is always "id" for consistency
+            </p>
           </div>
           <div className="space-y-2">
             <Label className="text-green-300 font-mono font-medium">Visibility</Label>

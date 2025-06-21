@@ -664,10 +664,27 @@ export const agentBuilder = ({
 
         const databaseResult = await generateDatabase(promptUnderstanding as PromptUnderstanding, existingAgent || undefined, changeAnalysis, agentOverview, conversationContext, command);
         
-        console.log(`🔧 Database generation complete: ${databaseResult.models.length} models`);
+        // Critical safety check: If AI generated empty results but we have existing data,
+        // and the user was expecting new items, don't proceed with empty results
+        let finalDatabaseResult = databaseResult;
+        if (existingAgent && databaseResult.models.length === 0 && 
+            changeAnalysis && changeAnalysis.expectedResult?.newItems?.length > 0) {
+          console.log('🚨 CRITICAL SAFETY CHECK: AI generated empty results but existing data exists and new items were expected');
+          console.log('🛡️ Preserving existing data to prevent data loss');
+          
+          // Use existing data as fallback to prevent data loss
+          finalDatabaseResult = {
+            models: existingAgent.models || [],
+            enums: existingAgent.enums || []
+          };
+          
+          console.log('🔄 Fallback applied - using existing data to prevent loss');
+        }
+        
+        console.log(`🔧 Database generation complete: ${finalDatabaseResult.models.length} models`);
         console.log('🔍 Raw AI database results:', JSON.stringify({
-          modelsCount: databaseResult.models.length,
-          modelNames: (databaseResult.models || []).map((m: any) => m.name)
+          modelsCount: finalDatabaseResult.models.length,
+          modelNames: (finalDatabaseResult.models || []).map((m: any) => m.name)
         }, null, 2));
         
         if (existingAgent) {
@@ -680,8 +697,8 @@ export const agentBuilder = ({
           content: JSON.stringify({ 
             step: 'models', 
             status: 'complete',
-            data: { object: databaseResult },
-            message: `Database schema complete: ${databaseResult.models.length} models`
+            data: { object: finalDatabaseResult },
+            message: `Database schema complete: ${finalDatabaseResult.models.length} models`
           })
         });
 
@@ -690,8 +707,8 @@ export const agentBuilder = ({
           agentOverview?.object?.name || existingAgent?.name || 'AI Agent System',
           agentOverview?.object?.description || existingAgent?.description || 'AI-generated agent system',
           agentOverview?.object?.domain || existingAgent?.domain || '',
-          databaseResult.models || [],
-          databaseResult.enums || [],
+          finalDatabaseResult.models || [],
+          finalDatabaseResult.enums || [],
           existingAgent?.actions || [],
           existingAgent?.schedules || [],
           { step: 'models', completed: true }
@@ -705,7 +722,7 @@ export const agentBuilder = ({
         // Save the actual partial agent data to document
         await saveDocumentWithContent(documentId, agentOverview?.object?.name || existingAgent?.name || 'AI Agent System', JSON.stringify(partialAgent, null, 2), session);
 
-        databaseResults = databaseResult;
+        databaseResults = finalDatabaseResult;
       }
 
       // Step 4: Generate Actions (was Step 3, now matching old version)
@@ -722,10 +739,26 @@ export const agentBuilder = ({
 
         const actionsResult = await generateActions(promptUnderstanding as PromptUnderstanding, databaseResults || { models: [], enums: [] }, existingAgent || undefined, changeAnalysis, agentOverview, conversationContext, command);
         
-        console.log(`🔧 Actions generation complete: ${actionsResult.actions.length} actions`);
+        // Critical safety check: If AI generated empty results but we have existing data,
+        // and the user was expecting new items, don't proceed with empty results
+        let finalActionsResult = actionsResult;
+        if (existingAgent && actionsResult.actions.length === 0 && 
+            changeAnalysis && changeAnalysis.expectedResult?.newItems?.length > 0) {
+          console.log('🚨 CRITICAL SAFETY CHECK: AI generated empty actions but existing data exists and new items were expected');
+          console.log('🛡️ Preserving existing actions to prevent data loss');
+          
+          // Use existing data as fallback to prevent data loss
+          finalActionsResult = {
+            actions: existingAgent.actions || []
+          };
+          
+          console.log('🔄 Fallback applied - using existing actions to prevent loss');
+        }
+        
+        console.log(`🔧 Actions generation complete: ${finalActionsResult.actions.length} actions`);
         console.log('🔍 Raw AI actions results:', JSON.stringify({
-          actionsCount: actionsResult.actions.length,
-          actionNames: (actionsResult.actions || []).map((a: any) => a.name)
+          actionsCount: finalActionsResult.actions.length,
+          actionNames: (finalActionsResult.actions || []).map((a: any) => a.name)
         }, null, 2));
         
         if (existingAgent) {
@@ -738,8 +771,8 @@ export const agentBuilder = ({
           content: JSON.stringify({ 
             step: 'actions', 
             status: 'complete',
-            data: { object: actionsResult },
-            message: `Workflows complete: ${actionsResult.actions.length} automated actions`
+            data: { object: finalActionsResult },
+            message: `Workflows complete: ${finalActionsResult.actions.length} automated actions`
           })
         });
 
@@ -750,7 +783,7 @@ export const agentBuilder = ({
           agentOverview?.object?.domain || existingAgent?.domain || '',
           databaseResults?.models || [],
           databaseResults?.enums || [],
-          actionsResult.actions || [],
+          finalActionsResult.actions || [],
           existingAgent?.schedules || [],
           { step: 'actions', completed: true }
         );
@@ -763,7 +796,7 @@ export const agentBuilder = ({
         // Save the actual partial agent data to document
         await saveDocumentWithContent(documentId, agentOverview?.object?.name || existingAgent?.name || 'AI Agent System', JSON.stringify(partialAgent, null, 2), session);
 
-        actionsResults = actionsResult;
+        actionsResults = finalActionsResult;
       }
 
       // Step 4.5: Schedules Generation (if actions were created)
@@ -920,26 +953,71 @@ export const agentBuilder = ({
         });
       }
 
+      // Perform deep merge of existing and new data
+      console.log('🔄 Starting deep merge process...');
+      console.log(`📊 Existing data: ${existingAgent?.models?.length || 0} models, ${existingAgent?.actions?.length || 0} actions`);
+      console.log(`📊 New data: ${databaseResults.models.length} models, ${actionsResults.actions.length} actions`);
+      
+      // Create incoming agent data structure
+      const incomingAgentData: AgentData = {
+        id: existingAgent?.id || documentId,
+        name: existingAgent?.name || 'Generated Agent',
+        description: existingAgent?.description || 'AI Generated Agent',
+        domain: existingAgent?.domain || 'general',
+        models: databaseResults.models,
+        enums: databaseResults.enums,
+        actions: actionsResults.actions,
+        schedules: schedulesResults.schedules,
+        createdAt: existingAgent?.createdAt || new Date().toISOString(),
+        metadata: {
+          createdAt: existingAgent?.metadata?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          version: String(parseInt(existingAgent?.metadata?.version || '0') + 1),
+          lastModifiedBy: existingAgent?.metadata?.lastModifiedBy || 'ai-agent-builder',
+          tags: existingAgent?.metadata?.tags || [],
+          status: existingAgent?.metadata?.status || 'active',
+          lastUpdateReason: 'AI agent builder generation',
+          lastUpdateTimestamp: new Date().toISOString(),
+          ...existingAgent?.metadata,
+        },
+      };
+      
+      const mergedData = performDeepMerge(
+        existingAgent,
+        incomingAgentData,
+        deletionOperations
+      );
+      
+      console.log(`📊 Merged result: ${mergedData.models?.length || 0} models, ${mergedData.actions?.length || 0} actions`);
+      
+      // Check for data integrity
+      if (existingAgent && (mergedData.models?.length || 0) < (existingAgent.models?.length || 0) && !deletionOperations?.modelsToDelete?.length) {
+        console.error('🚨 CRITICAL: Model count decreased without explicit deletion operations');
+      }
+      if (existingAgent && (mergedData.actions?.length || 0) < (existingAgent.actions?.length || 0) && !deletionOperations?.actionsToDelete?.length) {
+        console.error('🚨 CRITICAL: Action count decreased without explicit deletion operations');
+      }
+
       // Save document with intelligent merging to preserve existing data
       await saveDocumentWithContent(
         documentId,
-        finalAgent.name,
-        JSON.stringify(finalAgent, null, 2),
+        mergedData.name,
+        JSON.stringify(mergedData, null, 2),
         session,
         deletionOperations
       );
 
       // Generate success message based on decision object
-      const successMessage = generateSuccessMessage(finalAgent, currentOperation === 'update' || currentOperation === 'extend', decision.object);
+      const successMessage = generateSuccessMessage(mergedData, currentOperation === 'update' || currentOperation === 'extend', decision.object);
       
       dataStream.writeData({ type: 'finish', content: '' });
       
       console.log('✅ Agent builder completed successfully');
-      console.log('📄 Final agent title:', finalAgent.name);
+      console.log('📄 Final agent title:', mergedData.name);
       
       return {
         id: documentId,
-        title: finalAgent.name,
+        title: mergedData.name,
         kind: 'agent' as const,
         content: successMessage
       };
