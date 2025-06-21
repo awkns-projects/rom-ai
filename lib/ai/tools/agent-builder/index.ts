@@ -84,6 +84,9 @@ import {
   generateErrorMessage
 } from './document';
 
+// Import the hybrid agent builder
+import { HybridAgentBuilder } from './hybrid-implementation';
+
 // Re-export types for backward compatibility
 export type {
   AgentData,
@@ -112,7 +115,9 @@ export {
   executeGeneratedAction,
   validateGeneratedFunctionBody,
   createFunctionExecutionExample,
-  createEnhancedActionExample
+  createEnhancedActionExample,
+  // Export the hybrid agent builder class
+  HybridAgentBuilder
 };
 
 // Re-export enhanced schemas for external usage
@@ -322,9 +327,9 @@ async function saveStreamState(documentId: string, type: string, content: any, s
       await saveOrUpdateDocument({
         id: documentId,
         title: existingDoc.title,
-        content: existingDoc.content,
+        content: existingDoc.content || '{}',
         kind: existingDoc.kind,
-        userId: (session.user?.id || 'unknown') as string,
+        userId: (session?.user?.id || 'unknown') as string,
         metadata: {
           ...currentMetadata,
           streamHistory: updatedStreamHistory,
