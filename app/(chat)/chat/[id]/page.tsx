@@ -5,8 +5,8 @@ import { auth } from '@/app/(auth)/auth';
 import { Chat } from '@/components/chat';
 import { getChatById, getMessagesByChatId } from '@/lib/db/queries';
 import { DataStreamHandler } from '@/components/data-stream-handler';
-import { DEFAULT_CHAT_MODEL } from '@/lib/ai/models';
-import type { DBMessage } from '@/lib/db/schema';
+import { DEFAULT_CHAT_MODEL, chatModels, migrateToEnabledModel } from '@/lib/ai/models';
+import type { Message } from '@/lib/db/schema';
 import type { Attachment, UIMessage } from 'ai';
 
 export default async function Page(props: { params: Promise<{ id: string }> }) {
@@ -38,7 +38,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
     id,
   });
 
-  function convertToUIMessages(messages: Array<DBMessage>): Array<UIMessage> {
+  function convertToUIMessages(messages: Array<Message>): Array<UIMessage> {
     return messages.map((message) => {
       // Extract text content from parts for backward compatibility
       const textContent = (message.parts as UIMessage['parts'])
@@ -61,22 +61,24 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
 
   const cookieStore = await cookies();
   const chatModelFromCookie = cookieStore.get('chat-model');
+  const providerFromCookie = cookieStore.get('ai-provider');
 
-  if (!chatModelFromCookie) {
-    return (
-      <>
-        <Chat
-          id={chat.id}
-          initialMessages={convertToUIMessages(messagesFromDb)}
-          initialChatModel={DEFAULT_CHAT_MODEL}
-          initialVisibilityType={chat.visibility}
-          isReadonly={session?.user?.id !== chat.userId}
-          session={session}
-          autoResume={true}
-        />
-        <DataStreamHandler id={id} />
-      </>
-    );
+  // Determine the initial model and provider
+  let initialChatModel = DEFAULT_CHAT_MODEL;
+  let initialProvider: 'xai' | 'openai' = 'openai'; // Default to OpenAI since xAI models are disabled
+
+  if (chatModelFromCookie?.value) {
+    // Migrate potentially disabled models to enabled alternatives
+    initialChatModel = migrateToEnabledModel(chatModelFromCookie.value);
+    // Find the provider for this model
+    const model = chatModels.find(m => m.id === initialChatModel);
+    if (model) {
+      initialProvider = model.providerId;
+    }
+  }
+
+  if (providerFromCookie?.value && ['xai', 'openai'].includes(providerFromCookie.value)) {
+    initialProvider = providerFromCookie.value as 'xai' | 'openai';
   }
 
   return (
@@ -84,7 +86,8 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
       <Chat
         id={chat.id}
         initialMessages={convertToUIMessages(messagesFromDb)}
-        initialChatModel={chatModelFromCookie.value}
+        initialChatModel={initialChatModel}
+        initialProvider={initialProvider}
         initialVisibilityType={chat.visibility}
         isReadonly={session?.user?.id !== chat.userId}
         session={session}

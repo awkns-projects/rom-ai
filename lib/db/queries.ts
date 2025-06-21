@@ -24,7 +24,7 @@ import {
   suggestion,
   message,
   vote,
-  type DBMessage,
+  type Message,
   type Chat,
   stream,
 } from './schema';
@@ -211,7 +211,7 @@ export async function getChatById({ id }: { id: string }) {
 export async function saveMessages({
   messages,
 }: {
-  messages: Array<DBMessage>;
+  messages: Array<Message>;
 }) {
   try {
     return await db.insert(message).values(messages);
@@ -225,7 +225,7 @@ export async function updateMessage({
   message: messageData,
 }: {
   messageId: string;
-  message: Partial<DBMessage>;
+  message: Partial<Message>;
 }) {
   try {
     return await db

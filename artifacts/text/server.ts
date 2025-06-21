@@ -36,7 +36,7 @@ export const textDocumentHandler = createDocumentHandler<'text'>({
   onUpdateDocument: async ({ document, description, dataStream }) => {
     let draftContent = '';
 
-    const currentProvider = getCurrentProvider();
+    const currentProvider = await getCurrentProvider();
     
     const { fullStream } = streamText({
       model: myProvider.languageModel('artifact-model'),

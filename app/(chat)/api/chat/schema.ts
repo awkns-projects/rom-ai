@@ -5,6 +5,19 @@ const textPartSchema = z.object({
   type: z.enum(['text']),
 });
 
+// Valid model IDs that can be selected
+const validModelIds = [
+  // Specific model IDs
+  'grok-2-vision-1212',
+  'grok-3-mini-beta', 
+  'grok-2-1212',
+  'gpt-4o',
+  'gpt-4o-mini',
+  // Legacy model IDs for backward compatibility
+  'chat-model',
+  'chat-model-reasoning'
+] as const;
+
 export const postRequestBodySchema = z.object({
   id: z.string().uuid(),
   message: z.object({
@@ -23,7 +36,7 @@ export const postRequestBodySchema = z.object({
       )
       .optional(),
   }),
-  selectedChatModel: z.enum(['chat-model', 'chat-model-reasoning']),
+  selectedChatModel: z.enum(validModelIds),
   selectedVisibilityType: z.enum(['public', 'private']),
 });
 

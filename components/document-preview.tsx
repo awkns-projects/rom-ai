@@ -302,8 +302,10 @@ const DocumentContent = ({ document }: { document: Document }) => {
               metadata={{
                 selectedTab: 'models',
                 editingModel: null,
-                editingEnum: null,
                 editingAction: null,
+                editingSchedule: null,
+                viewingModelData: null,
+                editingRecord: null,
               }}
               setMetadata={() => {}}
               isLoading={false}

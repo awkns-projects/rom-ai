@@ -25,6 +25,7 @@ export function Chat({
   id,
   initialMessages,
   initialChatModel,
+  initialProvider = 'openai',
   initialVisibilityType,
   isReadonly,
   session,
@@ -33,6 +34,7 @@ export function Chat({
   id: string;
   initialMessages: Array<UIMessage>;
   initialChatModel: string;
+  initialProvider?: 'xai' | 'openai';
   initialVisibilityType: VisibilityType;
   isReadonly: boolean;
   session: Session;
@@ -44,6 +46,40 @@ export function Chat({
     chatId: id,
     initialVisibilityType,
   });
+
+  const [currentChatModel, setCurrentChatModel] = useState(initialChatModel);
+  const [currentProvider, setCurrentProvider] = useState(initialProvider);
+
+  useEffect(() => {
+    const checkCookies = () => {
+      const chatModelCookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('chat-model='));
+      const providerCookie = document.cookie
+        .split('; ')
+        .find(row => row.startsWith('ai-provider='));
+
+      if (chatModelCookie) {
+        const modelValue = chatModelCookie.split('=')[1];
+        if (modelValue && modelValue !== currentChatModel) {
+          setCurrentChatModel(modelValue);
+        }
+      }
+
+      if (providerCookie) {
+        const providerValue = providerCookie.split('=')[1] as 'xai' | 'openai';
+        if (providerValue && ['xai', 'openai'].includes(providerValue) && providerValue !== currentProvider) {
+          setCurrentProvider(providerValue);
+        }
+      }
+    };
+
+    checkCookies();
+
+    const interval = setInterval(checkCookies, 1000);
+
+    return () => clearInterval(interval);
+  }, [currentChatModel, currentProvider]);
 
   const {
     messages,
@@ -67,7 +103,7 @@ export function Chat({
     experimental_prepareRequestBody: (body) => ({
       id,
       message: body.messages.at(-1),
-      selectedChatModel: initialChatModel,
+      selectedChatModel: currentChatModel,
       selectedVisibilityType: visibilityType,
     }),
     onFinish: () => {
@@ -121,7 +157,8 @@ export function Chat({
       <div className="flex flex-col min-w-0 h-dvh bg-background">
         <ChatHeader
           chatId={id}
-          selectedModelId={initialChatModel}
+          selectedModelId={currentChatModel}
+          selectedProviderId={currentProvider}
           selectedVisibilityType={initialVisibilityType}
           isReadonly={isReadonly}
           session={session}

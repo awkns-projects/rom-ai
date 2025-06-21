@@ -353,7 +353,7 @@ export async function POST(request: Request) {
     const previousMessages = await getMessagesByChatId({ id });
 
     const messages = appendClientMessage({
-      // @ts-expect-error: todo add type conversion from DBMessage[] to UIMessage[]
+      // @ts-expect-error: todo add type conversion from Message[] to UIMessage[]
       messages: previousMessages,
       message,
     });

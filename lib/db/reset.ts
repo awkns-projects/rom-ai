@@ -22,9 +22,7 @@ const resetDatabase = async () => {
     console.log('⏳ Dropping tables...');
     
     // Drop tables with foreign key dependencies first
-    await db.execute(`DROP TABLE IF EXISTS "Vote_v2" CASCADE;`);
     await db.execute(`DROP TABLE IF EXISTS "Vote" CASCADE;`);
-    await db.execute(`DROP TABLE IF EXISTS "Message_v2" CASCADE;`);
     await db.execute(`DROP TABLE IF EXISTS "Message" CASCADE;`);
     await db.execute(`DROP TABLE IF EXISTS "Suggestion" CASCADE;`);
     await db.execute(`DROP TABLE IF EXISTS "Stream" CASCADE;`);

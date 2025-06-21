@@ -17,12 +17,14 @@ import type { Session } from 'next-auth';
 function PureChatHeader({
   chatId,
   selectedModelId,
+  selectedProviderId = 'openai',
   selectedVisibilityType,
   isReadonly,
   session,
 }: {
   chatId: string;
   selectedModelId: string;
+  selectedProviderId?: 'xai' | 'openai';
   selectedVisibilityType: VisibilityType;
   isReadonly: boolean;
   session: Session;
@@ -59,6 +61,7 @@ function PureChatHeader({
         <ModelSelector
           session={session}
           selectedModelId={selectedModelId}
+          selectedProviderId={selectedProviderId}
           className="order-1 md:order-2"
         />
       )}
@@ -88,5 +91,6 @@ function PureChatHeader({
 }
 
 export const ChatHeader = memo(PureChatHeader, (prevProps, nextProps) => {
-  return prevProps.selectedModelId === nextProps.selectedModelId;
+  return prevProps.selectedModelId === nextProps.selectedModelId && 
+         prevProps.selectedProviderId === nextProps.selectedProviderId;
 });

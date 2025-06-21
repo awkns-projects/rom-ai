@@ -323,30 +323,23 @@ const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Reco
   return 'pending';
 };
 
-// Helper function to check if the agent building process is complete
-const isAgentBuildingComplete = (currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>, agentData?: any) => {
-  return currentStep === 'complete' || currentStep === 'integration' && stepProgress?.integration === 'complete';
-};
-
 // Helper function to calculate progress percentage consistently
 const calculateProgressPercentage = (currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>, agentData?: any) => {
-  const steps = ['prompt-understanding', 'granular-analysis', 'analysis', 'change-analysis', 'overview', 'models', 'actions', 'schedules', 'integration'];
-  let completedSteps = 0;
+  const steps = [
+    { id: 'prompt-understanding', name: 'Understanding Requirements' },
+    { id: 'granular-analysis', name: 'Granular Analysis' },
+    { id: 'analysis', name: 'Analysis' },
+    { id: 'change-analysis', name: 'Change Analysis' },
+    { id: 'overview', name: 'Overview' },
+    { id: 'models', name: 'Models' },
+    { id: 'actions', name: 'Actions' },
+    { id: 'schedules', name: 'Schedules' },
+    { id: 'integration', name: 'Integration' }
+  ];
   
-  steps.forEach(step => {
-    const status = getStepStatus(step, currentStep, stepProgress, agentData);
-    if (status === 'complete') completedSteps++;
-  });
+  const completedSteps = steps.filter(step => getStepStatus(step.id, currentStep, stepProgress, agentData) === 'complete').length;
   
-  // If currently processing a step, add partial progress
-  if (currentStep && currentStep !== 'complete') {
-    const currentStepIndex = steps.indexOf(currentStep);
-    if (currentStepIndex >= 0) {
-      completedSteps += 0.5; // 50% progress for current processing step
-    }
-  }
-  
-  return Math.min(100, (completedSteps / steps.length) * 100);
+  return (completedSteps / steps.length) * 100;
 };
 
 // Progress Indicator Component
@@ -466,7 +459,6 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {},
       <div className="space-y-4">
         {steps.map((step, index) => {
           const status = getStepStatus(step.id, currentStep, stepProgress, agentData);
-          const isActive = currentStep === step.id;
           const message = stepMessages[step.id];
           
           return (
