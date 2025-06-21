@@ -441,7 +441,7 @@ export async function POST(request: Request) {
             type: 'error',
             content: 'Response generation timed out. Please try again with a shorter message.',
           });
-        }, 280000); // 280 seconds (20 seconds before maxDuration)
+        }, 30000); // 30 seconds (20 seconds before maxDuration)
 
         try {
           const tools: Record<string, any> = {};
