@@ -40,7 +40,7 @@ import { differenceInSeconds } from 'date-fns';
 import { ChatSDKError } from '@/lib/errors';
 import { agentBuilder } from '@/lib/ai/tools/agent-builder';
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 let globalStreamContext: ResumableStreamContext | null = null;
 
 function getStreamContext() {
