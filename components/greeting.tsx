@@ -1,4 +1,3 @@
-
 import { cn } from "@/lib/utils";
 import Marquee from "@/components/magicui/marquee";
 
@@ -130,9 +129,9 @@ export const Greeting = () => {
                 Rom Cards
               </h1>
               <p className="text-base sm:text-lg lg:text-xl text-center max-w-4xl mx-auto font-extralight font-mono text-matrix-gradient leading-loose tracking-wide opacity-85 px-4">
-                The easiest no-code tool to build apps, AI agents, CRMs & automations. 
+                Prompt any idea to live in seconds. Build AI agents, apps, CRMs, and anything.
                 <span className="block mt-3 text-sm sm:text-base lg:text-lg text-gray-400 dark:text-green-300/50 font-light tracking-wider">
-                  Build anything, then license it for profit — all built in.
+                  The only vibe coding tool that gives no headache.
                 </span>
               </p>
             </div>
