@@ -179,6 +179,7 @@ export interface AgentData {
   description: string;
   domain: string;
   models: AgentModel[];
+  enums: AgentEnum[];
   actions: AgentAction[];
   schedules: AgentSchedule[];
   createdAt: string;
