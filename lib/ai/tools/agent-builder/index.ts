@@ -1,4 +1,3 @@
-
 import { tool, type DataStreamWriter } from 'ai';
 import { z } from 'zod';
 import type { Message } from 'ai';
@@ -471,16 +470,47 @@ The tool maintains state throughout the generation process and can resume from a
     
     console.log(`📄 ${isUpdatingExisting ? 'UPDATING EXISTING' : 'CREATING NEW'} document with ID: ${documentId}`);
     
-    // Parse existing context
+    // CRITICAL FIX: Always fetch the most up-to-date document content when updating existing documents
     let existingAgent: AgentData | null = null;
     const contextToUse = context || existingContext;
     
-    if (contextToUse) {
+    // For existing documents, ALWAYS fetch fresh data from database first
+    if (isUpdatingExisting && session?.user?.id) {
+      console.log('🔄 Fetching fresh document content from database...');
+      try {
+        const freshDocument = await getDocumentById({ id: documentId });
+        if (freshDocument && freshDocument.content) {
+          console.log('✅ Found fresh document content in database');
+          try {
+            const freshParsedContent = JSON.parse(freshDocument.content);
+            if (freshParsedContent && (freshParsedContent.name || freshParsedContent.models || freshParsedContent.actions)) {
+              existingAgent = freshParsedContent as AgentData;
+              console.log('✅ Using FRESH database content as existing agent:', {
+                name: existingAgent.name,
+                models: existingAgent.models?.length || 0,
+                actions: existingAgent.actions?.length || 0,
+                schedules: existingAgent.schedules?.length || 0
+              });
+            }
+          } catch (parseError) {
+            console.log('⚠️ Failed to parse fresh document content, falling back to context');
+          }
+        } else {
+          console.log('⚠️ No fresh document content found in database, using context');
+        }
+      } catch (dbError) {
+        console.log('⚠️ Failed to fetch fresh document from database:', dbError);
+      }
+    }
+    
+    // Fallback to context if we didn't get fresh data from database
+    if (!existingAgent && contextToUse) {
+      console.log('🔄 Using context as fallback for existing agent data...');
       try {
         const parsedContext = JSON.parse(contextToUse);
         if (parsedContext && typeof parsedContext === 'object' && (parsedContext.name || parsedContext.models || parsedContext.actions)) {
           existingAgent = parsedContext as AgentData;
-          console.log('✅ Valid existing agent data found:', {
+          console.log('✅ Valid existing agent data found from context:', {
             name: existingAgent.name,
             models: existingAgent.models?.length || 0,
             actions: existingAgent.actions?.length || 0,
@@ -667,29 +697,25 @@ The tool maintains state throughout the generation process and can resume from a
         stepMetadata.stepProgress.complete = 'complete';
         stepMetadata.status = 'complete';
         
+        console.log('🔄 Sending final completion step...');
         streamWithPersistence(dataStream, 'agent-step', {
           step: 'complete',
           status: 'complete',
           message: 'Agent system generated successfully!'
         }, documentId, session);
 
-        // Save final agent data
+        // Save final agent data with updated timestamp
         const finalContent = JSON.stringify(result.agent, null, 2);
+        console.log('💾 Saving final agent data to document...');
         await saveDocumentWithContent(documentId, result.agent.name || 'AI Agent System', finalContent, session, undefined, {
           ...stepMetadata,
           qualityScore: result.executionMetrics.qualityScore,
           executionTime: result.executionMetrics.totalDuration,
-          validationResults: result.validationResults
+          validationResults: result.validationResults,
+          lastUpdateTimestamp: new Date().toISOString(), // Ensure fresh timestamp
+          completedAt: new Date().toISOString()
         });
 
-        // Stream the final agent data
-        streamWithPersistence(dataStream, 'agent-data', finalContent, documentId, session);
-        streamWithPersistence(dataStream, 'text-delta', finalContent, documentId, session);
-        
-        console.log('✅ Agent generation completed successfully');
-        console.log(`📊 Quality Score: ${result.executionMetrics.qualityScore}/100`);
-        console.log(`⏱️ Total Duration: ${result.executionMetrics.totalDuration}ms`);
-        
         // Create user-friendly completion message
         const userFriendlyMessage = `🎉 **Agent System Generated Successfully!**
 
@@ -703,6 +729,18 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created with 
 - **Generation Time:** ${Math.round((result.executionMetrics.totalDuration || 0) / 1000)}s
 
 ✅ **Ready to Use:** Your agent system is now available and ready for deployment!`;
+
+        console.log('📡 Streaming final agent data...');
+        // Stream the final agent data
+        streamWithPersistence(dataStream, 'agent-data', finalContent, documentId, session);
+        
+        console.log('📝 Streaming final user-friendly content...');
+        // Stream the final user-friendly content
+        streamWithPersistence(dataStream, 'text-delta', userFriendlyMessage, documentId, session);
+        
+        console.log('✅ Agent generation completed successfully');
+        console.log(`📊 Quality Score: ${result.executionMetrics.qualityScore}/100`);
+        console.log(`⏱️ Total Duration: ${result.executionMetrics.totalDuration}ms`);
         
         return {
           id: documentId,
@@ -715,6 +753,7 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created with 
         const qualityScore = result.executionMetrics?.qualityScore || 0;
         const hasModels = result.agent.models && result.agent.models.length > 0;
         const hasActions = result.agent.actions && result.agent.actions.length > 0;
+        const hasSchedules = result.agent.schedules && result.agent.schedules.length > 0;
         
         console.log('⚠️ Agent generation partial success - checking if acceptable');
         console.log('🔍 Partial success details:', {
@@ -722,18 +761,20 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created with 
           hasAgent: !!result.agent,
           hasModels,
           hasActions,
+          hasSchedules,
           modelsCount: result.agent.models?.length || 0,
           actionsCount: result.agent.actions?.length || 0,
+          schedulesCount: result.agent.schedules?.length || 0,
           qualityScore,
           errors: result.errors,
           validationResults: result.validationResults
         });
         
-        // Accept agent if it has basic structure, regardless of validation results
-        if (hasModels || hasActions) {
+        // Accept agent if it has ANY meaningful structure (very lenient)
+        if (hasModels || hasActions || hasSchedules) {
           console.log(`${result.success ? '✅' : '⚠️'} Agent generation completed ${result.success ? 'successfully' : 'with partial success'}`);
           console.log(`📊 Quality Score: ${qualityScore}/100`);
-          console.log(`📋 Components: ${result.agent.models?.length || 0} models, ${result.agent.actions?.length || 0} actions`);
+          console.log(`📋 Components: ${result.agent.models?.length || 0} models, ${result.agent.actions?.length || 0} actions, ${result.agent.schedules?.length || 0} schedules`);
           if (!result.success) {
             console.log(`⚠️ Issues: ${result.errors?.join(', ') || 'Validation warnings'}`);
           }
@@ -747,7 +788,7 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created with 
           
           const message = result.success 
             ? 'Agent system generated successfully!'
-            : `Agent system generated with ${result.agent.models?.length || 0} models, ${result.agent.actions?.length || 0} actions`;
+            : `Agent system generated with ${result.agent.models?.length || 0} models, ${result.agent.actions?.length || 0} actions, ${result.agent.schedules?.length || 0} schedules`;
           
           streamWithPersistence(dataStream, 'agent-step', {
             step: 'complete',
@@ -755,7 +796,7 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created with 
             message
           }, documentId, session);
 
-          // Save final agent data
+          // Save final agent data with updated timestamp
           const finalContent = JSON.stringify(result.agent, null, 2);
           await saveDocumentWithContent(documentId, result.agent.name || 'AI Agent System', finalContent, session, undefined, {
             ...stepMetadata,
@@ -764,13 +805,11 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created with 
             validationResults: result.validationResults,
             warnings: result.warnings || [],
             errors: result.errors || [],
-            partialSuccess: !result.success
+            partialSuccess: !result.success,
+            lastUpdateTimestamp: new Date().toISOString(), // Ensure fresh timestamp
+            completedAt: new Date().toISOString()
           });
 
-          // Stream the final agent data
-          streamWithPersistence(dataStream, 'agent-data', finalContent, documentId, session);
-          streamWithPersistence(dataStream, 'text-delta', finalContent, documentId, session);
-          
           // Create user-friendly completion message for partial success
           const userFriendlyMessage = result.success 
             ? `🎉 **Agent System Generated Successfully!**
@@ -795,6 +834,10 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created, thou
 - **Quality Score:** ${qualityScore}/100
 
 💡 **Status:** The core functionality is ready to use. You can refine or extend the system as needed.`;
+
+          // Stream the final agent data
+          streamWithPersistence(dataStream, 'agent-data', finalContent, documentId, session);
+          streamWithPersistence(dataStream, 'text-delta', userFriendlyMessage, documentId, session);
           
           return {
             id: documentId,
@@ -803,24 +846,106 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created, thou
             content: userFriendlyMessage
           };
         } else {
-          console.log('❌ Agent has no models or actions - rejecting as failure');
+          console.log('❌ Agent has no models, actions, or schedules - but will still try to save what we have');
+          
+          // Even if we have minimal data, still complete the process to avoid hanging
+          stepMetadata.currentStep = 'complete';
+          stepMetadata.stepProgress.complete = 'complete';
+          stepMetadata.status = 'complete';
+          
+          streamWithPersistence(dataStream, 'agent-step', {
+            step: 'complete',
+            status: 'complete',
+            message: 'Agent generation completed with minimal data'
+          }, documentId, session);
+
+          // Save whatever we have
+          const finalContent = JSON.stringify(result.agent, null, 2);
+          await saveDocumentWithContent(documentId, result.agent.name || 'AI Agent System', finalContent, session, undefined, {
+            ...stepMetadata,
+            qualityScore: 0,
+            executionTime: result.executionMetrics?.totalDuration || 0,
+            validationResults: result.validationResults,
+            warnings: result.warnings || [],
+            errors: result.errors || [],
+            minimalSuccess: true,
+            lastUpdateTimestamp: new Date().toISOString(),
+            completedAt: new Date().toISOString()
+          });
+
+          streamWithPersistence(dataStream, 'agent-data', finalContent, documentId, session);
+          streamWithPersistence(dataStream, 'text-delta', `⚠️ **Agent System Created with Minimal Data**
+
+The agent "${result.agent.name || 'AI Agent System'}" was created but may need additional configuration.
+
+💡 **Next Steps:** Please refine your request or try again with more specific requirements.`, documentId, session);
+          
+          return {
+            id: documentId,
+            title: result.agent.name || 'AI Agent System',
+            kind: 'agent' as const,
+            content: `⚠️ **Agent System Created with Minimal Data**
+
+The agent "${result.agent.name || 'AI Agent System'}" was created but may need additional configuration.
+
+💡 **Next Steps:** Please refine your request or try again with more specific requirements.`
+          };
         }
       } else {
-        console.log('❌ No agent generated at all');
+        console.log('❌ No agent generated at all - but will still complete to avoid hanging');
         console.log('🔍 Failure details:', {
           resultSuccess: result.success,
           hasAgent: !!result.agent,
           errors: result.errors,
           validationResults: result.validationResults
         });
-      }
-      
-      // Only throw error if we have no usable agent data at all
-      const errorMessage = result.errors?.length > 0 ? result.errors.join(', ') : 'Unknown error occurred during agent generation';
-      console.log('❌ No usable agent data generated, treating as failure');
-      console.log('🔍 Final failure reason:', errorMessage);
-      throw new Error(`Agent generation failed: ${errorMessage}`);
+        
+        // Even with complete failure, still mark as complete to avoid hanging UI
+        stepMetadata.currentStep = 'complete';
+        stepMetadata.stepProgress.complete = 'complete';
+        stepMetadata.status = 'complete';
+        
+        streamWithPersistence(dataStream, 'agent-step', {
+          step: 'complete',
+          status: 'complete',
+          message: 'Agent generation process completed'
+        }, documentId, session);
 
+        // Save failure state
+        await saveDocumentWithContent(documentId, 'Agent Generation Failed', '{}', session, undefined, {
+          ...stepMetadata,
+          qualityScore: 0,
+          executionTime: result.executionMetrics?.totalDuration || 0,
+          validationResults: result.validationResults,
+          warnings: result.warnings || [],
+          errors: result.errors || [],
+          failed: true,
+          lastUpdateTimestamp: new Date().toISOString(),
+          completedAt: new Date().toISOString()
+        });
+
+        streamWithPersistence(dataStream, 'agent-data', '{}', documentId, session);
+        streamWithPersistence(dataStream, 'text-delta', `❌ **Agent Generation Failed**
+
+The agent generation process encountered issues and could not create a usable agent.
+
+**Errors:** ${result.errors?.join(', ') || 'Unknown error'}
+
+💡 **Next Steps:** Please try again with a more specific request or check the system logs.`, documentId, session);
+        
+        return {
+          id: documentId,
+          title: 'Agent Generation Failed',
+          kind: 'agent' as const,
+          content: `❌ **Agent Generation Failed**
+
+The agent generation process encountered issues and could not create a usable agent.
+
+**Errors:** ${result.errors?.join(', ') || 'Unknown error'}
+
+💡 **Next Steps:** Please try again with a more specific request or check the system logs.`
+        };
+      }
     } catch (error) {
       console.error('❌ Enhanced Agent Builder Error:', error);
       
@@ -882,122 +1007,3 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created, thou
     }
   },
 });
-
-// Enhanced Agent Builder with Hybrid Approach
-// Preserves all original functionality while adding step-by-step orchestration
-
-// New enhanced orchestrator exports
-export {
-  executeAgentGeneration,
-  executeAgentGenerationFast,
-  executeAgentGenerationRobust,
-  executeAgentGenerationBalanced,
-  type OrchestratorConfig,
-  type OrchestratorResult
-} from './steps/orchestrator';
-
-// Individual step exports (for advanced usage)
-export {
-  executeStep0PromptUnderstanding,
-  validateStep0Output,
-  extractStep0Insights,
-  type Step0Input,
-  type Step0Output
-} from './steps/step0-prompt-understanding';
-
-export {
-  executeStep1Decision,
-  validateStep1Output,
-  extractExecutionStrategy,
-  type Step1Input,
-  type Step1Output
-} from './steps/step1-decision-making';
-
-export {
-  executeStep2TechnicalAnalysis,
-  validateStep2Output,
-  extractTechnicalInsights,
-  generateImplementationGuidance,
-  type Step2Input,
-  type Step2Output
-} from './steps/step2-technical-analysis';
-
-export {
-  executeStep3DatabaseGeneration,
-  validateStep3Output,
-  extractDatabaseInsights,
-  type Step3Input,
-  type Step3Output
-} from './steps/step3-database-generation';
-
-export {
-  executeStep4ActionGeneration,
-  validateStep4Output,
-  extractActionInsights,
-  type Step4Input,
-  type Step4Output
-} from './steps/step4-action-generation';
-
-export {
-  executeStep5ScheduleGeneration,
-  validateStep5Output,
-  extractScheduleInsights,
-  type Step5Input,
-  type Step5Output
-} from './steps/step5-schedule-generation';
-
-/**
- * ENHANCED AGENT BUILDER FUNCTION
- * 
- * New enhanced version that uses the orchestrator
- */
-export async function buildAgentEnhanced(
-  userRequest: string,
-  existingAgent?: AgentData,
-  options?: {
-    mode?: 'fast' | 'balanced' | 'robust';
-    enableValidation?: boolean;
-    enableInsights?: boolean;
-  }
-): Promise<AgentData> {
-  const { executeAgentGenerationFast, executeAgentGenerationRobust, executeAgentGenerationBalanced } = await import('./steps/orchestrator');
-  
-  let result;
-  
-  switch (options?.mode || 'balanced') {
-    case 'fast':
-      result = await executeAgentGenerationFast(userRequest, existingAgent);
-      break;
-    case 'robust':
-      result = await executeAgentGenerationRobust(userRequest, existingAgent);
-      break;
-    default:
-      result = await executeAgentGenerationBalanced(userRequest, existingAgent);
-      break;
-  }
-  
-  if (!result.success || !result.agent) {
-    throw new Error(`Agent generation failed: ${result.errors.join(', ')}`);
-  }
-  
-  return result.agent;
-}
-
-/**
- * UTILITY FUNCTIONS
- */
-export function getAgentBuilderVersion(): string {
-  return '2.0.0-hybrid';
-}
-
-export function getAgentBuilderFeatures(): string[] {
-  return [
-    'step-by-step-orchestration',
-    'comprehensive-validation',
-    'hybrid-approach-integration',
-    'quality-metrics',
-    'retry-logic',
-    'insight-extraction',
-    'backward-compatibility'
-  ];
-} 

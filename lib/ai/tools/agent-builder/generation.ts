@@ -228,17 +228,28 @@ Expected Results:
   let systemPrompt = `You are a database architect. `;
   
   if (isIncrementalUpdate) {
-    console.log('🔄 INCREMENTAL UPDATE detected - focusing on NEW models only');
+    console.log('🔄 INCREMENTAL UPDATE detected - analyzing what new items are needed');
     
-    systemPrompt += `This is an INCREMENTAL UPDATE to an existing system. Your job is to ONLY create NEW models and enums that are specifically requested by the user, NOT to regenerate existing ones.
+    systemPrompt += `This is an INCREMENTAL UPDATE to an existing system. Your job is to ANALYZE what new models and enums are NEEDED to fulfill the user's request, then create them.
 
-CRITICAL INCREMENTAL UPDATE RULES:
-1. ONLY generate NEW models that are explicitly mentioned in the user request
-2. DO NOT regenerate or modify existing models unless specifically asked
-3. Focus on what's NEW or DIFFERENT in the user's request
-4. If user asks to "add an animal table", create ONLY the Animal model
-5. If user asks to "add categories", create ONLY the Category model
-6. Return ONLY the new models/enums, not the existing ones
+INTELLIGENT INCREMENTAL UPDATE APPROACH:
+1. ANALYZE the user's request to understand what they want to accomplish
+2. COMPARE against existing models to identify gaps
+3. DETERMINE what new models/enums are NEEDED (not just mentioned) to fulfill the request
+4. CREATE the missing models/enums that are required
+5. ENSURE new models integrate properly with existing ones
+
+EXAMPLE SCENARIOS:
+- If user says "I need to track animals" and no Animal model exists → CREATE Animal model
+- If user says "add categories to products" and no Category model exists → CREATE Category model  
+- If user says "I want to manage inventory" and no Inventory model exists → CREATE Inventory model
+- If user says "track user preferences" and no Preference model exists → CREATE Preference model
+
+CRITICAL ANALYSIS QUESTIONS:
+- What does the user want to accomplish?
+- What data models are REQUIRED to support this functionality?
+- What models are missing from the existing system?
+- What enums are needed to support the new functionality?
 
 `;
   } else {
@@ -268,6 +279,13 @@ CRITICAL ID FIELD NAMING RULES:
 2. The idField property MUST always be set to "id"
 3. Relationship fields (foreign keys) CAN use descriptive names like "userId", "productId", etc.
 4. Primary key fields should have type "String", isId: true, unique: true, required: true
+
+CRITICAL MODEL NAMING RULES:
+1. Model names MUST ALWAYS be SINGULAR, never plural
+2. Use "User" not "Users", "Product" not "Products", "Order" not "Orders"
+3. Use "Category" not "Categories", "Company" not "Companies"
+4. This follows proper database modeling conventions where each model represents a single entity
+5. Examples: User, Product, Order, Category, Company, Task, Project, Invoice, Customer
 
 CRITICAL RELATION FIELD RULES:
 1. Relation fields MUST have relationField: true
@@ -336,6 +354,12 @@ EXAMPLE CORRECT MODELS:
   ]
 }
 
+CORRECT MODEL NAMES (SINGULAR):
+✅ User, Product, Order, Category, Company, Task, Project, Invoice, Customer, Lead, Contact, Event, Message, File, Document, Report, Campaign, Team, Role, Permission, Setting, Notification, Comment, Review, Rating, Payment, Subscription, Plan, Feature, Bug, Issue, Ticket, Article, Post, Page, Menu, Widget, Tag, Label, Status, Priority, Type, Template, Layout, Theme, Style, Asset, Image, Video, Audio
+
+❌ INCORRECT MODEL NAMES (PLURAL):
+❌ Users, Products, Orders, Categories, Companies, Tasks, Projects, Invoices, Customers, Leads, Contacts, Events, Messages, Files, Documents, Reports, Campaigns, Teams, Roles, Permissions, Settings, Notifications, Comments, Reviews, Ratings, Payments, Subscriptions, Plans, Features, Bugs, Issues, Tickets, Articles, Posts, Pages, Menus, Widgets, Tags, Labels, Statuses, Priorities, Types, Templates, Layouts, Themes, Styles, Assets, Images, Videos, Audios
+
 ACTION-AWARE DATABASE DESIGN PRINCIPLES:
 1. Include status/state fields for records that actions will modify
 2. Include timestamp fields (createdAt, updatedAt) for audit trails
@@ -372,6 +396,7 @@ Design models that:
 `}Each model should have:
 - A clear purpose and description
 - An appropriate emoji representation
+- A SINGULAR NAME (User, not Users; Product, not Products; Order, not Orders)
 - All necessary fields with correct types
 - Proper relationships to other models
 - Display fields for UI purposes
@@ -437,37 +462,59 @@ Each enum should have:
     return ['id'];
   }
 
-  const fixedModels = (result.object.models || []).map((model: any) => {
+  const fixedModels = (result.object.models || []).map((model: any, index: number) => {
+    // Check if this model already exists in the existing agent
+    const existingModel = existingAgent?.models?.find(m => m.name === model.name);
+    const modelId = existingModel?.id || model.id || `model_${model.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}_${index}`;
+    
     return {
       ...model,
-      id: model.id || `model_${model.name.toLowerCase().replace(/\s+/g, '_')}`,
+      id: modelId,
       idField: model.idField || 'id',
       displayFields: model.displayFields && model.displayFields.length > 0 ? model.displayFields : selectDisplayFields(model.fields || []),
-      fields: (model.fields || []).map((field: any) => ({
-        ...field,
-        id: field.id || `field_${field.name.toLowerCase().replace(/\s+/g, '_')}`,
-        type: field.type || 'String',
-        isId: field.isId || false,
-        unique: field.unique || false,
-        required: field.required || false,
-        list: field.list || false,
-        kind: field.kind || 'scalar',
-        relationField: field.relationField || false,
-        title: field.title || field.name,
-        order: field.order || 0,
-        sort: field.sort || false,
-        defaultValue: field.defaultValue || undefined
-      })),
-      enums: (model.enums || []).map((enumItem: any) => ({
-        ...enumItem,
-        id: enumItem.id || `enum_${enumItem.name.toLowerCase().replace(/\s+/g, '_')}`,
-        fields: (enumItem.fields || []).map((field: any) => ({
+      fields: (model.fields || []).map((field: any, fieldIndex: number) => {
+        // Check if this field already exists in the existing model
+        const existingField = existingModel?.fields?.find(f => f.name === field.name);
+        const fieldId = existingField?.id || field.id || `field_${field.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}_${fieldIndex}`;
+        
+        return {
           ...field,
-          id: field.id || `enum_field_${field.name.toLowerCase().replace(/\s+/g, '_')}`,
+          id: fieldId,
           type: field.type || 'String',
+          isId: field.isId || false,
+          unique: field.unique || false,
+          required: field.required || false,
+          list: field.list || false,
+          kind: field.kind || 'scalar',
+          relationField: field.relationField || false,
+          title: field.title || field.name,
+          order: field.order || 0,
+          sort: field.sort || false,
           defaultValue: field.defaultValue || undefined
-        }))
-      })),
+        };
+      }),
+      enums: (model.enums || []).map((enumItem: any, enumIndex: number) => {
+        // Check if this enum already exists in the existing model
+        const existingEnum = existingModel?.enums?.find(e => e.name === enumItem.name);
+        const enumId = existingEnum?.id || enumItem.id || `enum_${enumItem.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}_${enumIndex}`;
+        
+        return {
+          ...enumItem,
+          id: enumId,
+          fields: (enumItem.fields || []).map((field: any, enumFieldIndex: number) => {
+            // Check if this enum field already exists in the existing enum
+            const existingEnumField = existingEnum?.fields?.find(f => f.name === field.name);
+            const enumFieldId = existingEnumField?.id || field.id || `enum_field_${field.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}_${enumFieldIndex}`;
+            
+            return {
+              ...field,
+              id: enumFieldId,
+              type: field.type || 'String',
+              defaultValue: field.defaultValue || undefined
+            };
+          })
+        };
+      }),
       forms: model.forms || [],
       records: model.records || []
     };
@@ -535,15 +582,26 @@ ${(existingAgent.actions || []).map((action: any) => `- ${action.name}: ${action
   let systemPrompt = `You are a workflow automation expert. `;
   
   if (isIncrementalUpdate) {
-    systemPrompt += `This is an INCREMENTAL UPDATE to an existing system. Your job is to ONLY create NEW actions that are specifically requested by the user, NOT to regenerate existing ones.
+    systemPrompt += `This is an INCREMENTAL UPDATE to an existing system. Your job is to ANALYZE what new actions are NEEDED to fulfill the user's request, then create them.
 
-CRITICAL INCREMENTAL UPDATE RULES:
-1. ONLY generate NEW actions that are explicitly mentioned in the user request
-2. DO NOT regenerate or modify existing actions unless specifically asked
-3. Focus on what's NEW or DIFFERENT in the user's request
-4. If user asks to "add animal management actions", create ONLY new animal-related actions
-5. Return ONLY the new actions, not the existing ones
-6. Create ${expectedActionCount} new actions maximum
+INTELLIGENT INCREMENTAL UPDATE APPROACH:
+1. ANALYZE the user's request to understand what functionality they want
+2. COMPARE against existing actions to identify gaps  
+3. DETERMINE what new actions are NEEDED (not just mentioned) to fulfill the request
+4. CREATE the missing actions that are required
+5. ENSURE new actions work with existing models and actions
+
+EXAMPLE SCENARIOS:
+- If user says "I need to manage animals" and no animal actions exist → CREATE animal management actions
+- If user says "add reporting features" and no report actions exist → CREATE reporting actions
+- If user says "I want user notifications" and no notification actions exist → CREATE notification actions
+- If user says "track inventory" and no inventory actions exist → CREATE inventory actions
+
+CRITICAL ANALYSIS QUESTIONS:
+- What functionality does the user want to accomplish?
+- What actions are REQUIRED to support this functionality?
+- What actions are missing from the existing system?
+- What workflows need to be supported?
 
 `;
   } else {
@@ -690,35 +748,40 @@ Generate exactly ${expectedActionCount} actions that solve real business problem
   console.log('✅ Actions generation complete');
   
   // Fix actions to ensure they have all required fields and proper envVars arrays
-  const fixedActions = (result.object.actions || []).map((action: any) => ({
-    ...action,
-    id: action.id || `action_${action.name.toLowerCase().replace(/\s+/g, '_')}`,
-    emoji: action.emoji || '⚡',
-    type: action.type || 'Create',
-    role: action.role || 'member',
-    dataSource: {
-      type: action.dataSource?.type || 'database',
-      customFunction: action.dataSource?.customFunction ? {
-        code: action.dataSource.customFunction.code,
-        // Ensure envVars is always an array
-        envVars: Array.isArray(action.dataSource.customFunction.envVars) ? action.dataSource.customFunction.envVars : []
-      } : undefined,
-      database: action.dataSource?.type === 'custom' 
-        ? (action.dataSource?.database || undefined)
-        : (action.dataSource?.database || {
-            models: (databaseResult.models || []).slice(0, 1).map(model => ({
-              id: model.id,
-              name: model.name,
-              fields: (model.fields || []).slice(0, 3).map(field => ({
-                id: field.id,
-                name: field.name
+  const fixedActions = (result.object.actions || []).map((action: any, index: number) => {
+    // Check if this action already exists in the existing agent
+    const existingAction = existingAgent?.actions?.find(a => a.name === action.name);
+    const actionId = existingAction?.id || action.id || `action_${action.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}_${index}`;
+    
+    return {
+      ...action,
+      id: actionId,
+      emoji: action.emoji || '⚡',
+      type: action.type || 'Create',
+      role: action.role || 'member',
+      dataSource: {
+        type: action.dataSource?.type || 'database',
+        customFunction: action.dataSource?.customFunction ? {
+          code: action.dataSource.customFunction.code,
+          // Ensure envVars is always an array
+          envVars: Array.isArray(action.dataSource.customFunction.envVars) ? action.dataSource.customFunction.envVars : []
+        } : undefined,
+        database: action.dataSource?.type === 'custom' 
+          ? (action.dataSource?.database || undefined)
+          : (action.dataSource?.database || {
+              models: (databaseResult.models || []).slice(0, 1).map(model => ({
+                id: model.id,
+                name: model.name,
+                fields: (model.fields || []).slice(0, 3).map(field => ({
+                  id: field.id,
+                  name: field.name
+                }))
               }))
-            }))
-          })
-    },
-    execute: {
-      code: {
-        script: action.execute?.code?.script || `
+            })
+      },
+      execute: {
+        code: {
+          script: action.execute?.code?.script || `
 // Action: ${action.name}
 // Parameters: database, input, member
 try {
@@ -748,17 +811,18 @@ try {
 } catch (error) {
   throw new Error('Action failed: ' + error.message);
 }`,
-        envVars: Array.isArray(action.execute?.code?.envVars) ? action.execute.code.envVars : []
+          envVars: Array.isArray(action.execute?.code?.envVars) ? action.execute.code.envVars : []
+        }
+      },
+      results: {
+        actionType: action.results?.actionType || action.type || 'Create',
+        model: action.results?.model || ((databaseResult.models || [])[0]?.name || 'DefaultModel'),
+        identifierIds: action.results?.identifierIds || undefined,
+        fields: action.results?.fields || {},
+        fieldsToUpdate: action.results?.fieldsToUpdate || undefined
       }
-    },
-    results: {
-      actionType: action.results?.actionType || action.type || 'Create',
-      model: action.results?.model || ((databaseResult.models || [])[0]?.name || 'DefaultModel'),
-      identifierIds: action.results?.identifierIds || undefined,
-      fields: action.results?.fields || {},
-      fieldsToUpdate: action.results?.fieldsToUpdate || undefined
-    }
-  }));
+    };
+  });
 
   // If this is an incremental update, we need to merge with existing actions
   if (isIncrementalUpdate) {
@@ -831,7 +895,7 @@ export async function generateActionsWithEnhancedAnalysis(
  */
 export async function generateSchedules(
   promptUnderstanding: PromptUnderstanding,
-  databaseSchema: any,
+  databaseResult: any, // Changed parameter name to match actual usage
   actions: any,
   existingAgent?: AgentData,
   changeAnalysis?: ChangeAnalysis
@@ -874,7 +938,7 @@ AVAILABLE ACTIONS:
 ${Array.isArray(actions) ? actions.map((action: any) => `- ${action.name}: ${action.description}`).join('\n') : 'No actions available'}
 
 AVAILABLE DATA MODELS:
-${databaseSchema?.models?.map((model: any) => `- ${model.name}`).join('\n') || 'No models available'}
+${(databaseResult?.models || []).map((model: any) => `- ${model.name}`).join('\n') || 'No models available'}
 
 ${isIncrementalUpdate ? `
 FOR INCREMENTAL UPDATES:
@@ -912,39 +976,44 @@ Design schedules that:
   console.log('✅ Schedules generation complete');
   
   // Fix schedules to ensure they have all required fields
-  const fixedSchedules = (result.object.schedules || []).map((schedule: any) => ({
-    ...schedule,
-    id: schedule.id || `schedule_${schedule.name.toLowerCase().replace(/\s+/g, '_')}`,
-    emoji: schedule.emoji || '🕒',
-    type: schedule.type || 'Create',
-    role: schedule.role || 'admin',
-    interval: {
-      pattern: schedule.interval?.pattern || '0 0 * * *',
-      timezone: schedule.interval?.timezone || 'UTC',
-      active: schedule.interval?.active !== undefined ? schedule.interval.active : true
-    },
-    dataSource: {
-      type: schedule.dataSource?.type || 'database',
-      customFunction: schedule.dataSource?.customFunction ? {
-        code: schedule.dataSource.customFunction.code,
-        envVars: Array.isArray(schedule.dataSource.customFunction.envVars) ? schedule.dataSource.customFunction.envVars : []
-      } : undefined,
-      database: schedule.dataSource?.type === 'custom' 
-        ? (schedule.dataSource?.database || null)
-        : (schedule.dataSource?.database || {
-            models: databaseSchema?.models?.slice(0, 1).map((model: any) => ({
-              id: model.id,
-              name: model.name,
-              fields: model.fields?.slice(0, 3).map((field: any) => ({
-                id: field.id,
-                name: field.name
+  const fixedSchedules = (result.object.schedules || []).map((schedule: any, index: number) => {
+    // Check if this schedule already exists in the existing agent
+    const existingSchedule = existingAgent?.schedules?.find(s => s.name === schedule.name);
+    const scheduleId = existingSchedule?.id || schedule.id || `schedule_${schedule.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}_${index}`;
+    
+    return {
+      ...schedule,
+      id: scheduleId,
+      emoji: schedule.emoji || '🕒',
+      type: schedule.type || 'Create',
+      role: schedule.role || 'admin',
+      interval: {
+        pattern: schedule.interval?.pattern || '0 0 * * *',
+        timezone: schedule.interval?.timezone || 'UTC',
+        active: schedule.interval?.active !== undefined ? schedule.interval.active : true
+      },
+      dataSource: {
+        type: schedule.dataSource?.type || 'database',
+        customFunction: schedule.dataSource?.customFunction ? {
+          code: schedule.dataSource.customFunction.code,
+          envVars: Array.isArray(schedule.dataSource.customFunction.envVars) ? schedule.dataSource.customFunction.envVars : []
+        } : undefined,
+        database: schedule.dataSource?.type === 'custom' 
+          ? (schedule.dataSource?.database || null)
+          : (schedule.dataSource?.database || {
+              models: (databaseResult?.models || []).slice(0, 1).map((model: any) => ({
+                id: model.id,
+                name: model.name,
+                fields: model.fields?.slice(0, 3).map((field: any) => ({
+                  id: field.id,
+                  name: field.name
+                })) || []
               })) || []
-            })) || []
-          })
-    },
-    execute: {
-      code: {
-        script: schedule.execute?.code?.script || `
+            })
+      },
+      execute: {
+        code: {
+          script: schedule.execute?.code?.script || `
 // Schedule: ${schedule.name}
 // Parameters: database, envs
 try {
@@ -965,7 +1034,7 @@ try {
   return {
     output: result,
     data: [{
-      modelId: '${databaseSchema?.models?.[0]?.name || 'DefaultModel'}',
+      modelId: '${(databaseResult?.models || [])[0]?.name || 'DefaultModel'}',
       createdRecords: [],
       updatedRecords: [],
       deletedRecords: []
@@ -974,17 +1043,18 @@ try {
 } catch (error) {
   throw new Error('Schedule failed: ' + error.message);
 }`,
-        envVars: Array.isArray(schedule.execute?.code?.envVars) ? schedule.execute.code.envVars : []
+          envVars: Array.isArray(schedule.execute?.code?.envVars) ? schedule.execute.code.envVars : []
+        }
+      },
+      results: {
+        actionType: schedule.results?.actionType || schedule.type || 'Create',
+        model: schedule.results?.model || ((databaseResult?.models || [])[0]?.name || 'DefaultModel'),
+        identifierIds: schedule.results?.identifierIds || undefined,
+        fields: schedule.results?.fields || {},
+        fieldsToUpdate: schedule.results?.fieldsToUpdate || undefined
       }
-    },
-    results: {
-      actionType: schedule.results?.actionType || schedule.type || 'Create',
-      model: schedule.results?.model || (databaseSchema?.models?.[0]?.name || 'DefaultModel'),
-      identifierIds: schedule.results?.identifierIds || undefined,
-      fields: schedule.results?.fields || {},
-      fieldsToUpdate: schedule.results?.fieldsToUpdate || undefined
-    }
-  }));
+    };
+  });
 
   // If this is an incremental update, we need to merge with existing schedules
   if (isIncrementalUpdate) {

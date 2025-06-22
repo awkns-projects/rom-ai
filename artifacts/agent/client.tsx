@@ -166,6 +166,7 @@ interface EnvVar {
 }
 
 interface AgentData {
+  id?: string; // Optional for new agents, required for existing ones
   name: string;
   description: string;
   domain: string;
@@ -173,6 +174,15 @@ interface AgentData {
   actions: AgentAction[];
   schedules: AgentSchedule[];
   createdAt: string;
+  metadata?: {
+    createdAt: string;
+    updatedAt: string;
+    version: string;
+    lastModifiedBy: string;
+    tags: string[];
+    status: string;
+    [key: string]: any; // Allow additional metadata fields from orchestrator
+  };
 }
 
 interface AgentArtifactMetadata {
@@ -3164,18 +3174,19 @@ const AgentBuilderContent = memo(({
   const { artifact } = useArtifact();
   
   // Initialize metadata with defaults if null
-  const safeMetadata: AgentArtifactMetadata = {
-    selectedTab: metadata?.selectedTab || 'models',
-    editingModel: metadata?.editingModel || null,
-    editingAction: metadata?.editingAction || null,
-    editingSchedule: metadata?.editingSchedule || null,
-    viewingModelData: metadata?.viewingModelData || null,
-    editingRecord: metadata?.editingRecord || null,
-    currentStep: metadata?.currentStep,
-    stepProgress: metadata?.stepProgress,
-    stepMessages: metadata?.stepMessages,
-    dataManagement: metadata?.dataManagement || null
+  const safeMetadata: AgentArtifactMetadata = metadata || {
+    selectedTab: 'models',
+    editingModel: null,
+    editingAction: null,
+    editingSchedule: null,
+    viewingModelData: null,
+    editingRecord: null,
+    dataManagement: null
   };
+
+  // Track unsaved changes
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const [agentData, setAgentData] = useState<AgentData>(() => {
     console.log('🚀 Initializing agent data with content:', {
@@ -3209,19 +3220,23 @@ const AgentBuilderContent = memo(({
         const schedules = Array.isArray(parsed.schedules) ? parsed.schedules : [];
         
         const initialData = {
-          name: typeof parsed.name === 'string' ? parsed.name : 'New Agent',
-          description: typeof parsed.description === 'string' ? parsed.description : '',
-          domain: typeof parsed.domain === 'string' ? parsed.domain : '',
+          id: parsed.id, // Keep id if it exists (from orchestrator)
+          name: parsed.name || 'New Agent',
+          description: parsed.description || '',
+          domain: parsed.domain || '',
           models,
           actions,
           schedules,
-          createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString()
+          createdAt: parsed.createdAt || new Date().toISOString(),
+          metadata: parsed.metadata // Keep metadata if it exists (from orchestrator)
         };
 
         console.log('📥 Initialized agent data from content:', {
+          id: initialData.id,
           name: initialData.name,
           modelCount: initialData.models.length,
-          actionCount: initialData.actions.length
+          actionCount: initialData.actions.length,
+          hasMetadata: !!initialData.metadata
         });
 
         return initialData;
@@ -3277,17 +3292,27 @@ const AgentBuilderContent = memo(({
     });
     
     setAgentData(newData);
-    const serializedData = JSON.stringify(newData, null, 2);
-    onSaveContent(serializedData, true);
-  }, [onSaveContent, agentData.models, agentData.actions, agentData.schedules]);
+    setHasUnsavedChanges(true); // Mark as having unsaved changes
+    // Removed auto-save - only save when user explicitly clicks "Save Agent"
+    // const serializedData = JSON.stringify(newData, null, 2);
+    // onSaveContent(serializedData, true);
+  }, [agentData.models, agentData.actions, agentData.schedules]);
 
   // Enhanced save function - moved to maintain consistent hook order
   const saveAgentToConversation = useCallback(async () => {
-    // Save the current agent data using the standard document saving mechanism
-    const agentContent = JSON.stringify(agentData, null, 2);
-    onSaveContent(agentContent, false);
-    
-    console.log('✅ Agent data saved through standard document mechanism');
+    setIsSaving(true);
+    try {
+      // Save the current agent data using the standard document saving mechanism
+      const agentContent = JSON.stringify(agentData, null, 2);
+      onSaveContent(agentContent, false);
+      
+      setHasUnsavedChanges(false); // Clear unsaved changes flag
+      console.log('✅ Agent data saved through standard document mechanism');
+    } catch (error) {
+      console.error('❌ Failed to save agent data:', error);
+    } finally {
+      setIsSaving(false);
+    }
   }, [agentData, onSaveContent]);
 
   // Monitor content changes from external sources (like when opening from chat or refreshing page)
@@ -3311,13 +3336,15 @@ const AgentBuilderContent = memo(({
       // Only update if we have real data
       if (hasRealData) {
         const updatedData = {
+          id: parsed.id, // Keep id if it exists (from orchestrator)
           name: parsed.name || 'New Agent',
           description: parsed.description || '',
           domain: parsed.domain || '',
           models: Array.isArray(parsed.models) ? parsed.models : [],
           actions: Array.isArray(parsed.actions) ? parsed.actions : [],
           schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
-          createdAt: parsed.createdAt || new Date().toISOString()
+          createdAt: parsed.createdAt || new Date().toISOString(),
+          metadata: parsed.metadata // Keep metadata if it exists (from orchestrator)
         };
         
         // Only update if data has actually changed
@@ -3556,11 +3583,21 @@ const AgentBuilderContent = memo(({
               {/* Save Button */}
               <Button
                 onClick={saveAgentToConversation}
-                className="btn-matrix px-4 sm:px-6 py-2.5 text-sm font-medium font-mono"
+                disabled={isSaving}
+                className={cn(
+                  "px-4 sm:px-6 py-2.5 text-sm font-medium font-mono transition-all duration-200",
+                  hasUnsavedChanges 
+                    ? "btn-matrix border-yellow-500/50 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300" 
+                    : "btn-matrix"
+                )}
               >
                 <div className="flex items-center gap-2 justify-center">
-                  <div className="w-4 h-4">💾</div>
-                  <span>Save Agent</span>
+                  <div className="w-4 h-4">
+                    {isSaving ? '⏳' : hasUnsavedChanges ? '📝' : '💾'}
+                  </div>
+                  <span>
+                    {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'Save Agent'}
+                  </span>
                 </div>
               </Button>
             </div>
@@ -3593,15 +3630,17 @@ const AgentBuilderContent = memo(({
               </div>
               
               {/* Progress Steps */}
-               <div className="flex justify-between mt-4 text-xs font-mono">
-                {[
-                  { id: 'prompt-understanding', label: 'Analysis' },
-                  { id: 'overview', label: 'Overview' },
-                  { id: 'models', label: 'Models' },
-                  { id: 'actions', label: 'Actions' },
-                  { id: 'schedules', label: 'Schedules' },
-                  { id: 'complete', label: 'Complete' }
-                ].map((step) => {
+               <div className="flex justify-center mt-4 text-xs font-mono">
+                {(() => {
+                  const steps = [
+                    { id: 'prompt-understanding', label: 'Analysis' },
+                    { id: 'overview', label: 'Overview' },
+                    { id: 'models', label: 'Models' },
+                    { id: 'actions', label: 'Actions' },
+                    { id: 'schedules', label: 'Schedules' },
+                    { id: 'complete', label: 'Complete' }
+                  ];
+                  
                   // Use the enhanced step status function to properly handle API sync
                   const getEnhancedStepStatus = (stepId: string) => {
                     // Map orchestrator step IDs to UI step IDs
@@ -3641,12 +3680,20 @@ const AgentBuilderContent = memo(({
                     return getStepStatus(stepId, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
                   };
                   
-                  const stepStatus = getEnhancedStepStatus(step.id);
+                  // Find the current step
+                  const currentStep = steps.find(step => {
+                    const stepStatus = getEnhancedStepStatus(step.id);
+                    return stepStatus === 'processing';
+                  }) || steps.find(step => step.id === 'complete');
+                  
+                  if (!currentStep) return null;
+                  
+                  const stepStatus = getEnhancedStepStatus(currentStep.id);
                   const isComplete = stepStatus === 'complete';
                   const isProcessing = stepStatus === 'processing';
                   
                   return (
-                    <div key={step.id} className="flex flex-col items-center gap-1">
+                    <div className="flex items-center gap-2">
                       <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
                         isComplete 
                           ? 'bg-green-400 shadow-lg shadow-green-500/50 animate-matrix-glow' 
@@ -3661,11 +3708,11 @@ const AgentBuilderContent = memo(({
                           ? 'text-yellow-400'
                           : 'text-green-500/50'
                       }`}>
-                        {step.label}
+                        {currentStep.label}
                       </span>
                     </div>
                   );
-                })}
+                })()}
               </div>
             </div>
           )}
@@ -3908,26 +3955,55 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
         }));
       }
       
-      // Handle final completion - set status to idle for summary display
+      // Handle final completion - keep streaming until we get the completion event
       if (stepData.status === 'complete' && (stepData.step === 'complete' || mappedStepId === 'complete')) {
-        setArtifact((draftArtifact) => ({
-          ...draftArtifact,
-          isVisible: true,
-          status: 'idle', // Set to idle so the message component can show the summary
-        }));
+        // setArtifact((draftArtifact) => ({
+        //   ...draftArtifact,
+        //   isVisible: true,
+        //   status: 'streaming', // Keep as streaming initially
+        // }));
+        
+        // Set to idle after a brief delay to ensure all text-delta content has been processed
+        // The status change from 'streaming' to 'idle' will trigger document refetch in the main component
+        setTimeout(() => {
+          setArtifact((draftArtifact) => ({
+            ...draftArtifact,
+            status: 'idle',
+          }));
+        }, 1500); // 1.5 second delay to allow orchestrator to complete saving
       }
+    }
+
+    // Handle dedicated completion events (would need to be added to server-side)
+    // For now, we'll use the existing agent-step complete detection but make it more reliable
+    if (streamPart.type === 'agent-step') {
+      const stepData = typeof streamPart.content === 'string' 
+        ? JSON.parse(streamPart.content) 
+        : streamPart.content;
       
-      // Note: Final completion is now handled by the message component
-      // since it has better access to step progress tracking
+      // When we receive the final complete step, set artifact to idle after a brief delay
+      // to ensure all text-delta content has been processed
+      if (stepData.status === 'complete' && stepData.step === 'complete') {
+        setTimeout(() => {
+          setArtifact((draftArtifact) => ({
+            ...draftArtifact,
+            status: 'idle',
+          }));
+        }, 1200); // 1.2 second delay to allow orchestrator to complete saving
+      }
     }
     
     if (streamPart.type === 'text-delta') {
-      setArtifact((draftArtifact) => ({
-        ...draftArtifact,
-        content: draftArtifact.content + (streamPart.content as string),
-        isVisible: draftArtifact.status === 'streaming' && draftArtifact.content.length > 200,
-        status: 'streaming',
-      }));
+      setArtifact((draftArtifact) => {
+        const newContent = draftArtifact.content + (streamPart.content as string);
+        
+        return {
+          ...draftArtifact,
+          content: newContent,
+          isVisible: draftArtifact.status === 'streaming' && newContent.length > 200,
+          // Don't change status here - let the completion timeout handle it
+        };
+      });
     }
   },
 
