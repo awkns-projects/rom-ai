@@ -125,13 +125,13 @@ export const Greeting = () => {
               {/* <HeartHandshake className="mx-auto size-16 text-black dark:text-white lg:size-24" /> */}
             </div>
             <div className="z-10 mt-8 flex flex-col items-center text-center text-black dark:text-white w-full max-w-5xl mx-auto px-6">
-              <h1 className="text-3xl font-bold sm:text-4xl lg:text-6xl text-center text-black dark:text-white font-sans tracking-tight mb-6 bg-gradient-to-r from-green-400 via-green-500 to-green-600 dark:from-green-300 dark:via-green-400 dark:to-green-500 bg-clip-text text-transparent animate-pulse">
+              <h1 className="text-3xl font-bold sm:text-4xl lg:text-6xl text-center text-black dark:text-white font-sans tracking-tight mb-6 bg-gradient-to-r from-green-200 via-green-100 to-green-200 dark:from-green-100 dark:via-green-200 dark:to-green-100 bg-clip-text text-transparent animate-pulse drop-shadow-lg">
                 Rom Cards
               </h1>
-              <p className="text-lg sm:text-xl lg:text-2xl text-center max-w-4xl mx-auto font-medium font-sans leading-relaxed tracking-normal mb-4 text-gray-700 dark:text-green-100/90">
-                Prompt any idea to live in seconds. Build AI agents, apps, CRMs, automations, and anything.
+              <p className="text-lg sm:text-xl lg:text-2xl text-center max-w-4xl mx-auto font-medium font-sans leading-relaxed tracking-normal mb-4 text-gray-800 dark:text-green-200 brightness-110">
+                Prompt any idea to life. Build AI agents, apps, CRMs & automations.
               </p>
-              <span className="block text-base sm:text-lg lg:text-xl text-gray-500 dark:text-green-300/70 font-normal font-mono tracking-wide italic">
+              <span className="block text-base sm:text-lg lg:text-xl text-green-600 font-normal font-mono tracking-wide italic">
                 The only vibe coding tool that gives no headache.
               </span>
             </div>
