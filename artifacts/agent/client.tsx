@@ -193,7 +193,7 @@ interface AgentArtifactMetadata {
     examples?: 'processing' | 'complete';
     actions?: 'processing' | 'complete';
     schedules?: 'processing' | 'complete';
-    integration?: 'processing' | 'complete';
+    complete?: 'processing' | 'complete';
   };
   stepMessages?: Record<string, string>;
   dataManagement?: {
@@ -343,8 +343,8 @@ const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Reco
     return agentData?.name && agentData?.description && agentData?.domain ? 'complete' : 'pending';
   }
   
-  // For integration, check if all components are complete
-  if (stepId === 'integration') {
+  // For complete step, check if all components are complete
+  if (stepId === 'complete') {
     const hasBasicInfo = agentData?.name && agentData?.description && agentData?.domain;
     const hasModels = agentData?.models && agentData.models?.length > 0;
     const hasActions = agentData?.actions && agentData.actions?.length > 0;
@@ -357,20 +357,81 @@ const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Reco
 
 // Helper function to calculate progress percentage consistently
 const calculateProgressPercentage = (currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>, agentData?: any) => {
+  // Map orchestrator step IDs to UI step IDs
+  const stepIdMapping: Record<string, string> = {
+    'step0': 'prompt-understanding',
+    'step1': 'analysis',
+    'step2': 'overview',
+    'step3': 'models',
+    'step4': 'actions',
+    'step5': 'schedules',
+    'complete': 'complete', // Direct mapping for complete step
+    'error': 'complete' // Map errors to complete step as well
+  };
+
+  // Reverse mapping for getting orchestrator step from UI step
+  const reverseStepMapping: Record<string, string> = {
+    'prompt-understanding': 'step0',
+    'analysis': 'step1',
+    'overview': 'step2',
+    'models': 'step3',
+    'actions': 'step4',
+    'schedules': 'step5',
+    'complete': 'complete'
+  };
+
   const steps = [
     { id: 'prompt-understanding', name: 'Understanding Requirements' },
-    { id: 'granular-analysis', name: 'Granular Analysis' },
     { id: 'analysis', name: 'Analysis' },
-    { id: 'change-analysis', name: 'Change Analysis' },
     { id: 'overview', name: 'Overview' },
     { id: 'models', name: 'Data Models' },
-    { id: 'examples', name: 'Example Records' },
     { id: 'actions', name: 'Automated Actions' },
     { id: 'schedules', name: 'Schedules' },
-    { id: 'integration', name: 'Integration' }
+    { id: 'complete', name: 'Complete' }
   ];
+
+  // Enhanced getStepStatus function that handles both naming conventions
+  const getEnhancedStepStatus = (stepId: string) => {
+    // Check both the UI step ID and orchestrator step ID
+    const orchestratorStepId = reverseStepMapping[stepId] || stepId;
+    const uiStepId = stepIdMapping[stepId] || stepId;
+    
+    // Check stepProgress for both IDs
+    if (stepProgress) {
+      if (stepProgress[stepId as keyof typeof stepProgress]) {
+        return stepProgress[stepId as keyof typeof stepProgress];
+      }
+      if (orchestratorStepId && stepProgress[orchestratorStepId as keyof typeof stepProgress]) {
+        return stepProgress[orchestratorStepId as keyof typeof stepProgress];
+      }
+      if (uiStepId && stepProgress[uiStepId as keyof typeof stepProgress]) {
+        return stepProgress[uiStepId as keyof typeof stepProgress];
+      }
+    }
+    
+    // Check if this is the current step
+    if (currentStep === stepId || currentStep === orchestratorStepId || currentStep === uiStepId) {
+      return 'processing';
+    }
+    
+    // Determine based on step order
+    const stepOrder = steps.map(s => s.id);
+    const currentStepIndex = currentStep ? stepOrder.findIndex(s => s === currentStep || 
+      stepIdMapping[currentStep] === s || 
+      reverseStepMapping[currentStep] === s) : -1;
+    const thisStepIndex = stepOrder.indexOf(stepId);
+    
+    if (currentStepIndex >= 0 && thisStepIndex < currentStepIndex) {
+      return 'complete';
+    }
+    if (currentStepIndex >= 0 && thisStepIndex > currentStepIndex) {
+      return 'pending';
+    }
+    
+    return 'pending';
+  };
   
-  const completedSteps = steps.filter(step => getStepStatus(step.id, currentStep, stepProgress, agentData) === 'complete').length;
+  const completedSteps = steps.filter(step => getEnhancedStepStatus(step.id) === 'complete').length;
   
   return (completedSteps / steps.length) * 100;
 };
@@ -389,73 +450,138 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {},
     models?: 'processing' | 'complete';
     actions?: 'processing' | 'complete';
     schedules?: 'processing' | 'complete';
-    integration?: 'processing' | 'complete';
+    complete?: 'processing' | 'complete';
   }
 }) => {
+  // Map orchestrator step IDs to UI step IDs
+  const stepIdMapping: Record<string, string> = {
+    'step0': 'prompt-understanding',
+    'step1': 'analysis',
+    'step2': 'overview',
+    'step3': 'models',
+    'step4': 'actions',
+    'step5': 'schedules',
+    'complete': 'complete'
+  };
+
+  // Reverse mapping for getting orchestrator step from UI step
+  const reverseStepMapping: Record<string, string> = {
+    'prompt-understanding': 'step0',
+    'analysis': 'step1',
+    'overview': 'step2',
+    'models': 'step3',
+    'actions': 'step4',
+    'schedules': 'step5',
+    'complete': 'complete'
+  };
+
   const steps = [
     { 
       id: 'prompt-understanding', 
+      orchestratorId: 'step0',
       title: 'Understanding Requirements',
       description: 'Analyzing your request in detail',
       icon: '🧠'
     },
     { 
-      id: 'granular-analysis', 
-      title: 'Detailed Planning',
-      description: 'Creating execution strategy',
-      icon: '🔍'
-    },
-    { 
       id: 'analysis', 
+      orchestratorId: 'step1',
       title: 'AI Decision Making',
       description: 'Determining optimal approach',
       icon: '🤖'
     },
     { 
-      id: 'change-analysis', 
-      title: 'Change Impact Analysis',
-      description: 'Analyzing modifications needed',
-      icon: '📋'
-    },
-    { 
       id: 'overview', 
+      orchestratorId: 'step2',
       title: 'System Architecture',
       description: 'Designing system overview',
       icon: '🏗️'
     },
     { 
       id: 'models', 
+      orchestratorId: 'step3',
       title: 'Data Models',
       description: 'Defining data structures',
       icon: '📊'
     },
     { 
-      id: 'examples', 
-      title: 'Example Records',
-      description: 'Generating sample data',
-      icon: '📝'
-    },
-    { 
       id: 'actions', 
+      orchestratorId: 'step4',
       title: 'Automated Actions',
       description: 'Creating workflow automations',
       icon: '⚡'
     },
     {
       id: 'schedules',
+      orchestratorId: 'step5',
       title: 'Schedules & Timing',
       description: 'Automated execution timing',
       icon: '⏰'
     },
     {
-      id: 'integration',
-      title: 'System Integration',
-      description: 'Finalizing and integrating',
-      icon: '🔧'
+      id: 'complete',
+      orchestratorId: 'complete',
+      title: 'Complete',
+      description: 'Agent system successfully generated',
+      icon: '✅'
     }
   ];
 
-  const completedSteps = steps.filter(step => getStepStatus(step.id, currentStep, stepProgress, agentData) === 'complete').length;
+  // Enhanced getStepStatus function that handles both naming conventions
+  const getEnhancedStepStatus = (stepId: string) => {
+    // Check both the UI step ID and orchestrator step ID
+    const orchestratorStepId = reverseStepMapping[stepId] || stepId;
+    const uiStepId = stepIdMapping[stepId] || stepId;
+    
+    // Check stepProgress for both IDs
+    if (stepProgress) {
+      if (stepProgress[stepId as keyof typeof stepProgress]) {
+        return stepProgress[stepId as keyof typeof stepProgress];
+      }
+      if (orchestratorStepId && stepProgress[orchestratorStepId as keyof typeof stepProgress]) {
+        return stepProgress[orchestratorStepId as keyof typeof stepProgress];
+      }
+      if (uiStepId && stepProgress[uiStepId as keyof typeof stepProgress]) {
+        return stepProgress[uiStepId as keyof typeof stepProgress];
+      }
+    }
+    
+    // Check if this is the current step
+    if (currentStep === stepId || currentStep === orchestratorStepId || currentStep === uiStepId) {
+      return 'processing';
+    }
+    
+    // Determine based on step order
+    const stepOrder = steps.map(s => s.id);
+    const currentStepIndex = currentStep ? stepOrder.findIndex(s => s === currentStep || 
+      stepIdMapping[currentStep] === s || 
+      reverseStepMapping[currentStep] === s) : -1;
+    const thisStepIndex = stepOrder.indexOf(stepId);
+    
+    if (currentStepIndex >= 0 && thisStepIndex < currentStepIndex) {
+      return 'complete';
+    }
+    if (currentStepIndex >= 0 && thisStepIndex > currentStepIndex) {
+      return 'pending';
+    }
+    
+    return 'pending';
+  };
+
+  // Enhanced getStepMessage function
+  const getEnhancedStepMessage = (stepId: string) => {
+    // Check both the UI step ID and orchestrator step ID
+    const orchestratorStepId = reverseStepMapping[stepId] || stepId;
+    const uiStepId = stepIdMapping[stepId] || stepId;
+    
+    if (stepMessages[stepId]) return stepMessages[stepId];
+    if (stepMessages[orchestratorStepId]) return stepMessages[orchestratorStepId];
+    if (stepMessages[uiStepId]) return stepMessages[uiStepId];
+    
+    return '';
+  };
+
+  const completedSteps = steps.filter(step => getEnhancedStepStatus(step.id) === 'complete').length;
   const progressPercentage = calculateProgressPercentage(currentStep, stepProgress, agentData);
 
   return (
@@ -469,8 +595,8 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {},
               ? '🎉 Agent successfully built!' 
               : (() => {
                   // Find the current active step or the next pending step
-                  const activeStep = steps.find(s => getStepStatus(s.id, currentStep, stepProgress, agentData) === 'processing');
-                  const nextPendingStep = steps.find(s => getStepStatus(s.id, currentStep, stepProgress, agentData) === 'pending');
+                  const activeStep = steps.find(s => getEnhancedStepStatus(s.id) === 'processing');
+                  const nextPendingStep = steps.find(s => getEnhancedStepStatus(s.id) === 'pending');
                   const currentStepLabel = activeStep?.title || nextPendingStep?.title || 'Processing';
                   
                   return `Step ${completedSteps + 1} of ${steps.length} - ${currentStepLabel}`;
@@ -479,7 +605,7 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {},
           </p>
         </div>
         <div className="text-right">
-          <div className="text-2xl font-bold text-blue-600">{Math.round(calculateProgressPercentage(currentStep, stepProgress, agentData))}%</div>
+          <div className="text-2xl font-bold text-blue-600">{Math.round(progressPercentage)}%</div>
           <div className="text-xs text-gray-500">Complete</div>
         </div>
       </div>
@@ -497,8 +623,8 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {},
       {/* Steps */}
       <div className="space-y-4">
         {steps.map((step, index) => {
-          const status = getStepStatus(step.id, currentStep, stepProgress, agentData);
-          const message = stepMessages[step.id];
+          const status = getEnhancedStepStatus(step.id);
+          const message = getEnhancedStepMessage(step.id);
           
           return (
             <div 
@@ -566,11 +692,6 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {},
                         {agentData.models?.length} models created
                       </span>
                     )}
-                    {step.id === 'examples' && agentData.models && agentData.models?.some((model: any) => model.records && model.records.length > 0) && (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
-                        {agentData.models?.reduce((sum: number, model: any) => sum + (model.records?.length || 0), 0)} example records generated
-                      </span>
-                    )}
                     {step.id === 'actions' && agentData.actions && (
                       <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
                         {agentData.actions?.length} actions automated
@@ -578,7 +699,7 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {},
                     )}
                     {step.id === 'schedules' && agentData.schedules && (
                       <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
-                        {agentData.schedules?.length} schedules configured
+                        {agentData.schedules?.length} schedules created
                       </span>
                     )}
                   </div>
@@ -588,23 +709,6 @@ const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {},
           );
         })}
       </div>
-
-      {/* Completion Summary */}
-      {completedSteps === steps.length && agentData && (
-        <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-lg">🎉</span>
-            </div>
-            <div>
-              <h4 className="font-semibold text-green-900">Agent Successfully Built!</h4>
-              <p className="text-sm text-green-700 mt-1">
-                Your <strong>{agentData.name}</strong> is ready with {agentData.models?.length || 0} models and {agentData.actions?.length || 0} automated actions.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -3578,7 +3682,7 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
       const agentData = typeof streamPart.content === 'string' 
         ? JSON.parse(streamPart.content) 
         : streamPart.content;
-        
+      
       setArtifact((draftArtifact) => {
         return {
           ...draftArtifact,
@@ -3593,6 +3697,19 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
       const stepData = typeof streamPart.content === 'string' 
         ? JSON.parse(streamPart.content) 
         : streamPart.content;
+      
+      // Map orchestrator step IDs to UI step IDs for consistency
+      const stepIdMapping: Record<string, string> = {
+        'step0': 'prompt-understanding',
+        'step1': 'analysis', 
+        'step2': 'overview',
+        'step3': 'models',
+        'step4': 'actions',
+        'step5': 'schedules',
+        'complete': 'complete'
+      };
+      
+      const mappedStepId = stepIdMapping[stepData.step] || stepData.step;
         
       setMetadata((draftMetadata) => {
         const newMetadata: AgentArtifactMetadata = {
@@ -3601,13 +3718,17 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
           editingModel: draftMetadata?.editingModel || null,
           editingAction: draftMetadata?.editingAction || null,
           editingSchedule: draftMetadata?.editingSchedule || null,
-          currentStep: stepData.step,
+          currentStep: mappedStepId,
           stepProgress: {
             ...(draftMetadata?.stepProgress || {}),
+            [mappedStepId]: stepData.status,
+            // Also store the original step ID for compatibility
             [stepData.step]: stepData.status
           },
           stepMessages: {
             ...(draftMetadata?.stepMessages || {}),
+            [mappedStepId]: stepData.message || '',
+            // Also store the original step ID for compatibility
             [stepData.step]: stepData.message || ''
           }
         };
@@ -3621,6 +3742,18 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
           status: 'streaming',
         }));
       }
+      
+      // Handle any step completion to ensure visibility (but not for the final complete step)
+      if (stepData.status === 'complete' && stepData.step !== 'complete' && mappedStepId !== 'complete') {
+        setArtifact((draftArtifact) => ({
+          ...draftArtifact,
+          isVisible: true,
+          status: 'streaming',
+        }));
+      }
+      
+      // Note: Final completion is now handled by the message component
+      // since it has better access to step progress tracking
     }
     
     if (streamPart.type === 'text-delta') {

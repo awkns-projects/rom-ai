@@ -24,6 +24,12 @@ import {
   enhancedActionSchema
 } from './schemas';
 import { z } from 'zod';
+import { 
+  mergeModelsIntelligently, 
+  mergeActionsIntelligently, 
+  mergeSchedulesIntelligently,
+  mergeEnumsIntelligently 
+} from './merging';
 
 // Mock implementations for missing functions - these will be replaced by actual imports in your environment
 const mockProvider = {
@@ -148,12 +154,18 @@ export async function generateDatabase(
   command?: string
 ): Promise<{ models: AgentModel[], enums: AgentEnum[] }> {
   console.log('🗄️ Starting database generation with real AI...');
-  
+  console.log('📋 Input analysis:', {
+    hasExistingAgent: !!existingAgent,
+    existingModels: existingAgent?.models?.length || 0,
+    existingEnums: existingAgent?.enums?.length || 0,
+    isIncremental: !!(existingAgent && (existingAgent.models?.length || existingAgent.enums?.length))
+  });
+
   const existingModelsContext = existingAgent ? `
-EXISTING MODELS:
+EXISTING MODELS (DO NOT REGENERATE THESE):
 ${(existingAgent.models || []).map((model: any) => `- ${model.name}: ${model.description || 'No description'}`).join('\n')}
 
-EXISTING ENUMS:
+EXISTING ENUMS (DO NOT REGENERATE THESE):
 ${(existingAgent.enums || []).map((enumItem: any) => `- ${enumItem.name}: ${(enumItem.fields || []).map((f: any) => f.name).join(', ')}`).join('\n')}
 ` : '';
 
@@ -214,15 +226,35 @@ Expected Results:
 
   const model = await getAgentBuilderModel();
 
-  const result = await generateObject({
-    model,
-    schema: unifiedDatabaseSchema,
-    messages: [
-      {
-        role: 'system' as const,
-        content: `You are a database architect. Design data models based on the business requirements AND the actions that will be built.
+  // Determine if this is an incremental update
+  const isIncrementalUpdate = existingAgent && (existingAgent.models || []).length > 0;
+  
+  // Build the system prompt with focus on incremental updates
+  let systemPrompt = `You are a database architect. `;
+  
+  if (isIncrementalUpdate) {
+    console.log('🔄 INCREMENTAL UPDATE detected - focusing on NEW models only');
+    
+    systemPrompt += `This is an INCREMENTAL UPDATE to an existing system. Your job is to ONLY create NEW models and enums that are specifically requested by the user, NOT to regenerate existing ones.
 
-BUSINESS REQUIREMENTS:
+CRITICAL INCREMENTAL UPDATE RULES:
+1. ONLY generate NEW models that are explicitly mentioned in the user request
+2. DO NOT regenerate or modify existing models unless specifically asked
+3. Focus on what's NEW or DIFFERENT in the user's request
+4. If user asks to "add an animal table", create ONLY the Animal model
+5. If user asks to "add categories", create ONLY the Category model
+6. Return ONLY the new models/enums, not the existing ones
+
+`;
+  } else {
+    console.log('🆕 NEW SYSTEM creation - generating complete database schema');
+    
+    systemPrompt += `Design a complete data model based on the business requirements AND the actions that will be built.
+
+`;
+  }
+
+  systemPrompt += `BUSINESS REQUIREMENTS:
 ${JSON.stringify(promptUnderstanding, null, 2)}
 
 ${existingModelsContext}
@@ -321,6 +353,15 @@ ACTION-AWARE DATABASE DESIGN PRINCIPLES:
 9. Think about soft deletes - deletedAt, isDeleted fields if needed
 10. Consider priority, order, or sequence fields for sorting
 
+${isIncrementalUpdate ? `
+FOR INCREMENTAL UPDATES:
+- ONLY create models that are NEW and explicitly requested
+- Do NOT recreate existing models
+- Focus on the delta/difference in the user's request
+- Consider relationships to existing models
+- Return minimal set of new models/enums only
+
+` : `
 Design models that:
 1. Support all the required business features
 2. Support ALL the planned actions and their data needs
@@ -333,7 +374,7 @@ Design models that:
 9. Include workflow state management fields
 10. Include audit trail and permission fields
 
-Each model should have:
+`}Each model should have:
 - A clear purpose and description
 - An appropriate emoji representation
 - All necessary fields with correct types
@@ -348,7 +389,15 @@ Each enum should have:
 - A clear purpose
 - All necessary values used by models AND actions
 - Proper field definitions
-- Values that actions will need to set or filter by`
+- Values that actions will need to set or filter by`;
+
+  const result = await generateObject({
+    model,
+    schema: unifiedDatabaseSchema,
+    messages: [
+      {
+        role: 'system' as const,
+        content: systemPrompt
       }
     ],
     temperature: 0.3,
@@ -475,6 +524,23 @@ Each enum should have:
     }))
   }));
 
+  // If this is an incremental update, we need to merge with existing models
+  if (isIncrementalUpdate) {
+    console.log(`🔄 Incremental update: Generated ${fixedModels.length} new models, ${fixedEnums.length} new enums`);
+    console.log(`📊 Existing agent has ${(existingAgent.models || []).length} models, ${(existingAgent.enums || []).length} enums`);
+    
+    // Use intelligent merging instead of simple concatenation
+    const mergedModels = mergeModelsIntelligently(existingAgent.models || [], fixedModels);
+    const mergedEnums = mergeEnumsIntelligently(existingAgent.enums || [], fixedEnums);
+    
+    console.log(`📊 Final result: ${mergedModels.length} total models, ${mergedEnums.length} total enums`);
+    
+    return {
+      models: mergedModels,
+      enums: mergedEnums
+    };
+  }
+
   return {
     models: fixedModels,
     enums: fixedEnums
@@ -499,26 +565,42 @@ export async function generateActions(
   const userExperienceContext = promptUnderstanding.featureImagination.userExperience || 'General users and administrators';
   
   const existingActionsContext = existingAgent ? `
-EXISTING ACTIONS:
+EXISTING ACTIONS (DO NOT REGENERATE THESE):
 ${(existingAgent.actions || []).map((action: any) => `- ${action.name}: ${action.description || 'No description'}`).join('\n')}
 ` : '';
 
-  const expectedActionCount = Math.max(1, Math.min(5, promptUnderstanding.workflowAutomationNeeds.requiredActions.length || 2));
+  // Determine if this is an incremental update
+  const isIncrementalUpdate = existingAgent && (existingAgent.actions || []).length > 0;
+  
+  // For incremental updates, focus on new actions only
+  const expectedActionCount = isIncrementalUpdate 
+    ? Math.max(1, Math.min(3, promptUnderstanding.workflowAutomationNeeds.requiredActions.length || 1))
+    : Math.max(1, Math.min(5, promptUnderstanding.workflowAutomationNeeds.requiredActions.length || 2));
   
   const model = await getAgentBuilderModel();
 
-  // Generate with manual post-processing to fix envVars
-  let rawResult;
-  try {
-    rawResult = await generateObject({
-      model,
-      schema: unifiedActionsSchema,
-      messages: [
-        {
-          role: 'system' as const,
-          content: `You are a workflow automation expert. Design actions that implement business processes.
+  // Build the system prompt with focus on incremental updates
+  let systemPrompt = `You are a workflow automation expert. `;
+  
+  if (isIncrementalUpdate) {
+    systemPrompt += `This is an INCREMENTAL UPDATE to an existing system. Your job is to ONLY create NEW actions that are specifically requested by the user, NOT to regenerate existing ones.
 
-BUSINESS REQUIREMENTS:
+CRITICAL INCREMENTAL UPDATE RULES:
+1. ONLY generate NEW actions that are explicitly mentioned in the user request
+2. DO NOT regenerate or modify existing actions unless specifically asked
+3. Focus on what's NEW or DIFFERENT in the user's request
+4. If user asks to "add animal management actions", create ONLY new animal-related actions
+5. Return ONLY the new actions, not the existing ones
+6. Create ${expectedActionCount} new actions maximum
+
+`;
+  } else {
+    systemPrompt += `Design actions that implement business processes.
+
+`;
+  }
+
+  systemPrompt += `BUSINESS REQUIREMENTS:
 ${JSON.stringify(promptUnderstanding.workflowAutomationNeeds, null, 2)}
 
 AVAILABLE DATA MODELS:
@@ -526,6 +608,8 @@ ${(databaseResult.models || []).map(model => `- ${model.name}: ${(model.fields |
 
 AVAILABLE ENUMS:
 ${(databaseResult.enums || []).map(enumItem => `- ${enumItem.name}: ${(enumItem.fields || []).map(f => f.name).join(' | ')}`).join('\n') || 'None'}
+
+${existingActionsContext}
 
 CRITICAL ENVVARS REQUIREMENTS:
 - ALL envVars fields MUST be arrays, never null or undefined
@@ -555,15 +639,21 @@ Business Rules: ${Array.isArray(businessRulesContext) ? businessRulesContext.joi
 
 User Experience: ${Array.isArray(userExperienceContext) ? userExperienceContext.join(', ') : userExperienceContext}
 
-${existingActionsContext}
-
 GENERATION REQUIREMENTS:
+${isIncrementalUpdate ? `
+1. Create ONLY ${expectedActionCount} NEW actions that are specifically requested by the user
+2. Do NOT recreate existing actions
+3. Focus on the delta/difference in the user's request
+4. Each new action should solve a specific new business need
+5. Use appropriate data models from the available models (including new ones)
+6. Consider relationships to existing actions without duplicating them
+` : `
 1. Create ${expectedActionCount} high-quality actions that implement the business requirements
 2. Each action should have a clear business purpose and practical implementation
 3. Use appropriate data models from the available models
 4. Include proper error handling and validation
 5. Set appropriate user roles (admin/member) based on action sensitivity
-6. ALL envVars fields must be arrays (use empty array [] if no env vars needed)
+`}6. ALL envVars fields must be arrays (use empty array [] if no env vars needed)
 7. Provide meaningful names, descriptions, and emojis for each action
 8. Code should be production-ready with proper error handling
 
@@ -577,7 +667,18 @@ ACTION STRUCTURE REQUIREMENTS:
 - dataSource.customFunction.envVars: MUST be array (empty [] if none needed)
 - execute.code.envVars: MUST be array (empty [] if none needed)
 
-Generate exactly ${expectedActionCount} actions that solve real business problems.`
+Generate exactly ${expectedActionCount} actions that solve real business problems.`;
+
+  // Generate with manual post-processing to fix envVars
+  let rawResult;
+  try {
+    rawResult = await generateObject({
+      model,
+      schema: unifiedActionsSchema,
+      messages: [
+        {
+          role: 'system' as const,
+          content: systemPrompt
         }
       ],
       temperature: 0.1
@@ -686,7 +787,7 @@ try {
   return {
     output: result,
     data: [{
-      modelId: '${databaseResult.models[0]?.name || 'DefaultModel'}',
+      modelId: '${(databaseResult.models || [])[0]?.name || 'DefaultModel'}',
       createdRecords: [],
       updatedRecords: [],
       deletedRecords: []
@@ -695,18 +796,32 @@ try {
 } catch (error) {
   throw new Error('Action failed: ' + error.message);
 }`,
-        // Ensure envVars is always an array
         envVars: Array.isArray(action.execute?.code?.envVars) ? action.execute.code.envVars : []
       }
     },
     results: {
       actionType: action.results?.actionType || action.type || 'Create',
-      model: action.results?.model || (databaseResult.models[0]?.name || 'DefaultModel'),
+      model: action.results?.model || ((databaseResult.models || [])[0]?.name || 'DefaultModel'),
       identifierIds: action.results?.identifierIds || undefined,
       fields: action.results?.fields || {},
       fieldsToUpdate: action.results?.fieldsToUpdate || undefined
     }
   }));
+
+  // If this is an incremental update, we need to merge with existing actions
+  if (isIncrementalUpdate) {
+    console.log(`🔄 Incremental update: Generated ${fixedActions.length} new actions`);
+    console.log(`📊 Existing agent has ${(existingAgent.actions || []).length} actions`);
+    
+    // Use intelligent merging instead of simple concatenation
+    const mergedActions = mergeActionsIntelligently(existingAgent.actions || [], fixedActions);
+    
+    console.log(`📊 Final result: ${mergedActions.length} total actions`);
+    
+    return {
+      actions: mergedActions
+    };
+  }
 
   return {
     actions: fixedActions
@@ -771,17 +886,36 @@ export async function generateSchedules(
 ): Promise<{ schedules: AgentSchedule[] }> {
   console.log('🕒 Starting schedules generation with real AI...');
   
+  // Determine if this is an incremental update
+  const isIncrementalUpdate = existingAgent && (existingAgent.schedules || []).length > 0;
+  
   const model = await getAgentBuilderModel();
 
-  const result = await generateObject({
-    model,
-    schema: unifiedSchedulesSchema,
-    messages: [
-      {
-        role: 'system' as const,
-        content: `You are a scheduling automation expert. Design schedules that automate business processes.
+  // Build the system prompt with focus on incremental updates
+  let systemPrompt = `You are a scheduling automation expert. `;
+  
+  if (isIncrementalUpdate) {
+    systemPrompt += `This is an INCREMENTAL UPDATE to an existing system. Your job is to ONLY create NEW schedules that are specifically requested by the user, NOT to regenerate existing ones.
 
-BUSINESS REQUIREMENTS:
+CRITICAL INCREMENTAL UPDATE RULES:
+1. ONLY generate NEW schedules that are explicitly mentioned in the user request
+2. DO NOT regenerate or modify existing schedules unless specifically asked
+3. Focus on what's NEW or DIFFERENT in the user's request
+4. If user asks to "add daily animal feeding schedule", create ONLY new animal-related schedules
+5. Return ONLY the new schedules, not the existing ones
+6. Create maximum 2 new schedules for incremental updates
+
+EXISTING SCHEDULES (DO NOT REGENERATE THESE):
+${(existingAgent.schedules || []).map((schedule: any) => `- ${schedule.name}: ${schedule.description || 'No description'}`).join('\n')}
+
+`;
+  } else {
+    systemPrompt += `Design schedules that automate business processes.
+
+`;
+  }
+
+  systemPrompt += `BUSINESS REQUIREMENTS:
 ${JSON.stringify(promptUnderstanding.workflowAutomationNeeds, null, 2)}
 
 AVAILABLE ACTIONS:
@@ -790,17 +924,34 @@ ${Array.isArray(actions) ? actions.map((action: any) => `- ${action.name}: ${act
 AVAILABLE DATA MODELS:
 ${databaseSchema?.models?.map((model: any) => `- ${model.name}`).join('\n') || 'No models available'}
 
+${isIncrementalUpdate ? `
+FOR INCREMENTAL UPDATES:
+- ONLY create schedules that are NEW and explicitly requested
+- Do NOT recreate existing schedules
+- Focus on the delta/difference in the user's request
+- Consider relationships to existing schedules without duplicating them
+- Return minimal set of new schedules only
+
+` : `
 Design schedules that:
 1. Automate recurring business processes
 2. Trigger at appropriate intervals
 3. Use available actions effectively
 4. Provide business value through automation
 
-Each schedule should:
+`}Each schedule should:
 - Have a clear purpose and timing
 - Use appropriate intervals (cron patterns)
 - Execute meaningful actions
-- Have proper role-based access`
+- Have proper role-based access`;
+
+  const result = await generateObject({
+    model,
+    schema: unifiedSchedulesSchema,
+    messages: [
+      {
+        role: 'system' as const,
+        content: systemPrompt
       }
     ],
     temperature: 0.3,
@@ -882,6 +1033,21 @@ try {
       fieldsToUpdate: schedule.results?.fieldsToUpdate || undefined
     }
   }));
+
+  // If this is an incremental update, we need to merge with existing schedules
+  if (isIncrementalUpdate) {
+    console.log(`🔄 Incremental update: Generated ${fixedSchedules.length} new schedules`);
+    console.log(`📊 Existing agent has ${(existingAgent.schedules || []).length} schedules`);
+    
+    // Use intelligent merging instead of simple concatenation
+    const mergedSchedules = mergeSchedulesIntelligently(existingAgent.schedules || [], fixedSchedules);
+    
+    console.log(`📊 Final result: ${mergedSchedules.length} total schedules`);
+    
+    return {
+      schedules: mergedSchedules
+    };
+  }
 
   return {
     schedules: fixedSchedules

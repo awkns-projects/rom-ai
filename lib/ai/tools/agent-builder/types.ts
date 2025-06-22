@@ -328,6 +328,7 @@ export interface AgentMetadata {
   granularChanges?: any;
   aiDecision?: any;
   changeAnalysis?: any;
+  technicalAnalysis?: any;
   lastUpdateReason?: string;
   lastUpdateTimestamp?: string;
   comprehensiveAnalysisUsed?: boolean;

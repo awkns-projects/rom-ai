@@ -3,7 +3,7 @@
 import type { UIMessage } from 'ai';
 import cx from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';
-import { memo, useState, useMemo } from 'react';
+import { memo, useState, useMemo, useCallback, useEffect } from 'react';
 import type { Vote } from '@/lib/db/schema';
 import type { Document } from '@/lib/db/schema';
 import { DocumentToolCall, DocumentToolResult } from './document';
@@ -26,8 +26,14 @@ import useSWR from 'swr';
 import { LoaderIcon } from './icons';
 
 // Agent Builder Loading Component
-const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; message?: UIMessage; isLoading?: boolean }) => {
-  const { metadata } = useArtifact();
+const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persistedMetadata }: { 
+  args: any; 
+  message?: UIMessage; 
+  isLoading?: boolean;
+  metadata: any;
+  persistedMetadata: any;
+}) => {
+  const { artifact, setArtifact } = useArtifact();
   
   // Fetch the document to get persisted metadata
   const { data: documents } = useSWR<Array<Document>>(
@@ -36,7 +42,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
   );
 
   // Get persisted metadata from document
-  const persistedMetadata = useMemo(() => {
+  const persistedMetadataFromDoc = useMemo(() => {
     const document = documents?.[0];
     if (document?.metadata && typeof document.metadata === 'object') {
       return document.metadata as any;
@@ -45,19 +51,93 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
   }, [documents]);
   
   const steps = [
-    { id: 'prompt-understanding', label: 'Understanding Requirements' },
-    { id: 'granular-analysis', label: 'Detailed Planning' },
-    { id: 'analysis', label: 'AI Analysis & Decision Making' },
-    { id: 'change-analysis', label: 'Change Impact Analysis' },
-    { id: 'overview', label: 'System Architecture' },
-    { id: 'models', label: 'Database Models Creation' },
-    { id: 'actions', label: 'Automated Actions Setup' },
-    { id: 'schedules', label: 'Scheduling & Timing' },
-    { id: 'integration', label: 'System Integration' }
+    { id: 'step0', label: 'Understanding Requirements' },
+    { id: 'step1', label: 'AI Analysis & Decision Making' },
+    { id: 'step2', label: 'System Architecture' },
+    { id: 'step3', label: 'Database Models Creation' },
+    { id: 'step4', label: 'Automated Actions Setup' },
+    { id: 'step5', label: 'Scheduling & Timing' },
+    { id: 'complete', label: 'Complete' }
   ];
 
+  // Check if we have existing agent context
+  const existingAgentInfo = useMemo(() => {
+    console.log('🔍 Checking for existing agent context...', {
+      metadata: metadata ? Object.keys(metadata) : 'none',
+      persistedMetadata: persistedMetadata ? Object.keys(persistedMetadata) : 'none',
+      args: args ? Object.keys(args) : 'none'
+    });
+
+    // First check if this is an update operation by looking at the tool invocation in the message
+    if (message?.parts) {
+      for (const part of message.parts) {
+        if (part.type === 'tool-invocation' && part.toolInvocation?.toolName === 'agentBuilder') {
+          const toolArgs = part.toolInvocation.args;
+          if (toolArgs?.operation === 'update' || toolArgs?.operation === 'extend') {
+            console.log('✅ Found update operation in tool invocation');
+            return {
+              isUpdate: true,
+              operation: toolArgs.operation,
+              documentId: args?.documentId || 'Unknown',
+              title: 'Existing Agent Document',
+              source: 'tool-invocation'
+            };
+          }
+        }
+      }
+    }
+    
+    // Check metadata for existing agent info (real-time streaming state)
+    if (metadata?.existingAgentId || persistedMetadata?.existingAgentId) {
+      const documentId = metadata?.existingAgentId || persistedMetadata?.existingAgentId;
+      const title = metadata?.existingAgentTitle || persistedMetadata?.existingAgentTitle || 'Existing Agent Document';
+      const source = metadata?.existingAgentId ? 'real-time-metadata' : 'persisted-metadata';
+      
+      console.log(`✅ Found existing agent in ${source}:`, { documentId, title });
+      return {
+        isUpdate: true,
+        operation: 'update',
+        documentId,
+        title,
+        source
+      };
+    }
+    
+    // Check args for existing agent context
+    if (args?.existingAgentId || args?.operation === 'update') {
+      console.log('✅ Found existing agent in args');
+      return {
+        isUpdate: true,
+        operation: args.operation || 'update',
+        documentId: args.existingAgentId || args.documentId || 'Unknown',
+        title: args.existingAgentTitle || 'Existing Agent Document',
+        source: 'args'
+      };
+    }
+    
+    // Check if we have a document ID which indicates existing document
+    if (args?.documentId && args?.operation !== 'create') {
+      console.log('✅ Found document ID in args (not create operation)');
+      return {
+        isUpdate: true,
+        operation: 'update',
+        documentId: args.documentId,
+        title: 'Agent Document',
+        source: 'document-id'
+      };
+    }
+    
+    console.log('ℹ️ No existing agent context found - creating new agent');
+    return null;
+  }, [metadata, persistedMetadata, args, message]);
+
   // Get step status from metadata or tool call parts or persisted metadata
-  const getStepStatus = (stepId: string) => {
+  const getStepStatus = useCallback((stepId: string) => {
+    console.log(`🔍 Getting step status for: ${stepId}`);
+    
+    // Define step order for position-based status determination
+    const stepOrder = ['step0', 'step1', 'step2', 'step3', 'step4', 'step5', 'complete'];
+    
     // Check for step data in message parts (for streaming state)
     if (message?.parts) {
       for (const part of message.parts) {
@@ -69,9 +149,11 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
           if (content && typeof content === 'object') {
             // Check for step progress in the content
             if (content.stepProgress && content.stepProgress[stepId]) {
+              console.log(`✅ Found step status in tool invocation content: ${stepId} = ${content.stepProgress[stepId]}`);
               return content.stepProgress[stepId];
             }
             if (content.currentStep === stepId) {
+              console.log(`✅ Found current step in tool invocation: ${stepId} = processing`);
               return 'processing';
             }
           }
@@ -79,43 +161,73 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
       }
     }
     
-    // Check metadata (real-time streaming state)
+    // Check real-time metadata first (active streaming state)
     if (metadata?.stepProgress && metadata.stepProgress[stepId]) {
+      console.log(`✅ Found step status in real-time metadata: ${stepId} = ${metadata.stepProgress[stepId]}`);
       return metadata.stepProgress[stepId];
     }
     
     if (metadata?.currentStep === stepId) {
+      console.log(`✅ Found current step in real-time metadata: ${stepId} = processing`);
       return 'processing';
     }
     
-    // Check persisted metadata from database
+    // Fallback to persisted metadata (recovery state)
     if (persistedMetadata?.stepProgress && persistedMetadata.stepProgress[stepId]) {
+      console.log(`✅ Found step status in persisted metadata: ${stepId} = ${persistedMetadata.stepProgress[stepId]}`);
       return persistedMetadata.stepProgress[stepId];
     }
-    
+
     if (persistedMetadata?.currentStep === stepId) {
+      console.log(`✅ Found current step in persisted metadata: ${stepId} = processing`);
       return 'processing';
     }
-    
-    // Determine based on step order and persisted data
-    const stepOrder = ['prompt-understanding', 'granular-analysis', 'analysis', 'change-analysis', 'overview', 'models', 'actions', 'schedules', 'integration'];
-    const currentStepIndex = (metadata?.currentStep || persistedMetadata?.currentStep) ? 
-      stepOrder.indexOf(metadata?.currentStep || persistedMetadata?.currentStep) : -1;
-    const thisStepIndex = stepOrder.indexOf(stepId);
+
+    // Check document metadata from database
+    if (persistedMetadataFromDoc?.stepProgress && persistedMetadataFromDoc.stepProgress[stepId]) {
+      console.log(`✅ Found step status in document metadata: ${stepId} = ${persistedMetadataFromDoc.stepProgress[stepId]}`);
+      return persistedMetadataFromDoc.stepProgress[stepId];
+    }
+
+    if (persistedMetadataFromDoc?.currentStep === stepId) {
+      console.log(`✅ Found current step in document metadata: ${stepId} = processing`);
+      return 'processing';
+    }
+
+    // Check if all steps are complete (for completed agents)
+    const allStepsComplete = stepOrder.every(step => {
+      if (step === stepId) return false; // Don't check self
+      return (metadata?.stepProgress && metadata.stepProgress[step] === 'complete') ||
+             (persistedMetadata?.stepProgress && persistedMetadata.stepProgress[step] === 'complete') ||
+             (persistedMetadataFromDoc?.stepProgress && persistedMetadataFromDoc.stepProgress[step] === 'complete');
+    });
+
+    if (allStepsComplete && stepId === 'complete') {
+      console.log(`✅ All steps complete - marking ${stepId} as complete`);
+      return 'complete';
+    }
+
+    // Determine status based on current step position
+    const currentStepIndex = (metadata?.currentStep || persistedMetadata?.currentStep || persistedMetadataFromDoc?.currentStep) ?
+      stepOrder.indexOf(metadata?.currentStep || persistedMetadata?.currentStep || persistedMetadataFromDoc?.currentStep) : -1;
+    const stepIndex = stepOrder.indexOf(stepId);
     
     // If we have explicit metadata or are actively streaming or have persisted state
-    if (metadata?.currentStep || metadata?.stepProgress || persistedMetadata?.currentStep || persistedMetadata?.stepProgress) {
-      if (currentStepIndex >= 0 && thisStepIndex < currentStepIndex) {
+    if (metadata?.currentStep || metadata?.stepProgress || 
+        persistedMetadata?.currentStep || persistedMetadata?.stepProgress ||
+        persistedMetadataFromDoc?.currentStep || persistedMetadataFromDoc?.stepProgress) {
+      if (stepIndex < currentStepIndex) {
+        console.log(`✅ Step ${stepId} is before current step - marking as complete`);
         return 'complete';
-      }
-      if (currentStepIndex >= 0 && thisStepIndex > currentStepIndex) {
-        return 'pending';
+      } else if (stepIndex === currentStepIndex) {
+        console.log(`✅ Step ${stepId} is current step - marking as processing`);
+        return 'processing';
       }
     }
     
-    // Default to pending for initial state
+    console.log(`ℹ️ No status found for step ${stepId} - marking as pending`);
     return 'pending';
-  };
+  }, [message, metadata, persistedMetadata, persistedMetadataFromDoc]);
 
   // Get step message from metadata or tool call data or persisted metadata
   const getStepMessage = (stepId: string) => {
@@ -127,6 +239,11 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
     // Check persisted metadata
     if (persistedMetadata?.stepMessages && persistedMetadata.stepMessages[stepId]) {
       return persistedMetadata.stepMessages[stepId];
+    }
+    
+    // Check document metadata from database
+    if (persistedMetadataFromDoc?.stepMessages && persistedMetadataFromDoc.stepMessages[stepId]) {
+      return persistedMetadataFromDoc.stepMessages[stepId];
     }
     
     // Check message parts for stored step data
@@ -162,10 +279,84 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
     });
     
     return !allStepsComplete && (hasProcessingStep || persistedMetadata.currentStep);
-  }, [persistedMetadata, steps]);
+  }, [persistedMetadata, steps, getStepStatus]);
 
-  // Determine if we're actively processing - should be based on whether AI is working
-  const isProcessing = isLoading || false;
+  // Determine if we're actively processing - check if any step is processing or if we're loading
+  const isProcessing = useMemo(() => {
+    if (isLoading) return true;
+    
+    // Check if any step is currently processing
+    const hasProcessingStep = steps.some(step => {
+      const status = getStepStatus(step.id);
+      return status === 'processing';
+    });
+    
+    // Check if we have an active current step that's not complete
+    const currentStep = metadata?.currentStep || persistedMetadata?.currentStep || persistedMetadataFromDoc?.currentStep;
+    if (currentStep && currentStep !== 'complete') {
+      const currentStepStatus = getStepStatus(currentStep);
+      if (currentStepStatus === 'processing') {
+        return true;
+      }
+    }
+    
+    return hasProcessingStep;
+  }, [isLoading, steps, metadata, persistedMetadata, persistedMetadataFromDoc, getStepStatus]);
+
+  // Check if all steps are complete and update artifact status
+  const allStepsComplete = useMemo(() => {
+    const stepOrder = ['step0', 'step1', 'step2', 'step3', 'step4', 'step5'];
+    
+    const isComplete = stepOrder.every(step => {
+      return (metadata?.stepProgress && metadata.stepProgress[step] === 'complete') ||
+             (persistedMetadata?.stepProgress && persistedMetadata.stepProgress[step] === 'complete') ||
+             (persistedMetadataFromDoc?.stepProgress && persistedMetadataFromDoc.stepProgress[step] === 'complete');
+    });
+    
+    console.log('🔍 Checking if all steps are complete:', {
+      isComplete,
+      stepProgress: {
+        metadata: metadata?.stepProgress,
+        persistedMetadata: persistedMetadata?.stepProgress,
+        persistedMetadataFromDoc: persistedMetadataFromDoc?.stepProgress
+      }
+    });
+    
+    return isComplete;
+  }, [metadata?.stepProgress, persistedMetadata?.stepProgress, persistedMetadataFromDoc?.stepProgress]);
+
+  // Update artifact status when all steps are complete
+  useEffect(() => {
+    if (allStepsComplete && artifact?.status === 'streaming') {
+      console.log('🎉 All steps completed - updating artifact status to idle from message component');
+      console.log('🔍 Current metadata before completion:', {
+        metadata: metadata?.stepProgress,
+        persistedMetadata: persistedMetadata?.stepProgress,
+        persistedMetadataFromDoc: persistedMetadataFromDoc?.stepProgress
+      });
+      
+      setArtifact((draftArtifact) => ({
+        ...draftArtifact,
+        status: 'idle',
+        isVisible: true,
+      }));
+      
+      // Note: Step progress persistence is handled by the backend when it sends the final 'complete' step
+      // The agent builder saves the final stepMetadata to the database via saveDocumentWithContent
+      // This ensures step progress survives artifact status changes and page reloads
+      console.log('✅ Artifact status updated to idle - step progress is persisted by backend');
+    }
+  }, [allStepsComplete, artifact?.status, setArtifact]);
+
+  // Log step progress changes for debugging
+  useEffect(() => {
+    console.log('📊 Step progress update:', {
+      metadata: metadata?.stepProgress,
+      persistedMetadata: persistedMetadata?.stepProgress,
+      persistedMetadataFromDoc: persistedMetadataFromDoc?.stepProgress,
+      allStepsComplete
+    });
+  }, [metadata?.stepProgress, persistedMetadata?.stepProgress, persistedMetadataFromDoc?.stepProgress, allStepsComplete]);
 
   return (
     <div className="w-full max-w-2xl mx-auto">
@@ -213,6 +404,39 @@ const AgentBuilderLoading = memo(({ args, message, isLoading }: { args: any; mes
             <p className="text-sm text-green-200/80">
               <span className="font-medium text-green-100">Request:</span> {args.command}
             </p>
+            {existingAgentInfo && (
+              <div className="mt-3 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-blue-400 text-sm">📝</span>
+                  <span className="text-blue-300 text-sm font-medium">
+                    {existingAgentInfo.operation === 'update' ? 'Updating Existing Agent' :
+                     existingAgentInfo.operation === 'extend' ? 'Extending Existing Agent' :
+                     existingAgentInfo.operation === 'resume' ? 'Resuming Agent Build' :
+                     'Modifying Existing Agent'}
+                  </span>
+                </div>
+                <p className="text-xs text-blue-200/80">
+                  <span className="font-medium">Document:</span> {existingAgentInfo.title}
+                </p>
+                <p className="text-xs text-blue-200/60 font-mono">
+                  ID: {existingAgentInfo.documentId}
+                </p>
+                <p className="text-xs text-blue-200/70 mt-1">
+                  ✅ Found existing document - will merge changes intelligently
+                </p>
+              </div>
+            )}
+            {!existingAgentInfo && (
+              <div className="mt-3 p-3 bg-green-900/20 border border-green-500/30 rounded-lg">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-green-400 text-sm">✨</span>
+                  <span className="text-green-300 text-sm font-medium">Creating New Agent</span>
+                </div>
+                <p className="text-xs text-green-200/70">
+                  🆕 Building a brand new agent system from scratch
+                </p>
+              </div>
+            )}
             {canResume && !isProcessing && (
               <div className="mt-2 p-2 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
                 <p className="text-xs text-yellow-300">
@@ -294,7 +518,7 @@ AgentBuilderLoading.displayName = 'AgentBuilderLoading';
 
 // Agent Summary Component
 const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isReadonly: boolean; chatId: string }) => {
-  const { setArtifact, setMetadata } = useArtifact();
+  const { setArtifact: setSummaryArtifact } = useArtifact();
   
   // Fetch the document to get the latest agent data
   const { data: documents, isLoading: isDocumentsFetching, error } = useSWR<Array<Document>>(
@@ -316,7 +540,7 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
   
   const openAgentBuilder = () => {
     if (agentData && result?.id) {
-      setArtifact({
+      setSummaryArtifact({
         documentId: result.id,
         title: agentData.name || result.title || 'Agent',
         kind: 'agent',
@@ -541,14 +765,55 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
 AgentSummary.displayName = 'AgentSummary';
 
 // Agent Builder with Streaming Summary Component
-const AgentBuilderWithStreamingSummary = memo(({ args, message, isReadonly, chatId, isLoading }: { 
-  args: any; 
-  message?: UIMessage; 
-  isReadonly: boolean; 
-  chatId: string; 
-  isLoading?: boolean;
+const AgentBuilderWithStreamingSummary = memo(({ args, message, isLoading, isReadonly, chatId }: {
+  args: any;
+  message: UIMessage;
+  isLoading: boolean;
+  isReadonly: boolean;
+  chatId: string;
 }) => {
-  const { artifact } = useArtifact();
+  const { artifact, metadata, setMetadata } = useArtifact();
+  
+  // Check if this is a new agent building request
+  const isNewRequest = useMemo(() => {
+    // If we have a new documentId or the artifact status is idle (not streaming), it's likely a new request
+    const hasNewDocumentId = args?.documentId && args.documentId !== artifact?.documentId;
+    const isArtifactIdle = artifact?.status === 'idle';
+    const isStartingNewBuild = isLoading && !metadata?.currentStep;
+    
+    console.log('🔍 Checking if this is a new agent building request:', {
+      hasNewDocumentId,
+      isArtifactIdle,
+      isStartingNewBuild,
+      argsDocumentId: args?.documentId,
+      artifactDocumentId: artifact?.documentId,
+      artifactStatus: artifact?.status,
+      hasCurrentStep: !!metadata?.currentStep
+    });
+    
+    return hasNewDocumentId || (isArtifactIdle && isStartingNewBuild);
+  }, [args?.documentId, artifact?.documentId, artifact?.status, isLoading, metadata?.currentStep]);
+  
+  // Clear metadata when starting a new request
+  useEffect(() => {
+    if (isNewRequest && metadata?.stepProgress) {
+      console.log('🔄 Clearing previous step progress for new agent building request');
+      setMetadata(null);
+    }
+  }, [isNewRequest, metadata?.stepProgress, setMetadata]);
+  
+  // Use current metadata as persistedMetadata to preserve step progress
+  const persistedMetadata = useMemo(() => {
+    // If we have step progress in metadata, use it as persisted data
+    if (metadata?.stepProgress || metadata?.currentStep) {
+      console.log('✅ Using current metadata as persistedMetadata:', {
+        stepProgress: metadata.stepProgress,
+        currentStep: metadata.currentStep
+      });
+      return metadata;
+    }
+    return null;
+  }, [metadata]);
   
   // Check if the message has a completed agentBuilder tool result
   const hasCompletedResult = message?.parts?.some(part => 
@@ -559,7 +824,7 @@ const AgentBuilderWithStreamingSummary = memo(({ args, message, isReadonly, chat
   
   // Don't show partial summary if we have a completed result
   if (hasCompletedResult) {
-    return <AgentBuilderLoading args={args} message={message} isLoading={false} />;
+    return <AgentBuilderLoading args={args} message={message} isLoading={false} metadata={metadata} persistedMetadata={persistedMetadata} />;
   }
   
   // Show partial agent summary during streaming if we have agent data
@@ -592,7 +857,7 @@ const AgentBuilderWithStreamingSummary = memo(({ args, message, isReadonly, chat
   
   return (
     <div>
-      <AgentBuilderLoading args={args} message={message} isLoading={isLoading} />
+      <AgentBuilderLoading args={args} message={message} isLoading={isLoading} metadata={metadata} persistedMetadata={persistedMetadata} />
       {partialResult && (
         <div className="mt-4">
           <AgentSummary result={partialResult} isReadonly={isReadonly} chatId={chatId} />

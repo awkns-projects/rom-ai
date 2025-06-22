@@ -841,14 +841,26 @@ Focus on creating a robust, scalable, and maintainable architecture.`
     
     const finalContent = JSON.stringify(agent, null, 2);
     
+    // Create user-friendly completion message
+    const userFriendlyMessage = `🎉 **Agent System Generated Successfully!**
+
+Your AI agent "${agent.name}" has been created with the following components:
+
+📊 **Summary:**
+- **${agent.models?.length || 0} Database Models** - Data structures for your application
+- **${agent.actions?.length || 0} Actions** - Interactive features and workflows
+- **${agent.schedules?.length || 0} Schedules** - Automated tasks and triggers
+
+✅ **Ready to Use:** Your agent system is now available and ready for deployment!`;
+    
     streamWithPersistence(this.dataStream, 'kind', 'agent', this.documentId, this.session);
     streamWithPersistence(this.dataStream, 'title', agent.name, this.documentId, this.session);
-    streamWithPersistence(this.dataStream, 'content', finalContent, this.documentId, this.session);
+    streamWithPersistence(this.dataStream, 'content', userFriendlyMessage, this.documentId, this.session);
     
     await saveDocumentWithContent(
       this.documentId,
       agent.name,
-      finalContent,
+      finalContent, // Save the raw JSON to the document for system use
       this.session,
       undefined,
       {
@@ -967,7 +979,16 @@ This hybrid approach ensures both thorough planning and reliable execution.
         id: documentId,
         title: result.name,
         kind: 'agent' as const,
-        content: JSON.stringify(result, null, 2)
+        content: `🎉 **Agent System Generated Successfully!**
+
+Your AI agent "${result.name}" has been created with the following components:
+
+📊 **Summary:**
+- **${result.models?.length || 0} Database Models** - Data structures for your application
+- **${result.actions?.length || 0} Actions** - Interactive features and workflows
+- **${result.schedules?.length || 0} Schedules** - Automated tasks and triggers
+
+✅ **Ready to Use:** Your agent system is now available and ready for deployment!`
       };
       
     } catch (error) {
