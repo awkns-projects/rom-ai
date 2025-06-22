@@ -106,6 +106,7 @@ export function mergeModelsIntelligently(existing: AgentModel[], incoming: Agent
   
   const result: AgentModel[] = [];
   const processedIds = new Set<string>();
+  const processedNames = new Set<string>();
 
   // Process existing models first
   existing.forEach(existingModel => {
@@ -129,23 +130,38 @@ export function mergeModelsIntelligently(existing: AgentModel[], incoming: Agent
         enums: mergedEnums
       };
       
+      console.log(`  ✅ Merged model ${merged.name}: ${merged.records?.length || 0} records, ${merged.enums?.length || 0} enums`);
       result.push(merged);
-      processedIds.add(incomingMatch.id || incomingMatch.name);
+      
+      // Track both ID and name to prevent duplicate processing
+      if (incomingMatch.id) processedIds.add(incomingMatch.id);
+      if (incomingMatch.name) processedNames.add(incomingMatch.name);
     } else {
-      console.log(`✅ Preserving existing model: ${existingModel.name}`);
+      console.log(`✅ Preserving existing model: ${existingModel.name} (${existingModel.records?.length || 0} records)`);
       result.push(existingModel);
     }
   });
 
   // Add new models from incoming that weren't matched
   incoming.forEach(incomingModel => {
-    if (!processedIds.has(incomingModel.id || incomingModel.name)) {
-      console.log(`➕ Adding new model: ${incomingModel.name}`);
-      result.push(incomingModel);
+    const alreadyProcessedById = incomingModel.id && processedIds.has(incomingModel.id);
+    const alreadyProcessedByName = incomingModel.name && processedNames.has(incomingModel.name);
+    
+    if (!alreadyProcessedById && !alreadyProcessedByName) {
+      console.log(`➕ Adding new model: ${incomingModel.name} with ${incomingModel.records?.length || 0} records`);
+      
+      // Ensure the new model has all its records preserved
+      const newModel = {
+        ...incomingModel,
+        records: incomingModel.records || [] // Explicitly preserve records
+      };
+      
+      result.push(newModel);
     }
   });
 
-  console.log(`✅ Model merge complete: ${result.length} total models`);
+  const totalRecords = result.reduce((sum, model) => sum + (model.records?.length || 0), 0);
+  console.log(`✅ Model merge complete: ${result.length} total models, ${totalRecords} total records`);
   return result;
 }
 
@@ -154,6 +170,7 @@ function mergeModelEnums(existing: AgentEnum[], incoming: AgentEnum[]): AgentEnu
   
   const result: AgentEnum[] = [];
   const processedIds = new Set<string>();
+  const processedNames = new Set<string>();
 
   // Process existing enums first
   existing.forEach(existingEnum => {
@@ -172,7 +189,10 @@ function mergeModelEnums(existing: AgentEnum[], incoming: AgentEnum[]): AgentEnu
       };
       
       result.push(merged);
-      processedIds.add(incomingMatch.id || incomingMatch.name);
+      
+      // Track both ID and name to prevent duplicate processing
+      if (incomingMatch.id) processedIds.add(incomingMatch.id);
+      if (incomingMatch.name) processedNames.add(incomingMatch.name);
     } else {
       console.log(`✅ Preserving existing enum: ${existingEnum.name}`);
       result.push(existingEnum);
@@ -181,7 +201,10 @@ function mergeModelEnums(existing: AgentEnum[], incoming: AgentEnum[]): AgentEnu
 
   // Add new enums from incoming that weren't matched
   incoming.forEach(incomingEnum => {
-    if (!processedIds.has(incomingEnum.id || incomingEnum.name)) {
+    const alreadyProcessedById = incomingEnum.id && processedIds.has(incomingEnum.id);
+    const alreadyProcessedByName = incomingEnum.name && processedNames.has(incomingEnum.name);
+    
+    if (!alreadyProcessedById && !alreadyProcessedByName) {
       console.log(`➕ Adding new enum: ${incomingEnum.name}`);
       result.push(incomingEnum);
     }
@@ -404,21 +427,44 @@ export function mergeActionsIntelligently(existing: AgentAction[], incoming: Age
 
   console.log(`🔄 Merging ${existing.length} existing actions with ${incoming.length} incoming actions`);
   
-  const mergedActions: AgentAction[] = [...existing];
-  
-  for (const incomingAction of incoming) {
-    const existingIndex = mergedActions.findIndex(e => e.id === incomingAction.id);
-    
-    if (existingIndex >= 0) {
-      // Merge existing action with new data
-      mergedActions[existingIndex] = mergeActionDetails(mergedActions[existingIndex], incomingAction);
+  const result: AgentAction[] = [];
+  const processedIds = new Set<string>();
+  const processedNames = new Set<string>();
+
+  // Process existing actions first
+  existing.forEach(existingAction => {
+    const incomingMatch = incoming.find(inc => 
+      inc.id === existingAction.id || 
+      inc.name === existingAction.name
+    );
+
+    if (incomingMatch) {
+      console.log(`🔄 Merging existing action: ${existingAction.name}`);
+      const merged = mergeActionDetails(existingAction, incomingMatch);
+      result.push(merged);
+      
+      // Track both ID and name to prevent duplicate processing
+      if (incomingMatch.id) processedIds.add(incomingMatch.id);
+      if (incomingMatch.name) processedNames.add(incomingMatch.name);
     } else {
-      // Add new action
-      mergedActions.push(incomingAction);
+      console.log(`✅ Preserving existing action: ${existingAction.name}`);
+      result.push(existingAction);
     }
-  }
-  
-  return mergedActions;
+  });
+
+  // Add new actions from incoming that weren't matched
+  incoming.forEach(incomingAction => {
+    const alreadyProcessedById = incomingAction.id && processedIds.has(incomingAction.id);
+    const alreadyProcessedByName = incomingAction.name && processedNames.has(incomingAction.name);
+    
+    if (!alreadyProcessedById && !alreadyProcessedByName) {
+      console.log(`➕ Adding new action: ${incomingAction.name}`);
+      result.push(incomingAction);
+    }
+  });
+
+  console.log(`✅ Action merge complete: ${result.length} total actions`);
+  return result;
 }
 
 /**
@@ -477,25 +523,44 @@ export function mergeSchedulesIntelligently(existing: AgentSchedule[], incoming:
 
   console.log(`🔄 Merging ${existing.length} existing schedules with ${incoming.length} incoming schedules`);
   
-  const mergedSchedules: AgentSchedule[] = [...existing];
-  
-  for (const incomingSchedule of incoming) {
-    const existingIndex = mergedSchedules.findIndex(e => e.id === incomingSchedule.id);
-    
-    if (existingIndex >= 0) {
-      // Merge existing schedule with new data, preserving ID
-      mergedSchedules[existingIndex] = {
-        ...mergedSchedules[existingIndex],
-        ...incomingSchedule,
-        id: mergedSchedules[existingIndex].id
-      };
+  const result: AgentSchedule[] = [];
+  const processedIds = new Set<string>();
+  const processedNames = new Set<string>();
+
+  // Process existing schedules first
+  existing.forEach(existingSchedule => {
+    const incomingMatch = incoming.find(inc => 
+      inc.id === existingSchedule.id || 
+      inc.name === existingSchedule.name
+    );
+
+    if (incomingMatch) {
+      console.log(`🔄 Merging existing schedule: ${existingSchedule.name}`);
+      const merged = mergeScheduleDetails(existingSchedule, incomingMatch);
+      result.push(merged);
+      
+      // Track both ID and name to prevent duplicate processing
+      if (incomingMatch.id) processedIds.add(incomingMatch.id);
+      if (incomingMatch.name) processedNames.add(incomingMatch.name);
     } else {
-      // Add new schedule
-      mergedSchedules.push(incomingSchedule);
+      console.log(`✅ Preserving existing schedule: ${existingSchedule.name}`);
+      result.push(existingSchedule);
     }
-  }
-  
-  return mergedSchedules;
+  });
+
+  // Add new schedules from incoming that weren't matched
+  incoming.forEach(incomingSchedule => {
+    const alreadyProcessedById = incomingSchedule.id && processedIds.has(incomingSchedule.id);
+    const alreadyProcessedByName = incomingSchedule.name && processedNames.has(incomingSchedule.name);
+    
+    if (!alreadyProcessedById && !alreadyProcessedByName) {
+      console.log(`➕ Adding new schedule: ${incomingSchedule.name}`);
+      result.push(incomingSchedule);
+    }
+  });
+
+  console.log(`✅ Schedule merge complete: ${result.length} total schedules`);
+  return result;
 }
 
 /**
@@ -708,17 +773,23 @@ export function mergeModelRecords(existing: any[], incoming: any[]): any[] {
     incoming = [];
   }
 
+  console.log(`📝 Merging records: ${existing.length} existing + ${incoming.length} incoming`);
+
   const merged = [...existing];
   const existingIds = new Set(existing.map(r => r.id));
   
   for (const incomingRecord of incoming) {
     if (!existingIds.has(incomingRecord.id)) {
       // Add new record if it doesn't exist
+      console.log(`  ➕ Adding new record: ${incomingRecord.id}`);
       merged.push(incomingRecord);
+    } else {
+      console.log(`  ⏭️ Skipping existing record: ${incomingRecord.id}`);
     }
     // Note: We don't update existing records to preserve user data
     // Only add new example records
   }
   
+  console.log(`  ✅ Record merge result: ${merged.length} total records`);
   return merged;
 } 

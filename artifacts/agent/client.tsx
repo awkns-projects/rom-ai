@@ -3261,12 +3261,25 @@ const AgentBuilderContent = memo(({
 
   // Update content when agent data changes - moved to maintain hook order
   const updateAgentData = useCallback((newData: AgentData) => {
+    console.log('🔄 updateAgentData called with:', {
+      currentModels: agentData.models?.length || 0,
+      currentActions: agentData.actions?.length || 0,
+      currentSchedules: agentData.schedules?.length || 0,
+      newModels: newData.models?.length || 0,
+      newActions: newData.actions?.length || 0,
+      newSchedules: newData.schedules?.length || 0,
+      currentModelNames: (agentData.models || []).map((m: AgentModel) => m.name),
+      newModelNames: (newData.models || []).map((m: AgentModel) => m.name),
+      currentActionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
+      newActionNames: (newData.actions || []).map((a: AgentAction) => a.name),
+      currentScheduleNames: (agentData.schedules || []).map((s: AgentSchedule) => s.name),
+      newScheduleNames: (newData.schedules || []).map((s: AgentSchedule) => s.name)
+    });
+    
     setAgentData(newData);
-    const jsonContent = JSON.stringify(newData, null, 2);
-    // Save without debouncing to ensure document versions are created for navigation
-    // This allows the back/forward version navigation to work properly
-    onSaveContent(jsonContent, false);
-  }, [onSaveContent]);
+    const serializedData = JSON.stringify(newData, null, 2);
+    onSaveContent(serializedData, true);
+  }, [onSaveContent, agentData.models, agentData.actions, agentData.schedules]);
 
   // Enhanced save function - moved to maintain consistent hook order
   const saveAgentToConversation = useCallback(async () => {
@@ -3284,14 +3297,6 @@ const AgentBuilderContent = memo(({
       return;
     }
 
-    // Debug logging to track content updates
-    console.log('🔍 Agent builder received content update:', {
-      contentLength: content.length,
-      contentPreview: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
-      currentAgentName: agentData.name,
-      currentModelCount: agentData.models?.length || 0
-    });
-
     try {
       const parsed = JSON.parse(content);
       
@@ -3300,56 +3305,41 @@ const AgentBuilderContent = memo(({
                          (parsed.description && parsed.description.trim() !== '') ||
                          (parsed.domain && parsed.domain.trim() !== '') ||
                          (parsed.models && parsed.models.length > 0) ||
-                         (parsed.actions && parsed.actions.length > 0);
+                         (parsed.actions && parsed.actions.length > 0) ||
+                         (parsed.schedules && parsed.schedules.length > 0);
 
-      // Always update if we have real data, or if current state is just defaults
-      const currentIsDefaults = agentData.name === 'New Agent' && 
-                               !agentData.description && 
-                               !agentData.domain &&
-                               agentData.models?.length === 0 && 
-                               agentData.actions?.length === 0;
-
-      // Also update if content is not empty JSON object and we have defaults
-      const isEmptyJsonObject = content.trim() === '{}';
-      
-      if (hasRealData || (currentIsDefaults && !isEmptyJsonObject)) {
+      // Only update if we have real data
+      if (hasRealData) {
         const updatedData = {
           name: parsed.name || 'New Agent',
           description: parsed.description || '',
           domain: parsed.domain || '',
-          models: parsed.models || [],
-          actions: parsed.actions || [],
-          schedules: parsed.schedules || [],
+          models: Array.isArray(parsed.models) ? parsed.models : [],
+          actions: Array.isArray(parsed.actions) ? parsed.actions : [],
+          schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
           createdAt: parsed.createdAt || new Date().toISOString()
         };
         
-        // Only update if the content is actually different
-        const currentDataString = JSON.stringify(agentData);
+        // Only update if data has actually changed
+        const currentDataString = JSON.stringify({
+          name: agentData.name,
+          description: agentData.description,
+          domain: agentData.domain,
+          models: agentData.models,
+          actions: agentData.actions,
+          schedules: agentData.schedules
+        });
         const newDataString = JSON.stringify(updatedData);
         
         if (currentDataString !== newDataString) {
-          console.log('📥 Updating agent data from fetched content:', {
-            hasRealData,
-            currentIsDefaults,
-            isEmptyJsonObject,
-            newName: updatedData.name,
-            modelCount: updatedData.models.length,
-            actionCount: updatedData.actions.length
-          });
-          
           setAgentData(updatedData);
         }
-      } else {
-        console.log('🔄 Skipping update - no real data and not replacing defaults:', {
-          hasRealData,
-          currentIsDefaults,
-          isEmptyJsonObject
-        });
       }
     } catch (e) {
-      console.warn('⚠️ Failed to parse updated content:', e);
+      console.warn('Failed to parse updated content:', e);
     }
-  }, [content]); // Only depend on content, not agentData to avoid loops
+  }, [content]); // Remove updateMetadata and agentData from dependencies to prevent loops
+
 
   if (isLoading) {
     return <DocumentSkeleton artifactKind="agent" />;
@@ -3510,6 +3500,16 @@ const AgentBuilderContent = memo(({
     }
   ];
 
+  // Debug logging for tab counts
+  console.log('📊 Tab counts:', {
+    models: agentData.models?.length || 0,
+    actions: agentData.actions?.length || 0,
+    schedules: agentData.schedules?.length || 0,
+    modelNames: (agentData.models || []).map((m: AgentModel) => m.name),
+    actionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
+    scheduleNames: (agentData.schedules || []).map((s: AgentSchedule) => s.name)
+  });
+
   return (
     <div className="h-full bg-black text-green-200 flex flex-col relative overflow-hidden font-mono">
       {/* Background Effects */}
@@ -3537,7 +3537,7 @@ const AgentBuilderContent = memo(({
               </div>
             </div>
             
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <div className="flex flex-row items-center justify-between sm:justify-start gap-3 sm:gap-4">
               {/* Status Indicator */}
               <div className="flex items-center gap-3 px-3 sm:px-4 py-2 rounded-xl bg-black/50 border border-green-500/20 backdrop-blur-sm">
                 <div className="status-indicator status-online">
@@ -3593,15 +3593,55 @@ const AgentBuilderContent = memo(({
               </div>
               
               {/* Progress Steps */}
-              {/* <div className="flex justify-between mt-4 text-xs font-mono">
+               <div className="flex justify-between mt-4 text-xs font-mono">
                 {[
+                  { id: 'prompt-understanding', label: 'Analysis' },
                   { id: 'overview', label: 'Overview' },
                   { id: 'models', label: 'Models' },
-                  { id: 'enums', label: 'Enums' },
                   { id: 'actions', label: 'Actions' },
-                  { id: 'schedules', label: 'Schedules' }
+                  { id: 'schedules', label: 'Schedules' },
+                  { id: 'complete', label: 'Complete' }
                 ].map((step) => {
-                  const stepStatus = getStepStatus(step.id, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
+                  // Use the enhanced step status function to properly handle API sync
+                  const getEnhancedStepStatus = (stepId: string) => {
+                    // Map orchestrator step IDs to UI step IDs
+                    const stepIdMapping: Record<string, string> = {
+                      'step0': 'prompt-understanding',
+                      'step1': 'analysis',
+                      'step2': 'overview',
+                      'step3': 'models',
+                      'step4': 'actions',
+                      'step5': 'schedules',
+                      'complete': 'complete'
+                    };
+                    
+                    // Check both the UI step ID and orchestrator step ID
+                    const orchestratorStepId = Object.keys(stepIdMapping).find(key => stepIdMapping[key] === stepId) || stepId;
+                    const uiStepId = stepIdMapping[stepId] || stepId;
+                    
+                    // Check stepProgress for both IDs
+                    if (safeMetadata.stepProgress) {
+                      if (safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress]) {
+                        return safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress];
+                      }
+                      if (orchestratorStepId && safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress]) {
+                        return safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress];
+                      }
+                      if (uiStepId && safeMetadata.stepProgress[uiStepId as keyof typeof safeMetadata.stepProgress]) {
+                        return safeMetadata.stepProgress[uiStepId as keyof typeof safeMetadata.stepProgress];
+                      }
+                    }
+                    
+                    // Check if this is the current step
+                    if (safeMetadata.currentStep === stepId || safeMetadata.currentStep === orchestratorStepId || safeMetadata.currentStep === uiStepId) {
+                      return 'processing';
+                    }
+                    
+                    // Use the existing getStepStatus function as fallback
+                    return getStepStatus(stepId, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
+                  };
+                  
+                  const stepStatus = getEnhancedStepStatus(step.id);
                   const isComplete = stepStatus === 'complete';
                   const isProcessing = stepStatus === 'processing';
                   
@@ -3626,14 +3666,14 @@ const AgentBuilderContent = memo(({
                     </div>
                   );
                 })}
-              </div> */}
+              </div>
             </div>
           )}
         </div>
       </div>
 
       {/* Navigation */}
-      <div className="relative border-b border-green-500/20 backdrop-blur-xl bg-black/50">
+      <div className="relative border-b border-green-500/20 backdrop-blur-xl bg-black/50 sticky top-0 z-50 md:static md:z-auto">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex gap-1 sm:gap-2 -mb-px overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {tabs.map((tab) => (
@@ -3693,7 +3733,7 @@ const AgentBuilderContent = memo(({
                       allModels={agentData.models || []}
                       onUpdateModel={(updatedModel) => {
                         console.log('🔄 Updating model:', updatedModel);
-                        const updatedModels = (agentData.models || []).map(m => 
+                        const updatedModels = (agentData.models || []).map((m: AgentModel) => 
                           m.id === updatedModel.id ? updatedModel : m
                         );
                               updateAgentData({ ...agentData, models: updatedModels });
@@ -3711,6 +3751,12 @@ const AgentBuilderContent = memo(({
               
               // Show appropriate tab content
               if (safeMetadata.selectedTab === 'models') {
+                console.log('🗂️ Rendering ModelsListEditor');
+                console.log('🗂️ Models data:', {
+                  modelsCount: agentData.models?.length || 0,
+                  modelNames: (agentData.models || []).map((m: AgentModel) => m.name),
+                  editingId: safeMetadata.editingModel
+                });
                 return (
                   <ModelsListEditor
                     models={agentData.models || []}
@@ -3723,6 +3769,11 @@ const AgentBuilderContent = memo(({
               
               if (safeMetadata.selectedTab === 'actions') {
                 console.log('⚡ Rendering ActionsListEditor');
+                console.log('⚡ Actions data:', {
+                  actionsCount: agentData.actions?.length || 0,
+                  actionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
+                  editingId: safeMetadata.editingAction
+                });
                 return (
                   <ActionsListEditor
                     actions={agentData.actions || []}
@@ -3738,6 +3789,11 @@ const AgentBuilderContent = memo(({
               
               if (safeMetadata.selectedTab === 'schedules') {
                 console.log('⏰ Rendering SchedulesListEditor');
+                console.log('⏰ Schedules data:', {
+                  schedulesCount: agentData.schedules?.length || 0,
+                  scheduleNames: (agentData.schedules || []).map((s: AgentSchedule) => s.name),
+                  editingId: safeMetadata.editingSchedule
+                });
                 return (
                   <SchedulesListEditor
                     schedules={agentData.schedules || []}

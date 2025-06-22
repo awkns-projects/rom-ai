@@ -95,61 +95,63 @@ export async function executeStep2TechnicalAnalysis(
   try {
     const model = await getAgentBuilderModel();
     
-    const systemPrompt = `You are a senior technical architect analyzing requirements and designing system architecture.
+    // Enhanced system prompt with comprehensive technical analysis guidance
+    const systemPrompt = `You are a senior technical architect performing comprehensive system analysis.
 
-PROMPT UNDERSTANDING:
+ANALYSIS CONTEXT:
 ${JSON.stringify(promptUnderstanding, null, 2)}
 
-STRATEGIC DECISIONS:
+STRATEGIC DECISION:
 ${JSON.stringify(decision, null, 2)}
 
 ${existingAgent ? `EXISTING SYSTEM:
-${JSON.stringify({
-  models: existingAgent.models?.length || 0,
-  actions: existingAgent.actions?.length || 0,
-  schedules: existingAgent.schedules?.length || 0,
-  domain: existingAgent.domain
-}, null, 2)}` : 'NEW SYSTEM CREATION'}
+${JSON.stringify(existingAgent, null, 2)}` : 'NEW SYSTEM CREATION'}
 
-CONTEXT:
-- User Command: "${command}"
-- Conversation Context: ${conversationContext || 'None'}
+TECHNICAL ANALYSIS REQUIREMENTS:
 
-Your task is to perform comprehensive technical analysis and system design:
+You must provide a comprehensive technical analysis covering:
 
 1. TECHNICAL REQUIREMENTS ANALYSIS:
-   - Identify specific data models needed
-   - Determine integration requirements
-   - Assess scalability and performance needs
-   - Define security requirements
-   - Consider technical constraints
+   - Identify specific data models/entities needed
+   - List required integrations with external systems
+   - Define scalability needs and considerations
+   - Specify security requirements and constraints
+   - Outline performance requirements and benchmarks
 
 2. SYSTEM ARCHITECTURE DESIGN:
-   - Define system components and their purposes
-   - Map data flow between components
-   - Identify integration points
-   - Plan component dependencies
+   - Define system components and their relationships
+   - Map data flow patterns between components
+   - Identify key integration points
 
 3. DESIGN DECISIONS:
-   - Make key architectural decisions
-   - Provide clear rationale for each decision
-   - Consider alternatives and tradeoffs
-   - Document assumptions
+   - Document key architectural decisions with rationale
+   - List alternatives considered
+   - Explain tradeoffs
 
 4. IMPLEMENTATION STRATEGY:
-   - Choose optimal implementation approach
-   - Define implementation phases
-   - Identify dependencies and risks
+   - Choose implementation approach (unified/phased/incremental)
+   - Define implementation phases in order
+   - Identify critical dependencies
    - Plan risk mitigation strategies
 
-5. QUALITY ASSURANCE:
+5. QUALITY ASSURANCE PLAN:
    - Define testing strategy
-   - Plan validation checkpoints
-   - Identify monitoring needs
+   - Identify validation checkpoints
+   - Specify monitoring needs
    - Consider maintenance requirements
+
+6. ASSESSMENT METRICS:
+   - Assess overall system complexity
+   - Provide confidence level (0-100)
+   - Estimate implementation effort
+   - Identify technical risks
+
+CRITICAL: You must respond with a valid JSON object that exactly matches the required schema structure. All fields are required.
 
 Provide specific, actionable technical guidance that will inform the database, action, and schedule generation phases.`;
 
+    console.log('🔧 Attempting Step 2 technical analysis with enhanced debugging...');
+    
     const result = await generateObject({
       model,
       schema: z.object({
@@ -159,49 +161,49 @@ Provide specific, actionable technical guidance that will inform the database, a
           scalabilityNeeds: z.array(z.string()).describe('Scalability requirements and considerations'),
           securityRequirements: z.array(z.string()).describe('Security requirements and constraints'),
           performanceRequirements: z.array(z.string()).describe('Performance requirements and benchmarks')
-        }),
+        }).describe('Technical requirements analysis'),
         systemArchitecture: z.object({
           components: z.array(z.object({
-            name: z.string(),
-            purpose: z.string(),
-            dependencies: z.array(z.string()),
-            type: z.enum(['model', 'action', 'schedule', 'integration'])
+            name: z.string().describe('Component name'),
+            purpose: z.string().describe('Component purpose'),
+            dependencies: z.array(z.string()).describe('Component dependencies'),
+            type: z.enum(['model', 'action', 'schedule', 'integration']).describe('Component type')
           })).describe('System components and their relationships'),
           dataFlow: z.array(z.object({
-            from: z.string(),
-            to: z.string(),
-            data: z.string(),
-            trigger: z.string()
+            from: z.string().describe('Data source'),
+            to: z.string().describe('Data destination'),
+            data: z.string().describe('Data description'),
+            trigger: z.string().describe('Trigger condition')
           })).describe('Data flow patterns between components'),
           integrationPoints: z.array(z.string()).describe('Key integration points in the system')
-        }),
+        }).describe('System architecture design'),
         designDecisions: z.array(z.object({
-          decision: z.string(),
-          rationale: z.string(),
-          alternatives: z.array(z.string()),
-          tradeoffs: z.string()
+          decision: z.string().describe('Design decision'),
+          rationale: z.string().describe('Decision rationale'),
+          alternatives: z.array(z.string()).describe('Alternative options considered'),
+          tradeoffs: z.string().describe('Tradeoffs and implications')
         })).describe('Key architectural decisions with rationale'),
         implementationStrategy: z.object({
           approach: z.enum(['unified', 'phased', 'incremental']).describe('Overall implementation approach'),
           phases: z.array(z.string()).describe('Implementation phases in order'),
           dependencies: z.array(z.string()).describe('Critical dependencies between phases'),
           riskMitigation: z.array(z.object({
-            risk: z.string(),
-            mitigation: z.string(),
-            contingency: z.string()
+            risk: z.string().describe('Risk description'),
+            mitigation: z.string().describe('Mitigation strategy'),
+            contingency: z.string().describe('Contingency plan')
           })).describe('Risk mitigation strategies')
-        }),
+        }).describe('Implementation strategy and planning'),
         qualityPlan: z.object({
           testingStrategy: z.string().describe('Overall testing approach'),
           validationPoints: z.array(z.string()).describe('Key validation checkpoints'),
           monitoringNeeds: z.array(z.string()).describe('Monitoring and observability needs'),
           maintenanceConsiderations: z.array(z.string()).describe('Long-term maintenance considerations')
-        }),
+        }).describe('Quality assurance planning'),
         complexity: z.enum(['simple', 'moderate', 'complex', 'enterprise']).describe('Overall system complexity'),
         confidence: z.number().min(0).max(100).describe('Confidence level in the technical analysis'),
         estimatedEffort: z.enum(['low', 'medium', 'high', 'very-high']).describe('Estimated implementation effort'),
         technicalRisks: z.array(z.string()).describe('Key technical risks and concerns')
-      }),
+      }).describe('Complete technical analysis output'),
       messages: [
         {
           role: 'system',
@@ -209,11 +211,37 @@ Provide specific, actionable technical guidance that will inform the database, a
         },
         {
           role: 'user',
-          content: `Perform comprehensive technical analysis and system design for this request.`
+          content: `Perform comprehensive technical analysis and system design for this request. Return a complete JSON object with all required fields.`
         }
       ],
-      temperature: 0.3 // Lower temperature for consistent technical analysis
+      temperature: 0.1, // Very low temperature for consistent structured output
+      maxTokens: 4000 // Ensure enough tokens for complete response
     });
+
+    console.log('🔧 Step 2 generateObject completed, validating result...');
+    
+    // Additional validation logging
+    if (!result.object) {
+      console.error('❌ No object returned from generateObject');
+      throw new Error('No object generated from AI response');
+    }
+    
+    console.log('🔧 Validating required fields...');
+    const requiredFields = [
+      'technicalRequirements', 'systemArchitecture', 'designDecisions', 
+      'implementationStrategy', 'qualityPlan', 'complexity', 'confidence', 
+      'estimatedEffort', 'technicalRisks'
+    ];
+    
+    for (const field of requiredFields) {
+      if (!(field in result.object)) {
+        console.error(`❌ Missing required field: ${field}`);
+        console.error('Available fields:', Object.keys(result.object));
+        throw new Error(`Missing required field: ${field}`);
+      }
+    }
+    
+    console.log('✅ All required fields present');
 
     console.log('✅ STEP 2: Technical analysis completed successfully');
     console.log(`🔧 Technical Analysis Summary:

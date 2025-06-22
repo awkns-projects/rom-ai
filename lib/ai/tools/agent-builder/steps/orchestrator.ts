@@ -636,6 +636,34 @@ function assembleCompleteAgent(
     ? performDeepMerge(config.existingAgent, newAgentData)
     : newAgentData;
 
+  // Enhanced logging for debugging record merging
+  if (config.existingAgent) {
+    console.log('🔍 RECORD MERGE DEBUGGING:');
+    console.log('📊 New Agent Data (before merge):');
+    newAgentData.models.forEach(model => {
+      console.log(`  - ${model.name}: ${model.records?.length || 0} records`);
+      if (model.records && model.records.length > 0) {
+        console.log(`    Records: ${model.records.map(r => r.id).join(', ')}`);
+      }
+    });
+    
+    console.log('📊 Final Agent Data (after merge):');
+    finalAgent.models.forEach(model => {
+      console.log(`  - ${model.name}: ${model.records?.length || 0} records`);
+      if (model.records && model.records.length > 0) {
+        console.log(`    Records: ${model.records.map(r => r.id).join(', ')}`);
+      }
+    });
+    
+    // Check for record loss
+    const newModelRecordCount = newAgentData.models.reduce((sum, model) => sum + (model.records?.length || 0), 0);
+    const finalModelRecordCount = finalAgent.models.reduce((sum, model) => sum + (model.records?.length || 0), 0);
+    
+    if (finalModelRecordCount < newModelRecordCount) {
+      console.warn(`⚠️ RECORD LOSS DETECTED: ${newModelRecordCount} → ${finalModelRecordCount}`);
+    }
+  }
+
   // Enhanced logging for debugging
   console.log(`🔧 Agent Assembly Complete:
 - ${config.existingAgent ? 'MERGED' : 'NEW'} Agent Created
@@ -643,7 +671,8 @@ function assembleCompleteAgent(
 - Total Model Enums: ${finalAgent.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)}
 - Actions: ${finalAgent.actions.length} (${config.existingAgent ? `was ${config.existingAgent.actions?.length || 0}` : 'new'})
 - Schedules: ${finalAgent.schedules.length} (${config.existingAgent ? `was ${config.existingAgent.schedules?.length || 0}` : 'new'})
-- Example Records: ${Object.keys(step3.exampleRecords || {}).length} model types`);
+- Example Records: ${Object.keys(step3.exampleRecords || {}).length} model types
+- Total Records: ${finalAgent.models.reduce((sum, model) => sum + (model.records?.length || 0), 0)}`);
 
   // Log model-specific enum counts
   finalAgent.models.forEach(model => {
