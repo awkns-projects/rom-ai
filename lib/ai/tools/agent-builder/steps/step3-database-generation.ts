@@ -23,7 +23,6 @@ export interface Step3Input {
 
 export interface Step3Output {
   models: AgentModel[];
-  enums: AgentEnum[];
   exampleRecords: Record<string, any[]>;
   // Enhanced fields from hybrid approach
   designRationale: string;
@@ -78,7 +77,6 @@ export async function executeStep3DatabaseGeneration(
 
     const result: Step3Output = {
       models: databaseResult.models,
-      enums: databaseResult.enums,
       exampleRecords,
       designRationale: designAnalysis.rationale,
       actionAwarenessScore: designAnalysis.actionAwarenessScore,
@@ -90,7 +88,7 @@ export async function executeStep3DatabaseGeneration(
     console.log('✅ STEP 3: Database generation completed successfully');
     console.log(`📊 Database Summary:
 - Models: ${result.models.length}
-- Enums: ${result.enums.length}
+- Model Enums: ${result.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)}
 - Action Awareness Score: ${result.actionAwarenessScore}/100
 - Relationship Complexity: ${result.relationshipComplexity}
 - Validation Score: ${result.validationResults.overallScore}/100`);
@@ -107,7 +105,7 @@ export async function executeStep3DatabaseGeneration(
  * Enhanced database design validation with hybrid approach insights
  */
 async function validateDatabaseDesign(
-  databaseResult: { models: AgentModel[], enums: AgentEnum[] },
+  databaseResult: { models: AgentModel[] },
   promptUnderstanding: Step0Output
 ) {
   console.log('🔍 Validating database design comprehensively...');
@@ -286,11 +284,10 @@ function validateActionCompatibility(
  * Analyze database design quality and provide insights
  */
 function analyzeDatabaseDesign(
-  databaseResult: { models: AgentModel[], enums: AgentEnum[] },
+  databaseResult: { models: AgentModel[] },
   promptUnderstanding: Step0Output
 ) {
   const models = databaseResult.models;
-  const enums = databaseResult.enums;
   
   // Calculate action awareness score
   let actionAwarenessScore = 0;
@@ -307,7 +304,6 @@ function analyzeDatabaseDesign(
   if (hasStatusFields) actionAwarenessScore += 30;
   if (hasAuditFields) actionAwarenessScore += 25;
   if (hasUserFields) actionAwarenessScore += 20;
-  if (enums.length > 0) actionAwarenessScore += 15;
   if (totalActions > 0 && models.length >= totalActions) actionAwarenessScore += 10;
   
   // Determine relationship complexity
@@ -343,7 +339,7 @@ function analyzeDatabaseDesign(
   }
   
   // Generate design rationale
-  const rationale = `Database design supports ${models.length} models and ${enums.length} enums with ${relationshipComplexity} relationship structure. Action-aware design score: ${actionAwarenessScore}/100. The schema is optimized for ${promptUnderstanding.userRequestAnalysis.businessContext} domain with support for ${totalActions} planned actions.`;
+  const rationale = `Database design supports ${models.length} models with ${relationshipComplexity} relationship structure. Action-aware design score: ${actionAwarenessScore}/100. The schema is optimized for ${promptUnderstanding.userRequestAnalysis.businessContext} domain with support for ${totalActions} planned actions.`;
   
   return {
     rationale,
@@ -398,7 +394,7 @@ export function validateStep3Output(output: Step3Output): boolean {
 export function extractDatabaseInsights(output: Step3Output) {
   return {
     modelCount: output.models.length,
-    enumCount: output.enums.length,
+    enumCount: output.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0),
     relationshipComplexity: output.relationshipComplexity,
     actionAwarenessScore: output.actionAwarenessScore,
     validationScore: output.validationResults.overallScore,

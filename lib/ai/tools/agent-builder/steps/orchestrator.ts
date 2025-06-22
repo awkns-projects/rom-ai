@@ -593,7 +593,6 @@ function assembleCompleteAgent(
     description: step0.userRequestAnalysis.mainGoal || 'AI-generated agent',
     domain: step0.userRequestAnalysis.businessContext || 'general',
     models: modelsWithRecords,
-    enums: [], // Enums are now stored within individual models (model-scoped)
     actions: step4.actions,
     schedules: step5.schedules,
     createdAt: now,

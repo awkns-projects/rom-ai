@@ -1,4 +1,3 @@
-
 import type { 
   AgentData, 
   AgentModel, 
@@ -49,7 +48,6 @@ export function escapeForTemplate(str: string): string {
  * @param description - Agent description
  * @param domain - Agent domain
  * @param models - Array of models
- * @param enums - Array of enums
  * @param actions - Array of actions
  * @param schedules - Array of schedules
  * @param metadata - Optional metadata
@@ -61,7 +59,6 @@ export function createAgentData(
   description: string,
   domain: string,
   models: AgentModel[] = [],
-  enums: AgentEnum[] = [],
   actions: AgentAction[] = [],
   schedules: AgentSchedule[] = [],
   metadata?: any,
@@ -73,7 +70,6 @@ export function createAgentData(
     description,
     domain,
     models,
-    enums,
     actions,
     schedules,
     createdAt: new Date().toISOString(),
@@ -326,7 +322,6 @@ export function createInitialAgentData(
   description: string,
   domain: string,
   models: AgentModel[] = [],
-  enums: AgentEnum[] = [],
   actions: AgentAction[] = [],
   schedules: AgentSchedule[] = [],
   metadata: any = {}
@@ -339,7 +334,6 @@ export function createInitialAgentData(
     description,
     domain,
     models,
-    enums,
     actions,
     schedules,
     createdAt: now,

@@ -209,7 +209,6 @@ export class HybridAgentBuilder {
         description: `Hybrid AI Agent: ${command}`,
         domain: 'AI Agent System',
         models: databaseResult.models,
-        enums: databaseResult.enums || [],
         actions: actionsResult.actions,
         schedules: schedules.schedules,
         createdAt: new Date().toISOString(),

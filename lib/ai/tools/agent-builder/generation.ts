@@ -150,7 +150,7 @@ export async function generateDatabase(
   agentOverview?: any,
   conversationContext?: string,
   command?: string
-): Promise<{ models: AgentModel[], enums: AgentEnum[] }> {
+): Promise<{ models: AgentModel[] }> {
   console.log('🗄️ Starting database generation with real AI...');
   console.log('📋 Input analysis:', {
     hasExistingAgent: !!existingAgent,
@@ -487,8 +487,7 @@ Each enum should have:
     console.log(`📊 Final result: ${mergedModels.length} total models with ${finalModelEnums} total enums`);
     
     return {
-      models: mergedModels,
-      enums: [] // Deprecated: enums are now within models
+      models: mergedModels
     };
   }
 
@@ -496,8 +495,7 @@ Each enum should have:
   console.log(`📊 Generated ${fixedModels.length} models with ${totalEnums} total enums`);
 
   return {
-    models: fixedModels,
-    enums: [] // Deprecated: enums are now within models
+    models: fixedModels
   };
 }
 
@@ -506,7 +504,7 @@ Each enum should have:
  */
 export async function generateActions(
   promptUnderstanding: PromptUnderstanding,
-  databaseResult: { models: AgentModel[], enums: AgentEnum[] },
+  databaseResult: { models: AgentModel[] },
   existingAgent?: AgentData,
   changeAnalysis?: ChangeAnalysis,
   agentOverview?: any,
@@ -561,7 +559,7 @@ AVAILABLE DATA MODELS:
 ${(databaseResult.models || []).map(model => `- ${model.name}: ${(model.fields || []).map(f => f.name).join(', ')}`).join('\n')}
 
 AVAILABLE ENUMS:
-${(databaseResult.enums || []).map(enumItem => `- ${enumItem.name}: ${(enumItem.fields || []).map(f => f.name).join(' | ')}`).join('\n') || 'None'}
+${databaseResult.models.flatMap(model => model.enums || []).map(enumItem => `- ${enumItem.name}: ${(enumItem.fields || []).map(f => f.name).join(' | ')}`).join('\n') || 'None'}
 
 ${existingActionsContext}
 
@@ -788,7 +786,7 @@ try {
  */
 export async function generateActionsWithEnhancedAnalysis(
   promptUnderstanding: PromptUnderstanding,
-  databaseResult: { models: AgentModel[], enums: AgentEnum[] },
+  databaseResult: { models: AgentModel[] },
   useEnhancedGeneration = false,
   existingAgent?: AgentData,
   businessContext?: string
@@ -1331,7 +1329,7 @@ Generate realistic, contextually appropriate example data:`;
 export async function generateEnhancedActionImagination(
   actionRequest: string,
   promptUnderstanding: PromptUnderstanding,
-  databaseResult: { models: AgentModel[], enums: AgentEnum[] },
+  databaseResult: { models: AgentModel[] },
   existingAgent?: AgentData,
   businessContext?: string
 ): Promise<{
@@ -1424,7 +1422,7 @@ export async function generateEnhancedActionAnalysis(
   actionRequest: string,
   imagination: any,
   promptUnderstanding: PromptUnderstanding,
-  databaseResult: { models: AgentModel[], enums: AgentEnum[] },
+  databaseResult: { models: AgentModel[] },
   existingAgent?: AgentData,
   businessContext?: string
 ): Promise<z.infer<typeof enhancedActionAnalysisSchema>> {
@@ -1443,8 +1441,8 @@ export async function generateEnhancedActionAnalysis(
     }))
   }));
 
-  // Get available enums
-  const availableEnums = databaseResult.enums.map(enumDef => ({
+  // Get available enums from all models
+  const availableEnums = databaseResult.models.flatMap(model => model.enums || []).map(enumDef => ({
     name: enumDef.name,
     values: enumDef.fields.map(f => f.name)
   }));
@@ -1971,7 +1969,7 @@ CRITICAL: Ensure every required field is present as the correct data type (objec
  */
 export async function generateEnhancedActionCode(
   actionAnalysis: z.infer<typeof enhancedActionAnalysisSchema>,
-  databaseResult: { models: AgentModel[], enums: AgentEnum[] },
+  databaseResult: { models: AgentModel[] },
   existingAgent?: AgentData
 ): Promise<z.infer<typeof enhancedActionCodeSchema>> {
   console.log('🔧 Starting enhanced action code generation with focus on UI components...');
@@ -2254,7 +2252,7 @@ Generate using this exact structure with all object fields properly filled.`
 export async function generateCompleteEnhancedAction(
   actionRequest: string,
   promptUnderstanding: PromptUnderstanding,
-  databaseResult: { models: AgentModel[], enums: AgentEnum[] },
+  databaseResult: { models: AgentModel[] },
   existingAgent?: AgentData,
   businessContext?: string
 ): Promise<{
@@ -2381,7 +2379,7 @@ export async function generateCompleteEnhancedAction(
 export async function generateBatchEnhancedActions(
   actionRequests: string[],
   promptUnderstanding: PromptUnderstanding,
-  databaseResult: { models: AgentModel[], enums: AgentEnum[] },
+  databaseResult: { models: AgentModel[] },
   existingAgent?: AgentData,
   businessContext?: string
 ): Promise<Array<{

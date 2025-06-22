@@ -13,7 +13,6 @@ import { generateUUID } from '../../../utils';
  * @param description - Agent description
  * @param domain - Agent domain
  * @param models - Agent models
- * @param enums - Agent enums
  * @param actions - Agent actions
  * @param schedules - Agent schedules
  * @param metadata - Additional metadata for the agent
@@ -24,7 +23,6 @@ export function createAgentData(
   description: string,
   domain: string,
   models: AgentModel[] = [],
-  enums: AgentEnum[] = [],
   actions: AgentAction[] = [],
   schedules: AgentSchedule[] = [],
   metadata?: any
@@ -35,7 +33,6 @@ export function createAgentData(
     description,
     domain,
     models,
-    enums,
     actions,
     schedules,
     createdAt: new Date().toISOString(),
