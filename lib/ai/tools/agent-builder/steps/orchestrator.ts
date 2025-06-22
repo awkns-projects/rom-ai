@@ -586,7 +586,8 @@ function assembleCompleteAgent(
     };
   });
 
-  const result: AgentData = {
+  // Create the new agent data from step results
+  const newAgentData: AgentData = {
     id: config.existingAgent?.id || generateId(),
     name: step0.userRequestAnalysis.businessContext || 'Generated Agent',
     description: step0.userRequestAnalysis.mainGoal || 'AI-generated agent',
@@ -629,22 +630,48 @@ function assembleCompleteAgent(
     }
   };
 
+  // CRITICAL FIX: Apply final deep merge if we have an existing agent
+  // This ensures that the change-based merging is properly applied at the final assembly level
+  const finalAgent = config.existingAgent 
+    ? performDeepMerge(config.existingAgent, newAgentData)
+    : newAgentData;
+
   // Enhanced logging for debugging
   console.log(`🔧 Agent Assembly Complete:
-- Models: ${result.models.length}
-- Total Model Enums: ${result.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)}
-- Actions: ${result.actions.length}
-- Schedules: ${result.schedules.length}
+- ${config.existingAgent ? 'MERGED' : 'NEW'} Agent Created
+- Models: ${finalAgent.models.length} (${config.existingAgent ? `was ${config.existingAgent.models?.length || 0}` : 'new'})
+- Total Model Enums: ${finalAgent.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)}
+- Actions: ${finalAgent.actions.length} (${config.existingAgent ? `was ${config.existingAgent.actions?.length || 0}` : 'new'})
+- Schedules: ${finalAgent.schedules.length} (${config.existingAgent ? `was ${config.existingAgent.schedules?.length || 0}` : 'new'})
 - Example Records: ${Object.keys(step3.exampleRecords || {}).length} model types`);
 
   // Log model-specific enum counts
-  result.models.forEach(model => {
+  finalAgent.models.forEach(model => {
     if (model.enums && model.enums.length > 0) {
       console.log(`📊 Model "${model.name}" has ${model.enums.length} enums: ${model.enums.map(e => e.name).join(', ')}`);
     }
   });
 
-  return result;
+  // Log the change summary if this was an update
+  if (config.existingAgent) {
+    const existingModelCount = config.existingAgent.models?.length || 0;
+    const existingActionCount = config.existingAgent.actions?.length || 0;
+    const existingScheduleCount = config.existingAgent.schedules?.length || 0;
+    const existingEnumCount = (config.existingAgent.models || []).reduce((sum, model) => sum + (model.enums?.length || 0), 0);
+    
+    const finalModelCount = finalAgent.models.length;
+    const finalActionCount = finalAgent.actions.length;
+    const finalScheduleCount = finalAgent.schedules.length;
+    const finalEnumCount = finalAgent.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0);
+    
+    console.log(`📈 Change Summary:
+- Models: ${existingModelCount} → ${finalModelCount} (${finalModelCount > existingModelCount ? '+' : ''}${finalModelCount - existingModelCount})
+- Actions: ${existingActionCount} → ${finalActionCount} (${finalActionCount > existingActionCount ? '+' : ''}${finalActionCount - existingActionCount})
+- Schedules: ${existingScheduleCount} → ${finalScheduleCount} (${finalScheduleCount > existingScheduleCount ? '+' : ''}${finalScheduleCount - existingScheduleCount})
+- Enums: ${existingEnumCount} → ${finalEnumCount} (${finalEnumCount > existingEnumCount ? '+' : ''}${finalEnumCount - existingEnumCount})`);
+  }
+
+  return finalAgent;
 }
 
 /**
