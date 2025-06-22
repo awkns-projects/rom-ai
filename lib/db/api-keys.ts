@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { createHash, createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { createHash, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -22,7 +22,7 @@ const getEncryptionKey = (): string => {
   const authSecret = process.env.AUTH_SECRET;
   if (authSecret) {
     // Create a consistent 32-byte key from AUTH_SECRET
-    return createHash('sha256').update(authSecret + 'api-keys').digest('hex').slice(0, 32);
+    return createHash('sha256').update(`${authSecret}api-keys`).digest('hex').slice(0, 32);
   }
   
   // Development fallback
@@ -44,7 +44,7 @@ function encryptApiKey(apiKey: string): string {
   encrypted += cipher.final('hex');
   
   // Return IV + encrypted data
-  return iv.toString('hex') + ':' + encrypted;
+  return `${iv.toString('hex')}:${encrypted}`;
 }
 
 /**

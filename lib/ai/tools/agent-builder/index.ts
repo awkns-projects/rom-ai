@@ -1,10 +1,8 @@
-import { openai } from '@ai-sdk/openai';
-import { generateObject, tool, type DataStreamWriter } from 'ai';
+
+import { tool, type DataStreamWriter } from 'ai';
 import { z } from 'zod';
 import type { Message } from 'ai';
 import type { Session } from 'next-auth';
-import { myProvider } from '../../providers';
-import { getBestModelFor, supportsStructuredOutput } from '../../models';
 import { getDocumentById, saveOrUpdateDocument } from '../../../db/queries';
 import { generateUUID } from '../../../utils';
 
@@ -17,8 +15,6 @@ import type {
   AgentEnumField, 
   AgentAction, 
   AgentSchedule,
-  PromptUnderstanding,
-  ChangeAnalysis,
   DatabaseModel,
   DatabaseField,
   EnvVar
@@ -28,11 +24,6 @@ import type {
 import type { OrchestratorConfig } from './steps/orchestrator';
 
 import {
-  promptUnderstandingSchema,
-  changeAnalysisSchema,
-  databaseGenerationSchema,
-  actionGenerationSchema,
-  scheduleGenerationSchema,
   enhancedActionAnalysisSchema,
   enhancedActionCodeSchema,
   enhancedActionSchema
@@ -40,34 +31,16 @@ import {
 
 import {
   analyzeConversationContext,
-  cleanNullValues,
   deepEqual,
-  mergeArraysByKey,
-  ensureActionsHaveIds,
-  ensureSchedulesHaveIds,
-  ensureRequiredScheduleFields,
-  ensureRequiredActionFields,
   generateNewId
 } from './utils';
 
 import {
   performDeepMerge,
-  mergeModelsIntelligently,
-  mergeActionsIntelligently,
-  mergeSchedulesIntelligently,
   logContentChanges
 } from './merging';
 
 import {
-  generatePromptUnderstanding,
-  generateChangeAnalysis,
-  generateDatabase,
-  generateActions,
-  generateSchedules,
-  generateDecision,
-  generateGranularChangeAnalysis,
-  generateDeletionOperations,
-  generateExampleRecords,
   generateEnhancedActionAnalysis,
   generateEnhancedActionCode,
   generateCompleteEnhancedAction,
@@ -81,11 +54,7 @@ import {
 
 import {
   createAgentData,
-  validateAgentData,
-  logAgentData,
-  generateSuccessMessage,
   generateErrorMessage,
-  createAgentResult
 } from './document';
 
 // Import the hybrid agent builder
@@ -643,7 +612,7 @@ The tool maintains state throughout the generation process and can resume from a
           if (retryCount > maxRetries) {
             // Update step metadata for final failure
             stepMetadata.currentStep = 'error';
-            stepMetadata.stepProgress['error'] = 'error';
+            stepMetadata.stepProgress.error = 'error';
             stepMetadata.status = 'error';
             
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -695,7 +664,7 @@ The tool maintains state throughout the generation process and can resume from a
         
         // Final completion step
         stepMetadata.currentStep = 'complete';
-        stepMetadata.stepProgress['complete'] = 'complete';
+        stepMetadata.stepProgress.complete = 'complete';
         stepMetadata.status = 'complete';
         
         streamWithPersistence(dataStream, 'agent-step', {
@@ -773,7 +742,7 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created with 
           
           // Final completion step
           stepMetadata.currentStep = 'complete';
-          stepMetadata.stepProgress['complete'] = 'complete';
+          stepMetadata.stepProgress.complete = 'complete';
           stepMetadata.status = 'complete';
           
           const message = result.success 
@@ -850,7 +819,7 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created, thou
       const errorMessage = result.errors?.length > 0 ? result.errors.join(', ') : 'Unknown error occurred during agent generation';
       console.log('❌ No usable agent data generated, treating as failure');
       console.log('🔍 Final failure reason:', errorMessage);
-      throw new Error('Agent generation failed: ' + errorMessage);
+      throw new Error(`Agent generation failed: ${errorMessage}`);
 
     } catch (error) {
       console.error('❌ Enhanced Agent Builder Error:', error);

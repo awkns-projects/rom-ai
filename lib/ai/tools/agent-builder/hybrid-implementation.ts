@@ -7,24 +7,12 @@ import type { Message } from 'ai';
 // Import existing types and schemas
 import type { 
   AgentData, 
-  AgentModel, 
   AgentAction, 
-  AgentSchedule,
   PromptUnderstanding,
-  ChangeAnalysis
 } from './types';
-import { 
-  promptUnderstandingSchema,
-  changeAnalysisSchema,
-  unifiedDatabaseSchema,
-  actionGenerationSchema,
-  scheduleGenerationSchema
-} from './schemas';
 
 // Import existing generation functions
 import {
-  generatePromptUnderstanding,
-  generateChangeAnalysis,
   generateDatabase,
   generateActions,
   generateSchedules,
@@ -116,7 +104,7 @@ const hybridSystemDesignSchema = z.object({
 
 // Utility functions from current implementation
 function generateUUID(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = Math.random() * 16 | 0;
     const v = c === 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
@@ -158,7 +146,7 @@ export class HybridAgentBuilder {
   private session: Session | null | undefined;
   private dataStream: DataStreamWriter;
   private stepMetadata: any;
-  private isProcessCancelled: boolean = false;
+  private isProcessCancelled = false;
 
   constructor(
     documentId: string,

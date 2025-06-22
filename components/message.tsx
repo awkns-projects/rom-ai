@@ -13,7 +13,7 @@ import { MessageActions } from './message-actions';
 import { PreviewAttachment } from './preview-attachment';
 import { Weather } from './weather';
 import equal from 'fast-deep-equal';
-import { cn, sanitizeText, generateUUID, fetcher } from '@/lib/utils';
+import { cn, sanitizeText, fetcher } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { MessageEditor } from './message-editor';
@@ -21,7 +21,6 @@ import { DocumentPreview } from './document-preview';
 import { MessageReasoning } from './message-reasoning';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import { useArtifact } from '@/hooks/use-artifact';
-import { useChat } from '@ai-sdk/react';
 import useSWR from 'swr';
 import { LoaderIcon } from './icons';
 
@@ -148,7 +147,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
           
           if (content && typeof content === 'object') {
             // Check for step progress in the content
-            if (content.stepProgress && content.stepProgress[stepId]) {
+            if (content.stepProgress?.[stepId]) {
               console.log(`✅ Found step status in tool invocation content: ${stepId} = ${content.stepProgress[stepId]}`);
               return content.stepProgress[stepId];
             }
@@ -162,7 +161,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
     }
     
     // Check real-time metadata first (active streaming state)
-    if (metadata?.stepProgress && metadata.stepProgress[stepId]) {
+    if (metadata?.stepProgress?.[stepId]) {
       console.log(`✅ Found step status in real-time metadata: ${stepId} = ${metadata.stepProgress[stepId]}`);
       return metadata.stepProgress[stepId];
     }
@@ -173,7 +172,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
     }
     
     // Fallback to persisted metadata (recovery state)
-    if (persistedMetadata?.stepProgress && persistedMetadata.stepProgress[stepId]) {
+    if (persistedMetadata?.stepProgress?.[stepId]) {
       console.log(`✅ Found step status in persisted metadata: ${stepId} = ${persistedMetadata.stepProgress[stepId]}`);
       return persistedMetadata.stepProgress[stepId];
     }
@@ -184,7 +183,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
     }
 
     // Check document metadata from database
-    if (persistedMetadataFromDoc?.stepProgress && persistedMetadataFromDoc.stepProgress[stepId]) {
+    if (persistedMetadataFromDoc?.stepProgress?.[stepId]) {
       console.log(`✅ Found step status in document metadata: ${stepId} = ${persistedMetadataFromDoc.stepProgress[stepId]}`);
       return persistedMetadataFromDoc.stepProgress[stepId];
     }
@@ -232,17 +231,17 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
   // Get step message from metadata or tool call data or persisted metadata
   const getStepMessage = (stepId: string) => {
     // Check metadata first (real-time)
-    if (metadata?.stepMessages && metadata.stepMessages[stepId]) {
+    if (metadata?.stepMessages?.[stepId]) {
       return metadata.stepMessages[stepId];
     }
     
     // Check persisted metadata
-    if (persistedMetadata?.stepMessages && persistedMetadata.stepMessages[stepId]) {
+    if (persistedMetadata?.stepMessages?.[stepId]) {
       return persistedMetadata.stepMessages[stepId];
     }
     
     // Check document metadata from database
-    if (persistedMetadataFromDoc?.stepMessages && persistedMetadataFromDoc.stepMessages[stepId]) {
+    if (persistedMetadataFromDoc?.stepMessages?.[stepId]) {
       return persistedMetadataFromDoc.stepMessages[stepId];
     }
     
@@ -822,9 +821,41 @@ const AgentBuilderWithStreamingSummary = memo(({ args, message, isLoading, isRea
     part.toolInvocation?.state === 'result'
   );
   
-  // Don't show partial summary if we have a completed result
-  if (hasCompletedResult) {
+  // Check if we should show the agent summary after completion
+  // This handles both initial builds and secondary edits
+  const shouldShowCompletedSummary = hasCompletedResult && 
+    artifact?.kind === 'agent' && 
+    artifact?.content;
+  
+  // Don't show streaming summary if we have a completed result, but do show completed summary
+  if (hasCompletedResult && !shouldShowCompletedSummary) {
     return <AgentBuilderLoading args={args} message={message} isLoading={false} metadata={metadata} persistedMetadata={persistedMetadata} />;
+  }
+  
+  // Show completed agent summary if we have a finished result with agent data
+  if (shouldShowCompletedSummary) {
+    try {
+      const agentData = JSON.parse(artifact.content);
+      if (agentData && (agentData.models || agentData.actions || agentData.schedules)) {
+        const completedResult = {
+          id: artifact.documentId,
+          title: agentData.name || 'AI Agent System',
+          kind: 'agent',
+          content: artifact.content
+        };
+        
+        return (
+          <div>
+            <AgentBuilderLoading args={args} message={message} isLoading={false} metadata={metadata} persistedMetadata={persistedMetadata} />
+            <div className="mt-4">
+              <AgentSummary result={completedResult} isReadonly={isReadonly} chatId={chatId} />
+            </div>
+          </div>
+        );
+      }
+    } catch (e) {
+      console.error('Failed to parse completed agent data:', e);
+    }
   }
   
   // Show partial agent summary during streaming if we have agent data

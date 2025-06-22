@@ -567,21 +567,38 @@ function assembleCompleteAgent(
 ): AgentData {
   const now = new Date().toISOString();
   
-  // Create the new agent data from step results
-  const newAgentData: AgentData = {
+  // Integrate example records into models
+  const modelsWithRecords = step3.models.map(model => {
+    const modelExampleRecords = step3.exampleRecords?.[model.name] || [];
+    
+    // Convert example records to ModelRecord format
+    const modelRecords = modelExampleRecords.map((recordData, index) => ({
+      id: recordData.id || `${model.name.toLowerCase()}_record_${index + 1}`,
+      modelId: model.id,
+      data: recordData,
+      createdAt: now,
+      updatedAt: now
+    }));
+    
+    return {
+      ...model,
+      records: modelRecords
+    };
+  });
+
+  const result: AgentData = {
     id: config.existingAgent?.id || generateId(),
-    name: step0.userRequestAnalysis.mainGoal.substring(0, 50) + (step0.userRequestAnalysis.mainGoal.length > 50 ? '...' : ''),
-    description: step0.userRequestAnalysis.mainGoal,
-    domain: step0.userRequestAnalysis.businessContext,
-    models: step3.models,
-    enums: step3.enums,
+    name: step0.userRequestAnalysis.businessContext || 'Generated Agent',
+    description: step0.userRequestAnalysis.mainGoal || 'AI-generated agent',
+    domain: step0.userRequestAnalysis.businessContext || 'general',
+    models: modelsWithRecords,
     actions: step4.actions,
     schedules: step5.schedules,
-    createdAt: config.existingAgent?.createdAt || now,
+    createdAt: now,
     metadata: {
       createdAt: config.existingAgent?.metadata?.createdAt || now,
       updatedAt: now,
-      version: '2.0.0-hybrid',
+      version: '2.0.0-model-scoped-enums',
       lastModifiedBy: 'Enhanced Agent Builder',
       tags: [
         step0.userRequestAnalysis.complexity,
@@ -598,63 +615,36 @@ function assembleCompleteAgent(
       lastUpdateTimestamp: now,
       comprehensiveAnalysisUsed: true,
       operationType: config.existingAgent ? 'update' : 'create',
-      promptAnalysisPhase: {
-        complexity: step0.userRequestAnalysis.complexity,
-        businessContext: step0.userRequestAnalysis.businessContext,
-        dataModeling: step0.dataModelingNeeds,
-        workflowAutomation: step0.workflowAutomationNeeds
-      },
-      technicalAnalysis: {
-        complexity: step2.complexity,
-        confidence: step2.confidence,
-        estimatedEffort: step2.estimatedEffort,
-        technicalRisks: step2.technicalRisks,
-        implementationStrategy: step2.implementationStrategy
-      },
-      databaseGenerationPhase: {
-        models: step3.models,
-        enums: step3.enums,
-        generationApproach: 'hybrid-enhanced',
-        validationResults: step3.validationResults
-      },
-      actionGenerationPhase: {
-        actions: step4.actions,
-        generationApproach: 'hybrid-enhanced',
-        validationResults: step4.validationResults
-      },
-      scheduleGenerationPhase: {
-        schedules: step5.schedules,
-        generationApproach: 'hybrid-enhanced',
-        validationResults: step5.validationResults
-      },
       mergingPhase: {
-        approach: 'step-by-step-enhanced',
+        approach: 'model-scoped-enums',
         preservationStrategy: 'comprehensive-validation',
         conflictResolution: 'quality-based',
         finalCounts: {
           models: step3.models.length,
           actions: step4.actions.length,
-          schedules: step5.schedules.length
+          schedules: step5.schedules.length,
+          enums: step3.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)
         }
       }
     }
   };
 
-  // If there's an existing agent, perform intelligent deep merge
-  if (config.existingAgent) {
-    console.log('🔄 Merging new agent data with existing agent to preserve data');
-    console.log(`📊 Existing agent has: ${config.existingAgent.models?.length || 0} models, ${config.existingAgent.actions?.length || 0} actions, ${config.existingAgent.schedules?.length || 0} schedules`);
-    console.log(`📊 New agent data has: ${newAgentData.models?.length || 0} models, ${newAgentData.actions?.length || 0} actions, ${newAgentData.schedules?.length || 0} schedules`);
-    
-    const mergedAgent = performDeepMerge(config.existingAgent, newAgentData);
-    
-    console.log(`📊 Final merged agent has: ${mergedAgent.models?.length || 0} models, ${mergedAgent.actions?.length || 0} actions, ${mergedAgent.schedules?.length || 0} schedules`);
-    
-    return mergedAgent;
-  }
-  
-  // For new agents, return the new data as-is
-  return newAgentData;
+  // Enhanced logging for debugging
+  console.log(`🔧 Agent Assembly Complete:
+- Models: ${result.models.length}
+- Total Model Enums: ${result.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)}
+- Actions: ${result.actions.length}
+- Schedules: ${result.schedules.length}
+- Example Records: ${Object.keys(step3.exampleRecords || {}).length} model types`);
+
+  // Log model-specific enum counts
+  result.models.forEach(model => {
+    if (model.enums && model.enums.length > 0) {
+      console.log(`📊 Model "${model.name}" has ${model.enums.length} enums: ${model.enums.map(e => e.name).join(', ')}`);
+    }
+  });
+
+  return result;
 }
 
 /**
@@ -717,7 +707,7 @@ function calculateQualityScore(result: OrchestratorResult): number {
  * Generate a unique ID
  */
 function generateId(): string {
-  return 'agent_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  return `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
 /**

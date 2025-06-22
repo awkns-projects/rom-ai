@@ -1,13 +1,6 @@
 import { config } from 'dotenv';
 import postgres from 'postgres';
-import {
-  chat,
-  message,
-  vote,
-} from '../schema';
 import { drizzle } from 'drizzle-orm/postgres-js';
-import { inArray } from 'drizzle-orm';
-import { appendResponseMessages, type UIMessage } from 'ai';
 
 config({
   path: '.env.local',
@@ -45,5 +38,3 @@ type NewVoteInsert = {
 
 console.log('Migration helper: Deprecated tables have been removed from schema.');
 console.log('If you need to migrate existing data, please update this file accordingly.');
-
-export {};

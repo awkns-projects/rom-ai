@@ -1,5 +1,5 @@
 import { generateDatabase, generateExampleRecords } from '../generation';
-import type { AgentData, AgentModel, AgentEnum, PromptUnderstanding } from '../types';
+import type { AgentData, AgentModel, AgentEnum, } from '../types';
 import type { Step0Output } from './step0-prompt-understanding';
 import type { Step1Output } from './step1-decision-making';
 

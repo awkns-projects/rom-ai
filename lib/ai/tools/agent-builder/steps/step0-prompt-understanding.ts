@@ -1,5 +1,4 @@
 import { generateObject } from 'ai';
-import { z } from 'zod';
 import { getAgentBuilderModel } from '../generation';
 import { promptUnderstandingSchema } from '../schemas';
 import type { AgentData, PromptUnderstanding } from '../types';

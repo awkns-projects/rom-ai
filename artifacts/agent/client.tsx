@@ -330,7 +330,7 @@ const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Reco
   
   // For examples, check if they exist (only for new models)
   if (stepId === 'examples') {
-    return agentData?.models && agentData.models?.some((model: any) => model.records && model.records.length > 0) ? 'complete' : 'pending';
+    return agentData?.models?.some((model: any) => model.records && model.records.length > 0) ? 'complete' : 'pending';
   }
   
   // For actions, check if they exist
@@ -2262,6 +2262,11 @@ const ModelDataViewer = memo(({
 
   const records = model.records || [];
 
+  // Collect all enums from all models
+  const allEnums = useMemo(() => {
+    return allModels.flatMap(model => model.enums || []);
+  }, [allModels]);
+
   const addRecord = useCallback(() => {
     setIsAddingRecord(true);
     setEditingRecordId(null);
@@ -2314,6 +2319,7 @@ const ModelDataViewer = memo(({
       <RecordEditor
         model={model}
         allModels={allModels}
+        allEnums={allEnums}
         record={editingRecord}
         onSave={saveRecord}
         onCancel={cancelEdit}
@@ -2490,7 +2496,8 @@ const RecordEditor = memo(({
   onSave, 
   onCancel, 
   onDelete,
-  allModels = [] 
+  allModels = [],
+  allEnums = []
 }: { 
   model: AgentModel;
   record?: ModelRecord | null;
@@ -2498,6 +2505,7 @@ const RecordEditor = memo(({
   onCancel: () => void;
   onDelete?: () => void;
   allModels?: AgentModel[];
+  allEnums?: AgentEnum[];
 }) => {
   const [formData, setFormData] = useState<Record<string, any>>(
     record?.data || {}
@@ -2628,6 +2636,98 @@ const RecordEditor = memo(({
                   </SelectItem>
                 );
               })}
+            </SelectContent>
+          </Select>
+        );
+      }
+    }
+    
+    // Handle enum fields
+    if (field.kind === 'enum') {
+      const enumType = allEnums.find(e => e.name === field.type);
+      
+      if (!enumType) {
+        return (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+            <span className="text-red-400 text-sm font-mono">
+              Enum "{field.type}" not found
+            </span>
+          </div>
+        );
+      }
+
+      const enumValues = enumType.fields || [];
+      
+      if (enumValues.length === 0) {
+        return (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+            <span className="text-yellow-400 text-sm font-mono">
+              No values defined for enum "{field.type}"
+            </span>
+          </div>
+        );
+      }
+
+      if (field.list) {
+        // Multi-select for list enums
+        const selectedValues = Array.isArray(getFieldValue(field)) ? getFieldValue(field) : [];
+        
+        return (
+          <div className="space-y-2">
+            <div className="text-green-400 text-xs font-mono mb-2">
+              Select multiple values ({selectedValues.length} selected)
+            </div>
+            <div className="max-h-40 overflow-y-auto space-y-1 p-2 rounded-lg bg-black/30 border border-green-500/20">
+              {enumValues.map(enumValue => {
+                const isSelected = selectedValues.includes(enumValue.name);
+                
+                return (
+                  <label key={enumValue.id} className="flex items-center gap-2 p-2 hover:bg-green-500/10 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => {
+                        const newSelectedValues = e.target.checked
+                          ? [...selectedValues, enumValue.name]
+                          : selectedValues.filter((value: string) => value !== enumValue.name);
+                        updateField(field.name, newSelectedValues);
+                      }}
+                      className="w-4 h-4 rounded border-green-500/30 bg-black/50 text-green-400 focus:ring-green-400/20"
+                    />
+                    <span className="text-green-200 text-sm font-mono flex-1">
+                      {enumValue.name}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        );
+      } else {
+        // Single select for non-list enums
+        const selectedValue = getFieldValue(field);
+        
+        return (
+          <Select
+            value={selectedValue || 'none'}
+            onValueChange={(value) => updateField(field.name, value === 'none' ? '' : value)}
+          >
+            <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+              <SelectValue placeholder={`Select ${field.type}`} />
+            </SelectTrigger>
+            <SelectContent className="bg-black border-green-500/30">
+              <SelectItem value="none" className="text-green-200 focus:bg-green-500/20 font-mono">
+                None selected
+              </SelectItem>
+              {enumValues.map(enumValue => (
+                <SelectItem 
+                  key={enumValue.id} 
+                  value={enumValue.name} 
+                  className="text-green-200 focus:bg-green-500/20 font-mono"
+                >
+                  {enumValue.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         );
@@ -3749,6 +3849,15 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
           ...draftArtifact,
           isVisible: true,
           status: 'streaming',
+        }));
+      }
+      
+      // Handle final completion - set status to idle for summary display
+      if (stepData.status === 'complete' && (stepData.step === 'complete' || mappedStepId === 'complete')) {
+        setArtifact((draftArtifact) => ({
+          ...draftArtifact,
+          isVisible: true,
+          status: 'idle', // Set to idle so the message component can show the summary
         }));
       }
       

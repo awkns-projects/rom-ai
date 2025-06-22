@@ -21,14 +21,12 @@ import {
   deletionOperationsSchema,
   enhancedActionAnalysisSchema,
   enhancedActionCodeSchema,
-  enhancedActionSchema
 } from './schemas';
 import { z } from 'zod';
 import { 
   mergeModelsIntelligently, 
   mergeActionsIntelligently, 
-  mergeSchedulesIntelligently,
-  mergeEnumsIntelligently 
+  mergeSchedulesIntelligently
 } from './merging';
 
 // Mock implementations for missing functions - these will be replaced by actual imports in your environment
@@ -157,16 +155,13 @@ export async function generateDatabase(
   console.log('📋 Input analysis:', {
     hasExistingAgent: !!existingAgent,
     existingModels: existingAgent?.models?.length || 0,
-    existingEnums: existingAgent?.enums?.length || 0,
-    isIncremental: !!(existingAgent && (existingAgent.models?.length || existingAgent.enums?.length))
+    existingModelEnums: existingAgent?.models?.reduce((sum, model) => sum + (model.enums?.length || 0), 0) || 0,
+    isIncremental: !!(existingAgent && existingAgent.models?.length)
   });
 
   const existingModelsContext = existingAgent ? `
 EXISTING MODELS (DO NOT REGENERATE THESE):
-${(existingAgent.models || []).map((model: any) => `- ${model.name}: ${model.description || 'No description'}`).join('\n')}
-
-EXISTING ENUMS (DO NOT REGENERATE THESE):
-${(existingAgent.enums || []).map((enumItem: any) => `- ${enumItem.name}: ${(enumItem.fields || []).map((f: any) => f.name).join(', ')}`).join('\n')}
+${(existingAgent.models || []).map((model: any) => `- ${model.name}: ${model.description || 'No description'}${model.enums?.length ? ` (${model.enums.length} enums)` : ''}`).join('\n')}
 ` : '';
 
   const expectedCounts = changeAnalysis ? `
@@ -442,108 +437,67 @@ Each enum should have:
     return ['id'];
   }
 
-  // Fix models to ensure they have all required fields and FORCE idField to be "id"
   const fixedModels = (result.object.models || []).map((model: any) => {
-    const modelFields = (model.fields || []).map((field: any) => {
-      // If this is the primary key field, ensure it's named "id"
-      if (field.isId || field.name === model.idField) {
-        return {
-          ...field,
-          id: field.id || `field_id`,
-          name: 'id', // Force primary key field name to be "id"
-          title: field.title || 'ID',
-          type: 'String',
-          isId: true,
-          unique: true,
-          required: true,
-          kind: 'scalar',
-          relationField: false,
-          sort: field.sort !== undefined ? field.sort : true,
-          order: field.order || 0,
-          defaultValue: field.defaultValue || undefined
-        };
-      }
-      
-      // For other fields, keep their names as-is (allows userId, productId, etc. for relationships)
-      return {
-        ...field,
-        id: field.id || `field_${field.name.toLowerCase().replace(/\s+/g, '_')}`,
-        title: field.title || field.name,
-        kind: field.relationField ? 'object' : (field.kind || 'scalar'), // Force relation fields to have kind: 'object'
-        relationField: field.relationField || false,
-        list: field.list || false,
-        // Handle list relation fields with proper naming and structure
-        ...(field.relationField && field.list ? {
-          // For list relation fields, ensure plural naming (e.g., productIds, userIds)
-          name: field.name.endsWith('Ids') || field.name.endsWith('ids') 
-            ? field.name 
-            : field.name.endsWith('Id') 
-              ? field.name + 's'  // Convert "productId" to "productIds"
-              : field.name.endsWith('id')
-                ? field.name + 's'  // Convert "productid" to "productids"
-                : field.name + 'Ids', // Add "Ids" suffix for other cases
-          defaultValue: field.defaultValue !== undefined ? field.defaultValue : []
-        } : {}),
-        // For relation fields, ensure type is a model name, not a primitive type
-        type: field.relationField && field.type && ['String', 'Int', 'Float', 'Boolean'].includes(field.type) 
-          ? field.name.replace(/Id$/, '') // Convert "userId" to "User", "categoryId" to "Category"
-          : field.type,
-        sort: field.sort !== undefined ? field.sort : true,
-        order: field.order || 0,
-        defaultValue: field.relationField && field.list 
-          ? (field.defaultValue !== undefined ? field.defaultValue : [])
-          : (field.defaultValue || undefined)
-      };
-    });
-
     return {
       ...model,
       id: model.id || `model_${model.name.toLowerCase().replace(/\s+/g, '_')}`,
-      emoji: model.emoji || '📊',
-      description: model.description || `${model.name} data model`,
-      hasPublishedField: model.hasPublishedField || false,
-      idField: 'id', // ALWAYS force this to be "id", regardless of what AI generated
-      displayFields: model.displayFields && model.displayFields.length > 0 
-        ? model.displayFields 
-        : selectDisplayFields(modelFields), // Use intelligent selection instead of ['id']
-      fields: modelFields,
-      enums: model.enums || [],
+      idField: model.idField || 'id',
+      displayFields: model.displayFields && model.displayFields.length > 0 ? model.displayFields : selectDisplayFields(model.fields || []),
+      fields: (model.fields || []).map((field: any) => ({
+        ...field,
+        id: field.id || `field_${field.name.toLowerCase().replace(/\s+/g, '_')}`,
+        type: field.type || 'String',
+        isId: field.isId || false,
+        unique: field.unique || false,
+        required: field.required || false,
+        list: field.list || false,
+        kind: field.kind || 'scalar',
+        relationField: field.relationField || false,
+        title: field.title || field.name,
+        order: field.order || 0,
+        sort: field.sort || false,
+        defaultValue: field.defaultValue || undefined
+      })),
+      enums: (model.enums || []).map((enumItem: any) => ({
+        ...enumItem,
+        id: enumItem.id || `enum_${enumItem.name.toLowerCase().replace(/\s+/g, '_')}`,
+        fields: (enumItem.fields || []).map((field: any) => ({
+          ...field,
+          id: field.id || `enum_field_${field.name.toLowerCase().replace(/\s+/g, '_')}`,
+          type: field.type || 'String',
+          defaultValue: field.defaultValue || undefined
+        }))
+      })),
       forms: model.forms || [],
       records: model.records || []
     };
   });
 
-  const fixedEnums = (result.object.enums || []).map((enumItem: any) => ({
-    ...enumItem,
-    id: enumItem.id || `enum_${enumItem.name.toLowerCase().replace(/\s+/g, '_')}`,
-    fields: (enumItem.fields || []).map((field: any) => ({
-      ...field,
-      id: field.id || `enum_field_${field.name.toLowerCase().replace(/\s+/g, '_')}`,
-      type: field.type || 'String',
-      defaultValue: field.defaultValue || undefined
-    }))
-  }));
-
   // If this is an incremental update, we need to merge with existing models
   if (isIncrementalUpdate) {
-    console.log(`🔄 Incremental update: Generated ${fixedModels.length} new models, ${fixedEnums.length} new enums`);
-    console.log(`📊 Existing agent has ${(existingAgent.models || []).length} models, ${(existingAgent.enums || []).length} enums`);
+    console.log(`🔄 Incremental update: Generated ${fixedModels.length} new models`);
+    const existingModelEnums = (existingAgent.models || []).reduce((sum, model) => sum + (model.enums?.length || 0), 0);
+    const newModelEnums = fixedModels.reduce((sum, model) => sum + (model.enums?.length || 0), 0);
+    console.log(`📊 Existing agent has ${(existingAgent.models || []).length} models with ${existingModelEnums} total enums`);
     
     // Use intelligent merging instead of simple concatenation
     const mergedModels = mergeModelsIntelligently(existingAgent.models || [], fixedModels);
-    const mergedEnums = mergeEnumsIntelligently(existingAgent.enums || [], fixedEnums);
+    const finalModelEnums = mergedModels.reduce((sum, model) => sum + (model.enums?.length || 0), 0);
     
-    console.log(`📊 Final result: ${mergedModels.length} total models, ${mergedEnums.length} total enums`);
+    console.log(`📊 Final result: ${mergedModels.length} total models with ${finalModelEnums} total enums`);
     
     return {
       models: mergedModels,
-      enums: mergedEnums
+      enums: [] // Deprecated: enums are now within models
     };
   }
 
+  const totalEnums = fixedModels.reduce((sum, model) => sum + (model.enums?.length || 0), 0);
+  console.log(`📊 Generated ${fixedModels.length} models with ${totalEnums} total enums`);
+
   return {
     models: fixedModels,
-    enums: fixedEnums
+    enums: [] // Deprecated: enums are now within models
   };
 }
 
@@ -835,7 +789,7 @@ try {
 export async function generateActionsWithEnhancedAnalysis(
   promptUnderstanding: PromptUnderstanding,
   databaseResult: { models: AgentModel[], enums: AgentEnum[] },
-  useEnhancedGeneration: boolean = false,
+  useEnhancedGeneration = false,
   existingAgent?: AgentData,
   businessContext?: string
 ): Promise<{ 
@@ -1103,7 +1057,7 @@ export async function generateDecision(
   promptUnderstanding: PromptUnderstanding,
   existingAgent?: AgentData,
   granularChanges?: any,
-  currentOperation: string = 'create'
+  currentOperation = 'create'
 ) {
   console.log('🧠 Starting decision generation with real AI...');
   
@@ -1131,12 +1085,9 @@ ${JSON.stringify(granularChanges, null, 2)}
 ` : ''}
 
 EXISTING SYSTEM: ${existingAgent ? JSON.stringify({
-  name: existingAgent.name,
-  description: existingAgent.description,
-  domain: existingAgent.domain,
-  models: (existingAgent.models || []).map(m => m.name),
-  enums: (existingAgent.enums || []).map(e => e.name),
-  actions: (existingAgent.actions || []).map(a => a.name)
+  models: (existingAgent.models || []).map(m => ({ id: m.id, name: m.name })),
+  actions: (existingAgent.actions || []).map(a => ({ id: a.id, name: a.name })),
+  schedules: (existingAgent.schedules || []).map(s => ({ id: s.id, name: s.name }))
 }, null, 2) : 'None'}
 
 Based on the comprehensive analysis above, determine the technical approach:
@@ -1181,9 +1132,9 @@ PROMPT UNDERSTANDING RESULTS:
 ${JSON.stringify(promptUnderstanding, null, 2)}
 
 EXISTING SYSTEM: ${existingAgent ? JSON.stringify({
-  models: (existingAgent.models || []).map(m => ({ id: m.id, name: m.name, fields: (m.fields || []).map(f => ({ id: f.id, name: f.name, type: f.type })) })),
-  enums: (existingAgent.enums || []).map(e => ({ id: e.id, name: e.name, fields: (e.fields || []).map(f => ({ id: f.id, name: f.name })) })),
-  actions: (existingAgent.actions || []).map(a => ({ id: a.id, name: a.name, type: a.type }))
+  models: (existingAgent.models || []).map(m => ({ id: m.id, name: m.name })),
+  actions: (existingAgent.actions || []).map(a => ({ id: a.id, name: a.name })),
+  schedules: (existingAgent.schedules || []).map(s => ({ id: s.id, name: s.name }))
 }, null, 2) : 'None'}
 
 Create a detailed execution plan that breaks down each change into specific operations:
@@ -1254,11 +1205,11 @@ ${JSON.stringify(granularChanges, null, 2)}
 ` : ''}
 
 EXISTING SYSTEM:
-${JSON.stringify({
+${existingAgent ? JSON.stringify({
   models: (existingAgent.models || []).map(m => ({ id: m.id, name: m.name })),
   actions: (existingAgent.actions || []).map(a => ({ id: a.id, name: a.name })),
   schedules: (existingAgent.schedules || []).map(s => ({ id: s.id, name: s.name }))
-}, null, 2)}
+}, null, 2) : 'None'}
 
 Determine what needs to be deleted:
 1. Which models should be removed?
@@ -1283,7 +1234,7 @@ Be conservative - when in doubt, preserve existing data.`
 export async function generateExampleRecords(
   models: AgentModel[],
   existingModels: AgentModel[] = [],
-  businessContext: string = ''
+  businessContext = ''
 ): Promise<Record<string, any[]>> {
   // Identify newly created models (not in existing models)
   const newModels = models.filter(model => 

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-const fs = require('fs');
-const path = require('path');
-const { spawn } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawn } = require('node:child_process');
 
 // Configuration
 const CONFIG = {
@@ -23,7 +23,7 @@ function log(message, level = 'INFO') {
   const timestamp = new Date().toISOString();
   const logMessage = `[${timestamp}] [${level}] ${message}`;
   console.log(logMessage);
-  fs.appendFileSync(CONFIG.LOG_FILE, logMessage + '\n');
+  fs.appendFileSync(CONFIG.LOG_FILE, `${logMessage}\n`);
 }
 
 // Test scenarios for agent builder
@@ -118,8 +118,8 @@ const ADVANCED_SCENARIOS = [
 // Scoring system for agent builder results
 function scoreAgentResult(result, expectedCriteria) {
   let score = 0;
-  let maxScore = 100;
-  let details = [];
+  const maxScore = 100;
+  const details = [];
 
   try {
     // Parse the result if it's a string
@@ -211,8 +211,8 @@ function scoreAgentResult(result, expectedCriteria) {
 
 function scoreModels(models, expectedModels) {
   let score = 0;
-  let maxScore = 30;
-  let details = [];
+  const maxScore = 30;
+  const details = [];
 
   // Check if we have expected number of models (5 points)
   if (models.length >= expectedModels.length) {
@@ -260,8 +260,8 @@ function scoreModels(models, expectedModels) {
 
 function scoreActions(actions, expectedActions) {
   let score = 0;
-  let maxScore = 30;
-  let details = [];
+  const maxScore = 30;
+  const details = [];
 
   // Check if we have expected number of actions (5 points)
   if (actions.length >= expectedActions.length) {
@@ -280,7 +280,7 @@ function scoreActions(actions, expectedActions) {
     if (action.name) actionScore += 1;
     if (action.description) actionScore += 1;
     if (action.type && ['Create', 'Update'].includes(action.type)) actionScore += 1;
-    if (action.execute && action.execute.code && action.execute.code.script) actionScore += 2;
+    if (action.execute?.code?.script) actionScore += 2;
     if (action.dataSource) actionScore += 1;
     if (action.results) actionScore += 1;
     
@@ -299,8 +299,8 @@ function scoreActions(actions, expectedActions) {
 
 function scoreSchedules(schedules, expectedSchedules) {
   let score = 0;
-  let maxScore = 20;
-  let details = [];
+  const maxScore = 20;
+  const details = [];
 
   // Check if we have expected number of schedules (5 points)
   if (schedules.length >= expectedSchedules.length) {
@@ -318,8 +318,8 @@ function scoreSchedules(schedules, expectedSchedules) {
     if (schedule.id) scheduleScore += 1;
     if (schedule.name) scheduleScore += 1;
     if (schedule.description) scheduleScore += 1;
-    if (schedule.interval && schedule.interval.pattern) scheduleScore += 2;
-    if (schedule.execute && schedule.execute.code && schedule.execute.code.script) scheduleScore += 2;
+    if (schedule.interval?.pattern) scheduleScore += 2;
+    if (schedule.execute?.code?.script) scheduleScore += 2;
     
     if (scheduleScore >= 5) {
       validSchedules++;
@@ -385,7 +385,7 @@ async function testAgentBuilder(scenario, iteration) {
     
     // Extract agent data from response
     let agentData = null;
-    if (response && response.content) {
+    if (response?.content) {
       // Try to find agent data in the response
       if (typeof response.content === 'string') {
         // Look for JSON in the response
@@ -491,7 +491,7 @@ async function runAgentBuilderTests() {
   let iteration = 1;
   let bestScore = 0;
   let bestResult = null;
-  let failurePatterns = [];
+  const failurePatterns = [];
   let consecutiveFailures = 0;
   
   // Check if server is running

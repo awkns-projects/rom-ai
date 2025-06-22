@@ -1,6 +1,6 @@
 import { auth } from '@/app/(auth)/auth';
 import { ChatSDKError } from '@/lib/errors';
-import { saveUserApiKeys, getUserApiKeys, deleteUserApiKeys, hasUserApiKeys } from '@/lib/db/api-keys';
+import { saveUserApiKeys, deleteUserApiKeys, hasUserApiKeys } from '@/lib/db/api-keys';
 import { z } from 'zod';
 
 const apiKeySchema = z.object({

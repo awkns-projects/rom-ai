@@ -58,17 +58,7 @@ export const unifiedDatabaseSchema = z.object({
         defaultValue: z.string().optional()
       }))
     })).optional().describe('Enumeration types used by this model')
-  })).describe('Array of data models'),
-  enums: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-    fields: z.array(z.object({
-      id: z.string(),
-      name: z.string(),
-      type: z.string(),
-      defaultValue: z.string().optional()
-    }))
-  })).optional().describe('Global enumeration types')
+  })).describe('Array of data models')
 });
 
 export const unifiedActionsSchema = z.object({
@@ -175,10 +165,10 @@ export const granularChangeAnalysisSchema = z.object({
 // Deletion operations schema
 export const deletionOperationsSchema = z.object({
   modelsToDelete: z.array(z.string()).describe('Names or IDs of models to delete'),
-  enumsToDelete: z.array(z.string()).describe('Names or IDs of enums to delete'),
   actionsToDelete: z.array(z.string()).describe('Names or IDs of actions to delete'),
   schedulesToDelete: z.array(z.string()).describe('Names or IDs of schedules to delete'),
-  fieldDeletions: z.record(z.array(z.string())).describe('Fields to delete from specific models (model name -> field names)')
+  fieldDeletions: z.record(z.array(z.string())).describe('Fields to delete from specific models (model name -> field names)'),
+  enumDeletions: z.record(z.array(z.string())).optional().describe('Enums to delete from specific models (model name -> enum names)')
 });
 
 // Enhanced schema for detailed prompt understanding and feature imagination

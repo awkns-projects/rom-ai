@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, memo, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, memo, } from 'react';
 import { Artifact } from '@/components/create-artifact';
 import { DocumentSkeleton } from '@/components/document-skeleton';
 import { DiffView } from '@/components/diffview';
@@ -28,9 +28,6 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import { useArtifact } from '@/hooks/use-artifact';
-
-// Add new imports for action running
-import { executeActionWithUI, getDatabaseDataForStep, createMockDatabase, ActionRunState } from '../../lib/ai/tools/agent-builder/utils';
 
 interface AgentModel {
   id: string;
@@ -308,7 +305,7 @@ const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Reco
   
   // For examples, check if they exist (only for new models)
   if (stepId === 'examples') {
-    return agentData?.models && agentData.models.some((model: any) => model.records && model.records.length > 0) ? 'complete' : 'pending';
+    return agentData?.models?.some((model: any) => model.records && model.records.length > 0) ? 'complete' : 'pending';
   }
   
   // For actions, check if they exist

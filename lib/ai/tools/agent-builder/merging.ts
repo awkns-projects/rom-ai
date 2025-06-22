@@ -7,7 +7,6 @@ import type {
   AgentAction, 
   AgentSchedule 
 } from './types';
-import { deepEqual, mergeArraysByKey } from './utils';
 import { generateUUID } from '../../../utils';
 
 /**
@@ -22,103 +21,78 @@ export function performDeepMerge(
   incoming: AgentData,
   deletionOperations?: any
 ): AgentData {
-  console.log('🔄 Starting deep merge operation');
+  console.log('🔄 Starting comprehensive deep merge...');
   
-  // Handle case where existing is null/undefined (new document)
   if (!existing) {
-    console.log('📊 No existing data - using incoming data as-is');
-    console.log(`📊 Incoming: ${incoming.models?.length || 0} models, ${incoming.actions?.length || 0} actions, ${incoming.schedules?.length || 0} schedules`);
+    console.log('📝 No existing agent data, returning incoming data as-is');
     return incoming;
   }
-  
-  console.log(`📊 Existing: ${existing.models?.length || 0} models, ${existing.actions?.length || 0} actions, ${existing.schedules?.length || 0} schedules`);
-  console.log(`📊 Incoming: ${incoming.models?.length || 0} models, ${incoming.actions?.length || 0} actions, ${incoming.schedules?.length || 0} schedules`);
 
-  // Start with existing data as base
-  const merged: AgentData = {
+  // Initialize safe arrays to prevent null/undefined errors
+  const safeExistingModels = existing.models || [];
+  const safeIncomingModels = incoming.models || [];
+  const safeExistingActions = existing.actions || [];
+  const safeIncomingActions = incoming.actions || [];
+  const safeExistingSchedules = existing.schedules || [];
+  const safeIncomingSchedules = incoming.schedules || [];
+
+  console.log(`📊 Merging data:
+- Existing: ${safeExistingModels.length} models, ${safeExistingActions.length} actions, ${safeExistingSchedules.length} schedules
+- Incoming: ${safeIncomingModels.length} models, ${safeIncomingActions.length} actions, ${safeIncomingSchedules.length} schedules`);
+
+  // Perform intelligent array merging
+  const mergedModels = mergeModelsIntelligently(safeExistingModels, safeIncomingModels);
+  const mergedActions = mergeActionsIntelligently(safeExistingActions, safeIncomingActions);
+  const mergedSchedules = mergeSchedulesIntelligently(safeExistingSchedules, safeIncomingSchedules);
+
+  // Critical safety checks to prevent data loss
+  if (mergedModels.length === 0 && safeExistingModels.length > 0) {
+    console.warn('⚠️ SAFETY CHECK: Merged models resulted in empty array, preserving existing models');
+    mergedModels.push(...safeExistingModels);
+  }
+
+  if (mergedActions.length === 0 && safeExistingActions.length > 0) {
+    console.warn('⚠️ SAFETY CHECK: Merged actions resulted in empty array, preserving existing actions');
+    mergedActions.push(...safeExistingActions);
+  }
+
+  if (mergedSchedules.length === 0 && safeExistingSchedules.length > 0) {
+    console.warn('⚠️ SAFETY CHECK: Merged schedules resulted in empty array, preserving existing schedules');
+    mergedSchedules.push(...safeExistingSchedules);
+  }
+
+  const result = {
     ...existing,
-    // Update top-level properties only if they're different and meaningful
-    name: incoming.name && incoming.name !== existing.name ? incoming.name : existing.name,
-    description: incoming.description && incoming.description !== existing.description ? incoming.description : existing.description,
-    domain: incoming.domain && incoming.domain !== existing.domain ? incoming.domain : existing.domain,
-    // Keep original creation date
-    createdAt: existing.createdAt || incoming.createdAt || new Date().toISOString(),
-    // Merge metadata intelligently
+    ...incoming,
+    id: existing.id, // Always preserve the existing ID
+    models: mergedModels,
+    actions: mergedActions,
+    schedules: mergedSchedules,
+    createdAt: existing.createdAt, // Preserve original creation time
     metadata: {
-      // Start with existing metadata
-      ...(existing.metadata || {}),
-      // Then merge in incoming metadata
-      ...(incoming.metadata || {}),
-      // Then ensure required fields are present with final values
-      createdAt: existing.metadata?.createdAt || incoming.metadata?.createdAt || new Date().toISOString(),
+      ...existing.metadata,
+      ...incoming.metadata,
       updatedAt: new Date().toISOString(),
-      version: String(parseInt(existing.metadata?.version || '0') + 1),
-      lastModifiedBy: 'ai-agent-builder',
-      tags: existing.metadata?.tags || [],
-      status: existing.metadata?.status || 'active',
-      // Preserve comprehensive analysis from latest update
-      promptUnderstanding: incoming.metadata?.promptUnderstanding || existing.metadata?.promptUnderstanding,
-      granularChanges: incoming.metadata?.granularChanges || existing.metadata?.granularChanges,
-      aiDecision: incoming.metadata?.aiDecision || existing.metadata?.aiDecision,
-      changeAnalysis: incoming.metadata?.changeAnalysis || existing.metadata?.changeAnalysis,
-      lastUpdateReason: incoming.metadata?.lastUpdateReason || existing.metadata?.lastUpdateReason,
-      lastUpdateTimestamp: incoming.metadata?.lastUpdateTimestamp || new Date().toISOString(),
-      comprehensiveAnalysisUsed: incoming.metadata?.comprehensiveAnalysisUsed || existing.metadata?.comprehensiveAnalysisUsed,
-      operationType: incoming.metadata?.operationType || existing.metadata?.operationType
+      operationType: 'merge'
     }
   };
 
-  // Apply deletion operations before merging
+  // Apply deletion operations if specified
   if (deletionOperations) {
-    merged.models = performDeletionOperations(merged.models || [], deletionOperations.modelsToDelete, deletionOperations.modelFieldDeletions);
-    merged.actions = performDeletionOperations(merged.actions || [], deletionOperations.actionsToDelete);
+    console.log('🗑️ Applying deletion operations...');
+    return applyDeletionOperations(result, deletionOperations);
   }
 
-  // Ensure arrays are properly initialized and valid before merging
-  const safeExistingModels = Array.isArray(merged.models) ? merged.models : [];
-  const safeIncomingModels = Array.isArray(incoming.models) ? incoming.models : [];
-  const safeExistingActions = Array.isArray(merged.actions) ? merged.actions : [];
-  const safeIncomingActions = Array.isArray(incoming.actions) ? incoming.actions : [];
-  const safeExistingSchedules = Array.isArray(merged.schedules) ? merged.schedules : [];
-  const safeIncomingSchedules = Array.isArray(incoming.schedules) ? incoming.schedules : [];
+  // Final result logging
+  const totalModelEnums = result.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0);
+  console.log(`✅ Deep merge completed:
+- Final: ${result.models.length} models, ${result.actions.length} actions, ${result.schedules.length} schedules
+- Total Model Enums: ${totalModelEnums}
+- Models with decreased count: ${result.models.length < safeExistingModels.length ? '⚠️ YES' : 'No'}
+- Actions with decreased count: ${result.actions.length < safeExistingActions.length ? '⚠️ YES' : 'No'}
+- Model Enums with decreased count: ${totalModelEnums < safeExistingModels.reduce((sum, model) => sum + (model.enums?.length || 0), 0) ? '⚠️ YES' : 'No'}`);
 
-  // Intelligent array merging for models
-  merged.models = mergeModelsIntelligently(safeExistingModels, safeIncomingModels);
-  
-  // Critical safety check: If merged result has fewer items than existing and incoming was empty,
-  // this indicates a potential data loss scenario - preserve existing data
-  if (safeExistingModels.length > 0 && safeIncomingModels.length === 0 && merged.models.length === 0) {
-    console.log('🚨 CRITICAL SAFETY CHECK: Merged models resulted in empty array when existing data exists');
-    console.log('🛡️ Preserving existing models to prevent data loss');
-    merged.models = safeExistingModels;
-  }
-  
-  // Intelligent array merging for actions
-  merged.actions = mergeActionsIntelligently(safeExistingActions, safeIncomingActions);
-  
-  // Critical safety check: If merged result has fewer items than existing and incoming was empty,
-  // this indicates a potential data loss scenario - preserve existing data
-  if (safeExistingActions.length > 0 && safeIncomingActions.length === 0 && merged.actions.length === 0) {
-    console.log('🚨 CRITICAL SAFETY CHECK: Merged actions resulted in empty array when existing data exists');
-    console.log('🛡️ Preserving existing actions to prevent data loss');
-    merged.actions = safeExistingActions;
-  }
-  
-  // Intelligent array merging for schedules
-  merged.schedules = mergeSchedulesIntelligently(safeExistingSchedules, safeIncomingSchedules);
-  
-  console.log('📊 Deep merge completed with comprehensive metadata preservation');
-  console.log(`📊 Final result: ${merged.models?.length || 0} models, ${merged.actions?.length || 0} actions, ${merged.schedules?.length || 0} schedules`);
-  
-  // Final validation: Ensure we never have fewer items than we started with unless explicitly deleted
-  if ((merged.models?.length || 0) < (existing.models?.length || 0) && !deletionOperations?.modelsToDelete?.length) {
-    console.warn(`⚠️ WARNING: Model count decreased from ${existing.models?.length || 0} to ${merged.models?.length || 0} without explicit deletion operations`);
-  }
-  if ((merged.actions?.length || 0) < (existing.actions?.length || 0) && !deletionOperations?.actionsToDelete?.length) {
-    console.warn(`⚠️ WARNING: Action count decreased from ${existing.actions?.length || 0} to ${merged.actions?.length || 0} without explicit deletion operations`);
-  }
-  
-  return merged;
+  return result;
 }
 
 /**
@@ -128,52 +102,131 @@ export function performDeepMerge(
  * @returns Merged models array
  */
 export function mergeModelsIntelligently(existing: AgentModel[], incoming: AgentModel[]): AgentModel[] {
-  // Defensive coding: ensure inputs are arrays
-  if (!Array.isArray(existing)) {
-    console.warn('⚠️ mergeModelsIntelligently: existing is not an array, using empty array');
-    existing = [];
-  }
-  if (!Array.isArray(incoming)) {
-    console.warn('⚠️ mergeModelsIntelligently: incoming is not an array, using empty array');
-    incoming = [];
-  }
+  console.log(`🔄 Merging models: ${existing.length} existing + ${incoming.length} incoming`);
+  
+  const result: AgentModel[] = [];
+  const processedIds = new Set<string>();
 
-  console.log(`🔄 Merging ${existing.length} existing models with ${incoming.length} incoming models`);
-  
-  const mergedModels: AgentModel[] = [...existing];
-  
-  for (const incomingModel of incoming) {
-    const existingIndex = mergedModels.findIndex(e => 
-      e.id === incomingModel.id || 
-      e.name.toLowerCase() === incomingModel.name.toLowerCase()
+  // Process existing models first
+  existing.forEach(existingModel => {
+    const incomingMatch = incoming.find(inc => 
+      inc.id === existingModel.id || 
+      inc.name === existingModel.name
     );
-    
-    if (existingIndex >= 0) {
-      // Merge existing model with new data
-      const existingModel = mergedModels[existingIndex];
-      mergedModels[existingIndex] = {
+
+    if (incomingMatch) {
+      console.log(`🔄 Merging existing model: ${existingModel.name}`);
+      
+      // Merge model-scoped enums intelligently
+      const mergedEnums = mergeModelEnums(existingModel.enums || [], incomingMatch.enums || []);
+      
+      const merged: AgentModel = {
         ...existingModel,
-        ...incomingModel,
-        // Preserve original ID
-        id: existingModel.id,
-        // Intelligent field merging
-        fields: mergeFieldsIntelligently(existingModel.fields || [], incomingModel.fields || []),
-        // Intelligent enum merging
-        enums: mergeEnumsIntelligently(existingModel.enums || [], incomingModel.enums || [])
+        ...incomingMatch,
+        id: existingModel.id, // Preserve original ID
+        fields: mergeFieldsIntelligently(existingModel.fields, incomingMatch.fields),
+        records: mergeModelRecords(existingModel.records || [], incomingMatch.records || []),
+        enums: mergedEnums
       };
+      
+      result.push(merged);
+      processedIds.add(incomingMatch.id || incomingMatch.name);
     } else {
-      // Add new model
-      mergedModels.push(incomingModel);
+      console.log(`✅ Preserving existing model: ${existingModel.name}`);
+      result.push(existingModel);
     }
-  }
+  });
+
+  // Add new models from incoming that weren't matched
+  incoming.forEach(incomingModel => {
+    if (!processedIds.has(incomingModel.id || incomingModel.name)) {
+      console.log(`➕ Adding new model: ${incomingModel.name}`);
+      result.push(incomingModel);
+    }
+  });
+
+  console.log(`✅ Model merge complete: ${result.length} total models`);
+  return result;
+}
+
+function mergeModelEnums(existing: AgentEnum[], incoming: AgentEnum[]): AgentEnum[] {
+  console.log(`🔄 Merging model enums: ${existing.length} existing + ${incoming.length} incoming`);
   
-  return mergedModels;
+  const result: AgentEnum[] = [];
+  const processedIds = new Set<string>();
+
+  // Process existing enums first
+  existing.forEach(existingEnum => {
+    const incomingMatch = incoming.find(inc => 
+      inc.id === existingEnum.id || 
+      inc.name === existingEnum.name
+    );
+
+    if (incomingMatch) {
+      console.log(`🔄 Merging existing enum: ${existingEnum.name}`);
+      const merged: AgentEnum = {
+        ...existingEnum,
+        ...incomingMatch,
+        id: existingEnum.id, // Preserve original ID
+        fields: mergeEnumFields(existingEnum.fields, incomingMatch.fields)
+      };
+      
+      result.push(merged);
+      processedIds.add(incomingMatch.id || incomingMatch.name);
+    } else {
+      console.log(`✅ Preserving existing enum: ${existingEnum.name}`);
+      result.push(existingEnum);
+    }
+  });
+
+  // Add new enums from incoming that weren't matched
+  incoming.forEach(incomingEnum => {
+    if (!processedIds.has(incomingEnum.id || incomingEnum.name)) {
+      console.log(`➕ Adding new enum: ${incomingEnum.name}`);
+      result.push(incomingEnum);
+    }
+  });
+
+  console.log(`✅ Model enum merge complete: ${result.length} total enums`);
+  return result;
+}
+
+function mergeEnumFields(existing: AgentEnumField[], incoming: AgentEnumField[]): AgentEnumField[] {
+  const result: AgentEnumField[] = [];
+  const processedNames = new Set<string>();
+
+  // Process existing fields first
+  existing.forEach(existingField => {
+    const incomingMatch = incoming.find(inc => inc.name === existingField.name);
+    
+    if (incomingMatch) {
+      // Merge the fields, keeping existing structure but updating with incoming changes
+      const merged: AgentEnumField = {
+        ...existingField,
+        ...incomingMatch
+      };
+      result.push(merged);
+      processedNames.add(incomingMatch.name);
+    } else {
+      // Keep existing field as-is
+      result.push(existingField);
+    }
+  });
+
+  // Add new fields from incoming that weren't matched
+  incoming.forEach(incomingField => {
+    if (!processedNames.has(incomingField.name)) {
+      result.push(incomingField);
+    }
+  });
+
+  return result;
 }
 
 /**
- * Merges fields between existing and incoming models
+ * Merges model fields
  * @param existing - Existing model
- * @param incoming - Incoming model with potential changes
+ * @param incoming - Incoming model
  * @returns Merged model
  */
 export function mergeModelFields(existing: AgentModel, incoming: AgentModel): AgentModel {
@@ -181,7 +234,7 @@ export function mergeModelFields(existing: AgentModel, incoming: AgentModel): Ag
     ...existing,
     ...incoming,
     fields: mergeFieldsIntelligently(existing.fields, incoming.fields),
-    enums: mergeEnumsIntelligently(existing.enums || [], incoming.enums || [])
+    enums: mergeModelEnums(existing.enums || [], incoming.enums || [])
   };
 }
 
@@ -216,11 +269,11 @@ export function mergeFieldsIntelligently(existing: AgentField[], incoming: Agent
           // Ensure plural naming for list relation fields
           if (!updatedField.name.endsWith('Ids') && !updatedField.name.endsWith('ids')) {
             if (updatedField.name.endsWith('Id')) {
-              updatedField.name = updatedField.name + 's'; // Convert "productId" to "productIds"
+              updatedField.name = `${updatedField.name}s`; // Convert "productId" to "productIds"
             } else if (updatedField.name.endsWith('id')) {
-              updatedField.name = updatedField.name + 's'; // Convert "productid" to "productids"
+              updatedField.name = `${updatedField.name}s`; // Convert "productid" to "productids"
             } else {
-              updatedField.name = updatedField.name + 'Ids'; // Add "Ids" suffix for other cases
+              updatedField.name = `${updatedField.name}Ids`; // Add "Ids" suffix for other cases
             }
           }
           // Ensure default value is an empty array
@@ -247,11 +300,11 @@ export function mergeFieldsIntelligently(existing: AgentField[], incoming: Agent
           // Ensure plural naming for list relation fields
           if (!updatedField.name.endsWith('Ids') && !updatedField.name.endsWith('ids')) {
             if (updatedField.name.endsWith('Id')) {
-              updatedField.name = updatedField.name + 's'; // Convert "productId" to "productIds"
+              updatedField.name = `${updatedField.name}s`; // Convert "productId" to "productIds"
             } else if (updatedField.name.endsWith('id')) {
-              updatedField.name = updatedField.name + 's'; // Convert "productid" to "productids"
+              updatedField.name = `${updatedField.name}s`; // Convert "productid" to "productids"
             } else {
-              updatedField.name = updatedField.name + 'Ids'; // Add "Ids" suffix for other cases
+              updatedField.name = `${updatedField.name}Ids`; // Add "Ids" suffix for other cases
             }
           }
           // Ensure default value is an empty array
@@ -280,11 +333,11 @@ export function mergeFieldsIntelligently(existing: AgentField[], incoming: Agent
           // Ensure plural naming for list relation fields
           if (!newField.name.endsWith('Ids') && !newField.name.endsWith('ids')) {
             if (newField.name.endsWith('Id')) {
-              newField.name = newField.name + 's'; // Convert "productId" to "productIds"
+              newField.name = `${newField.name}s`; // Convert "productId" to "productIds"
             } else if (newField.name.endsWith('id')) {
-              newField.name = newField.name + 's'; // Convert "productid" to "productids"
+              newField.name = `${newField.name}s`; // Convert "productid" to "productids"
             } else {
-              newField.name = newField.name + 'Ids'; // Add "Ids" suffix for other cases
+              newField.name = `${newField.name}Ids`; // Add "Ids" suffix for other cases
             }
           }
           // Ensure default value is an empty array
@@ -294,39 +347,6 @@ export function mergeFieldsIntelligently(existing: AgentField[], incoming: Agent
         }
       }
       merged.push(newField);
-    }
-  }
-  
-  return merged;
-}
-
-/**
- * Intelligently merges enum arrays
- * @param existing - Existing enums
- * @param incoming - New enums to merge
- * @returns Merged enums array
- */
-export function mergeEnumsIntelligently(existing: AgentEnum[], incoming: AgentEnum[]): AgentEnum[] {
-  const merged = [...existing];
-  
-  for (const incomingEnum of incoming) {
-    const existingIndex = merged.findIndex(e => 
-      e.id === incomingEnum.id || 
-      e.name.toLowerCase() === incomingEnum.name.toLowerCase()
-    );
-    
-    if (existingIndex !== -1) {
-      // Merge existing enum with incoming changes, preserving ID
-      const existingEnum = merged[existingIndex];
-      merged[existingIndex] = {
-        ...existingEnum,
-        ...incomingEnum,
-        id: existingEnum.id,
-        fields: mergeEnumFieldsIntelligently(existingEnum.fields || [], incomingEnum.fields || [])
-      };
-    } else {
-      // Add new enum
-      merged.push(incomingEnum);
     }
   }
   
@@ -518,48 +538,87 @@ export function mergeScheduleDetails(existing: AgentSchedule, incoming: AgentSch
  * @returns Modified agent data
  */
 export function applyDeletionOperations(agentData: AgentData, deletionOperations: any): AgentData {
-  const modified = { ...agentData };
+  console.log('🗑️ Applying deletion operations...');
   
-  // Apply model deletions
+  const result = { ...agentData };
+  
+  // Delete models
   if (deletionOperations.modelsToDelete?.length > 0) {
-    modified.models = modified.models.filter(model => 
-      !deletionOperations.modelsToDelete.includes(model.id) && 
-      !deletionOperations.modelsToDelete.includes(model.name)
+    console.log(`🗑️ Deleting ${deletionOperations.modelsToDelete.length} models`);
+    result.models = result.models.filter(model => 
+      !deletionOperations.modelsToDelete.includes(model.name) && 
+      !deletionOperations.modelsToDelete.includes(model.id)
     );
   }
   
-  // Apply action deletions
+  // Delete actions
   if (deletionOperations.actionsToDelete?.length > 0) {
-    modified.actions = modified.actions.filter(action => 
-      !deletionOperations.actionsToDelete.includes(action.id) && 
-      !deletionOperations.actionsToDelete.includes(action.name)
+    console.log(`🗑️ Deleting ${deletionOperations.actionsToDelete.length} actions`);
+    result.actions = result.actions.filter(action => 
+      !deletionOperations.actionsToDelete.includes(action.name) && 
+      !deletionOperations.actionsToDelete.includes(action.id)
     );
   }
   
-  // Apply field deletions
-  if (deletionOperations.modelFieldDeletions) {
-    for (const [modelKey, fieldsToDelete] of Object.entries(deletionOperations.modelFieldDeletions)) {
-      const modelIndex = modified.models.findIndex(m => m.id === modelKey || m.name === modelKey);
-      if (modelIndex >= 0 && Array.isArray(fieldsToDelete)) {
-        modified.models[modelIndex].fields = modified.models[modelIndex].fields.filter(field =>
-          !fieldsToDelete.includes(field.id) && !fieldsToDelete.includes(field.name)
-        );
-      }
-    }
+  // Delete schedules
+  if (deletionOperations.schedulesToDelete?.length > 0) {
+    console.log(`🗑️ Deleting ${deletionOperations.schedulesToDelete.length} schedules`);
+    result.schedules = result.schedules.filter(schedule => 
+      !deletionOperations.schedulesToDelete.includes(schedule.name) && 
+      !deletionOperations.schedulesToDelete.includes(schedule.id)
+    );
   }
   
-  return modified;
+  // Delete fields from specific models
+  if (deletionOperations.fieldDeletions) {
+    console.log('🗑️ Deleting specific fields from models');
+    result.models = result.models.map(model => {
+      const fieldsToDelete = deletionOperations.fieldDeletions[model.name];
+      if (fieldsToDelete?.length > 0) {
+        console.log(`🗑️ Deleting ${fieldsToDelete.length} fields from model ${model.name}`);
+        return {
+          ...model,
+          fields: model.fields.filter(field => !fieldsToDelete.includes(field.name))
+        };
+      }
+      return model;
+    });
+  }
+  
+  // Delete enums from specific models
+  if (deletionOperations.enumDeletions) {
+    console.log('🗑️ Deleting specific enums from models');
+    result.models = result.models.map(model => {
+      const enumsToDelete = deletionOperations.enumDeletions[model.name];
+      if (enumsToDelete?.length > 0) {
+        console.log(`🗑️ Deleting ${enumsToDelete.length} enums from model ${model.name}`);
+        return {
+          ...model,
+          enums: (model.enums || []).filter(enumItem => !enumsToDelete.includes(enumItem.name))
+        };
+      }
+      return model;
+    });
+  }
+  
+  console.log('✅ Deletion operations completed');
+  return result;
 }
 
 /**
- * Logs content changes between existing and merged agent data
+ * Logs content changes between existing and merged data
  * @param existing - Original agent data
  * @param merged - Merged agent data
  */
 export function logContentChanges(existing: AgentData, merged: AgentData): void {
   console.log('📊 Content Changes Summary:');
   console.log(`  Models: ${existing.models?.length || 0} → ${merged.models?.length || 0}`);
-  console.log(`  Enums: ${existing.enums?.length || 0} → ${merged.enums?.length || 0}`);
+  
+  // Count model-scoped enums
+  const existingEnumCount = (existing.models || []).reduce((sum, model) => sum + (model.enums?.length || 0), 0);
+  const mergedEnumCount = (merged.models || []).reduce((sum, model) => sum + (model.enums?.length || 0), 0);
+  console.log(`  Model Enums: ${existingEnumCount} → ${mergedEnumCount}`);
+  
   console.log(`  Actions: ${existing.actions?.length || 0} → ${merged.actions?.length || 0}`);
   console.log(`  Schedules: ${existing.schedules?.length || 0} → ${merged.schedules?.length || 0}`);
   
@@ -632,4 +691,34 @@ function performDeletionOperations<T extends { id?: string; name?: string }>(
   }
   
   return result;
+}
+
+/**
+ * Intelligently merges model records
+ * @param existing - Existing model records
+ * @param incoming - New model records to merge
+ * @returns Merged records array
+ */
+export function mergeModelRecords(existing: any[], incoming: any[]): any[] {
+  // Defensive coding: ensure inputs are arrays
+  if (!Array.isArray(existing)) {
+    existing = [];
+  }
+  if (!Array.isArray(incoming)) {
+    incoming = [];
+  }
+
+  const merged = [...existing];
+  const existingIds = new Set(existing.map(r => r.id));
+  
+  for (const incomingRecord of incoming) {
+    if (!existingIds.has(incomingRecord.id)) {
+      // Add new record if it doesn't exist
+      merged.push(incomingRecord);
+    }
+    // Note: We don't update existing records to preserve user data
+    // Only add new example records
+  }
+  
+  return merged;
 } 

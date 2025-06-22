@@ -393,7 +393,7 @@ function analyzeResourceRequirements(actions: AgentAction[]) {
   
   const externalAPIs = actions
     .filter(a => a.execute?.code?.script.includes('fetch') || a.execute?.code?.script.includes('api'))
-    .map(a => a.name + ' API')
+    .map(a => `${a.name} API`)
     .filter((api, index, self) => self.indexOf(api) === index);
   
   const backgroundProcessing = actions.some(a => 

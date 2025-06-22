@@ -3,10 +3,8 @@ import type {
   AgentModel, 
   AgentAction, 
   AgentSchedule,
-  AgentField,
   AgentEnum
 } from './types';
-import { generateNewId } from './utils';
 import { generateUUID } from '../../../utils';
 
 /**
@@ -53,7 +51,7 @@ export function createAgentData(
  */
 export function generateSuccessMessage(
   agentData: AgentData, 
-  isUpdating: boolean = false,
+  isUpdating = false,
   decision?: any
 ): string {
   if (decision) {
@@ -103,10 +101,7 @@ export function generateSuccessMessage(
 export function generateErrorMessage(error: any, operation: string): string {
   const errorMessage = error?.message || error?.toString() || 'Unknown error occurred';
   
-  return `❌ **Agent Builder Error**\n\n` +
-    `**Operation:** ${operation}\n` +
-    `**Error:** ${errorMessage}\n\n` +
-    `Please try again or contact support if the issue persists.`;
+  return `❌ **Agent Builder Error**\n\n**Operation:** ${operation}\n**Error:** ${errorMessage}\n\nPlease try again or contact support if the issue persists.`;
 }
 
 /**
@@ -121,7 +116,7 @@ export function createAgentResult(
   documentId: string,
   title: string,
   content: string,
-  kind: string = 'agent'
+  kind = 'agent'
 ) {
   return {
     documentId,

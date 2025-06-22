@@ -7,8 +7,6 @@ import {
   actionTestCasesSchema,
   actionIntegrationSchema,
   simplifiedEnhancedActionSchema,
-  generationStepSchemas,
-  type GenerationStep,
   type ActionCodeCore,
   type ActionUIComponents,
   type ActionHelpers,
