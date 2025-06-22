@@ -129,10 +129,10 @@ export const Greeting = () => {
                 Rom Cards
               </h1>
               <p className="text-lg sm:text-xl lg:text-2xl text-center max-w-4xl mx-auto font-medium font-sans leading-relaxed tracking-normal mb-4 text-gray-800 dark:text-green-200 brightness-110">
-                Prompt your AI agent to life and make people hire them to make money.
+                Simply describe what you need - watch your AI agent come to life and start earning money for you!
               </p>
               <span className="block text-base sm:text-lg lg:text-xl text-green-600 font-normal font-mono tracking-wide italic">
-                Turn prompts into profitable AI workers.
+                No coding required. Just prompt, deploy, and profit.
               </span>
             </div>
             <div className="absolute inset-x-0 bottom-0 h-full bg-gradient-to-b from-transparent to-white to-70% dark:to-black" />
