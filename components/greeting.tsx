@@ -121,11 +121,11 @@ export const Greeting = () => {
               </Marquee>
             </div>
             <div className="z-10 mx-auto size-24 rounded-[2rem] border bg-white/10 p-3 shadow-2xl backdrop-blur-md dark:bg-black/10 lg:size-32">
-                <img src="/images/logo.png" className="mx-auto size-16 text-black dark:text-white lg:size-24" />
+                <img src="/images/logo.png" alt="Rom Cards Logo" className="mx-auto size-16 text-black dark:text-white lg:size-24" />
               {/* <HeartHandshake className="mx-auto size-16 text-black dark:text-white lg:size-24" /> */}
             </div>
             <div className="z-10 mt-8 flex flex-col items-center text-center text-black dark:text-white w-full max-w-5xl mx-auto px-6">
-              <h1 className="text-3xl font-bold sm:text-4xl lg:text-6xl text-center text-black dark:text-white font-sans tracking-tight mb-6 bg-gradient-to-r from-green-200 via-green-100 to-green-200 dark:from-green-100 dark:via-green-200 dark:to-green-100 bg-clip-text text-transparent animate-pulse drop-shadow-lg">
+              <h1 className="text-3xl font-bold sm:text-4xl lg:text-6xl text-center dark:text-white font-sans tracking-tight mb-6 bg-gradient-to-r from-green-200 via-green-100 to-green-200 dark:from-green-100 dark:via-green-200 dark:to-green-100 bg-clip-text text-transparent animate-pulse drop-shadow-lg">
                 Rom Cards
               </h1>
               <p className="text-lg sm:text-xl lg:text-2xl text-center max-w-4xl mx-auto font-medium font-sans leading-relaxed tracking-normal mb-4 text-gray-800 dark:text-green-200 brightness-110">

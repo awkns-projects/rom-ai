@@ -37,7 +37,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
               {/* <span className="text-lg font-semibold font-mono px-2 hover:bg-green-500/10 text-green-200 rounded-md cursor-pointer transition-all duration-200 hover:text-green-100">
                 Rom Cards
               </span> */}
-              <img src="/images/logo.png" className="size-10" />
+              <img src="/images/logo.png" alt="Rom Cards Logo" className="size-10" />
             </Link>
             <Tooltip>
               <TooltipTrigger asChild>
