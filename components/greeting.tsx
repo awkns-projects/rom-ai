@@ -125,15 +125,15 @@ export const Greeting = () => {
               {/* <HeartHandshake className="mx-auto size-16 text-black dark:text-white lg:size-24" /> */}
             </div>
             <div className="z-10 mt-8 flex flex-col items-center text-center text-black dark:text-white w-full max-w-5xl mx-auto px-6">
-              <h1 className="text-2xl font-extralight sm:text-3xl lg:text-4xl text-center text-black dark:text-white font-mono tracking-[0.2em] mb-8 opacity-90">
+              <h1 className="text-3xl font-bold sm:text-4xl lg:text-6xl text-center text-black dark:text-white font-sans tracking-tight mb-6 bg-gradient-to-r from-green-400 via-green-500 to-green-600 dark:from-green-300 dark:via-green-400 dark:to-green-500 bg-clip-text text-transparent animate-pulse">
                 Rom Cards
               </h1>
-              <p className="text-base sm:text-lg lg:text-xl text-center max-w-4xl mx-auto font-extralight font-mono text-matrix-gradient leading-loose tracking-wide opacity-85 px-4">
-                Prompt any idea to live in seconds. Build AI agents, apps, CRMs, and anything.
-                <span className="block mt-3 text-sm sm:text-base lg:text-lg text-gray-400 dark:text-green-300/50 font-light tracking-wider">
-                  The only vibe coding tool that gives no headache.
-                </span>
+              <p className="text-lg sm:text-xl lg:text-2xl text-center max-w-4xl mx-auto font-medium font-sans leading-relaxed tracking-normal mb-4 text-gray-700 dark:text-green-100/90">
+                Prompt any idea to live in seconds. Build AI agents, apps, CRMs, automations, and anything.
               </p>
+              <span className="block text-base sm:text-lg lg:text-xl text-gray-500 dark:text-green-300/70 font-normal font-mono tracking-wide italic">
+                The only vibe coding tool that gives no headache.
+              </span>
             </div>
             <div className="absolute inset-x-0 bottom-0 h-full bg-gradient-to-b from-transparent to-white to-70% dark:to-black" />
           </div>
