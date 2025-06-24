@@ -560,19 +560,21 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
 
     try {
-      // Create a function from the code string
+      // Create an async function from the code string
       const executeFunction = new Function(
         'db', 'input', 'envVars', 'testMode', 'console', 'generateId', 'formatDate', 'validateRequired', 'ai', 'z',
         `
-        try {
-          ${code}
-        } catch (error) {
-          throw new Error('Execution error: ' + error.message);
-        }
+        return (async () => {
+          try {
+            ${code}
+          } catch (error) {
+            throw new Error('Execution error: ' + error.message);
+          }
+        })();
         `
       );
 
-      // Execute with the context
+      // Execute with the context and await the promise
       result = await executeFunction(
         executionContext.db,
         executionContext.input,

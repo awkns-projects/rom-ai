@@ -13,6 +13,8 @@ const MAX_SCHEDULES_PER_RUN = 100; // Limit total schedules processed per cron r
 const MAX_CONCURRENT_EXECUTIONS = 5; // Limit concurrent schedule executions
 const EXECUTION_TIMEOUT = 4 * 60 * 1000; // 4 minutes (less than maxDuration)
 const CRON_TIMEOUT = 4.5 * 60 * 1000; // 4.5 minutes total cron timeout
+const MAX_ERROR_COUNT = 3; // Maximum consecutive errors before disabling schedule
+const ERROR_RESET_HOURS = 24; // Hours to wait before allowing retry after max errors
 
 // Interface for schedule with lastProcessedAt
 interface ScheduleWithTracking {
@@ -24,6 +26,9 @@ interface ScheduleWithTracking {
     active: boolean;
   };
   lastProcessedAt?: string;
+  errorCount?: number;
+  lastError?: string;
+  lastErrorAt?: string;
   savedInputs?: {
     inputParameters: Record<string, any>;
     envVars: Record<string, string>;
@@ -61,6 +66,29 @@ function shouldScheduleRun(schedule: ScheduleWithTracking): { shouldRun: boolean
 
     if (!schedule.interval.active) {
       return { shouldRun: false };
+    }
+
+    // Check for too many consecutive errors
+    if (schedule.errorCount && schedule.errorCount >= MAX_ERROR_COUNT) {
+      // Check if enough time has passed since last error to allow retry
+      if (schedule.lastErrorAt) {
+        const lastErrorTime = new Date(schedule.lastErrorAt);
+        const now = new Date();
+        const hoursSinceLastError = (now.getTime() - lastErrorTime.getTime()) / (1000 * 60 * 60);
+        
+        if (hoursSinceLastError < ERROR_RESET_HOURS) {
+          return { 
+            shouldRun: false, 
+            error: `Schedule disabled due to ${schedule.errorCount} consecutive errors. Will retry after ${ERROR_RESET_HOURS} hours from last error.` 
+          };
+        }
+        // If enough time has passed, allow retry (error count will be reset on success)
+      } else {
+        return { 
+          shouldRun: false, 
+          error: `Schedule disabled due to ${schedule.errorCount} consecutive errors.` 
+        };
+      }
     }
 
     if (!schedule.interval.pattern || typeof schedule.interval.pattern !== 'string') {
@@ -271,7 +299,7 @@ async function executeSchedulesWithConcurrencyLimit(
 }
 
 // Helper function to safely parse JSON with fallback
-function safeJsonParse(content: string, fallback: any = null): any {
+function safeJsonParse(content: string | null, fallback: any = null): any {
   try {
     if (!content || typeof content !== 'string') {
       return fallback;
@@ -444,6 +472,10 @@ async function processCronJob(request: NextRequest, startTime: number) {
               continue;
             }
 
+            // Log schedule details for debugging
+            const errorInfo = schedule.errorCount ? ` (errors: ${schedule.errorCount})` : '';
+            console.log(`📋 Queuing schedule ${schedule.id} (${schedule.name})${errorInfo} for execution`);
+
             // Add to execution queue and mark document as processed
             schedulesToExecute.push({
               documentId: document.id,
@@ -500,23 +532,35 @@ async function processCronJob(request: NextRequest, startTime: number) {
       // This prevents infinite retries of failed schedules
       item.schedule.lastProcessedAt = new Date().toISOString();
       
+      // Update error tracking based on execution result
+      if (executionResult) {
+        if (executionResult.success) {
+          // Reset error count on successful execution
+          item.schedule.errorCount = 0;
+          delete item.schedule.lastError;
+          delete item.schedule.lastErrorAt;
+          console.log(`✅ Schedule ${item.schedule.id} (${item.schedule.name}) executed successfully`);
+        } else {
+          // Increment error count on failure
+          item.schedule.errorCount = (item.schedule.errorCount || 0) + 1;
+          item.schedule.lastError = executionResult.error || 'Unknown error';
+          item.schedule.lastErrorAt = new Date().toISOString();
+          console.error(`❌ Schedule ${item.schedule.id} (${item.schedule.name}) failed (error #${item.schedule.errorCount}): ${executionResult.error}`);
+        }
+      } else {
+        // No execution result found - treat as error
+        item.schedule.errorCount = (item.schedule.errorCount || 0) + 1;
+        item.schedule.lastError = 'No execution result returned';
+        item.schedule.lastErrorAt = new Date().toISOString();
+        console.warn(`⚠️ No execution result found for schedule ${item.schedule.id} (error #${item.schedule.errorCount})`);
+      }
+      
       // Group by document for batch updates
       if (!documentsToUpdate.has(item.documentId)) {
         documentsToUpdate.set(item.documentId, {
           document: documents.find(d => d.id === item.documentId),
           agentData: item.agentData
         });
-      }
-      
-      // Log execution result for debugging
-      if (executionResult) {
-        if (executionResult.success) {
-          console.log(`✅ Schedule ${item.schedule.id} (${item.schedule.name}) executed successfully`);
-        } else {
-          console.error(`❌ Schedule ${item.schedule.id} (${item.schedule.name}) failed: ${executionResult.error}`);
-        }
-      } else {
-        console.warn(`⚠️ No execution result found for schedule ${item.schedule.id}`);
       }
     }
 
@@ -536,6 +580,18 @@ async function processCronJob(request: NextRequest, startTime: number) {
     const successfulExecutions = executionResults.filter(r => r.success).length;
     const failedExecutions = executionResults.filter(r => !r.success).length;
     
+    // Count schedules with errors and disabled schedules
+    let schedulesWithErrors = 0;
+    let disabledSchedules = 0;
+    for (const item of schedulesToExecute) {
+      if (item.schedule.errorCount && item.schedule.errorCount > 0) {
+        schedulesWithErrors++;
+        if (item.schedule.errorCount >= MAX_ERROR_COUNT) {
+          disabledSchedules++;
+        }
+      }
+    }
+    
     // Note: totalErrors already includes validation errors and document update failures
     // Don't double-count execution failures if they were already counted elsewhere
 
@@ -550,11 +606,15 @@ async function processCronJob(request: NextRequest, startTime: number) {
       schedulesExecuted: successfulExecutions,
       schedulesSkipped: totalSchedulesSkipped,
       schedulesFailed: failedExecutions,
+      schedulesWithErrors,
+      disabledSchedules,
       validationErrors: totalErrors, // Separate validation/processing errors from execution failures
       limits: {
         maxDocuments: MAX_DOCUMENTS_PER_RUN,
         maxSchedules: MAX_SCHEDULES_PER_RUN,
-        maxConcurrency: MAX_CONCURRENT_EXECUTIONS
+        maxConcurrency: MAX_CONCURRENT_EXECUTIONS,
+        maxErrorCount: MAX_ERROR_COUNT,
+        errorResetHours: ERROR_RESET_HOURS
       },
       executionResults
     };
@@ -578,5 +638,85 @@ async function processCronJob(request: NextRequest, startTime: number) {
 
 // Also handle POST for manual testing
 export async function POST(request: NextRequest) {
-  return GET(request);
+  try {
+    const body = await request.json();
+    
+    // Check if this is an error reset request
+    if (body.action === 'reset-errors') {
+      return await handleErrorReset(request, body);
+    }
+    
+    // Otherwise, treat as normal cron execution
+    return GET(request);
+  } catch (error) {
+    // If JSON parsing fails, treat as normal cron execution
+    return GET(request);
+  }
+}
+
+// Helper function to reset errors for schedules
+async function handleErrorReset(request: NextRequest, body: any) {
+  try {
+    // Verify authorization for error reset
+    const authHeader = request.headers.get('authorization');
+    if ((authHeader !== `Bearer ${process.env.CRON_SECRET}`) && process.env.NODE_ENV === 'production') {
+      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const { documentId, scheduleId } = body;
+    
+    if (!documentId) {
+      return Response.json({ error: 'documentId is required for error reset' }, { status: 400 });
+    }
+
+    const documents = await getAllDocuments();
+    const document = documents.find(d => d.id === documentId);
+    
+    if (!document) {
+      return Response.json({ error: 'Document not found' }, { status: 404 });
+    }
+
+    const agentData = safeJsonParse(document.content);
+    if (!agentData || !agentData.schedules) {
+      return Response.json({ error: 'Invalid document or no schedules found' }, { status: 400 });
+    }
+
+    let resetsPerformed = 0;
+    
+    // Reset errors for specific schedule or all schedules
+    for (const schedule of agentData.schedules) {
+      if (!scheduleId || schedule.id === scheduleId) {
+        if (schedule.errorCount && schedule.errorCount > 0) {
+          schedule.errorCount = 0;
+          delete schedule.lastError;
+          delete schedule.lastErrorAt;
+          resetsPerformed++;
+          console.log(`🔄 Reset errors for schedule ${schedule.id} (${schedule.name})`);
+        }
+      }
+    }
+
+    if (resetsPerformed > 0) {
+      const updateSuccess = await safeUpdateDocument(document, agentData);
+      if (!updateSuccess) {
+        return Response.json({ error: 'Failed to save error reset' }, { status: 500 });
+      }
+    }
+
+    return Response.json({
+      success: true,
+      message: `Reset errors for ${resetsPerformed} schedule(s)`,
+      documentId,
+      scheduleId: scheduleId || 'all',
+      resetsPerformed,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Error reset failed:', error);
+    return Response.json({
+      error: 'Failed to reset errors',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
 } 

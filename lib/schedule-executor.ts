@@ -369,13 +369,28 @@ export async function executeScheduleDirectly(params: ExecuteScheduleParams): Pr
     let executionError: string | null = null;
 
     try {
-      // Create a function from the code string and execute it
-      const func = new Function('context', `
-        const { db, env, input, console, schedule } = context;
-        ${code}
-      `);
+      // Create an async function from the code string (same approach as execute-action)
+      const executeFunction = new Function(
+        'db', 'env', 'input', 'console', 'schedule',
+        `
+        return (async () => {
+          try {
+            ${code}
+          } catch (error) {
+            throw new Error('Execution error: ' + error.message);
+          }
+        })();
+        `
+      );
       
-      result = await func(context);
+      // Execute with the context parameters and await the promise
+      result = await executeFunction(
+        context.db,
+        context.env,
+        context.input,
+        context.console,
+        context.schedule
+      );
     } catch (error: any) {
       console.error('Schedule execution error:', error);
       executionError = error.message || 'Unknown execution error';
