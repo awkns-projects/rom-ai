@@ -20,9 +20,23 @@ const ExecuteScheduleSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    // Check if this is a cron request
+    const authHeader = request.headers.get('authorization');
+    const isCronRequest = authHeader === `Bearer ${process.env.CRON_SECRET}`;
+    
+    let session = null;
+    let userId = null;
+    
+    if (isCronRequest) {
+      // For cron requests, we'll get the userId from the document directly
+      // Skip session authentication
+    } else {
+      // For regular requests, require authentication
+      session = await auth();
+      if (!session?.user?.id) {
+        return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      userId = session.user.id;
     }
 
     const body = await request.json();
@@ -35,8 +49,18 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: 'Document not found' }, { status: 404 });
     }
 
-    if (document.userId !== session.user.id) {
-      return Response.json({ error: 'Unauthorized access to document' }, { status: 403 });
+    // For cron requests, get userId from document; for regular requests, verify ownership
+    if (isCronRequest) {
+      userId = document.userId;
+    } else {
+      if (document.userId !== session!.user.id) {
+        return Response.json({ error: 'Unauthorized access to document' }, { status: 403 });
+      }
+    }
+
+    // Ensure userId is set
+    if (!userId) {
+      return Response.json({ error: 'Unable to determine user ID' }, { status: 500 });
     }
 
     if (!document.content) {
@@ -402,7 +426,7 @@ export async function POST(request: NextRequest) {
           title: document.title,
           kind: document.kind,
           content: JSON.stringify(agentData),
-          userId: session.user.id,
+          userId: userId,
           metadata: {
             ...(document.metadata as Record<string, any> || {}),
             lastScheduleExecution: new Date().toISOString(),
