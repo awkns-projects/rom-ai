@@ -17,6 +17,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip middleware for cron endpoints - they handle their own authentication
+  if (pathname.startsWith('/api/cron/') || 
+      (pathname.startsWith('/api/agent/execute-schedule') && 
+       request.headers.get('authorization')?.startsWith('Bearer '))) {
+    return NextResponse.next();
+  }
+
   const token = await getToken({
     req: request,
     secret: process.env.AUTH_SECRET,
