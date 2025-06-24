@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getAllDocuments, saveOrUpdateDocument } from '@/lib/db/queries';
 import { CronExpressionParser } from 'cron-parser';
+import { executeScheduleDirectly } from '@/lib/schedule-executor';
 
 // Interface for schedule with lastProcessedAt
 interface ScheduleWithTracking {
@@ -84,46 +85,33 @@ async function executeSchedule(documentId: string, schedule: ScheduleWithTrackin
     };
   }
 
-  const startTime = Date.now();
-
   try {
     // Use saved inputs if available, otherwise use empty objects
     const inputParameters = schedule.savedInputs?.inputParameters || {};
     const envVars = schedule.savedInputs?.envVars || {};
 
-    // Call the existing execute-schedule API
-    const response = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/agent/execute-schedule`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.CRON_SECRET}`,
-      },
-      body: JSON.stringify({
-        documentId,
-        scheduleId: schedule.id,
-        code: schedule.execute.code.script,
-        inputParameters,
-        envVars,
-        testMode: false, // Always run in production mode for cron
-        interval: schedule.interval
-      }),
+    // Call the direct execution function instead of making HTTP request
+    const result = await executeScheduleDirectly({
+      documentId,
+      scheduleId: schedule.id,
+      code: schedule.execute.code.script,
+      inputParameters,
+      envVars,
+      testMode: false, // Always run in production mode for cron
+      interval: schedule.interval
     });
-
-    const result = await response.json();
-    const executionTime = Date.now() - startTime;
 
     return {
       success: result.success,
       error: result.error,
-      executionTime,
+      executionTime: result.executionTime,
       result: result.result
     };
   } catch (error) {
-    const executionTime = Date.now() - startTime;
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown execution error',
-      executionTime
+      executionTime: 0
     };
   }
 }
@@ -202,6 +190,9 @@ export async function GET(request: NextRequest) {
         
         // Save the updated document with the new timestamp
         try {
+          // Update the schedule's lastProcessedAt timestamp
+          schedule.lastProcessedAt = new Date().toISOString();
+
           const updatedContent = JSON.stringify(agentData, null, 2);
           await saveOrUpdateDocument({
             id: document.id,
@@ -211,18 +202,7 @@ export async function GET(request: NextRequest) {
             kind: 'agent',
             metadata: {
               ...(document.metadata as Record<string, any> || {}),
-              lastScheduleExecution: new Date().toISOString(),
-              executionHistory: [
-                ...((document.metadata as any)?.executionHistory || []).slice(-9), // Keep last 9
-                {
-                  timestamp: new Date().toISOString(),
-                  executionTime: executionResult.executionTime || 0,
-                  success: executionResult.success,
-                  testMode: false,
-                  scheduleId: schedule.id,
-                  type: 'cron-schedule'
-                }
-              ]
+              lastScheduleExecution: new Date().toISOString()
             }
           });
         } catch (saveError) {

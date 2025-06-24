@@ -1022,7 +1022,7 @@ export const ScheduleEditor = memo(({
                 <SelectItem value="0 */6 * * *" className="text-orange-200 focus:bg-orange-500/20 font-mono">6 hours</SelectItem>
                 <SelectItem value="0 */12 * * *" className="text-orange-200 focus:bg-orange-500/20 font-mono">12 hours</SelectItem>
                 <SelectItem value="0 0 * * *" className="text-orange-200 focus:bg-orange-500/20 font-mono">1 day</SelectItem>
-                <SelectItem value="0 */3 * *" className="text-orange-200 focus:bg-orange-500/20 font-mono">3 days</SelectItem>
+                <SelectItem value="0 0 */3 * *" className="text-orange-200 focus:bg-orange-500/20 font-mono">3 days</SelectItem>
                 <SelectItem value="0 0 * * 0" className="text-orange-200 focus:bg-orange-500/20 font-mono">1 week</SelectItem>
               </SelectContent>
             </Select>

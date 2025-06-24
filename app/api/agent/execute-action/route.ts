@@ -593,10 +593,32 @@ export async function POST(request: NextRequest) {
 
     const executionTime = Date.now() - startTime;
 
+    // Get change log for reporting
+    const changeLog = db.getChangeLog();
+
     // Save updated agent data back to document if not in test mode and no errors
     if (!testMode && !executionError) {
       try {
-        const updatedContent = JSON.stringify(agentData, null, 2);
+        // Add execution history to agent data content instead of metadata
+        if (!agentData.executionHistory) {
+          agentData.executionHistory = [];
+        }
+        
+        // Add new execution record
+        agentData.executionHistory.push({
+          timestamp: new Date().toISOString(),
+          executionTime,
+          success: !executionError,
+          testMode: false,
+          type: 'action',
+          error: executionError,
+          changelog: changeLog
+        });
+        
+        // Keep only last 20 execution records
+        agentData.executionHistory = agentData.executionHistory.slice(-20);
+
+        const updatedContent = JSON.stringify(agentData);
         await saveOrUpdateDocument({
           id: documentId,
           title: document.title,
@@ -605,16 +627,7 @@ export async function POST(request: NextRequest) {
           userId: session.user.id,
           metadata: {
             ...(document.metadata as Record<string, any> || {}),
-            lastActionExecution: new Date().toISOString(),
-            executionHistory: [
-              ...((document.metadata as any)?.executionHistory || []).slice(-9), // Keep last 9
-              {
-                timestamp: new Date().toISOString(),
-                executionTime,
-                success: !executionError,
-                testMode: false
-              }
-            ]
+            lastActionExecution: new Date().toISOString()
           }
         });
         console.log('✅ Document updated with new database state');
@@ -624,7 +637,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Return execution results
-    const changeLog = db.getChangeLog();
+    // (changeLog is already defined above)
     
     // Organize changes by model for better UI display
     const modelChanges = agentData.models.map((model: any) => {
