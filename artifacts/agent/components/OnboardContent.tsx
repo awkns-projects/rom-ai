@@ -93,7 +93,7 @@ export const OnboardContent = memo(({ onTabChange }: OnboardContentProps) => {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <h2 className="text-2xl font-bold text-green-200 font-mono">Getting Started</h2>
-          <div className="flex gap-2">
+          <div className="flex gap-2 hidden md:flex">
             {slides.map((_, index) => (
               <button
                 key={index}
