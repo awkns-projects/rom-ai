@@ -393,7 +393,7 @@ export const SchedulesListEditor = memo(({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Schedules & Timing</h3>
+          <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Scheduled Automation</h3>
           <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
             <span className="text-green-300 text-sm font-medium font-mono">{schedules.length} schedules</span>
           </div>

@@ -303,21 +303,37 @@
 
 @keyframes shimmer {
     0% {
-        transform: translateX(-100%);
+        background-position: -200px 0;
     }
 
     100% {
-        transform: translateX(100%);
+        background-position: calc(200px + 100%) 0;
     }
 }
 
 .animate-shimmer {
-    animation: shimmer 2s ease-in-out infinite;
+    animation: shimmer 2s infinite;
+}
+
+/* Animation delay utilities for visual demos */
+.animation-delay-150 {
+    animation-delay: 150ms;
+}
+
+.animation-delay-300 {
+    animation-delay: 300ms;
+}
+
+.animation-delay-600 {
+    animation-delay: 600ms;
+}
+
+.animation-delay-900 {
+    animation-delay: 900ms;
 }
 
 .focus-matrix:focus {
     @apply outline-none ring-2 ring-green-500/50 ring-offset-2 ring-offset-black;
-    box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
 }
 
 /* Matrix text gradient */

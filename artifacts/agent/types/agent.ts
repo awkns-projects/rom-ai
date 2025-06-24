@@ -23,7 +23,7 @@ export interface AgentData {
 }
 
 export interface AgentArtifactMetadata {
-  selectedTab: 'models' | 'actions' | 'schedules';
+  selectedTab: 'onboard' | 'models' | 'actions' | 'schedules';
   editingModel: string | null;
   editingAction: string | null;
   editingSchedule: string | null;

@@ -158,9 +158,10 @@ export const ModelsListEditor = memo(({
     );
   }
 
+  // Show list view
   return (
     <div className="space-y-6">
-      {/* Header - Updated to match Schedules style */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
           <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Data Models</h3>
@@ -170,7 +171,6 @@ export const ModelsListEditor = memo(({
         </div>
         <Button 
           onClick={addModel}
-          disabled={status === 'streaming'}
           className="btn-matrix px-3 sm:px-4 py-2"
         >
           <div className="flex items-center gap-2">

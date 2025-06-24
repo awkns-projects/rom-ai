@@ -32,6 +32,7 @@ import { generateNewId, calculateProgressPercentage } from './utils';
 import { ModelsListEditor } from './components/lists/ModelsListEditor';
 import { ActionsListEditor } from './components/lists/ActionsListEditor';
 import { SchedulesListEditor } from './components/lists/SchedulesListEditor';
+import { OnboardContent } from './components/OnboardContent';
 
 interface AgentModel {
   id: string;
@@ -185,7 +186,7 @@ interface AgentData {
 }
 
 interface AgentArtifactMetadata {
-  selectedTab: 'models' | 'actions' | 'schedules';
+  selectedTab: 'onboard' | 'models' | 'actions' | 'schedules';
   editingModel: string | null;
   editingAction: string | null;
   editingSchedule: string | null;
@@ -1814,7 +1815,7 @@ const AgentBuilderContent = memo(({
   
   // Initialize metadata with defaults if null
   const safeMetadata: AgentArtifactMetadata = metadata || {
-    selectedTab: 'models',
+    selectedTab: 'onboard',
     editingModel: null,
     editingAction: null,
     editingSchedule: null,
@@ -2150,6 +2151,11 @@ const AgentBuilderContent = memo(({
   // Tab configuration
   const tabs = [
     {
+      id: 'onboard' as const,
+      label: 'Onboard',
+      count: 0
+    },
+    {
       id: 'models' as const,
       label: 'Models',
       count: agentData.models?.length || 0
@@ -2378,14 +2384,16 @@ const AgentBuilderContent = memo(({
               >
                 <div className="flex items-center gap-2 sm:gap-3">
                   <span className="font-medium">{tab.label}</span>
-                  <div className={cn(
-                    "px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-bold font-mono transition-colors border",
-                    safeMetadata.selectedTab === tab.id
-                      ? "bg-green-500/20 text-green-300 border-green-500/30"
-                      : "bg-green-500/10 text-green-400 border-green-500/20 group-hover:bg-green-500/20 group-hover:text-green-300"
-                  )}>
-                    {tab.count}
-                  </div>
+                  {tab.id !== 'onboard' && (
+                    <div className={cn(
+                      "px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-bold font-mono transition-colors border",
+                      safeMetadata.selectedTab === tab.id
+                        ? "bg-green-500/20 text-green-300 border-green-500/30"
+                        : "bg-green-500/10 text-green-400 border-green-500/20 group-hover:bg-green-500/20 group-hover:text-green-300"
+                    )}>
+                      {tab.count}
+                    </div>
+                  )}
                 </div>
                 
                 {/* Active tab indicator */}
@@ -2436,6 +2444,17 @@ const AgentBuilderContent = memo(({
               }
               
               // Show appropriate tab content
+              if (safeMetadata.selectedTab === 'onboard') {
+                return (
+                  <OnboardContent 
+                    onTabChange={(tab) => setMetadata({ 
+                      ...safeMetadata, 
+                      selectedTab: tab 
+                    })} 
+                  />
+                );
+              }
+              
               if (safeMetadata.selectedTab === 'models') {
                 console.log('🗂️ Rendering ModelsListEditor');
                 console.log('🗂️ Models data:', {
@@ -2508,7 +2527,7 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
   
   initialize: ({ setMetadata }) => {
     setMetadata({
-      selectedTab: 'models',
+      selectedTab: 'onboard',
       editingModel: null,
       editingAction: null,
       editingSchedule: null,

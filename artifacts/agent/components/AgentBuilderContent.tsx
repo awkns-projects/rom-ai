@@ -6,6 +6,7 @@ import { ModelsListEditor } from './lists/ModelsListEditor';
 import { ActionsListEditor } from './lists/ActionsListEditor';
 import { SchedulesListEditor } from './lists/SchedulesListEditor';
 import { ModelDataViewer } from './editors/ModelDataViewer';
+import { OnboardContent } from './OnboardContent';
 import type { AgentData, AgentArtifactMetadata } from '../types';
 
 interface AgentBuilderContentProps {
@@ -28,7 +29,7 @@ export const AgentBuilderContent = memo(({
   stepMessages
 }: AgentBuilderContentProps) => {
   const handleTabChange = useCallback((value: string) => {
-    if (value === 'models' || value === 'actions' || value === 'schedules') {
+    if (value === 'onboard' || value === 'models' || value === 'actions' || value === 'schedules') {
       onMetadataUpdate({
         ...metadata,
         selectedTab: value,
@@ -105,7 +106,10 @@ export const AgentBuilderContent = memo(({
               onValueChange={handleTabChange}
               className="w-full"
             >
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="onboard" className="font-mono">
+                  🎯 Onboard
+                </TabsTrigger>
                 <TabsTrigger value="models" className="font-mono">
                   🗃️ Models ({agentData.models.length})
                 </TabsTrigger>
@@ -116,6 +120,10 @@ export const AgentBuilderContent = memo(({
                   ⏰ Schedules ({agentData.schedules.length})
                 </TabsTrigger>
               </TabsList>
+
+              <TabsContent value="onboard" className="mt-8">
+                <OnboardContent onTabChange={handleTabChange} />
+              </TabsContent>
 
               <TabsContent value="models" className="mt-8">
                 <ModelsListEditor
