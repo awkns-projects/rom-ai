@@ -39,6 +39,7 @@ import type { Chat } from '@/lib/db/schema';
 import { differenceInSeconds } from 'date-fns';
 import { ChatSDKError } from '@/lib/errors';
 import { agentBuilder } from '@/lib/ai/tools/agent-builder';
+export const dynamic = 'force-dynamic';
 
 export const maxDuration = 300;
 let globalStreamContext: ResumableStreamContext | null = null;
