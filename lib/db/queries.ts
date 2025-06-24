@@ -467,6 +467,24 @@ export async function getDocumentById({ id }: { id: string }) {
   }
 }
 
+export async function getAllDocuments() {
+  try {
+    const documents = await db
+      .select()
+      .from(document)
+      .where(eq(document.kind, 'agent'))
+      .orderBy(desc(document.createdAt));
+
+    return documents;
+  } catch (error) {
+    console.error('Database error in getAllDocuments:', error);
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get all documents',
+    );
+  }
+}
+
 export async function deleteDocumentsByIdAfterTimestamp({
   id,
   timestamp,

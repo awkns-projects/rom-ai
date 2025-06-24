@@ -3,7 +3,6 @@ import type {
   AgentModel, 
   AgentAction, 
   AgentSchedule, 
-  AgentEnum 
 } from './types';
 import { generateUUID } from '../../../utils';
 
@@ -256,7 +255,7 @@ export function ensureRequiredScheduleFields(schedules: any[]): any[] {
     interval: schedule.interval || {
       pattern: '0 0 * * *', // Daily at midnight
       timezone: 'UTC',
-      active: true
+      active: false
     },
     dataSource: schedule.dataSource || {
       type: 'custom',

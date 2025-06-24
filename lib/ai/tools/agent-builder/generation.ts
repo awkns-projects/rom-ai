@@ -1,33 +1,57 @@
-import { generateObject } from 'ai';
+import { generateObject, type CoreMessage } from 'ai';
 import { getProvider } from '../../providers';
 import { getBestModelFor } from '../../models';
 import type { 
   AgentData, 
-  AgentModel, 
-  AgentEnum, 
-  AgentAction, 
-  AgentSchedule, 
   PromptUnderstanding, 
-  ChangeAnalysis 
+  ChangeAnalysis, 
+  AgentModel, 
+  AgentAction, 
+  AgentSchedule
 } from './types';
 import { 
-  promptUnderstandingSchema, 
-  changeAnalysisSchema, 
+  promptUnderstandingSchema,
+  changeAnalysisSchema,
+  enhancedActionAnalysisSchema,
+  enhancedActionCodeSchema,
   unifiedDatabaseSchema,
   unifiedActionsSchema,
   unifiedSchedulesSchema,
   decisionSchema,
   granularChangeAnalysisSchema,
-  deletionOperationsSchema,
-  enhancedActionAnalysisSchema,
-  enhancedActionCodeSchema,
+  deletionOperationsSchema
 } from './schemas';
 import { z } from 'zod';
-import { 
-  mergeModelsIntelligently, 
-  mergeActionsIntelligently, 
-  mergeSchedulesIntelligently
-} from './merging';
+import { mergeModelsIntelligently, mergeActionsIntelligently, mergeSchedulesIntelligently } from './merging';
+// import type { PseudoCodeStep } from '../../../artifacts/agent/types/action';
+// import { mergeDatabaseChanges, mergeActionChanges, mergeScheduleChanges, logMergingDecision } from './merging';
+
+// Define PseudoCodeStep interface locally to avoid import issues
+interface PseudoCodeStep {
+  id: string;
+  description: string;
+  type: string;
+  inputFields: Array<{
+    id: string;
+    name: string;
+    type: string;
+    kind: 'scalar' | 'object' | 'enum';
+    required: boolean;
+    list: boolean;
+    description: string;
+    relationModel?: string;
+  }>;
+  outputFields: Array<{
+    id: string;
+    name: string;
+    type: string;
+    kind: 'scalar' | 'object' | 'enum';
+    required: boolean;
+    list: boolean;
+    description: string;
+    relationModel?: string;
+  }>;
+}
 
 // Mock implementations for missing functions - these will be replaced by actual imports in your environment
 const mockProvider = {
@@ -156,7 +180,7 @@ export async function generateDatabase(
     hasExistingAgent: !!existingAgent,
     existingModels: existingAgent?.models?.length || 0,
     existingModelEnums: existingAgent?.models?.reduce((sum, model) => sum + (model.enums?.length || 0), 0) || 0,
-    isIncremental: !!(existingAgent && existingAgent.models?.length)
+    isIncremental: !!(existingAgent?.models?.length)
   });
 
   const existingModelsContext = existingAgent ? `
@@ -990,7 +1014,7 @@ Design schedules that:
       interval: {
         pattern: schedule.interval?.pattern || '0 0 * * *',
         timezone: schedule.interval?.timezone || 'UTC',
-        active: schedule.interval?.active !== undefined ? schedule.interval.active : true
+        active: schedule.interval?.active !== undefined ? schedule.interval.active : false
       },
       dataSource: {
         type: schedule.dataSource?.type || 'database',
@@ -2935,4 +2959,353 @@ export {
   validateBlogPostFunction
 };
 `;
+}
+
+/**
+ * Generate pseudo code steps for actions or schedules
+ */
+export async function generatePseudoSteps(
+  name: string,
+  description: string,
+  type: 'Create' | 'Update',
+  availableModels: AgentModel[],
+  entityType: 'action' | 'schedule',
+  businessContext?: string
+): Promise<PseudoCodeStep[]> {
+  console.log(`🧩 Generating pseudo steps for ${entityType}: ${name}`);
+  
+  const model = await getAgentBuilderModel();
+
+  const systemPrompt = `You are a business process expert creating detailed pseudo code steps for a ${entityType}.
+
+ENTITY DETAILS:
+- Name: ${name}
+- Description: ${description}
+- Type: ${type}
+- Entity Type: ${entityType}
+
+AVAILABLE DATA MODELS:
+${availableModels.map(model => `
+- ${model.name}: ${(model.fields || []).map(f => `${f.name} (${f.type})`).join(', ')}
+`).join('')}
+
+${businessContext ? `BUSINESS CONTEXT: ${businessContext}` : ''}
+
+Create a logical sequence of pseudo code steps that accomplish the goal. Each step should:
+
+1. **Input/Output Clarity**: Define exactly what data goes in and what comes out
+2. **Database Operations**: Use specific model names and fields from the available models
+3. **External API Calls**: Include calls to external services like Shopify, payment gateways, etc.
+4. **AI Operations**: Use AI for analysis, decision making, or data processing when needed
+5. **Business Logic**: Include validation, calculations, and business rules
+6. **Error Handling**: Consider what could go wrong and how to handle it
+7. **Realistic Workflow**: Follow a logical business process flow
+
+STEP TYPES TO USE:
+- Database find unique: Get one specific record
+- Database find many: Get multiple records with criteria
+- Database create: Create new records
+- Database update unique: Update one specific record
+- Database update many: Update multiple records
+- Database delete unique: Delete one specific record
+- Database delete many: Delete multiple records
+- Call External API: Make API calls to external services (Shopify, payment processors, etc.)
+- AI Analysis: Use AI for analysis, decision making, or data processing
+
+**CRITICAL FIELD TYPE RULES**:
+When defining field types, follow these EXACT patterns:
+
+1. **For database model references (relationships)**:
+   - Use the EXACT model name: "${availableModels.map(m => m.name).join('", "')}"
+   - Example: If referencing a Customer, use type "Customer" (not "String")
+
+2. **For database model ID fields (foreign keys)**:
+   - Use ModelName + "Id" pattern: "${availableModels.map(m => `${m.name}Id`).join('", "')}"
+   - Example: To reference a Customer by ID, use type "CustomerId" (not "String")
+   - Example: To reference a Lead by ID, use type "LeadId" (not "String")
+
+3. **For scalar/primitive data**:
+   - Use: String, Int, Float, Boolean, DateTime, Json, Bytes
+
+**RELATIONSHIP FIELD EXAMPLES**:
+${availableModels.map(model => `
+- To reference a ${model.name} record: type = "${model.name}"
+- To reference a ${model.name} by ID: type = "${model.name}Id"
+`).join('')}
+
+**IMPORTANT**: When you see field names like "leadId", "customerId", "orderId", etc., the type should be "${availableModels.map(m => m.name).find(name => name.toLowerCase() === 'lead') ? 'LeadId' : 'ModelNameId'}", NOT "String"!
+
+For ${type} operations:
+${type === 'Create' ? '- Focus on data validation, creation, and confirmation steps' : '- Focus on finding existing records, validation, updating, and confirmation steps'}
+
+Generate 3-7 logical steps that would accomplish this ${entityType}'s purpose. Be specific about database model relationships and connections.
+
+**EXAMPLE FIELD PATTERNS**:
+❌ WRONG: { name: "leadId", type: "String" }
+✅ CORRECT: { name: "leadId", type: "LeadId" }
+
+❌ WRONG: { name: "customer", type: "String" }
+✅ CORRECT: { name: "customer", type: "Customer" }
+
+Follow these patterns exactly to ensure proper relationship detection!`;
+
+  const pseudoStepsSchema = z.object({
+    steps: z.array(z.object({
+      description: z.string().describe('Clear description of what this step does'),
+      type: z.enum([
+        'Database find unique', 
+        'Database find many', 
+        'Database update unique', 
+        'Database update many', 
+        'Database create', 
+        'Database create many', 
+        'Database delete unique', 
+        'Database delete many',
+        'call external api',
+        'ai analysis'
+      ]),
+      inputFields: z.array(z.object({
+        name: z.string().describe('Field name'),
+        type: z.string().describe(`Data type - CRITICAL: Use exact patterns: For relationships use "${availableModels.map(m => m.name).join('", "')}", for IDs use "${availableModels.map(m => `${m.name}Id`).join('", "')}", for scalars use String, Int, Boolean, etc. Example: "leadId" field should be type "LeadId" NOT "String"`),
+        description: z.string().describe('What this field represents'),
+        required: z.boolean().describe('Whether this field is required'),
+        list: z.boolean().default(false).describe('Whether this field contains multiple values (array)')
+      })).describe('Input fields this step needs'),
+      outputFields: z.array(z.object({
+        name: z.string().describe('Field name'),
+        type: z.string().describe(`Data type - CRITICAL: Use exact patterns: For relationships use "${availableModels.map(m => m.name).join('", "')}", for IDs use "${availableModels.map(m => `${m.name}Id`).join('", "')}", for scalars use String, Int, Boolean, etc. Example: "leadId" field should be type "LeadId" NOT "String"`),
+        description: z.string().describe('What this field represents'),
+        required: z.boolean().describe('Whether this field will always be present'),
+        list: z.boolean().default(false).describe('Whether this field contains multiple values (array)')
+      })).describe('Output fields this step produces')
+    }))
+  });
+
+  const result = await generateObject({
+    model,
+    schema: pseudoStepsSchema,
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      }
+    ],
+    temperature: 0.4,
+  });
+
+  // Helper function to determine field properties based on type and available models
+  const getFieldProperties = (fieldType: string, availableModels: AgentModel[]) => {
+    console.log(`🔍 Analyzing field type: "${fieldType}" against models: [${availableModels.map(m => m.name).join(', ')}]`);
+    
+    // Check if this is a model name (exact match)
+    const isModelType = availableModels.some(model => model.name === fieldType);
+    
+    // Check if this is a model ID field (ends with model name + "Id")
+    const modelIdMatch = availableModels.find(model => 
+      fieldType === `${model.name}Id` || 
+      fieldType.toLowerCase() === `${model.name.toLowerCase()}id`
+    );
+    
+    // Additional pattern checks for common variations
+    const alternativeIdMatch = availableModels.find(model => {
+      const modelNameLower = model.name.toLowerCase();
+      const fieldTypeLower = fieldType.toLowerCase();
+      
+      // Check variations like: leadid, lead_id, leadID
+      return (
+        fieldTypeLower === `${modelNameLower}id` ||
+        fieldTypeLower === `${modelNameLower}_id` ||
+        fieldTypeLower === `${modelNameLower}ID` ||
+        fieldType === `${model.name}_id` ||
+        fieldType === `${model.name}ID`
+      );
+    });
+    
+    const finalModelMatch = modelIdMatch || alternativeIdMatch;
+    
+    if (isModelType) {
+      console.log(`✅ Detected direct model reference: ${fieldType} -> ${fieldType}`);
+      return {
+        kind: 'object' as const,
+        relationModel: fieldType,
+        finalType: fieldType
+      };
+    } else if (finalModelMatch) {
+      console.log(`✅ Detected model ID reference: ${fieldType} -> ${finalModelMatch.name}`);
+      return {
+        kind: 'object' as const,
+        relationModel: finalModelMatch.name,
+        finalType: 'String' // IDs are typically strings
+      };
+    } else {
+      console.log(`➡️ Scalar field detected: ${fieldType}`);
+      return {
+        kind: 'scalar' as const,
+        relationModel: undefined,
+        finalType: fieldType
+      };
+    }
+  };
+
+  // Convert steps to internal format
+  console.log(`Generated ${result.object.steps.length} pseudo steps. Converting to internal format...`);
+  
+  const convertedSteps: PseudoCodeStep[] = result.object.steps.map((step: any, index: number) => {
+    console.log(`\n📝 Converting step ${index + 1}: ${step.type}`);
+    
+    // Post-process input fields to catch missed relationship patterns
+    const processedInputFields = step.inputFields?.map((field: any) => {
+      let processedType = field.type;
+      
+      // Special handling: if field name ends with "Id" but type is "String",
+      // check if it should be a relationship
+      if (field.name.endsWith('Id') && field.type === 'String') {
+        const potentialModelName = field.name.slice(0, -2); // Remove "Id"
+        const matchingModel = availableModels.find(model => 
+          model.name.toLowerCase() === potentialModelName.toLowerCase()
+        );
+        
+        if (matchingModel) {
+          console.log(`🔧 Auto-correcting: ${field.name} type from "String" to "${matchingModel.name}Id"`);
+          processedType = `${matchingModel.name}Id`;
+        }
+      }
+      
+      const properties = getFieldProperties(processedType, availableModels);
+      
+      return {
+        id: `field_${Date.now()}_${index}_input_${field.name}`,
+        name: field.name,
+        type: properties.finalType,
+        kind: properties.kind,
+        relationModel: properties.relationModel,
+        required: field.required || false,
+        list: field.list || false,
+        description: field.description
+      };
+    }) || [];
+    
+    // Process output fields similarly
+    const processedOutputFields = step.outputFields?.map((field: any) => {
+      let processedType = field.type;
+      
+      // Apply same post-processing for output fields
+      if (field.name.endsWith('Id') && field.type === 'String') {
+        const potentialModelName = field.name.slice(0, -2);
+        const matchingModel = availableModels.find(model => 
+          model.name.toLowerCase() === potentialModelName.toLowerCase()
+        );
+        
+        if (matchingModel) {
+          console.log(`🔧 Auto-correcting: ${field.name} type from "String" to "${matchingModel.name}Id"`);
+          processedType = `${matchingModel.name}Id`;
+        }
+      }
+      
+      const properties = getFieldProperties(processedType, availableModels);
+      
+      return {
+        id: `field_${Date.now()}_${index}_output_${field.name}`,
+        name: field.name,
+        type: properties.finalType,
+        kind: properties.kind,
+        relationModel: properties.relationModel,
+        required: field.required || false,
+        list: field.list || false,
+        description: field.description
+      };
+    }) || [];
+
+    return {
+      id: `step_${Date.now()}_${index}`,
+      step: index + 1,
+      type: step.type,
+      title: step.title || step.description,
+      description: step.description,
+      inputFields: processedInputFields,
+      outputFields: processedOutputFields,
+      code: step.code || ''
+    };
+  });
+
+  console.log(`✅ Generated ${convertedSteps.length} pseudo steps for ${name}`);
+  console.log(`🔍 Detected relationship fields:`, convertedSteps.flatMap(step => 
+    [...step.inputFields, ...step.outputFields]
+      .filter(f => f.kind === 'object')
+      .map(f => `${f.name} (${f.type}) -> ${f.relationModel}`)
+  ));
+  
+  return convertedSteps;
+}
+
+/**
+ * Generate processing time estimate for schedules
+ */
+export async function generateProcessingTimeEstimate(
+  scheduleName: string,
+  description: string,
+  pseudoSteps: PseudoCodeStep[],
+  interval: string,
+  businessContext?: string
+): Promise<{
+  estimatedDuration: string;
+  complexity: 'low' | 'medium' | 'high';
+  resourceUsage: 'light' | 'moderate' | 'heavy';
+  reasoning: string;
+}> {
+  console.log(`⏱️ Generating processing time estimate for schedule: ${scheduleName}`);
+  
+  const model = await getAgentBuilderModel();
+
+  const systemPrompt = `You are a performance analysis expert estimating processing time for automated schedules.
+
+SCHEDULE DETAILS:
+- Name: ${scheduleName}
+- Description: ${description}
+- Interval: ${interval}
+- Number of Steps: ${pseudoSteps.length}
+
+PSEUDO STEPS ANALYSIS:
+${pseudoSteps.map((step, index) => `
+Step ${index + 1}: ${step.type} - ${step.description}
+- Inputs: ${step.inputFields.length} fields
+- Outputs: ${step.outputFields.length} fields
+`).join('')}
+
+${businessContext ? `BUSINESS CONTEXT: ${businessContext}` : ''}
+
+Analyze the complexity and estimate realistic processing time considering:
+
+1. **Database Operations**: Number and complexity of database queries/writes
+2. **Data Volume**: Potential amount of data being processed
+3. **Business Logic**: Complexity of validations and calculations
+4. **Network/External Calls**: Any external API calls or file operations
+5. **Scheduling Frequency**: How often this runs affects resource planning
+
+Provide realistic estimates that help users understand:
+- How long each execution might take
+- Resource impact on the system
+- Whether the schedule frequency is appropriate`;
+
+  const estimateSchema = z.object({
+    estimatedDuration: z.string().describe('Human-readable duration estimate (e.g., "2-5 seconds", "30-60 seconds", "2-3 minutes")'),
+    complexity: z.enum(['low', 'medium', 'high']).describe('Overall complexity level'),
+    resourceUsage: z.enum(['light', 'moderate', 'heavy']).describe('Expected system resource usage'),
+    reasoning: z.string().describe('Detailed explanation of the estimate and factors considered')
+  });
+
+  const result = await generateObject({
+    model,
+    schema: estimateSchema,
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      }
+    ],
+    temperature: 0.3,
+  });
+
+  console.log(`✅ Generated processing time estimate: ${result.object.estimatedDuration}`);
+  return result.object;
 }

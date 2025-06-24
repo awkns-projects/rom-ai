@@ -5,6 +5,7 @@ import { DocumentSkeleton } from '@/components/document-skeleton';
 import { DiffView } from '@/components/diffview';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { 
   Select, 
@@ -28,10 +29,10 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import { useArtifact } from '@/hooks/use-artifact';
-import { generateNewId, calculateProgressPercentage } from './utils';
-import { ModelsListEditor } from './components/lists/ModelsListEditor';
-import { ActionsListEditor } from './components/lists/ActionsListEditor';
-import { SchedulesListEditor } from './components/lists/SchedulesListEditor';
+import { RunActionModal } from './action-runner';
+
+// Add new imports for action running
+// import { executeActionWithUI, getDatabaseDataForStep, createMockDatabase, ActionRunState } from '../../../lib/ai/tools/agent-builder/utils';
 
 interface AgentModel {
   id: string;
@@ -291,45 +292,437 @@ const FIELD_KINDS = [
 ];
 
 // Helper function to generate new IDs
+function generateNewId(type: string, existingEntities: any[]): string {
+  const prefixMap: Record<string, string> = {
+    'model': 'mdl',
+    'field': 'fld',
+    'enum': 'enm',
+    'enumField': 'enf',
+    'action': 'act',
+    'form': 'frm',
+    'formField': 'ff'
+  };
+  
+  const prefix = prefixMap[type] || type.charAt(0);
+  
+  const highestId = existingEntities.reduce((max, entity) => {
+    if (entity.id?.startsWith(prefix)) {
+      const idNumber = Number.parseInt(entity.id.slice(prefix.length), 10);
+      return Number.isNaN(idNumber) ? max : Math.max(max, idNumber);
+    }
+    return max;
+  }, 0);
+  
+  return `${prefix}${highestId + 1}`;
+}
+
 // Helper function to determine step status consistently across all progress indicators
 const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>, agentData?: any) => {
-  // If there's explicit progress for this step, use it
+  // If we have explicit step progress for this step, use it
   if (stepProgress?.[stepId as keyof typeof stepProgress]) {
     return stepProgress[stepId as keyof typeof stepProgress];
   }
-  
-  // Check if we have data for this step
-  if (agentData) {
-    switch (stepId) {
-      case 'schedules':
-        return agentData.schedules && agentData.schedules.length > 0 ? 'complete' : 'pending';
-      case 'models':
-        return agentData.models && agentData.models.length > 0 ? 'complete' : 'pending';
-      case 'examples': {
-        // Check if any model has example records
-        const hasExamples = agentData.models?.some((model: AgentModel) => 
-          model.exampleRecords && model.exampleRecords.length > 0
-        );
-        return hasExamples ? 'complete' : 'pending';
-      }
-      case 'actions':
-        return agentData.actions && agentData.actions.length > 0 ? 'complete' : 'pending';
-      case 'overview':
-        return agentData.name && agentData.description && agentData.domain ? 'complete' : 'pending';
-      case 'complete':
-        return 'pending'; // This should be set explicitly
-      default:
-        return 'pending';
-    }
-  }
-  
+
   // If this is the current step, it's processing
   if (currentStep === stepId) {
     return 'processing';
   }
+
+  // For schedules, check if they exist
+  if (stepId === 'schedules') {
+    return agentData?.schedules && agentData.schedules?.length > 0 ? 'complete' : 'pending';
+  }
   
+  // For models, check if they exist 
+  if (stepId === 'models') {
+    return agentData?.models && agentData.models?.length > 0 ? 'complete' : 'pending';
+  }
+  
+  // For examples, check if they exist (only for new models)
+  if (stepId === 'examples') {
+    return agentData?.models?.some((model: any) => model.records && model.records.length > 0) ? 'complete' : 'pending';
+  }
+  
+  // For actions, check if they exist
+  if (stepId === 'actions') {
+    return agentData?.actions && agentData.actions?.length > 0 ? 'complete' : 'pending';
+  }
+  
+  // For overview, check if basic info exists
+  if (stepId === 'overview') {
+    return agentData?.name && agentData?.description && agentData?.domain ? 'complete' : 'pending';
+  }
+  
+  // For complete step, check if all components are complete
+  if (stepId === 'complete') {
+    const hasBasicInfo = agentData?.name && agentData?.description && agentData?.domain;
+    const hasModels = agentData?.models && agentData.models?.length > 0;
+    const hasActions = agentData?.actions && agentData.actions?.length > 0;
+    return hasBasicInfo && hasModels && hasActions ? 'complete' : 'pending';
+  }
+  
+  // For early analysis steps, we rely on stepProgress or currentStep
   return 'pending';
 };
+
+// Helper function to calculate progress percentage consistently
+const calculateProgressPercentage = (currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>, agentData?: any) => {
+  // Map orchestrator step IDs to UI step IDs
+  const stepIdMapping: Record<string, string> = {
+    'step0': 'prompt-understanding',
+    'step1': 'analysis',
+    'step2': 'overview',
+    'step3': 'models',
+    'step4': 'actions',
+    'step5': 'schedules',
+    'complete': 'complete', // Direct mapping for complete step
+    'error': 'complete' // Map errors to complete step as well
+  };
+
+  // Reverse mapping for getting orchestrator step from UI step
+  const reverseStepMapping: Record<string, string> = {
+    'prompt-understanding': 'step0',
+    'analysis': 'step1',
+    'overview': 'step2',
+    'models': 'step3',
+    'actions': 'step4',
+    'schedules': 'step5',
+    'complete': 'complete'
+  };
+
+  const steps = [
+    { id: 'prompt-understanding', name: 'Understanding Requirements' },
+    { id: 'analysis', name: 'Analysis' },
+    { id: 'overview', name: 'Overview' },
+    { id: 'models', name: 'Data Models' },
+    { id: 'actions', name: 'Automated Actions' },
+    { id: 'schedules', name: 'Schedules' },
+    { id: 'complete', name: 'Complete' }
+  ];
+
+  // Enhanced getStepStatus function that handles both naming conventions
+  const getEnhancedStepStatus = (stepId: string) => {
+    // Check both the UI step ID and orchestrator step ID
+    const orchestratorStepId = reverseStepMapping[stepId] || stepId;
+    const uiStepId = stepIdMapping[stepId] || stepId;
+    
+    // Check stepProgress for both IDs
+    if (stepProgress) {
+      if (stepProgress[stepId as keyof typeof stepProgress]) {
+        return stepProgress[stepId as keyof typeof stepProgress];
+      }
+      if (orchestratorStepId && stepProgress[orchestratorStepId as keyof typeof stepProgress]) {
+        return stepProgress[orchestratorStepId as keyof typeof stepProgress];
+      }
+      if (uiStepId && stepProgress[uiStepId as keyof typeof stepProgress]) {
+        return stepProgress[uiStepId as keyof typeof stepProgress];
+      }
+    }
+    
+    // Check if this is the current step
+    if (currentStep === stepId || currentStep === orchestratorStepId || currentStep === uiStepId) {
+      return 'processing';
+    }
+    
+    // Determine based on step order
+    const stepOrder = steps.map(s => s.id);
+    const currentStepIndex = currentStep ? stepOrder.findIndex(s => s === currentStep || 
+      stepIdMapping[currentStep] === s || 
+      reverseStepMapping[currentStep] === s) : -1;
+    const thisStepIndex = stepOrder.indexOf(stepId);
+    
+    if (currentStepIndex >= 0 && thisStepIndex < currentStepIndex) {
+      return 'complete';
+    }
+    if (currentStepIndex >= 0 && thisStepIndex > currentStepIndex) {
+      return 'pending';
+    }
+    
+    return 'pending';
+  };
+  
+  const completedSteps = steps.filter(step => getEnhancedStepStatus(step.id) === 'complete').length;
+  
+  return (completedSteps / steps.length) * 100;
+};
+
+// Progress Indicator Component
+const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {}, stepProgress }: { 
+  currentStep?: string, 
+  agentData: any,
+  stepMessages?: Record<string, string>,
+  stepProgress?: {
+    'prompt-understanding'?: 'processing' | 'complete';
+    'granular-analysis'?: 'processing' | 'complete';
+    analysis?: 'processing' | 'complete';
+    'change-analysis'?: 'processing' | 'complete';
+    overview?: 'processing' | 'complete';
+    models?: 'processing' | 'complete';
+    actions?: 'processing' | 'complete';
+    schedules?: 'processing' | 'complete';
+    complete?: 'processing' | 'complete';
+  }
+}) => {
+  // Map orchestrator step IDs to UI step IDs
+  const stepIdMapping: Record<string, string> = {
+    'step0': 'prompt-understanding',
+    'step1': 'analysis',
+    'step2': 'overview',
+    'step3': 'models',
+    'step4': 'actions',
+    'step5': 'schedules',
+    'complete': 'complete'
+  };
+
+  // Reverse mapping for getting orchestrator step from UI step
+  const reverseStepMapping: Record<string, string> = {
+    'prompt-understanding': 'step0',
+    'analysis': 'step1',
+    'overview': 'step2',
+    'models': 'step3',
+    'actions': 'step4',
+    'schedules': 'step5',
+    'complete': 'complete'
+  };
+
+  const steps = [
+    { 
+      id: 'prompt-understanding', 
+      orchestratorId: 'step0',
+      title: 'Understanding Requirements',
+      description: 'Analyzing your request in detail',
+      icon: '🧠'
+    },
+    { 
+      id: 'analysis', 
+      orchestratorId: 'step1',
+      title: 'AI Decision Making',
+      description: 'Determining optimal approach',
+      icon: '🤖'
+    },
+    { 
+      id: 'overview', 
+      orchestratorId: 'step2',
+      title: 'System Architecture',
+      description: 'Designing system overview',
+      icon: '🏗️'
+    },
+    { 
+      id: 'models', 
+      orchestratorId: 'step3',
+      title: 'Data Models',
+      description: 'Defining data structures',
+      icon: '📊'
+    },
+    { 
+      id: 'actions', 
+      orchestratorId: 'step4',
+      title: 'Automated Actions',
+      description: 'Creating workflow automations',
+      icon: '⚡'
+    },
+    {
+      id: 'schedules',
+      orchestratorId: 'step5',
+      title: 'Schedules & Timing',
+      description: 'Automated execution timing',
+      icon: '⏰'
+    },
+    {
+      id: 'complete',
+      orchestratorId: 'complete',
+      title: 'Complete',
+      description: 'Agent system successfully generated',
+      icon: '✅'
+    }
+  ];
+
+  // Enhanced getStepStatus function that handles both naming conventions
+  const getEnhancedStepStatus = (stepId: string) => {
+    // Check both the UI step ID and orchestrator step ID
+    const orchestratorStepId = reverseStepMapping[stepId] || stepId;
+    const uiStepId = stepIdMapping[stepId] || stepId;
+    
+    // Check stepProgress for both IDs
+    if (stepProgress) {
+      if (stepProgress[stepId as keyof typeof stepProgress]) {
+        return stepProgress[stepId as keyof typeof stepProgress];
+      }
+      if (orchestratorStepId && stepProgress[orchestratorStepId as keyof typeof stepProgress]) {
+        return stepProgress[orchestratorStepId as keyof typeof stepProgress];
+      }
+      if (uiStepId && stepProgress[uiStepId as keyof typeof stepProgress]) {
+        return stepProgress[uiStepId as keyof typeof stepProgress];
+      }
+    }
+    
+    // Check if this is the current step
+    if (currentStep === stepId || currentStep === orchestratorStepId || currentStep === uiStepId) {
+      return 'processing';
+    }
+    
+    // Determine based on step order
+    const stepOrder = steps.map(s => s.id);
+    const currentStepIndex = currentStep ? stepOrder.findIndex(s => s === currentStep || 
+      stepIdMapping[currentStep] === s || 
+      reverseStepMapping[currentStep] === s) : -1;
+    const thisStepIndex = stepOrder.indexOf(stepId);
+    
+    if (currentStepIndex >= 0 && thisStepIndex < currentStepIndex) {
+      return 'complete';
+    }
+    if (currentStepIndex >= 0 && thisStepIndex > currentStepIndex) {
+      return 'pending';
+    }
+    
+    return 'pending';
+  };
+
+  // Enhanced getStepMessage function
+  const getEnhancedStepMessage = (stepId: string) => {
+    // Check both the UI step ID and orchestrator step ID
+    const orchestratorStepId = reverseStepMapping[stepId] || stepId;
+    const uiStepId = stepIdMapping[stepId] || stepId;
+    
+    if (stepMessages[stepId]) return stepMessages[stepId];
+    if (stepMessages[orchestratorStepId]) return stepMessages[orchestratorStepId];
+    if (stepMessages[uiStepId]) return stepMessages[uiStepId];
+    
+    return '';
+  };
+
+  const completedSteps = steps.filter(step => getEnhancedStepStatus(step.id) === 'complete').length;
+  const progressPercentage = calculateProgressPercentage(currentStep, stepProgress, agentData);
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900">Building Your AI Agent</h3>
+          <p className="text-sm text-gray-600 mt-1">
+            {completedSteps === steps.length 
+              ? '🎉 Agent successfully built!' 
+              : (() => {
+                  // Find the current active step or the next pending step
+                  const activeStep = steps.find(s => getEnhancedStepStatus(s.id) === 'processing');
+                  const nextPendingStep = steps.find(s => getEnhancedStepStatus(s.id) === 'pending');
+                  const currentStepLabel = activeStep?.title || nextPendingStep?.title || 'Processing';
+                  
+                  return `Step ${completedSteps + 1} of ${steps.length} - ${currentStepLabel}`;
+                })()
+            }
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-bold text-blue-600">{Math.round(progressPercentage)}%</div>
+          <div className="text-xs text-gray-500">Complete</div>
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="mb-6">
+        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+          <div 
+            className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-1000 ease-out"
+            style={{ width: `${progressPercentage}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Steps */}
+      <div className="space-y-4">
+        {steps.map((step, index) => {
+          const status = getEnhancedStepStatus(step.id);
+          const message = getEnhancedStepMessage(step.id);
+          
+          return (
+            <div 
+              key={step.id} 
+              className={`flex items-start space-x-4 p-4 rounded-lg transition-all duration-300 ${
+                status === 'complete' 
+                  ? 'bg-green-50 border border-green-200' 
+                  : status === 'processing' 
+                    ? 'bg-blue-50 border border-blue-200 shadow-md' 
+                    : 'bg-gray-50 border border-gray-200'
+              }`}
+            >
+              {/* Step Icon */}
+              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg font-semibold transition-all duration-300 ${
+                status === 'complete'
+                  ? 'bg-green-500 text-white'
+                  : status === 'processing'
+                    ? 'bg-blue-500 text-white animate-pulse'
+                    : 'bg-gray-300 text-gray-600'
+              }`}>
+                {status === 'complete' ? '✓' : status === 'processing' ? step.icon : index + 1}
+              </div>
+
+              {/* Step Content */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className={`font-medium ${
+                    status === 'complete' ? 'text-green-900' : 
+                    status === 'processing' ? 'text-blue-900' : 'text-gray-700'
+                  }`}>
+                    {step.title}
+                  </h4>
+                </div>
+
+                {/* Step Description/Message */}
+                <p className={`text-sm ${
+                  status === 'complete' ? 'text-green-700' : 
+                  status === 'processing' ? 'text-blue-700' : 'text-gray-600'
+                }`}>
+                  {message || step.description}
+                </p>
+
+                {/* Processing Animation */}
+                {status === 'processing' && (
+                  <div className="mt-3 flex items-center space-x-2">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <span className="text-xs text-blue-600 font-medium">Working...</span>
+                  </div>
+                )}
+
+                {/* Completion Details */}
+                {status === 'complete' && agentData && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {step.id === 'overview' && agentData.domain && (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
+                        {agentData.domain}
+                      </span>
+                    )}
+                    {step.id === 'models' && agentData.models && (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
+                        {agentData.models?.length} models created
+                      </span>
+                    )}
+                    {step.id === 'actions' && agentData.actions && (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
+                        {agentData.actions?.length} actions automated
+                      </span>
+                    )}
+                    {step.id === 'schedules' && agentData.schedules && (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
+                        {agentData.schedules?.length} schedules created
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // Model Editor Component
 const ModelEditor = memo(({ 
   model, 
@@ -1118,6 +1511,750 @@ const EnumEditor = memo(({
   );
 });
 
+// Action Editor Component
+const ActionEditor = memo(({ 
+  action, 
+  onUpdate, 
+  onDelete,
+  allModels 
+}: { 
+  action: AgentAction;
+  onUpdate: (action: AgentAction) => void;
+  onDelete: () => void;
+  allModels: AgentModel[];
+}) => {
+  return (
+    <div className="space-y-6">
+      {/* Action Basic Info */}
+      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
+            <span className="text-orange-400 text-xl">⚡</span>
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-green-200 font-mono">Action Configuration</h3>
+            <p className="text-green-400 text-sm font-mono">Define automated workflow behavior</p>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Action Name</Label>
+            <Input
+              value={action.name}
+              onChange={(e) => onUpdate({ ...action, name: e.target.value })}
+              placeholder="Action name (e.g., createUser, processOrder)"
+              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+            />
+          </div>
+
+        </div>
+        
+        <div className="mt-4 space-y-2">
+          <Label className="text-green-300 font-mono font-medium">Description</Label>
+          <Textarea
+            value={action.description}
+            onChange={(e) => onUpdate({ ...action, description: e.target.value })}
+            placeholder="Describe what this action does..."
+            rows={3}
+            className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+          />
+        </div>
+      </div>
+
+      {/* Role Configuration */}
+      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-orange-500 to-red-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Role Configuration</h4>
+        </div>
+        
+        <div className="space-y-4">
+            <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Access Role</Label>
+            <Select
+              value={action.role}
+              onValueChange={(value: 'admin' | 'member') => onUpdate({
+                  ...action,
+                role: value
+              })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="admin" className="text-green-200 focus:bg-green-500/20 font-mono">Admin Only</SelectItem>
+                <SelectItem value="member" className="text-green-200 focus:bg-green-500/20 font-mono">All Members</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-green-500/70 text-sm font-mono">Control who can trigger this action</p>
+            </div>
+        </div>
+      </div>
+
+      {/* Execution Logic */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <span className="text-green-400 text-lg">⚡</span>
+          <h3 className="text-lg font-semibold text-green-300 font-mono">Execution Logic</h3>
+        </div>
+        
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-green-300 font-mono">
+            Execution Type
+          </label>
+          <select
+            value={action.execute?.type || 'prompt'}
+            onChange={(e) => onUpdate({
+              ...action,
+              execute: {
+                ...action.execute,
+                type: e.target.value as 'code' | 'prompt'
+              }
+            })}
+            className="w-full px-3 py-2 bg-black/50 border border-green-500/30 rounded-lg text-green-100 font-mono focus:outline-none focus:border-green-400"
+          >
+            <option value="code">Code Script</option>
+            <option value="prompt">AI Prompt</option>
+          </select>
+        </div>
+
+        {action.execute?.type === 'code' && (
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-green-300 font-mono">
+              Script Code
+            </label>
+            <textarea
+              value={action.execute.code?.script || ''}
+              onChange={(e) => onUpdate({
+                ...action,
+                execute: {
+                  ...action.execute,
+                  code: {
+                    ...action.execute.code,
+                    script: e.target.value
+                  }
+                }
+              })}
+              rows={8}
+              className="w-full px-3 py-2 bg-black/50 border border-green-500/30 rounded-lg text-green-100 font-mono text-sm focus:outline-none focus:border-green-400"
+              placeholder="// Enter your JavaScript code here
+// Available parameters: database, input, member
+// Example:
+// try {
+//   const result = database['Model'].find(item => item.id === input.id);
+//   return { output: { result }, data: [] };
+// } catch (error) {
+//   throw new Error('Action failed: ' + error.message);
+// }"
+            />
+          </div>
+        )}
+
+        {action.execute?.type === 'prompt' && (
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-green-300 font-mono">
+              AI Prompt Template
+            </label>
+            <textarea
+              value={action.execute.prompt?.template || ''}
+              onChange={(e) => onUpdate({
+                ...action,
+                execute: {
+                  ...action.execute,
+                  prompt: {
+                    ...action.execute.prompt,
+                    template: e.target.value
+                  }
+                }
+              })}
+              rows={6}
+              className="w-full px-3 py-2 bg-black/50 border border-green-500/30 rounded-lg text-green-100 font-mono text-sm focus:outline-none focus:border-green-400"
+              placeholder="Enter your AI prompt template here..."
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Action Controls */}
+      <div className="flex justify-end pt-4 border-t border-green-500/20">
+        <Button
+          variant="destructive"
+          onClick={onDelete}
+          className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30 font-mono"
+        >
+          <CrossIcon size={16} />
+          <span className="ml-2">Delete Action</span>
+        </Button>
+      </div>
+    </div>
+  );
+});
+
+// Models List Editor Component
+const ModelsListEditor = memo(({ models, onModelsChange, updateMetadata, status }: {
+  models: AgentModel[];
+  onModelsChange: (models: AgentModel[]) => void;
+  updateMetadata: (updates: Partial<AgentArtifactMetadata>) => void;
+  status: 'streaming' | 'idle';
+}) => {
+  const [editingModelId, setEditingModelId] = useState<string | null>(null);
+  const [isAddingModel, setIsAddingModel] = useState(false);
+
+  // Helper function to check if a model has a published field
+  const hasPublishedField = useCallback((model: AgentModel): boolean => {
+    return model.fields.some(field => field.name === 'published' && field.type === 'Boolean');
+  }, []);
+
+  const addModel = useCallback(() => {
+    const newModel: AgentModel = {
+      id: generateNewId('model', models || []),
+      name: `Model${(models?.length || 0) + 1}`,
+      emoji: '🗃️', // Default emoji, will be auto-generated by AI
+      idField: 'id',
+      displayFields: [],
+      fields: [
+        {
+          id: 'fld1',
+          name: 'id',
+          type: 'String',
+          isId: true,
+          unique: true,
+          list: false,
+          required: true,
+          kind: 'scalar',
+          relationField: false,
+          title: 'ID',
+          sort: false,
+          order: 1
+        },
+        {
+          id: 'fld2',
+          name: 'published',
+          type: 'Boolean',
+          isId: false,
+          unique: false,
+          list: false,
+          required: false,
+          kind: 'scalar',
+          relationField: false,
+          title: 'Published',
+          sort: false,
+          order: 2,
+          defaultValue: 'false'
+        }
+      ],
+      enums: [],
+      hasPublishedField: true
+    };
+    
+    // Add to top of list and set to editing mode
+    onModelsChange([newModel, ...(models || [])]);
+    setEditingModelId(newModel.id);
+  }, [models, onModelsChange]);
+
+  const updateModel = useCallback((updatedModel: AgentModel) => {
+    const updatedModels = models.map(model => 
+      model.id === updatedModel.id ? updatedModel : model
+    );
+    onModelsChange(updatedModels);
+  }, [models, onModelsChange]);
+
+  const deleteModel = useCallback((modelId: string) => {
+    const model = models.find(m => m.id === modelId);
+    const modelName = model?.name || 'this model';
+    
+    if (window.confirm(`Are you sure you want to delete model "${modelName}"? This action cannot be undone and will remove all associated data.`)) {
+      onModelsChange(models.filter(model => model.id !== modelId));
+      if (editingModelId === modelId) {
+        setEditingModelId(null);
+      }
+    }
+  }, [models, onModelsChange, editingModelId]);
+
+  const viewModelData = useCallback((modelId: string) => {
+    console.log('🔍 Data button clicked for modelId:', modelId);
+    updateMetadata({
+      dataManagement: {
+        viewingModelId: modelId,
+        editingRecordId: null,
+        isAddingRecord: false
+      }
+    });
+    console.log('🔍 Called updateMetadata with viewingModelId:', modelId);
+  }, [updateMetadata]);
+
+  const backToModelsList = useCallback(() => {
+    setEditingModelId(null);
+    updateMetadata({ dataManagement: null });
+  }, [updateMetadata]);
+
+  if (editingModelId && models.find(m => m.id === editingModelId)) {
+    const editingModel = models.find(m => m.id === editingModelId)!;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center">
+          <Button
+            onClick={backToModelsList}
+            className="btn-matrix px-4 py-2 mx-4"
+          >
+            ← Back
+          </Button>
+          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Model: {editingModel.name}</h3>
+         
+        </div>
+        <ModelEditor
+          model={editingModel}
+          onUpdate={updateModel}
+          onDelete={() => deleteModel(editingModel.id)}
+          allModels={models}
+          allEnums={editingModel.enums || []}
+          updateModel={updateModel}
+          allActions={[]}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header - Updated to match Schedules style */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Data Models</h3>
+          <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
+            <span className="text-green-300 text-sm font-medium font-mono">{models.length} models</span>
+          </div>
+        </div>
+        <Button 
+          onClick={addModel}
+          disabled={status === 'streaming'}
+          className="btn-matrix px-3 sm:px-4 py-2"
+        >
+          <div className="flex items-center gap-2">
+            <PlusIcon size={16} />
+            <span>Add Model</span>
+          </div>
+        </Button>
+      </div>
+
+      <div className="grid gap-3 sm:gap-4">
+        {models.map((model) => (
+          <div key={model.id} className="p-4 sm:p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm hover:border-green-500/40 transition-colors">
+            {/* Mobile-first layout */}
+            <div className="flex flex-col gap-4">
+              {/* Top section with icon, title, and stats */}
+              <div className="flex items-start gap-3 sm:gap-4">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-green-500/20 flex items-center justify-center border border-green-500/30 flex-shrink-0">
+                  <span className="text-lg sm:text-xl">{model.emoji || '🗃️'}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{model.name || 'Unnamed Model'}</h4>
+                  {model.description && (
+                    <p className="text-green-300 text-xs sm:text-sm font-mono mt-1 opacity-80 leading-relaxed">
+                      {/* Truncate on mobile for better layout */}
+                      <span className="sm:hidden">
+                        {model.description.length > 60 
+                          ? `${model.description.substring(0, 60)}...` 
+                          : model.description}
+                      </span>
+                      <span className="hidden sm:inline">
+                        {model.description}
+                      </span>
+                    </p>
+                  )}
+                  {/* Stats row - responsive */}
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-2">
+                    <span className="text-green-400 text-xs sm:text-sm font-mono">
+                      {model.fields.length} fields • {model.enums?.length || 0} enums
+                    </span>
+                    <span className="text-blue-400 text-xs sm:text-sm font-mono">
+                      {model.records?.length || 0} records
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Action buttons - Full width on mobile */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-green-500/10">
+                <Button
+                  onClick={() => setEditingModelId(model.id)}
+                  size="sm"
+                  className="btn-matrix px-3 py-2 text-xs sm:text-sm w-full sm:w-auto flex-1 sm:flex-none"
+                >
+                  <span>Edit Model</span>
+                </Button>
+                <Button
+                  onClick={() => viewModelData(model.id)}
+                  size="sm"
+                  className="btn-matrix px-3 py-2 text-xs sm:text-sm w-full sm:w-auto flex-1 sm:flex-none"
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <span className="text-sm">📊</span>
+                    <span>View Data</span>
+                  </div>
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {models.length === 0 && (
+          <div className="text-center py-8 sm:py-12">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-green-800/30 flex items-center justify-center border border-green-500/20">
+              <span className="text-2xl sm:text-4xl">🗃️</span>
+            </div>
+            <h4 className="text-lg sm:text-xl font-semibold text-green-300 mb-2 font-mono">No Models Defined</h4>
+            <p className="text-green-500 text-sm font-mono mb-6 px-4">Create your first data model to get started</p>
+            <Button 
+              onClick={addModel}
+              disabled={status === 'streaming'}
+              className="btn-matrix px-4 sm:px-6 py-2 sm:py-3 w-full sm:w-auto max-w-xs"
+            >
+              <div className="flex items-center gap-2 justify-center">
+                <PlusIcon size={16} />
+                <span>Create First Model</span>
+              </div>
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// Actions List Editor Component  
+const ActionsListEditor = memo(({ 
+  actions, 
+  updateActions, 
+  editingId, 
+  setEditingId, 
+  addAction,
+  models,
+  status
+}: { 
+  actions: AgentAction[];
+  updateActions: (actions: AgentAction[]) => void;
+  editingId: string | null;
+  setEditingId: (id: string | null) => void;
+  addAction: () => void;
+  models: AgentModel[];
+  status: 'streaming' | 'idle';
+}) => {
+  const [runActionId, setRunActionId] = useState<string | null>(null);
+  
+  const updateAction = useCallback((updatedAction: AgentAction) => {
+    updateActions(actions.map(action => 
+      action.id === updatedAction.id ? updatedAction : action
+    ));
+  }, [actions, updateActions]);
+
+  const deleteAction = useCallback((actionId: string) => {
+    const action = actions.find(a => a.id === actionId);
+    const actionName = action?.name || 'this action';
+    
+    if (window.confirm(`Are you sure you want to delete action "${actionName}"? This action cannot be undone.`)) {
+      updateActions(actions.filter(action => action.id !== actionId));
+      if (editingId === actionId) {
+        setEditingId(null);
+      }
+    }
+  }, [actions, updateActions, editingId, setEditingId]);
+
+  if (editingId && actions.find(a => a.id === editingId)) {
+    const editingAction = actions.find(a => a.id === editingId)!;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center">
+          <Button
+            onClick={() => setEditingId(null)}
+            className="btn-matrix px-4 py-2 mx-4"
+          >
+            ← Back
+          </Button>
+          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Action: {editingAction.name}</h3>
+         
+        </div>
+        <ActionEditor
+          action={editingAction}
+          onUpdate={updateAction}
+          onDelete={() => deleteAction(editingAction.id)}
+          allModels={models}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header - Updated to match Schedules style */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Automated Actions</h3>
+          <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
+            <span className="text-green-300 text-sm font-medium font-mono">{actions.length} actions</span>
+          </div>
+        </div>
+        <Button 
+          onClick={addAction}
+          disabled={status === 'streaming'}
+          className="btn-matrix px-3 sm:px-4 py-2"
+        >
+          <div className="flex items-center gap-2">
+            <PlusIcon size={16} />
+            <span>Add Action</span>
+          </div>
+        </Button>
+      </div>
+
+      <div className="grid gap-4">
+        {actions.map((action) => (
+          <div key={action.id} className="p-4 sm:p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm hover:border-blue-500/40 transition-colors">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-500/20 flex items-center justify-center border border-blue-500/30 flex-shrink-0">
+                  <span className="text-lg sm:text-xl">{action.emoji || '⚡'}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{action.name || 'Unnamed Action'}</h4>
+                  <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
+                    {action.role}
+                  </p>
+                  {action.description && (
+                    <p className="text-green-300/80 text-xs sm:text-sm font-mono leading-relaxed">
+                      {action.description.length > 100 
+                        ? `${action.description.substring(0, 100)}...` 
+                        : action.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2 sm:ml-4">
+                <Button
+                  onClick={() => setRunActionId(action.id)}
+                  className="btn-matrix px-3 sm:px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 border-green-500/30"
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <span>▶️</span>
+                    <span className="text-xs sm:text-sm">Run</span>
+                  </div>
+                </Button>
+                <Button
+                  onClick={() => setEditingId(action.id)}
+                  className="btn-matrix px-3 sm:px-4 py-2"
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <PencilEditIcon size={14} />
+                    <span className="text-xs sm:text-sm">Edit</span>
+                  </div>
+                </Button>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {actions.length === 0 && (
+          <div className="text-center py-8 sm:py-12">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-blue-800/30 flex items-center justify-center border border-blue-500/20">
+              <span className="text-3xl sm:text-4xl">⚡</span>
+            </div>
+            <h4 className="text-lg sm:text-xl font-semibold text-green-300 mb-2 font-mono">No Actions Defined</h4>
+            <p className="text-green-500 text-sm font-mono mb-4 sm:mb-6 px-4">Create automated actions for your agent</p>
+            <Button 
+              onClick={addAction}
+              disabled={status === 'streaming'}
+              className="btn-matrix px-4 sm:px-6 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <PlusIcon size={16} />
+                <span>Create First Action</span>
+              </div>
+            </Button>
+          </div>
+        )}
+      </div>
+      
+      {/* Run Action Modal */}
+      {runActionId && (
+        <RunActionModal
+          action={actions.find(a => a.id === runActionId)!}
+          models={models}
+          onClose={() => setRunActionId(null)}
+        />
+      )}
+    </div>
+  );
+});
+
+// Schedules List Editor Component
+const SchedulesListEditor = memo(({ 
+  schedules, 
+  updateSchedules, 
+  editingId, 
+  setEditingId, 
+  addSchedule,
+  models,
+  status
+}: { 
+  schedules: AgentSchedule[];
+  updateSchedules: (schedules: AgentSchedule[]) => void;
+  editingId: string | null;
+  setEditingId: (id: string | null) => void;
+  addSchedule: () => void;
+  models: AgentModel[];
+  status: 'streaming' | 'idle';
+}) => {
+  const updateSchedule = useCallback((updatedSchedule: AgentSchedule) => {
+    updateSchedules(schedules.map(schedule => 
+      schedule.id === updatedSchedule.id ? updatedSchedule : schedule
+    ));
+  }, [schedules, updateSchedules]);
+
+  const deleteSchedule = useCallback((scheduleId: string) => {
+    const schedule = schedules.find(s => s.id === scheduleId);
+    const scheduleName = schedule?.name || 'this schedule';
+    
+    if (window.confirm(`Are you sure you want to delete schedule "${scheduleName}"? This action cannot be undone.`)) {
+      updateSchedules(schedules.filter(schedule => schedule.id !== scheduleId));
+      if (editingId === scheduleId) {
+        setEditingId(null);
+      }
+    }
+  }, [schedules, updateSchedules, editingId, setEditingId]);
+
+  if (editingId && schedules.find(s => s.id === editingId)) {
+    const editingSchedule = schedules.find(s => s.id === editingId)!;
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center">
+          <Button
+            onClick={() => setEditingId(null)}
+            className="btn-matrix px-4 py-2 mx-4"
+          >
+            ← Back
+          </Button>
+          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Schedule: {editingSchedule.name}</h3>
+
+        </div>
+        <div className="p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
+          <ScheduleEditor
+            schedule={editingSchedule}
+            onUpdate={updateSchedule}
+            onDelete={() => deleteSchedule(editingSchedule.id)}
+            allModels={models}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Schedules & Timing</h3>
+          <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
+            <span className="text-green-300 text-sm font-medium font-mono">{schedules.length} schedules</span>
+          </div>
+        </div>
+        <Button 
+          onClick={addSchedule}
+          disabled={status === 'streaming'}
+          className="btn-matrix px-3 sm:px-4 py-2"
+        >
+          <div className="flex items-center gap-2">
+            <PlusIcon size={16} />
+            <span>Add Schedule</span>
+          </div>
+        </Button>
+      </div>
+
+      <div className="grid gap-4">
+        {schedules.map((schedule) => (
+          <div key={schedule.id} className="p-4 sm:p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm hover:border-purple-500/40 transition-colors">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-500/20 flex items-center justify-center border border-purple-500/30 flex-shrink-0">
+                  <span className="text-lg sm:text-xl">{schedule.emoji || '⏰'}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{schedule.name || 'Unnamed Schedule'}</h4>
+                  <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
+                    {schedule.type} • {schedule.interval.pattern} • {schedule.interval.active ? 'Active' : 'Inactive'}
+                  </p>
+                  {schedule.description && (
+                    <p className="text-green-300/80 text-xs sm:text-sm font-mono leading-relaxed">
+                      {schedule.description.length > 100 
+                        ? `${schedule.description.substring(0, 100)}...` 
+                        : schedule.description}
+                    </p>
+                  )}
+                </div>
+              </div>
+              
+              {/* Mobile-optimized controls */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-2">
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => {
+                      // Toggle activation
+                      const updatedSchedule = {
+                        ...schedule,
+                        interval: { ...schedule.interval, active: !schedule.interval.active }
+                      };
+                      updateSchedule(updatedSchedule);
+                    }}
+                    className={`font-mono px-3 sm:px-4 py-2 flex-1 sm:flex-initial ${
+                      schedule.interval.active 
+                        ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30'
+                        : 'bg-green-500/20 hover:bg-green-500/30 text-green-400 border-green-500/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 justify-center">
+                      <span>{schedule.interval.active ? '⏸️' : '▶️'}</span>
+                      <span className="text-xs sm:text-sm">{schedule.interval.active ? 'Pause' : 'Activate'}</span>
+                    </div>
+                  </Button>
+                  <Button
+                    onClick={() => setEditingId(schedule.id)}
+                    className="btn-matrix px-3 sm:px-4 py-2 flex-1 sm:flex-initial"
+                  >
+                    <div className="flex items-center gap-2 justify-center">
+                      <PencilEditIcon size={14} />
+                      <span className="text-xs sm:text-sm">Edit</span>
+                    </div>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {schedules.length === 0 && (
+          <div className="text-center py-8 sm:py-12">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-purple-800/30 flex items-center justify-center border border-purple-500/20">
+              <span className="text-3xl sm:text-4xl">⏰</span>
+            </div>
+            <h4 className="text-lg sm:text-xl font-semibold text-green-300 mb-2 font-mono">No Schedules Defined</h4>
+            <p className="text-green-500 text-sm font-mono mb-4 sm:mb-6 px-4">Create scheduled tasks for your agent</p>
+            <Button 
+              onClick={addSchedule}
+              disabled={status === 'streaming'}
+              className="btn-matrix px-4 sm:px-6 py-3"
+            >
+              <div className="flex items-center gap-2">
+                <PlusIcon size={16} />
+                <span>Create First Schedule</span>
+              </div>
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 // Model Data Viewer Component
 const ModelDataViewer = memo(({ 
   model, 
@@ -1783,6 +2920,231 @@ const RecordEditor = memo(({
   );
 });
 
+// Schedule Editor Component
+const ScheduleEditor = memo(({ 
+  schedule, 
+  onUpdate, 
+  onDelete,
+  allModels
+}: { 
+  schedule: AgentSchedule;
+  onUpdate: (schedule: AgentSchedule) => void;
+  onDelete: () => void;
+  allModels: AgentModel[];
+}) => {
+  return (
+    <div className="space-y-6">
+      {/* Name and Description */}
+      <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Schedule Configuration</h4>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Schedule Name</Label>
+            <Input
+              value={schedule.name}
+              onChange={(e) => onUpdate({ ...schedule, name: e.target.value })}
+              placeholder="e.g., Daily Report Generation"
+              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Schedule Type</Label>
+            <Select
+              value={schedule.type}
+              onValueChange={(value: 'Create' | 'Update') => onUpdate({ ...schedule, type: value })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="Create" className="text-green-200 focus:bg-green-500/20 font-mono">Create Records</SelectItem>
+                <SelectItem value="Update" className="text-green-200 focus:bg-green-500/20 font-mono">Update Records</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Required Role</Label>
+            <Select
+              value={schedule.role}
+              onValueChange={(value: 'admin' | 'member') => onUpdate({ ...schedule, role: value })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="admin" className="text-green-200 focus:bg-green-500/20 font-mono">Admin Only</SelectItem>
+                <SelectItem value="member" className="text-green-200 focus:bg-green-500/20 font-mono">All Members</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        
+        <div className="space-y-2">
+          <Label className="text-green-300 font-mono font-medium">Description</Label>
+          <Textarea
+            value={schedule.description}
+            onChange={(e) => onUpdate({ ...schedule, description: e.target.value })}
+            placeholder="Describe what this schedule does and its business purpose..."
+            rows={3}
+            className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+          />
+          {schedule.description && (
+            <p className="text-green-400 text-sm font-mono mt-2">{schedule.description}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Schedule Interval */}
+      <div className="p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Schedule Timing</h4>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Schedule Pattern</Label>
+            <Input
+              value={schedule.interval.pattern}
+              onChange={(e) => onUpdate({
+                ...schedule,
+                interval: { ...schedule.interval, pattern: e.target.value }
+              })}
+              placeholder="e.g., daily, weekly, 0 9 * * 1-5"
+              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Timezone</Label>
+            <Input
+              value={schedule.interval.timezone || ''}
+              onChange={(e) => onUpdate({
+                ...schedule,
+                interval: { ...schedule.interval, timezone: e.target.value }
+              })}
+              placeholder="e.g., America/New_York"
+              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+            />
+          </div>
+          
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Status</Label>
+            <Select
+              value={schedule.interval.active ? 'active' : 'inactive'}
+              onValueChange={(value) => onUpdate({
+                ...schedule,
+                interval: { ...schedule.interval, active: value === 'active' }
+              })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="active" className="text-green-200 focus:bg-green-500/20 font-mono">Active</SelectItem>
+                <SelectItem value="inactive" className="text-green-200 focus:bg-green-500/20 font-mono">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Execution Configuration */}
+      <div className="p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
+          <h4 className="text-lg font-semibold text-green-200 font-mono">Execution Configuration</h4>
+        </div>
+        
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-green-300 font-mono font-medium">Execution Type</Label>
+            <Select
+              value={schedule.execute.type}
+              onValueChange={(value: 'code' | 'prompt') => onUpdate({
+                ...schedule,
+                execute: value === 'code' 
+                  ? { type: 'code', code: { script: '' } }
+                  : { type: 'prompt', prompt: { template: '' } }
+              })}
+            >
+              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-black border-green-500/30">
+                <SelectItem value="code" className="text-green-200 focus:bg-green-500/20 font-mono">JavaScript Code</SelectItem>
+                <SelectItem value="prompt" className="text-green-200 focus:bg-green-500/20 font-mono">AI Prompt</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {schedule.execute.type === 'code' && (
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">Script Code</Label>
+              <Textarea
+                value={schedule.execute.code?.script || ''}
+                onChange={(e) => onUpdate({
+                  ...schedule,
+                  execute: {
+                    ...schedule.execute,
+                    code: {
+                      ...schedule.execute.code,
+                      script: e.target.value
+                    }
+                  }
+                })}
+                placeholder="// Processing script here..."
+                rows={6}
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-sm"
+              />
+            </div>
+          )}
+          
+          {schedule.execute.type === 'prompt' && (
+            <div className="space-y-2">
+              <Label className="text-green-300 font-mono font-medium">AI Prompt Template</Label>
+              <Textarea
+                value={schedule.execute.prompt?.template || ''}
+                onChange={(e) => onUpdate({
+                  ...schedule,
+                  execute: {
+                    ...schedule.execute,
+                    prompt: {
+                      ...schedule.execute.prompt,
+                      template: e.target.value
+                    }
+                  }
+                })}
+                placeholder="Analyze the following data and..."
+                rows={6}
+                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Schedule Controls */}
+      <div className="flex justify-end pt-4 border-t border-green-500/20">
+        <Button
+          variant="destructive"
+          onClick={onDelete}
+          className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30 font-mono"
+        >
+          <CrossIcon size={16} />
+          <span className="ml-2">Delete Schedule</span>
+        </Button>
+      </div>
+    </div>
+  );
+});
+
 // Main Agent Builder Component
 const AgentBuilderContent = memo(({
   content,
@@ -1810,7 +3172,6 @@ const AgentBuilderContent = memo(({
   setMessages?: UseChatHelpers['setMessages'];
 }) => {
   const { artifact } = useArtifact();
-  const documentId = artifact?.documentId; // Get documentId from artifact
   
   // Initialize metadata with defaults if null
   const safeMetadata: AgentArtifactMetadata = metadata || {
@@ -2078,7 +3439,7 @@ const AgentBuilderContent = memo(({
       interval: {
         pattern: '0 0 * * *',
         timezone: 'UTC',
-        active: false
+        active: true
       },
       dataSource: {
         type: 'database',
@@ -2447,13 +3808,8 @@ const AgentBuilderContent = memo(({
                   <ModelsListEditor
                     models={agentData.models || []}
                     onModelsChange={(models) => updateAgentData({ ...agentData, models })}
-                    updateMetadata={(updates) => {
-                      setMetadata({ 
-                        ...safeMetadata, 
-                        ...updates
-                      });
-                    }}
-                    status={'idle'}
+                    updateMetadata={updateMetadata}
+                    status={status}
                   />
                 );
               }
@@ -2468,9 +3824,12 @@ const AgentBuilderContent = memo(({
                 return (
                   <ActionsListEditor
                     actions={agentData.actions || []}
-                    onUpdate={(actions) => updateAgentData({ ...agentData, actions })}
-                    allModels={agentData.models || []}
-                    documentId={documentId}
+                    updateActions={(actions) => updateAgentData({ ...agentData, actions })}
+                    editingId={safeMetadata.editingAction}
+                    setEditingId={(id) => updateMetadata({ editingAction: id })}
+                    addAction={addAction}
+                    models={agentData.models || []}
+                    status={status}
                   />
                 );
               }
@@ -2485,9 +3844,12 @@ const AgentBuilderContent = memo(({
                 return (
                   <SchedulesListEditor
                     schedules={agentData.schedules || []}
-                    onUpdate={(schedules) => updateAgentData({ ...agentData, schedules })}
-                    allModels={agentData.models || []}
-                    documentId={documentId}
+                    updateSchedules={(schedules) => updateAgentData({ ...agentData, schedules })}
+                    editingId={safeMetadata.editingSchedule}
+                    setEditingId={(id) => updateMetadata({ editingSchedule: id })}
+                    addSchedule={addSchedule}
+                    models={agentData.models || []}
+                    status={status}
                   />
                 );
               }

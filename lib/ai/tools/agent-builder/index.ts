@@ -479,7 +479,7 @@ The tool maintains state throughout the generation process and can resume from a
       console.log('🔄 Fetching fresh document content from database...');
       try {
         const freshDocument = await getDocumentById({ id: documentId });
-        if (freshDocument && freshDocument.content) {
+        if (freshDocument?.content) {
           console.log('✅ Found fresh document content in database');
           try {
             const freshParsedContent = JSON.parse(freshDocument.content);

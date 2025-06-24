@@ -3,7 +3,6 @@ import type {
   AgentModel, 
   AgentAction, 
   AgentSchedule,
-  AgentEnum
 } from './types';
 import { generateUUID } from '../../../utils';
 
