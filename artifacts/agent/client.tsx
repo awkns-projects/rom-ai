@@ -2250,22 +2250,22 @@ const AgentBuilderContent = memo(({
           
           {/* Enhanced Progress Indicator - Only show when AI is actually running */}
           {status === 'streaming' && (
-            <div className="mt-4 sm:mt-6 p-3 sm:p-4 rounded-2xl bg-black/50 border border-green-500/20 backdrop-blur-sm shadow-lg shadow-green-500/10">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-3">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                  <div className="text-sm font-medium text-green-200 font-mono">Build Progress</div>
-                  <div className="px-2 py-1 rounded-lg bg-green-500/20 text-green-300 text-xs font-medium font-mono border border-green-500/30 self-start">
+            <div className="mt-3 sm:mt-6 p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-black/50 border border-green-500/20 backdrop-blur-sm shadow-lg shadow-green-500/10">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-2 sm:mb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                  <div className="text-xs sm:text-sm font-medium text-green-200 font-mono">Build Progress</div>
+                  <div className="px-2 py-0.5 sm:py-1 rounded-lg bg-green-500/20 text-green-300 text-xs font-medium font-mono border border-green-500/30 self-start">
                     {agentData?.name || 'AI Agent System'}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-blue-600">{Math.round(calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData))}%</div>
+                  <div className="text-xl sm:text-2xl font-bold text-blue-600">{Math.round(calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData))}%</div>
                   <div className="text-xs text-gray-500">Complete</div>
                 </div>
               </div>
               
               {/* Progress Bar */}
-              <div className="relative h-2 bg-green-500/10 rounded-full overflow-hidden border border-green-500/20">
+              <div className="relative h-1.5 sm:h-2 bg-green-500/10 rounded-full overflow-hidden border border-green-500/20">
                 <div 
                   className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-700 rounded-full transition-all duration-1000 ease-out shadow-lg shadow-green-500/30"
                   style={{ width: `${calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData)}%` }}
@@ -2275,7 +2275,7 @@ const AgentBuilderContent = memo(({
               </div>
               
               {/* Progress Steps */}
-               <div className="flex justify-center mt-4 text-xs font-mono">
+               <div className="flex justify-center mt-2 sm:mt-4 text-xs font-mono">
                 {(() => {
                   const steps = [
                     { id: 'prompt-understanding', label: 'Analysis' },
