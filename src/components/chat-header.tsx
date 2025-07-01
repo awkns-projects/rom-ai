@@ -49,7 +49,7 @@ function PureChatHeader({
               }}
             >
               <PlusIcon />
-              <span className="md:sr-only">NEW CHAT</span>
+              <span className="hidden md:inline">NEW CHAT</span>
             </Button>
           </TooltipTrigger>
           <TooltipContent className="bg-black border-green-500/30 text-green-200 font-mono">NEW CHAT</TooltipContent>
@@ -74,13 +74,14 @@ function PureChatHeader({
       )}
 
       <Button
-        className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-black border border-green-500/30 shadow-lg shadow-green-500/20 hover:shadow-green-500/40 hidden md:flex py-1.5 px-2 h-fit md:h-[34px] order-4 md:ml-auto font-mono font-medium"
+        className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-black border border-green-500/30 shadow-lg shadow-green-500/20 hover:shadow-green-500/40 py-1.5 px-2 h-fit md:h-[34px] order-4 md:ml-auto font-mono font-medium"
         asChild
       >
         <Link
           href={`/deployment`}
         >
-          My Agents
+          <span className="md:hidden">🤖</span>
+          <span className="hidden md:inline">My Agents</span>
         </Link>
       </Button> 
     </header>

@@ -11,6 +11,7 @@ export interface AgentData {
   actions: AgentAction[];
   schedules: AgentSchedule[];
   createdAt: string;
+  theme?: string; // Stored theme selection for the agent
   metadata?: {
     createdAt: string;
     updatedAt: string;

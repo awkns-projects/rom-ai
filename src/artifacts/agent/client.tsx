@@ -185,6 +185,7 @@ interface AgentData {
   actions: AgentAction[];
   schedules: AgentSchedule[];
   createdAt: string;
+  theme?: string; // Stored theme selection for the agent
   metadata?: {
     createdAt: string;
     updatedAt: string;
@@ -697,9 +698,11 @@ const AgentBuilderContent = memo(({
       currentModels: agentData.models?.length || 0,
       currentActions: agentData.actions?.length || 0,
       currentSchedules: agentData.schedules?.length || 0,
+      currentTheme: agentData.theme,
       newModels: newData.models?.length || 0,
       newActions: newData.actions?.length || 0,
       newSchedules: newData.schedules?.length || 0,
+      newTheme: newData.theme,
       currentModelNames: (agentData.models || []).map((m: AgentModel) => m.name),
       newModelNames: (newData.models || []).map((m: AgentModel) => m.name),
       currentActionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
@@ -710,7 +713,7 @@ const AgentBuilderContent = memo(({
     
     setAgentData(newData);
     setHasUnsavedChanges(true);
-  }, [agentData.models, agentData.actions, agentData.schedules]);
+  }, [agentData]);
 
   // Enhanced save function
   const saveAgentToConversation = useCallback(async () => {
@@ -789,28 +792,34 @@ const AgentBuilderContent = memo(({
           actions: Array.isArray(parsed.actions) ? parsed.actions : [],
           schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
           createdAt: parsed.createdAt || new Date().toISOString(),
+          theme: parsed.theme, // Preserve theme selection
           metadata: parsed.metadata
         };
         
-        // Only update if data has actually changed
-        const currentDataString = JSON.stringify({
-          name: agentData.name,
-          description: agentData.description,
-          domain: agentData.domain,
-          models: agentData.models,
-          actions: agentData.actions,
-          schedules: agentData.schedules
+        // Use a more stable comparison approach
+        setAgentData(prevData => {
+          const currentDataString = JSON.stringify({
+            name: prevData.name,
+            description: prevData.description,
+            domain: prevData.domain,
+            models: prevData.models,
+            actions: prevData.actions,
+            schedules: prevData.schedules,
+            theme: prevData.theme
+          });
+          const newDataString = JSON.stringify(updatedData);
+          
+          // Only update if data has actually changed
+          if (currentDataString !== newDataString) {
+            return updatedData;
+          }
+          return prevData;
         });
-        const newDataString = JSON.stringify(updatedData);
-        
-        if (currentDataString !== newDataString) {
-          setAgentData(updatedData);
-        }
       }
     } catch (e) {
       console.warn('Failed to parse updated content:', e);
     }
-  }, [content]);
+  }, [content]); // Remove agentData dependency to prevent infinite loop
 
   // NOW ALL HOOKS ARE DECLARED - we can safely do early returns
   if (isLoading) {
@@ -1092,6 +1101,9 @@ const AgentBuilderContent = memo(({
                       ...safeMetadata, 
                       selectedTab: tab 
                     })} 
+                    models={agentData.models || []}
+                    agentData={agentData}
+                    onThemeChange={(theme) => updateAgentData({ ...agentData, theme })}
                   />
                 );
               }
