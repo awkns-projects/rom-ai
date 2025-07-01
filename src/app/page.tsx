@@ -106,8 +106,8 @@ const stats = [
 
 const navLinks = [
   { href: '#home', label: 'Home' },
-  { href: '#features', label: 'Features' },
   { href: '#demo', label: 'Demo' },
+  { href: '#features', label: 'Features' },
   { href: '#use-cases', label: 'Use Cases' },
   { href: '#marketplace', label: 'Marketplace' },
   { href: '#stats', label: 'Stats' },
