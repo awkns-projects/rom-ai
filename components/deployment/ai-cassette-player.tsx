@@ -383,6 +383,13 @@ export default function Component() {
   const getSelectedRomCard = () => romCards.find((card) => card.id === selectedRomCard)
   const getCurrentSlots = () => getSelectedRomCard()?.slots || []
   
+  // Helper function to check if a cassette can be inserted into the current ROM card
+  const canInsertCassetteInCurrentCard = (cassetteId: string) => {
+    const currentCard = getSelectedRomCard()
+    if (!currentCard) return false
+    return !currentCard.slots.some(slot => slot.cassetteId === cassetteId)
+  }
+
   // Helper function to count how many ROM cards an agent is deployed to
   const getAgentDeploymentCount = (cassetteId: string) => {
     return romCards.reduce((count, romCard) => {
@@ -597,6 +604,17 @@ export default function Component() {
   const insertCassette = (cassetteId: string, slotId: number) => {
     if (!selectedRomCard) return
     
+    const currentCard = getSelectedRomCard()
+    if (!currentCard) return
+    
+    // Check if this cassette is already inserted in this ROM card
+    const isAlreadyInCard = currentCard.slots.some(slot => slot.cassetteId === cassetteId)
+    if (isAlreadyInCard) {
+      // Could add a toast notification here
+      console.log(`Agent already deployed to this ROM card`)
+      return
+    }
+    
     setRomCards(cards => 
       cards.map(card => 
         card.id === selectedRomCard 
@@ -669,6 +687,12 @@ export default function Component() {
     const slot = currentCard?.slots.find(s => s.id === slotId)
     
     if (!slot?.isOccupied && selectedCassette) {
+      // Check if this cassette is already in this ROM card
+      const isAlreadyInCard = currentCard?.slots.some(s => s.cassetteId === selectedCassette)
+      if (isAlreadyInCard) {
+        console.log(`Agent already deployed to this ROM card`)
+        return
+      }
       insertCassette(selectedCassette, slotId)
     }
     
@@ -967,6 +991,9 @@ export default function Component() {
                           const currentCassette = cassettes.find((c) => c.id === insertedCassette?.id)
                           const displayBalance = currentCassette?.balance || insertedCassette?.balance || 0
                           const isLowBalance = insertedCassette && displayBalance < insertedCassette.costPerHour
+                          const deploymentCount = getAgentDeploymentCount(insertedCassette?.id || "")
+                          const activeCount = getAgentActiveCount(insertedCassette?.id || "")
+                          const isInCurrentCard = !canInsertCassetteInCurrentCard(insertedCassette?.id || "")
                           return (
                             <div
                               key={slot.id}
@@ -976,7 +1003,9 @@ export default function Component() {
                                     ? "border-cyan-400 bg-cyan-900/20 shadow-cyan-400/30"
                                     : "border-green-500/70 bg-green-900/20"
                                   : selectedCassette
-                                    ? "border-cyan-400 border-dashed animate-pulse shadow-cyan-400/50"
+                                    ? canInsertCassetteInCurrentCard(selectedCassette)
+                                      ? "border-cyan-400 border-dashed animate-pulse shadow-cyan-400/50"
+                                      : "border-red-400 border-dashed bg-red-900/10"
                                     : "border-green-500/30 hover:border-green-400/50"
                               } ${isLowBalance ? "ring-2 ring-red-400 animate-pulse" : ""}`}
                               onClick={() => handleSlotTap(slot.id)}
@@ -1071,16 +1100,53 @@ export default function Component() {
                               {!slot.isOccupied && (
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <div className="text-green-500/70 text-center">
-                                    {selectedCassette ? (
-                                      <div className="text-cyan-400 text-xs font-mono font-bold animate-pulse">
-                                        {">>> INSERT <<<"}
-                                      </div>
+                                    {selectedCassette && selectedRomCard === romCard.id ? (
+                                      canInsertCassetteInCurrentCard(selectedCassette) ? (
+                                        <div className="text-cyan-400">
+                                          <div className="text-sm font-mono font-bold mb-1 animate-pulse">
+                                            {">>> INSERT <<<"}
+                                          </div>
+                                          <div className="text-xs font-mono">SELECTED CASSETTE</div>
+                                        </div>
+                                      ) : (
+                                        <div className="text-red-400">
+                                          <div className="text-sm font-mono font-bold mb-1">
+                                            {">>> BLOCKED <<<"}
+                                          </div>
+                                          <div className="text-xs font-mono">ALREADY DEPLOYED</div>
+                                        </div>
+                                      )
                                     ) : (
                                       <div>
-                                        <div className="w-8 h-4 mx-auto mb-1 border border-dashed border-green-500/50 rounded"></div>
-                                        <div className="text-xs font-mono">EMPTY</div>
+                                        <div className="w-12 h-8 mx-auto mb-2 border-2 border-dashed border-green-500/50 rounded"></div>
+                                        <div className="text-xs font-mono">EMPTY SLOT</div>
                                       </div>
                                     )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Deployment Status */}
+                              {deploymentCount > 0 && (
+                                <div className="mt-2 text-center">
+                                  <div className="inline-flex items-center gap-1 bg-black/20 rounded px-2 py-1">
+                                    <div className="text-black text-xs font-mono font-bold">
+                                      {deploymentCount} ROM{deploymentCount > 1 ? 'S' : ''}
+                                      {activeCount > 0 && (
+                                        <span className="text-green-800"> • {activeCount} ACTIVE</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Current ROM Card Status */}
+                              {isInCurrentCard && (
+                                <div className="mt-2 text-center">
+                                  <div className="inline-flex items-center gap-2 bg-orange-500/20 rounded px-2 py-1">
+                                    <div className="text-orange-800 text-xs font-mono font-bold">
+                                      ALREADY IN THIS ROM CARD
+                                    </div>
                                   </div>
                                 </div>
                               )}
@@ -1125,6 +1191,7 @@ export default function Component() {
                   const isLowBalance = cassette.balance < cassette.costPerHour
                   const deploymentCount = getAgentDeploymentCount(cassette.id)
                   const activeCount = getAgentActiveCount(cassette.id)
+                  const isInCurrentCard = !canInsertCassetteInCurrentCard(cassette.id)
                   return (
                     <Card
                       key={cassette.id}
@@ -1132,7 +1199,9 @@ export default function Component() {
                         selectedCassette === cassette.id
                           ? "ring-2 ring-white/70 scale-105 shadow-2xl"
                           : "hover:scale-102 hover:shadow-xl"
-                      } ${isLowBalance ? "ring-2 ring-red-400" : ""}`}
+                      } ${isLowBalance ? "ring-2 ring-red-400" : ""} ${
+                        isInCurrentCard ? "opacity-60 ring-2 ring-orange-400" : ""
+                      }`}
                       onClick={() => handleCassetteSelect(cassette.id)}
                     >
                       <div className="flex items-center gap-2 mb-2">
@@ -1149,20 +1218,36 @@ export default function Component() {
                       {/* Deployment Status */}
                       {deploymentCount > 0 && (
                         <div className="mt-2 text-center">
-                          <div className="inline-flex items-center gap-1 bg-black/20 rounded px-2 py-1">
+                          <div className="inline-flex items-center gap-2 bg-black/20 rounded px-3 py-1">
                             <div className="text-black text-xs font-mono font-bold">
-                              {deploymentCount} ROM{deploymentCount > 1 ? 'S' : ''}
+                              DEPLOYED TO {deploymentCount} ROM CARD{deploymentCount > 1 ? 'S' : ''}
                               {activeCount > 0 && (
-                                <span className="text-green-800"> • {activeCount} ACTIVE</span>
+                                <div className="text-green-800 mt-1">
+                                  {activeCount} ACTIVELY RUNNING
+                                </div>
                               )}
                             </div>
                           </div>
                         </div>
                       )}
 
+                      {/* Current ROM Card Status */}
+                      {isInCurrentCard && (
+                        <div className="text-center mb-3">
+                          <div className="inline-flex items-center gap-2 bg-orange-500/20 rounded px-3 py-1">
+                            <div className="text-orange-800 text-xs font-mono font-bold">
+                              ALREADY IN THIS ROM CARD
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {selectedCassette === cassette.id && (
-                        <div className="mt-2 text-center">
-                          <div className="w-2 h-2 bg-black rounded-full animate-pulse mx-auto"></div>
+                        <div className="text-center mb-3">
+                          <div className="inline-flex items-center gap-2 bg-black/30 rounded px-3 py-1">
+                            <div className="w-2 h-2 bg-black rounded-full animate-pulse"></div>
+                            <span className="text-black text-xs font-mono font-bold">{">>> SELECTED <<<"}</span>
+                          </div>
                         </div>
                       )}
                     </Card>
@@ -1273,6 +1358,9 @@ export default function Component() {
                         const currentCassette = cassettes.find((c) => c.id === insertedCassette?.id)
                         const displayBalance = currentCassette?.balance || insertedCassette?.balance || 0
                         const isLowBalance = insertedCassette && displayBalance < insertedCassette.costPerHour
+                        const deploymentCount = getAgentDeploymentCount(insertedCassette?.id || "")
+                        const activeCount = getAgentActiveCount(insertedCassette?.id || "")
+                        const isInCurrentCard = !canInsertCassetteInCurrentCard(insertedCassette?.id || "")
                         return (
                           <div
                             key={slot.id}
@@ -1282,7 +1370,9 @@ export default function Component() {
                                   ? "border-cyan-400 bg-cyan-900/20 shadow-cyan-400/30"
                                   : "border-green-500/70 bg-green-900/20"
                                 : selectedCassette
-                                  ? "border-cyan-400 hover:border-cyan-300 shadow-cyan-400/50"
+                                  ? canInsertCassetteInCurrentCard(selectedCassette)
+                                    ? "border-cyan-400 hover:border-cyan-300 shadow-cyan-400/50"
+                                    : "border-red-400 bg-red-900/10 cursor-not-allowed"
                                   : "border-green-500/30 hover:border-green-400/50"
                             } ${isLowBalance ? "ring-2 ring-red-400 animate-pulse" : ""}`}
                             onClick={() => {
@@ -1377,12 +1467,21 @@ export default function Component() {
                               <div className="absolute inset-0 flex items-center justify-center">
                                 <div className="text-green-500/70 text-center">
                                   {selectedCassette && selectedRomCard === romCard.id ? (
-                                    <div className="text-cyan-400">
-                                      <div className="text-sm font-mono font-bold mb-1 animate-pulse">
-                                        {">>> INSERT <<<"}
+                                    canInsertCassetteInCurrentCard(selectedCassette) ? (
+                                      <div className="text-cyan-400">
+                                        <div className="text-sm font-mono font-bold mb-1 animate-pulse">
+                                          {">>> INSERT <<<"}
+                                        </div>
+                                        <div className="text-xs font-mono">SELECTED CASSETTE</div>
                                       </div>
-                                      <div className="text-xs font-mono">SELECTED CASSETTE</div>
-                                    </div>
+                                    ) : (
+                                      <div className="text-red-400">
+                                        <div className="text-sm font-mono font-bold mb-1">
+                                          {">>> BLOCKED <<<"}
+                                        </div>
+                                        <div className="text-xs font-mono">ALREADY DEPLOYED</div>
+                                      </div>
+                                    )
                                   ) : (
                                     <div>
                                       <div className="w-12 h-8 mx-auto mb-2 border-2 border-dashed border-green-500/50 rounded"></div>
@@ -1415,12 +1514,15 @@ export default function Component() {
                     const isLowBalance = cassette.balance < cassette.costPerHour
                     const deploymentCount = getAgentDeploymentCount(cassette.id)
                     const activeCount = getAgentActiveCount(cassette.id)
+                    const isInCurrentCard = !canInsertCassetteInCurrentCard(cassette.id)
                     return (
                       <Card
                         key={cassette.id}
                         className={`${cassette.gradient} p-4 cursor-pointer transform transition-all duration-200 shadow-lg hover:shadow-2xl border-2 border-black/20 ${
                           selectedCassette === cassette.id ? "ring-4 ring-white/70 scale-105" : "hover:scale-105"
-                        } ${isLowBalance ? "ring-2 ring-red-400" : ""}`}
+                        } ${isLowBalance ? "ring-2 ring-red-400" : ""} ${
+                          isInCurrentCard ? "opacity-60 ring-2 ring-orange-400" : ""
+                        }`}
                         onClick={() => handleCassetteSelect(cassette.id)}
                       >
                         <div className="flex items-center gap-3 mb-3">
@@ -1461,6 +1563,17 @@ export default function Component() {
                                     {activeCount} ACTIVELY RUNNING
                                   </div>
                                 )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Current ROM Card Status */}
+                        {isInCurrentCard && (
+                          <div className="text-center mb-3">
+                            <div className="inline-flex items-center gap-2 bg-orange-500/20 rounded px-3 py-1">
+                              <div className="text-orange-800 text-xs font-mono font-bold">
+                                ALREADY IN THIS ROM CARD
                               </div>
                             </div>
                           </div>

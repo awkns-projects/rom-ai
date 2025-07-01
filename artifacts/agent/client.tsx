@@ -2616,10 +2616,10 @@ const AgentBuilderContent = memo(({
                         </div>
                         <Button
                           onClick={() => openExplanationModal('schedules')}
-                          variant="outline"
-                          className="btn-matrix border-orange-500/30 hover:border-orange-500/50 text-orange-200 hover:text-orange-100 bg-transparent hover:bg-orange-500/10 px-4 py-2 text-sm whitespace-nowrap"
+                          className="bg-orange-600 hover:bg-orange-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors duration-200 flex items-center gap-2 shadow-lg hover:shadow-orange-500/25"
                         >
-                          Explain More
+                          <span>📅</span>
+                          How Schedules Work
                         </Button>
                       </div>
                     </div>
