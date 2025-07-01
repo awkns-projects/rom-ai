@@ -918,7 +918,86 @@ export default function Component() {
         {/* Mobile Layout */}
         {isMobile ? (
           <>
-            {/* ROM Cards Management */}
+            {/* Cassette Library Section - MOVED TO TOP */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-green-400 font-mono text-sm font-bold">{">>> MY_AGENTS.DIR <<<"}</h3>
+              </div>
+
+              {/* Horizontal Matrix Scroll */}
+              <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+                {cassettes.slice(0, 4).map((cassette) => {
+                  const isLowBalance = cassette.balance < cassette.costPerHour
+                  const deploymentCount = getAgentDeploymentCount(cassette.id)
+                  const activeCount = getAgentActiveCount(cassette.id)
+                  const isInCurrentCard = !canInsertCassetteInCurrentCard(cassette.id)
+                  return (
+                    <Card
+                      key={cassette.id}
+                      className={`${cassette.gradient} p-3 flex-shrink-0 w-40 transition-all duration-200 border-2 border-black/20 shadow-lg ${
+                        selectedCassette === cassette.id
+                          ? "ring-2 ring-white/70 scale-105 shadow-2xl"
+                          : "hover:scale-102 hover:shadow-xl"
+                      } ${isLowBalance ? "ring-2 ring-red-400" : ""} ${
+                        isInCurrentCard ? "opacity-60 ring-2 ring-orange-400" : ""
+                      }`}
+                      onClick={() => handleCassetteSelect(cassette.id)}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="text-black flex-shrink-0">{cassette.icon}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-black font-bold text-xs font-mono truncate">{cassette.name}</div>
+                          <div className="text-black/80 text-xs font-mono">{cassette.type}</div>
+                        </div>
+                        {isLowBalance && <AlertTriangle className="w-3 h-3 text-red-600" />}
+                      </div>
+                      <div className="text-black/90 text-xs font-mono mb-2 leading-relaxed">
+                        {cassette.description}
+                      </div>
+                      <div className="text-black/60 text-xs font-mono">${cassette.costPerHour}/hr</div>
+
+                      {/* Deployment Status */}
+                      {deploymentCount > 0 && (
+                        <div className="mt-2 text-center">
+                          <div className="inline-flex items-center gap-2 bg-black/20 rounded px-3 py-1">
+                            <div className="text-black text-xs font-mono font-bold">
+                              DEPLOYED TO {deploymentCount} ROM CARD{deploymentCount > 1 ? 'S' : ''}
+                              {activeCount > 0 && (
+                                <div className="text-green-800 mt-1">
+                                  {activeCount} ACTIVELY RUNNING
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Current ROM Card Status */}
+                      {isInCurrentCard && (
+                        <div className="text-center mb-3">
+                          <div className="inline-flex items-center gap-2 bg-orange-500/20 rounded px-3 py-1">
+                            <div className="text-orange-800 text-xs font-mono font-bold">
+                              ALREADY IN THIS ROM CARD
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedCassette === cassette.id && (
+                        <div className="text-center mb-3">
+                          <div className="inline-flex items-center gap-2 bg-black/30 rounded px-3 py-1">
+                            <div className="w-2 h-2 bg-black rounded-full animate-pulse"></div>
+                            <span className="text-black text-xs font-mono font-bold">{">>> SELECTED <<<"}</span>
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* ROM Cards Management - MOVED BELOW AGENTS */}
             <div className="mb-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-green-400 font-mono text-sm font-bold">My Rom Cards</h3>
@@ -1178,16 +1257,22 @@ export default function Component() {
               </div>
             </div>
 
-            {/* Cassette Library Section */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-green-400 font-mono text-sm font-bold">{">>> PAYMENT_CASSETTES.DIR <<<"}</h3>
-                
-              </div>
-
-              {/* Horizontal Matrix Scroll */}
-              <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                {availableCassettes.slice(0, 4).map((cassette) => {
+            <div className="text-center">
+              <p className="text-green-400/70 text-sm font-mono">
+                {">>> INSERT_ROM_CARD → DEPLOY_SYSTEM <<<"}
+              </p>
+            </div>
+          </>
+        ) : (
+          /* Desktop Layout - Agents on LEFT, ROM Cards on RIGHT */
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Desktop Agents Library - MOVED TO LEFT */}
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <GlitchText className="text-green-400 font-semibold text-lg mb-4 font-mono">
+                  My Agents
+                </GlitchText>
+                {cassettes.map((cassette) => {
                   const isLowBalance = cassette.balance < cassette.costPerHour
                   const deploymentCount = getAgentDeploymentCount(cassette.id)
                   const activeCount = getAgentActiveCount(cassette.id)
@@ -1195,29 +1280,34 @@ export default function Component() {
                   return (
                     <Card
                       key={cassette.id}
-                      className={`${cassette.gradient} p-3 flex-shrink-0 w-40 transition-all duration-200 border-2 border-black/20 shadow-lg ${
-                        selectedCassette === cassette.id
-                          ? "ring-2 ring-white/70 scale-105 shadow-2xl"
-                          : "hover:scale-102 hover:shadow-xl"
+                      className={`${cassette.gradient} p-4 cursor-pointer transform transition-all duration-200 shadow-lg hover:shadow-2xl border-2 border-black/20 ${
+                        selectedCassette === cassette.id ? "ring-4 ring-white/70 scale-105" : "hover:scale-105"
                       } ${isLowBalance ? "ring-2 ring-red-400" : ""} ${
                         isInCurrentCard ? "opacity-60 ring-2 ring-orange-400" : ""
                       }`}
                       onClick={() => handleCassetteSelect(cassette.id)}
                     >
-                      <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-3 mb-3">
                         <div className="text-black flex-shrink-0">{cassette.icon}</div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-black font-bold text-xs font-mono truncate">{cassette.name}</div>
-                          <div className="text-black/80 text-xs font-mono">{cassette.type}</div>
+                        <div className="flex-1">
+                          <div className="text-black font-bold text-base font-mono">{cassette.name}</div>
+                          <div className="text-black/90 text-sm font-mono">{cassette.type}</div>
                         </div>
-                        {isLowBalance && <AlertTriangle className="w-3 h-3 text-red-600" />}
+                        {isLowBalance && <AlertTriangle className="w-5 h-5 text-red-600" />}
                       </div>
-                      <div className="text-black font-bold text-xs font-mono">${cassette.balance.toFixed(2)}</div>
-                      <div className="text-black/60 text-xs font-mono">${cassette.costPerHour}/hr</div>
+
+                      <div className="text-black/90 text-sm mb-3 leading-relaxed font-mono">
+                        {cassette.description}
+                      </div>
+
+                      <div className="flex justify-between items-center text-sm mb-3 font-mono">
+                        <span className="text-black/90">Cost/Hour:</span>
+                        <span className="text-black font-bold text-lg">${cassette.costPerHour}</span>
+                      </div>
 
                       {/* Deployment Status */}
                       {deploymentCount > 0 && (
-                        <div className="mt-2 text-center">
+                        <div className="text-center mb-3">
                           <div className="inline-flex items-center gap-2 bg-black/20 rounded px-3 py-1">
                             <div className="text-black text-xs font-mono font-bold">
                               DEPLOYED TO {deploymentCount} ROM CARD{deploymentCount > 1 ? 'S' : ''}
@@ -1250,22 +1340,19 @@ export default function Component() {
                           </div>
                         </div>
                       )}
+
+                      <div className="flex gap-1">
+                        {[...Array(12)].map((_, i) => (
+                          <div key={i} className="w-1 h-1 bg-black/40 rounded-full"></div>
+                        ))}
+                      </div>
                     </Card>
                   )
                 })}
               </div>
             </div>
 
-            <div className="text-center">
-              <p className="text-green-400/70 text-sm font-mono">
-                {">>> INSERT_ROM_CARD → DEPLOY_SYSTEM <<<"}
-              </p>
-            </div>
-          </>
-        ) : (
-          /* Desktop Layout - Multiple ROM Cards */
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Desktop ROM Cards Management */}
+            {/* Desktop ROM Cards Management - MOVED TO RIGHT */}
             <div className="lg:col-span-2">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-green-400 font-mono text-lg font-bold">My Rom Cards</h3>
@@ -1498,106 +1585,6 @@ export default function Component() {
                   </Card>
                 ))}
               </div>
-            </div>
-
-            {/* Desktop Cassette & Agent Library */}
-            <div className="space-y-4">
-             
-
-              {/* Show Cassettes by default or when showLibrary is true */}
-              
-                <div className="space-y-3">
-                  <GlitchText className="text-green-400 font-semibold text-lg mb-4 font-mono">
-                    My Agents
-                  </GlitchText>
-                  {availableCassettes.map((cassette) => {
-                    const isLowBalance = cassette.balance < cassette.costPerHour
-                    const deploymentCount = getAgentDeploymentCount(cassette.id)
-                    const activeCount = getAgentActiveCount(cassette.id)
-                    const isInCurrentCard = !canInsertCassetteInCurrentCard(cassette.id)
-                    return (
-                      <Card
-                        key={cassette.id}
-                        className={`${cassette.gradient} p-4 cursor-pointer transform transition-all duration-200 shadow-lg hover:shadow-2xl border-2 border-black/20 ${
-                          selectedCassette === cassette.id ? "ring-4 ring-white/70 scale-105" : "hover:scale-105"
-                        } ${isLowBalance ? "ring-2 ring-red-400" : ""} ${
-                          isInCurrentCard ? "opacity-60 ring-2 ring-orange-400" : ""
-                        }`}
-                        onClick={() => handleCassetteSelect(cassette.id)}
-                      >
-                        <div className="flex items-center gap-3 mb-3">
-                          <div className="text-black flex-shrink-0">{cassette.icon}</div>
-                          <div className="flex-1">
-                            <div className="text-black font-bold text-base font-mono">{cassette.name}</div>
-                            <div className="text-black/90 text-sm font-mono">{cassette.type}</div>
-                          </div>
-                          {isLowBalance && <AlertTriangle className="w-5 h-5 text-red-600" />}
-                        </div>
-
-                        <div className="text-black/90 text-sm mb-3 leading-relaxed font-mono">
-                          {cassette.description}
-                        </div>
-
-                        <div className="flex justify-between items-center text-sm mb-2 font-mono">
-                          <span className="text-black/90">Balance:</span>
-                          <span className="text-black font-bold text-lg">${cassette.balance.toFixed(2)}</span>
-                        </div>
-
-                        <div className="flex justify-between items-center text-sm mb-3 font-mono">
-                          <span className="text-black/90">Cost/Hour:</span>
-                          <span className="text-black font-bold text-lg">${cassette.costPerHour}</span>
-                        </div>
-
-                        <div className="text-black/60 text-xs font-mono mb-3">
-                          Last used: {cassette.lastUsed} • {cassette.capacity}
-                        </div>
-
-                        {/* Deployment Status */}
-                        {deploymentCount > 0 && (
-                          <div className="text-center mb-3">
-                            <div className="inline-flex items-center gap-2 bg-black/20 rounded px-3 py-1">
-                              <div className="text-black text-xs font-mono font-bold">
-                                DEPLOYED TO {deploymentCount} ROM CARD{deploymentCount > 1 ? 'S' : ''}
-                                {activeCount > 0 && (
-                                  <div className="text-green-800 mt-1">
-                                    {activeCount} ACTIVELY RUNNING
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Current ROM Card Status */}
-                        {isInCurrentCard && (
-                          <div className="text-center mb-3">
-                            <div className="inline-flex items-center gap-2 bg-orange-500/20 rounded px-3 py-1">
-                              <div className="text-orange-800 text-xs font-mono font-bold">
-                                ALREADY IN THIS ROM CARD
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {selectedCassette === cassette.id && (
-                          <div className="text-center mb-3">
-                            <div className="inline-flex items-center gap-2 bg-black/30 rounded px-3 py-1">
-                              <div className="w-2 h-2 bg-black rounded-full animate-pulse"></div>
-                              <span className="text-black text-xs font-mono font-bold">{">>> SELECTED <<<"}</span>
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="flex gap-1">
-                          {[...Array(12)].map((_, i) => (
-                            <div key={i} className="w-1 h-1 bg-black/40 rounded-full"></div>
-                          ))}
-                        </div>
-                      </Card>
-                    )
-                  })}
-                </div>
-              
             </div>
           </div>
         )}
