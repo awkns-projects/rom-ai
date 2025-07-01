@@ -799,7 +799,7 @@ export default function Component() {
           <div className="mb-8">
             <div className="text-green-400 font-mono text-2xl mb-4 animate-pulse">
               <Terminal className="w-8 h-8 mx-auto mb-2" />
-              ROM CARDS DEPLOYMENT MATRIX SYSTEM
+              ROM CARDS DEPLOYMENT SYSTEM
             </div>
             <div className="text-green-300 font-mono text-sm space-y-2">
               <div>
@@ -844,7 +844,7 @@ export default function Component() {
         <div className="text-center mb-4">
           <div className="inline-flex items-center gap-3 bg-black/80 backdrop-blur-sm rounded border border-green-500/50 px-4 py-2 mb-3">
             <div className={`w-2 h-2 rounded-full ${isPowered ? "bg-green-400 animate-pulse" : "bg-red-500"}`} />
-            <span className="text-green-400 font-mono text-xs tracking-widest">ROM_CARDS_MATRIX_v3.0.1</span>
+            <span className="text-green-400 font-mono text-xs tracking-widest">ROM_CARDS_v0.0.1</span>
             <div className="text-green-300 font-mono text-xs">{systemTime.toLocaleTimeString()}</div>
           </div>
           <GlitchText className="text-xl sm:text-2xl font-bold text-green-400 font-mono tracking-wider">

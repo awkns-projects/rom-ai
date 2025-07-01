@@ -312,14 +312,14 @@ function TypewriterEffect() {
   const [isDeleting, setIsDeleting] = useState(false);
   
   const phrases = [
-    'I need a CRM that remembers all my customers',
-    'Build me a support bot that knows our products',
-    'Create a dashboard that updates every morning',
-    'I want an AI like JARVIS for my business',
-    'Make me an Iron Man-style personal assistant',
-    'Build me a JARVIS that handles customer support',
-    'I want an AI that follows up with leads',
-    'Make me an app that tracks competitor prices'
+    'Sync with Shopify to send abandoned cart emails with 15% discount codes via Gmail API',
+    'Connect to Stripe and send personalized follow-up emails through Mailchimp when payments complete',
+    'Integrate with Google Sheets to track inventory and send Slack alerts when stock is low',
+    'Build a customer support bot that syncs with Zendesk and remembers conversations in HubSpot CRM',
+    'Connect LinkedIn Sales Navigator with Gmail to automatically qualify and score leads',
+    'Sync with WooCommerce and create competitor price tracking dashboard using web scraping APIs',
+    'Integrate Instagram Business API to auto-post products when Shopify inventory updates',
+    'Connect Calendly with Salesforce to automatically schedule follow-up calls with warm leads'
   ];
 
   useEffect(() => {
@@ -358,31 +358,31 @@ function FloatingSuccessStories() {
   const stories = [
     { 
       icon: '🛒', 
-      name: 'Sarah\'s Store Bot', 
+      name: 'E-commerce Auto-Pilot', 
       gradient: 'from-blue-500 to-cyan-400',
       revenue: '$2,847/mo',
-      description: 'Sells jewelry automatically'
+      description: 'Saved 20 hours/week on inventory and customer emails'
     },
     { 
-      icon: '💰', 
-      name: 'Mike\'s Lead Gen', 
+      icon: '🎯', 
+      name: 'Lead Scoring System', 
       gradient: 'from-purple-500 to-pink-400',
       revenue: '$5,123/mo', 
-      description: 'Finds customers for gyms'
+      description: 'Doubled conversion rate by auto-qualifying leads'
     },
     { 
       icon: '📧', 
-      name: 'Lisa\'s Email Helper', 
+      name: 'Newsletter Automation', 
       gradient: 'from-orange-500 to-red-400',
       revenue: '$1,956/mo',
-      description: 'Writes newsletters'
+      description: 'Grew email list 300% with automated sequences'
     },
     { 
       icon: '📊', 
-      name: 'Tom\'s Data Wizard', 
+      name: 'Customer CRM Dashboard', 
       gradient: 'from-green-500 to-teal-400',
       revenue: '$3,234/mo',
-      description: 'Analyzes business trends'
+      description: 'Never loses track of customer conversations'
     }
   ];
 
@@ -528,14 +528,17 @@ function DemoModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
                 <div className="text-cyan-400">$ rom-cards build</div>
                 <div className="text-green-300/80">💭 What would you like to build?</div>
                 <div className="text-green-400 animate-pulse">
-                  &gt; "A customer support bot that remembers past conversations"
+                  &gt; "Send abandoned cart emails with 15% discount codes to customers who haven't purchased in 24 hours"
                 </div>
                 <div className="text-yellow-400">🧠 Understanding your needs...</div>
-                <div className="text-blue-400">💾 Setting up customer memory...</div>
-                <div className="text-cyan-400">🔗 Connecting to your website...</div>
-                <div className="text-green-400">📊 Creating support dashboard...</div>
-                <div className="text-green-400">✅ Your AI support bot is ready!</div>
-                <div className="text-cyan-400">🌐 Live at: https://your-support-bot.romcards.app</div>
+                <div className="text-blue-400">💾 Setting up customer cart tracking...</div>
+                <div className="text-cyan-400">📧 Creating email automation system...</div>
+                <div className="text-purple-400">🎯 Configuring discount code generation...</div>
+                <div className="text-orange-400">⏰ Setting up 24-hour trigger scheduling...</div>
+                <div className="text-green-400">✅ Your cart recovery system is ready!</div>
+                <div className="text-cyan-400">🌐 Live at: https://cart-recovery.romcards.app</div>
+                <div className="text-green-300">📊 Database: Customer cart tracking</div>
+                <div className="text-yellow-300">💰 Ready to recover abandoned sales!</div>
               </div>
             </div>
           </div>
@@ -597,13 +600,13 @@ function EnhancedHeroSection() {
             
             {/* Main Headline with Colorful Gradient */}
             <div className="space-y-6">
-              <h1 className="text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-200 via-purple-200 to-pink-200 font-mono tracking-tight leading-none">
+              <h1 className="text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-200 via-emerald-200 to-cyan-200 font-mono tracking-tight leading-none">
                 Rom Cards
               </h1>
               
               <p className="text-xl md:text-2xl lg:text-3xl text-white max-w-4xl leading-relaxed">
                 Build your own
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 font-semibold"> JARVIS </span>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 font-semibold"> JARVIS DASHBOARD </span>
                 using only prompts
               </p>
               
@@ -619,10 +622,10 @@ function EnhancedHeroSection() {
                   <div className="w-4 h-4 bg-gradient-to-r from-red-400 to-red-500 rounded-full shadow-lg"></div>
                   <div className="w-4 h-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full shadow-lg"></div>
                   <div className="w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full shadow-lg"></div>
-                  <span className="text-white/80 ml-3 font-mono text-sm">your-dream-app.txt</span>
+                  <span className="text-white/80 ml-3 font-mono text-sm">AI Agent Builder</span>
                 </div>
                 <div className="text-left space-y-4">
-                  <div className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 font-mono text-sm opacity-75">💭 What's your Iron Man moment?</div>
+                  <div className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 font-mono text-sm opacity-75">💭 What do you want to build?</div>
                   <TypewriterEffect />
                   <div className="text-white/60 font-mono text-sm mt-4">
                     → AI is building this for you right now... 🤖✨
@@ -682,31 +685,31 @@ function EnhancedHeroSection() {
                   {[
                     { 
                       icon: '🛒', 
-                      name: 'Sarah\'s Store Bot', 
+                      name: 'E-commerce Auto-Pilot', 
                       gradient: 'from-blue-500 to-cyan-400',
                       revenue: '$2,847/mo',
-                      description: 'Sells jewelry automatically'
+                      description: 'Saved 20 hours/week on inventory and customer emails'
                     },
                     { 
-                      icon: '💰', 
-                      name: 'Mike\'s Lead Gen', 
+                      icon: '🎯', 
+                      name: 'Lead Scoring System', 
                       gradient: 'from-purple-500 to-pink-400',
                       revenue: '$5,123/mo', 
-                      description: 'Finds customers for gyms'
+                      description: 'Doubled conversion rate by auto-qualifying leads'
                     },
                     { 
                       icon: '📧', 
-                      name: 'Lisa\'s Email Helper', 
+                      name: 'Newsletter Automation', 
                       gradient: 'from-orange-500 to-red-400',
                       revenue: '$1,956/mo',
-                      description: 'Writes newsletters'
+                      description: 'Grew email list 300% with automated sequences'
                     },
                     { 
                       icon: '📊', 
-                      name: 'Tom\'s Data Wizard', 
+                      name: 'Customer CRM Dashboard', 
                       gradient: 'from-green-500 to-teal-400',
                       revenue: '$3,234/mo',
-                      description: 'Analyzes business trends'
+                      description: 'Never loses track of customer conversations'
                     }
                   ].map((story, index) => (
                     <div
@@ -1125,7 +1128,8 @@ function AgentLicensingExamples() {
       icon: '🛍️',
       gradient: 'from-green-500/10 via-cyan-500/5 to-green-700/10',
       border: 'border-green-500/20',
-      hoverBorder: 'hover:border-green-500/40'
+      hoverBorder: 'hover:border-green-500/40',
+      growth: '+23%'
     },
     {
       name: 'Lead Generator',
@@ -1136,7 +1140,8 @@ function AgentLicensingExamples() {
       icon: '🎯',
       gradient: 'from-cyan-500/10 via-blue-500/5 to-cyan-700/10',
       border: 'border-cyan-500/20',
-      hoverBorder: 'hover:border-cyan-500/40'
+      hoverBorder: 'hover:border-cyan-500/40',
+      growth: '+18%'
     },
     {
       name: 'Content Creator',
@@ -1147,7 +1152,8 @@ function AgentLicensingExamples() {
       icon: '✍️',
       gradient: 'from-purple-500/10 via-pink-500/5 to-purple-700/10',
       border: 'border-purple-500/20',
-      hoverBorder: 'hover:border-purple-500/40'
+      hoverBorder: 'hover:border-purple-500/40',
+      growth: '+31%'
     }
   ];
 
@@ -1181,7 +1187,7 @@ function AgentLicensingExamples() {
           <div className="mt-4 pt-4 border-t border-green-500/20">
             <div className="flex items-center gap-2 text-green-300">
               <TrendingUp className="w-4 h-4" />
-              <span className="font-mono text-xs">+{Math.floor(Math.random() * 30 + 10)}% this month</span>
+              <span className="font-mono text-xs">{example.growth} this month</span>
             </div>
           </div>
         </div>
@@ -1461,6 +1467,327 @@ function Header() {
   );
 }
 
+// Mobile App Demo Component
+function MobileAppDemo() {
+  const [activeTab, setActiveTab] = useState(0);
+  
+  const tabs = [
+    { 
+      id: 'dashboard', 
+      label: 'Dashboard', 
+      icon: '📊',
+      color: 'text-green-400'
+    },
+    { 
+      id: 'customers', 
+      label: 'Customers', 
+      icon: '👥',
+      color: 'text-blue-400'
+    },
+    { 
+      id: 'emails', 
+      label: 'Emails', 
+      icon: '📧',
+      color: 'text-purple-400'
+    },
+    { 
+      id: 'schedule', 
+      label: 'Schedule', 
+      icon: '⏰',
+      color: 'text-orange-400'
+    },
+    { 
+      id: 'chat', 
+      label: 'AI Chat', 
+      icon: '🤖',
+      color: 'text-cyan-400'
+    }
+  ];
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 0: // Dashboard
+        return (
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-green-100 font-mono font-bold text-lg">Dashboard</h3>
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+            </div>
+            
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Active Carts', value: '12', color: 'text-orange-400' },
+                { label: 'Emails Sent', value: '47', color: 'text-green-400' },
+                { label: 'Recovery Rate', value: '23%', color: 'text-blue-400' },
+                { label: 'Revenue', value: '$1,247', color: 'text-purple-400' }
+              ].map((stat, index) => (
+                <div key={index} className="bg-black/30 border border-green-500/20 rounded-lg p-3 text-center">
+                  <div className={`text-xl font-bold font-mono ${stat.color}`}>{stat.value}</div>
+                  <div className="text-green-300/70 font-mono text-xs">{stat.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Quick Actions */}
+            <div className="space-y-2">
+              <h4 className="text-green-200 font-mono text-sm font-semibold">Quick Actions</h4>
+              {[
+                { action: 'Send Cart Recovery Emails', status: 'Ready', color: 'text-green-400' },
+                { action: 'Generate Weekly Report', status: 'Scheduled', color: 'text-blue-400' },
+                { action: 'Update Discount Codes', status: 'In Progress', color: 'text-orange-400' }
+              ].map((item, index) => (
+                <div key={index} className="flex items-center justify-between p-3 bg-green-500/5 border border-green-500/10 rounded-lg">
+                  <div>
+                    <div className="text-green-100 font-mono text-sm">{item.action}</div>
+                    <div className={`${item.color} font-mono text-xs`}>{item.status}</div>
+                  </div>
+                  <button className="w-8 h-8 bg-green-500/10 border border-green-500/20 rounded-md flex items-center justify-center">
+                    <span className="text-green-400 text-xs">→</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+      case 1: // Customers
+        return (
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-green-100 font-mono font-bold text-lg">Customers</h3>
+              <span className="text-orange-300 font-mono text-xs">12 abandoned carts</span>
+            </div>
+            
+            <div className="space-y-3">
+              {[
+                { name: 'Sarah M.', email: 'sarah@email.com', value: '$127.50', timeLeft: '2h 45m', status: 'pending', avatar: '👩' },
+                { name: 'Mike R.', email: 'mike@email.com', value: '$89.99', timeLeft: '5h 12m', status: 'scheduled', avatar: '👨' },
+                { name: 'Lisa K.', email: 'lisa@email.com', value: '$203.25', timeLeft: '1h 33m', status: 'pending', avatar: '👩‍💼' },
+                { name: 'Tom B.', email: 'tom@email.com', value: '$156.80', timeLeft: '8h 07m', status: 'sent', avatar: '👨‍💻' }
+              ].map((customer, index) => (
+                <div key={index} className="bg-green-500/5 border border-green-500/10 rounded-lg p-3">
+                  <div className="flex items-center gap-3 mb-2">
+                    <span className="text-2xl">{customer.avatar}</span>
+                    <div className="flex-1">
+                      <div className="text-green-100 font-mono text-sm font-medium">{customer.name}</div>
+                      <div className="text-green-400/60 font-mono text-xs">{customer.email}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-green-300 font-mono text-sm font-bold">{customer.value}</div>
+                      <div className="text-green-300/80 font-mono text-xs">{customer.timeLeft}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className={`font-mono text-xs px-2 py-1 rounded ${
+                      customer.status === 'pending' ? 'bg-orange-500/20 text-orange-400' :
+                      customer.status === 'scheduled' ? 'bg-blue-500/20 text-blue-400' :
+                      'bg-green-500/20 text-green-400'
+                    }`}>
+                      {customer.status}
+                    </span>
+                    <div className="flex gap-1">
+                      <button className="w-6 h-6 bg-green-500/10 border border-green-500/20 rounded text-xs">📧</button>
+                      <button className="w-6 h-6 bg-blue-500/10 border border-blue-500/20 rounded text-xs">⏰</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+      case 2: // Emails
+        return (
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-green-100 font-mono font-bold text-lg">Email Templates</h3>
+              <button className="text-green-400 font-mono text-xs">+ New</button>
+            </div>
+            
+            {/* Email Preview */}
+            <div className="bg-black/30 border border-green-500/20 rounded-lg p-4">
+              <div className="text-green-300/70 font-mono text-xs mb-2">Subject: Don't forget your items + 15% OFF!</div>
+              <div className="space-y-2 text-green-200/80 font-mono text-sm">
+                <p>Hi Sarah,</p>
+                <p>You left some great items in your cart worth $127.50.</p>
+                <p>Complete your purchase in the next 24 hours and save 15% with code: <span className="text-cyan-400 font-bold">CART15</span></p>
+                <div className="mt-3 p-2 bg-green-500/10 border border-green-500/20 rounded text-center">
+                  <span className="text-green-300 font-bold text-xs">Complete Purchase Now →</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Email Stats */}
+            <div className="space-y-2">
+              <h4 className="text-green-200 font-mono text-sm font-semibold">Campaign Performance</h4>
+              {[
+                { metric: 'Open Rate', value: '24.5%', trend: '+2.1%' },
+                { metric: 'Click Rate', value: '8.3%', trend: '+1.5%' },
+                { metric: 'Conversion', value: '18.2%', trend: '+3.2%' }
+              ].map((stat, index) => (
+                <div key={index} className="flex items-center justify-between p-2 bg-green-500/5 rounded">
+                  <span className="text-green-300 font-mono text-sm">{stat.metric}</span>
+                  <div className="text-right">
+                    <span className="text-green-100 font-mono text-sm font-bold">{stat.value}</span>
+                    <span className="text-green-400 font-mono text-xs ml-2">{stat.trend}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+      case 3: // Schedule
+        return (
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-green-100 font-mono font-bold text-lg">Schedule</h3>
+              <button className="text-purple-400 font-mono text-xs">+ Add Task</button>
+            </div>
+            
+            <div className="space-y-3">
+              {[
+                { time: '2:30 PM', task: 'Send cart recovery emails', count: '8 emails', type: 'email' },
+                { time: '6:00 PM', task: 'Follow-up reminders', count: '3 emails', type: 'email' },
+                { time: '9:00 AM', task: 'Weekly analysis report', count: 'Tomorrow', type: 'report' },
+                { time: '12:00 PM', task: 'Update discount codes', count: 'Daily', type: 'update' }
+              ].map((schedule, index) => (
+                <div key={index} className="bg-purple-500/5 border border-purple-500/10 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                      <span className="text-purple-300 font-mono text-sm font-bold">{schedule.time}</span>
+                    </div>
+                    <span className="text-purple-400/60 font-mono text-xs">{schedule.count}</span>
+                  </div>
+                  <div className="text-green-100 font-mono text-sm">{schedule.task}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Today's Progress */}
+            <div className="bg-green-500/5 border border-green-500/10 rounded-lg p-3 mt-4">
+              <h4 className="text-green-200 font-mono text-sm font-semibold mb-2">Today's Progress</h4>
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs font-mono">
+                  <span className="text-green-300">Tasks Completed</span>
+                  <span className="text-green-400 font-bold">6/8</span>
+                </div>
+                <div className="w-full bg-green-900/30 rounded-full h-2">
+                  <div className="bg-green-400 h-2 rounded-full" style={{ width: '75%' }}></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 4: // AI Chat
+        return (
+          <div className="p-4 space-y-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 bg-cyan-500/10 border border-cyan-500/20 rounded-lg flex items-center justify-center">
+                <span className="text-cyan-400 text-sm">🤖</span>
+              </div>
+              <h3 className="text-green-100 font-mono font-bold text-lg">AI Assistant</h3>
+            </div>
+            
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {[
+                { type: 'ai', message: 'Found 12 abandoned carts. Should I send recovery emails?' },
+                { type: 'user', message: 'Yes, but only to carts over $100' },
+                { type: 'ai', message: 'Filtered to 8 high-value carts. Scheduling emails with 15% discount codes.' },
+                { type: 'ai', message: 'Email campaign queued. Expected recovery: $890 (18% avg rate)' },
+                { type: 'user', message: 'Perfect! Schedule the next batch for 6 PM' },
+                { type: 'ai', message: '✅ Scheduled! I\'ll send 3 follow-up emails at 6 PM today.' }
+              ].map((chat, index) => (
+                <div key={index} className={`flex ${chat.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-xs p-3 rounded-lg font-mono text-sm ${
+                    chat.type === 'user' 
+                      ? 'bg-green-500/20 border border-green-500/30 text-green-100' 
+                      : 'bg-cyan-500/20 border border-cyan-500/30 text-cyan-100'
+                  }`}>
+                    {chat.message}
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="flex gap-2 mt-4">
+              <input 
+                type="text" 
+                placeholder="Ask AI anything..." 
+                className="flex-1 bg-green-500/5 border border-green-500/20 rounded-lg px-3 py-2 text-green-100 font-mono text-sm focus:outline-none focus:border-green-500/40"
+              />
+              <button className="w-10 h-10 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-lg flex items-center justify-center transition-colors duration-200">
+                <span className="text-cyan-400">→</span>
+              </button>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="bg-gradient-to-br from-green-500/10 via-green-600/5 to-green-700/10 border border-green-500/20 rounded-3xl backdrop-blur-sm shadow-2xl overflow-hidden" style={{ height: '700px', width: '350px' }}>
+      {/* Mobile App Header */}
+      <div className="bg-black/40 border-b border-green-500/20 p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center justify-center">
+              <span className="text-lg">🛒</span>
+            </div>
+            <div>
+              <h3 className="text-green-100 font-mono font-bold text-sm">Cart Recovery</h3>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <span className="text-green-300 font-mono text-xs">Live</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-1">
+            <div className="w-1 h-1 bg-green-400 rounded-full"></div>
+            <div className="w-1 h-1 bg-green-400 rounded-full"></div>
+            <div className="w-1 h-1 bg-green-400 rounded-full"></div>
+          </div>
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <div className="flex-1 overflow-y-auto" style={{ height: 'calc(100% - 140px)' }}>
+        {renderTabContent()}
+      </div>
+
+      {/* Bottom Tab Navigation */}
+      <div className="bg-black/60 border-t border-green-500/20 px-2 py-2">
+        <div className="flex justify-around">
+          {tabs.map((tab, index) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(index)}
+              className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-all duration-200 ${
+                activeTab === index
+                  ? 'bg-green-500/20 border border-green-500/30'
+                  : 'hover:bg-green-500/10'
+              }`}
+            >
+              <span className="text-lg">{tab.icon}</span>
+              <span className={`font-mono text-xs transition-colors duration-200 ${
+                activeTab === index ? tab.color : 'text-green-500'
+              }`}>
+                {tab.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-black text-green-200 scroll-smooth">
@@ -1477,7 +1804,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Watch AI Build Your JARVIS-Level Business App
+              Watch AI Build Your Business App
             </h2>
             <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
               See how simple descriptions become working AI apps with memory and smart features - like Tony Stark's workshop
@@ -1505,6 +1832,25 @@ export default function HomePage() {
               </div>
               <LiveMetrics />
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Created AI App Demo Section */}
+      <section className="py-20 px-4 bg-gradient-to-b from-green-950/10 to-black scroll-mt-16">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
+              This Is What Your AI App Looks Like
+            </h2>
+            <p className="text-xl text-green-300/80 max-w-4xl mx-auto font-mono">
+              A real cart recovery system built from the prompt above - mobile-first design with intuitive tabs
+            </p>
+          </div>
+
+          {/* Mobile App Demo Interface */}
+          <div className="max-w-sm mx-auto">
+            <MobileAppDemo />
           </div>
         </div>
       </section>
