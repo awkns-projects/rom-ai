@@ -536,7 +536,7 @@ function DemoModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
                 <div className="text-purple-400">🎯 Configuring discount code generation...</div>
                 <div className="text-orange-400">⏰ Setting up 24-hour trigger scheduling...</div>
                 <div className="text-green-400">✅ Your cart recovery system is ready!</div>
-                <div className="text-cyan-400">🌐 Live at: https://cart-recovery.rom.cards</div>
+                <div className="text-cyan-400">🌐 Live at: https://www.rom.cards/apps/cart-recovery</div>
                 <div className="text-green-300">📊 Database: Customer cart tracking</div>
                 <div className="text-yellow-300">💰 Ready to recover abandoned sales!</div>
               </div>
@@ -1685,14 +1685,14 @@ function MobileAppDemo() {
       case 4: // AI Chat
         return (
           <div className="p-4 space-y-4">
-            <div className="flex items-center gap-3 mb-4">
+            <div className="flex items-center gap-3 mb-6">
               <div className="w-8 h-8 bg-cyan-500/10 border border-cyan-500/20 rounded-lg flex items-center justify-center">
                 <span className="text-cyan-400 text-sm">🤖</span>
               </div>
               <h3 className="text-green-100 font-mono font-bold text-lg">AI Assistant</h3>
             </div>
             
-            <div className="space-y-3 max-h-64 overflow-y-auto">
+            <div className="space-y-4 max-h-64 overflow-y-auto">
               {[
                 { type: 'ai', message: 'Found 12 abandoned carts. Should I send recovery emails?' },
                 { type: 'user', message: 'Yes, but only to carts over $100' },
@@ -1702,7 +1702,7 @@ function MobileAppDemo() {
                 { type: 'ai', message: '✅ Scheduled! I\'ll send 3 follow-up emails at 6 PM today.' }
               ].map((chat, index) => (
                 <div key={index} className={`flex ${chat.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-xs p-3 rounded-lg font-mono text-sm ${
+                  <div className={`max-w-xs p-4 rounded-2xl font-mono text-sm leading-relaxed ${
                     chat.type === 'user' 
                       ? 'bg-green-500/20 border border-green-500/30 text-green-100' 
                       : 'bg-cyan-500/20 border border-cyan-500/30 text-cyan-100'
@@ -1713,14 +1713,14 @@ function MobileAppDemo() {
               ))}
             </div>
             
-            <div className="flex gap-2 mt-4">
+            <div className="flex gap-3 mt-6 pt-4 border-t border-green-500/20">
               <input 
                 type="text" 
                 placeholder="Ask AI anything..." 
-                className="flex-1 bg-green-500/5 border border-green-500/20 rounded-lg px-3 py-2 text-green-100 font-mono text-sm focus:outline-none focus:border-green-500/40"
+                className="flex-1 bg-green-500/5 border border-green-500/20 rounded-xl px-4 py-3 text-green-100 font-mono text-sm focus:outline-none focus:border-green-500/40 placeholder:text-green-500/50"
               />
-              <button className="w-10 h-10 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-lg flex items-center justify-center transition-colors duration-200">
-                <span className="text-cyan-400">→</span>
+              <button className="w-12 h-12 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-xl flex items-center justify-center transition-colors duration-200">
+                <span className="text-cyan-400 text-lg">→</span>
               </button>
             </div>
           </div>
@@ -1762,24 +1762,24 @@ function MobileAppDemo() {
       </div>
 
       {/* Bottom Tab Navigation */}
-      <div className="bg-black/60 border-t border-green-500/20 px-2 py-2">
-        <div className="flex justify-around">
+      <div className="bg-black/60 border-t border-green-500/20 p-2">
+        <div className="grid grid-cols-5 gap-1">
           {tabs.map((tab, index) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(index)}
-              className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-all duration-200 ${
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all duration-200 ${
                 activeTab === index
                   ? 'bg-green-500/20 border border-green-500/30'
                   : 'hover:bg-green-500/10'
               }`}
             >
-              <span className="text-lg">{tab.icon}</span>
-              <span className={`font-mono text-xs transition-colors duration-200 ${
+              <span className="text-lg mb-1">{tab.icon}</span>
+              {/* <span className={`font-mono text-xs transition-colors duration-200 text-center ${
                 activeTab === index ? tab.color : 'text-green-500'
               }`}>
                 {tab.label}
-              </span>
+              </span> */}
             </button>
           ))}
         </div>
