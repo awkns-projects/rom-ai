@@ -1104,6 +1104,7 @@ const AgentBuilderContent = memo(({
                     models={agentData.models || []}
                     agentData={agentData}
                     onThemeChange={(theme) => updateAgentData({ ...agentData, theme })}
+                    onDataChange={updateAgentData}
                   />
                 );
               }

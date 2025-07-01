@@ -8,9 +8,10 @@ interface OnboardContentProps {
   models?: any[]; // Array of models to determine default view
   agentData?: any; // Add agentData prop
   onThemeChange?: (theme: string) => void; // Add theme change callback
+  onDataChange?: (agentData: any) => void; // Add data change callback
 }
 
-export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThemeChange }: OnboardContentProps) => {
+export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThemeChange, onDataChange }: OnboardContentProps) => {
   // Determine initial view based on models length
   const hasModels = models.length > 0;
   const [showDemo, setShowDemo] = useState(hasModels);
@@ -175,7 +176,7 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
           </div>
           
           <div className="flex justify-center">
-            <MobileAppDemoWrapper agentData={agentData} onThemeChange={onThemeChange} />
+            <MobileAppDemoWrapper agentData={agentData} onThemeChange={onThemeChange} onDataChange={onDataChange} />
           </div>
           
           <div className="text-center space-y-4 pt-4">
