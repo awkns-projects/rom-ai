@@ -964,7 +964,7 @@ function LiveMetrics() {
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {metricData.map((metric, index) => (
         <div key={index} className={`bg-gradient-to-br ${metric.gradient} border ${metric.border} rounded-xl p-4 text-center transition-all duration-500 backdrop-blur-sm ${
           metric.isAnimating ? `bg-gradient-to-br ${metric.gradient} border-opacity-60 shadow-lg shadow-current/20 scale-105` : ''
@@ -1732,7 +1732,7 @@ function MobileAppDemo() {
   };
 
   return (
-    <div className="bg-gradient-to-br from-green-500/10 via-green-600/5 to-green-700/10 border border-green-500/20 rounded-3xl backdrop-blur-sm shadow-2xl overflow-hidden" style={{ height: '700px', width: '350px' }}>
+    <div className="bg-gradient-to-br from-green-500/10 via-green-600/5 to-green-700/10 border border-green-500/20 rounded-3xl backdrop-blur-sm shadow-2xl overflow-hidden w-full max-w-sm mx-auto" style={{ height: 'min(700px, 80vh)', maxWidth: 'min(350px, calc(100vw - 2rem))' }}>
       {/* Mobile App Header */}
       <div className="bg-black/40 border-b border-green-500/20 p-4">
         <div className="flex items-center justify-between">
@@ -1849,7 +1849,7 @@ export default function HomePage() {
           </div>
 
           {/* Mobile App Demo Interface */}
-          <div className="max-w-sm mx-auto">
+          <div className="w-full max-w-sm mx-auto px-4">
             <MobileAppDemo />
           </div>
         </div>
@@ -2038,8 +2038,8 @@ export default function HomePage() {
                 <Link href="/register">
                   <Button className="bg-gradient-to-r from-green-600 to-green-700 text-black hover:from-green-700 hover:to-green-800 border border-green-500/30 shadow-lg shadow-green-500/20 hover:shadow-green-500/40 hover:shadow-xl transform hover:-translate-y-0.5 px-8 py-3 font-mono text-lg group">
                     <Play className="w-5 h-5 mr-2 group-hover:animate-bounce" />
-                    Start Building Now
-                    <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                    Get Started
+                    {/* <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" /> */}
                   </Button>
                 </Link>
                 <Link href="#">
