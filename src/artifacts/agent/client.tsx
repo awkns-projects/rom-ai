@@ -344,98 +344,9 @@ const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Reco
   return 'pending';
 };
 
-
-
-
-// Main Agent Builder Component
-const AgentBuilderContent = memo(({
-  content,
-  onSaveContent,
-  status,
-  mode,
-  isCurrentVersion,
-  currentVersionIndex,
-  getDocumentContentById,
-  isLoading,
-  metadata,
-  setMetadata,
-  setMessages,
-}: {
-  content: string;
-  onSaveContent: (content: string, debounce: boolean) => void;
-  status: 'streaming' | 'idle';
-  mode: 'edit' | 'diff';
-  isCurrentVersion: boolean;
-  currentVersionIndex: number;
-  getDocumentContentById: (index: number) => string;
-  isLoading: boolean;
-  metadata: AgentArtifactMetadata | null;
-  setMetadata: (metadata: AgentArtifactMetadata) => void;
-  setMessages?: UseChatHelpers['setMessages'];
-}) => {
-  const { artifact } = useArtifact();
-  const documentId = artifact?.documentId; // Get documentId from artifact
-  const router = useRouter();
-  const params = useParams();
-  
-  // Get chatId from router query parameters
-  const chatId = params.id as string;
-  
-  // Initialize metadata with defaults if null
-  const safeMetadata: AgentArtifactMetadata = metadata || {
-    selectedTab: 'onboard',
-    editingModel: null,
-    editingAction: null,
-    editingSchedule: null,
-    viewingModelData: null,
-    editingRecord: null,
-    dataManagement: null,
-    showExplanationModal: null
-  };
-
-  // Track unsaved changes
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [showDeploymentModal, setShowDeploymentModal] = useState(false);
-
-  // Introduction section states - collapsed by default on mobile, expanded on desktop
-  const [isModelsIntroExpanded, setIsModelsIntroExpanded] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth >= 768; // md breakpoint - true for desktop, false for mobile
-    }
-    return false; // Default to collapsed for SSR to match mobile-first
-  });
-  const [isActionsIntroExpanded, setIsActionsIntroExpanded] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth >= 768; // md breakpoint - true for desktop, false for mobile
-    }
-    return false; // Default to collapsed for SSR to match mobile-first
-  });
-  const [isSchedulesIntroExpanded, setIsSchedulesIntroExpanded] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return window.innerWidth >= 768; // md breakpoint - true for desktop, false for mobile
-    }
-    return false; // Default to collapsed for SSR to match mobile-first
-  });
-
-  // Handle window resize to adjust intro state
-  useEffect(() => {
-    const handleResize = () => {
-      const isDesktop = window.innerWidth >= 768; // md breakpoint
-      // Auto-expand when switching to desktop if currently collapsed
-      if (isDesktop) {
-        if (!isModelsIntroExpanded) setIsModelsIntroExpanded(true);
-        if (!isActionsIntroExpanded) setIsActionsIntroExpanded(true);
-        if (!isSchedulesIntroExpanded) setIsSchedulesIntroExpanded(true);
-      }
-      // Don't auto-collapse when switching to mobile, let user control it
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [isModelsIntroExpanded, isActionsIntroExpanded, isSchedulesIntroExpanded]);
-
-  const [agentData, setAgentData] = useState<AgentData>(() => {
+// Custom hooks for managing agent builder state
+const useAgentData = (content: string) => {
+  return useState<AgentData>(() => {
     console.log('🚀 Initializing agent data with content:', {
       hasContent: !!content,
       contentLength: content?.length || 0,
@@ -513,122 +424,58 @@ const AgentBuilderContent = memo(({
       };
     }
   });
+};
 
-  // Update metadata safely - moved before other callbacks to maintain hook order
-  const updateMetadata = useCallback((updates: Partial<AgentArtifactMetadata>) => {
-    if (setMetadata) {
-      setMetadata({ ...safeMetadata, ...updates });
+const useIntroductionState = () => {
+  // Introduction section states - collapsed by default on mobile, expanded on desktop
+  const [isModelsIntroExpanded, setIsModelsIntroExpanded] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 768; // md breakpoint - true for desktop, false for mobile
     }
-  }, [safeMetadata, setMetadata]);
-
-  // Update content when agent data changes - moved to maintain hook order
-  const updateAgentData = useCallback((newData: AgentData) => {
-    console.log('🔄 updateAgentData called with:', {
-      currentModels: agentData.models?.length || 0,
-      currentActions: agentData.actions?.length || 0,
-      currentSchedules: agentData.schedules?.length || 0,
-      newModels: newData.models?.length || 0,
-      newActions: newData.actions?.length || 0,
-      newSchedules: newData.schedules?.length || 0,
-      currentModelNames: (agentData.models || []).map((m: AgentModel) => m.name),
-      newModelNames: (newData.models || []).map((m: AgentModel) => m.name),
-      currentActionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
-      newActionNames: (newData.actions || []).map((a: AgentAction) => a.name),
-      currentScheduleNames: (agentData.schedules || []).map((s: AgentSchedule) => s.name),
-      newScheduleNames: (newData.schedules || []).map((s: AgentSchedule) => s.name)
-    });
-    
-    setAgentData(newData);
-    setHasUnsavedChanges(true); // Mark as having unsaved changes
-    // Removed auto-save - only save when user explicitly clicks "Save Agent"
-    // const serializedData = JSON.stringify(newData, null, 2);
-    // onSaveContent(serializedData, true);
-  }, [agentData.models, agentData.actions, agentData.schedules]);
-
-  // Enhanced save function - moved to maintain consistent hook order
-  const saveAgentToConversation = useCallback(async () => {
-    setIsSaving(true);
-    try {
-      // Save the current agent data using the standard document saving mechanism
-      const agentContent = JSON.stringify(agentData, null, 2);
-      onSaveContent(agentContent, false);
-      
-      setHasUnsavedChanges(false); // Clear unsaved changes flag
-      console.log('✅ Agent data saved through standard document mechanism');
-      
-      // Show deployment modal after successful save
-      setShowDeploymentModal(true);
-    } catch (error) {
-      console.error('❌ Failed to save agent data:', error);
-    } finally {
-      setIsSaving(false);
+    return false; // Default to collapsed for SSR to match mobile-first
+  });
+  const [isActionsIntroExpanded, setIsActionsIntroExpanded] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 768; // md breakpoint - true for desktop, false for mobile
     }
-  }, [agentData, onSaveContent]);
+    return false; // Default to collapsed for SSR to match mobile-first
+  });
+  const [isSchedulesIntroExpanded, setIsSchedulesIntroExpanded] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 768; // md breakpoint - true for desktop, false for mobile
+    }
+    return false; // Default to collapsed for SSR to match mobile-first
+  });
 
-  // Monitor content changes from external sources (like when opening from chat or refreshing page)
+  // Handle window resize to adjust intro state
   useEffect(() => {
-    // Skip if content is explicitly empty or just whitespace
-    if (!content || content.trim() === '') {
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(content);
-      
-      // Check if this is meaningful agent data (not just empty default structure)
-      const hasRealData = (parsed.name && parsed.name !== 'New Agent' && parsed.name.trim() !== '') ||
-                         (parsed.description && parsed.description.trim() !== '') ||
-                         (parsed.domain && parsed.domain.trim() !== '') ||
-                         (parsed.models && parsed.models.length > 0) ||
-                         (parsed.actions && parsed.actions.length > 0) ||
-                         (parsed.schedules && parsed.schedules.length > 0);
-
-      // Only update if we have real data
-      if (hasRealData) {
-        const updatedData = {
-          id: parsed.id, // Keep id if it exists (from orchestrator)
-          name: parsed.name || 'New Agent',
-          description: parsed.description || '',
-          domain: parsed.domain || '',
-          models: Array.isArray(parsed.models) ? parsed.models : [],
-          actions: Array.isArray(parsed.actions) ? parsed.actions : [],
-          schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
-          createdAt: parsed.createdAt || new Date().toISOString(),
-          metadata: parsed.metadata // Keep metadata if it exists (from orchestrator)
-        };
-        
-        // Only update if data has actually changed
-        const currentDataString = JSON.stringify({
-          name: agentData.name,
-          description: agentData.description,
-          domain: agentData.domain,
-          models: agentData.models,
-          actions: agentData.actions,
-          schedules: agentData.schedules
-        });
-        const newDataString = JSON.stringify(updatedData);
-        
-        if (currentDataString !== newDataString) {
-          setAgentData(updatedData);
-        }
+    const handleResize = () => {
+      const isDesktop = window.innerWidth >= 768; // md breakpoint
+      // Auto-expand when switching to desktop if currently collapsed
+      if (isDesktop) {
+        if (!isModelsIntroExpanded) setIsModelsIntroExpanded(true);
+        if (!isActionsIntroExpanded) setIsActionsIntroExpanded(true);
+        if (!isSchedulesIntroExpanded) setIsSchedulesIntroExpanded(true);
       }
-    } catch (e) {
-      console.warn('Failed to parse updated content:', e);
-    }
-  }, [content]); // Remove updateMetadata and agentData from dependencies to prevent loops
+      // Don't auto-collapse when switching to mobile, let user control it
+    };
 
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isModelsIntroExpanded, isActionsIntroExpanded, isSchedulesIntroExpanded]);
 
-  if (isLoading) {
-    return <DocumentSkeleton artifactKind="agent" />;
-  }
+  return {
+    isModelsIntroExpanded,
+    setIsModelsIntroExpanded,
+    isActionsIntroExpanded,
+    setIsActionsIntroExpanded,
+    isSchedulesIntroExpanded,
+    setIsSchedulesIntroExpanded
+  };
+};
 
-  if (mode === 'diff') {
-    const oldContent = getDocumentContentById(currentVersionIndex - 1);
-    const newContent = getDocumentContentById(currentVersionIndex);
-    return <DiffView oldContent={oldContent} newContent={newContent} />;
-  }
-
-  const addModel = () => {
+const useAgentActions = (agentData: AgentData, updateAgentData: (data: AgentData) => void, updateMetadata: (updates: Partial<AgentArtifactMetadata>) => void) => {
+  const addModel = useCallback(() => {
     const newModel: AgentModel = {
       id: generateNewId('model', agentData.models || []),
       name: `Model${(agentData.models?.length || 0) + 1}`,
@@ -676,9 +523,9 @@ const AgentBuilderContent = memo(({
       models: [newModel, ...(agentData.models || [])]
     });
     updateMetadata({ editingModel: newModel.id });
-  };
+  }, [agentData, updateAgentData, updateMetadata]);
 
-  const addSchedule = () => {
+  const addSchedule = useCallback(() => {
     const newSchedule: AgentSchedule = {
       id: generateNewId('schedule', agentData.schedules || []),
       name: `Schedule${(agentData.schedules?.length || 0) + 1}`,
@@ -711,9 +558,9 @@ const AgentBuilderContent = memo(({
       schedules: [newSchedule, ...(agentData.schedules || [])]
     });
     updateMetadata({ editingSchedule: newSchedule.id });
-  };
+  }, [agentData, updateAgentData, updateMetadata]);
 
-  const addAction = () => {
+  const addAction = useCallback(() => {
     const newAction: AgentAction = {
       id: generateNewId('action', agentData.actions || []),
       name: `Action${(agentData.actions?.length || 0) + 1}`,
@@ -756,10 +603,141 @@ const AgentBuilderContent = memo(({
       actions: updatedActions
     });
     updateMetadata({ editingAction: newAction.id }); // Use actual action ID instead of '0'
-  };
+  }, [agentData, updateAgentData, updateMetadata]);
+
+  return { addModel, addSchedule, addAction };
+};
+
+const useModalHandlers = (safeMetadata: AgentArtifactMetadata, setMetadata: (metadata: AgentArtifactMetadata) => void) => {
+  // Add explanation modal handlers
+  const openExplanationModal = useCallback((type: 'models' | 'actions' | 'schedules') => {
+    setMetadata({ ...safeMetadata, showExplanationModal: type });
+  }, [safeMetadata, setMetadata]);
+
+  const closeExplanationModal = useCallback(() => {
+    setMetadata({ ...safeMetadata, showExplanationModal: null });
+  }, [safeMetadata, setMetadata]);
+
+  return { openExplanationModal, closeExplanationModal };
+};
+
+// Main Agent Builder Component
+const AgentBuilderContent = memo(({
+  content,
+  onSaveContent,
+  status,
+  mode,
+  isCurrentVersion,
+  currentVersionIndex,
+  getDocumentContentById,
+  isLoading,
+  metadata,
+  setMetadata,
+  setMessages,
+}: {
+  content: string;
+  onSaveContent: (content: string, debounce: boolean) => void;
+  status: 'streaming' | 'idle';
+  mode: 'edit' | 'diff';
+  isCurrentVersion: boolean;
+  currentVersionIndex: number;
+  getDocumentContentById: (index: number) => string;
+  isLoading: boolean;
+  metadata: AgentArtifactMetadata | null;
+  setMetadata: (metadata: AgentArtifactMetadata) => void;
+  setMessages?: UseChatHelpers['setMessages'];
+}) => {
+  // ALL HOOKS MUST BE DECLARED AT THE TOP LEVEL BEFORE ANY CONDITIONAL LOGIC
+  const { artifact } = useArtifact();
+  const router = useRouter();
+  const params = useParams();
+  
+  // Initialize metadata with defaults if null - this must be consistent
+  const safeMetadata: AgentArtifactMetadata = useMemo(() => metadata || {
+    selectedTab: 'onboard',
+    editingModel: null,
+    editingAction: null,
+    editingSchedule: null,
+    viewingModelData: null,
+    editingRecord: null,
+    dataManagement: null,
+    showExplanationModal: null
+  }, [metadata]);
+
+  // All state hooks
+  const [agentData, setAgentData] = useAgentData(content);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showDeploymentModal, setShowDeploymentModal] = useState(false);
+  
+  // Introduction state hooks
+  const {
+    isModelsIntroExpanded,
+    setIsModelsIntroExpanded,
+    isActionsIntroExpanded,
+    setIsActionsIntroExpanded,
+    isSchedulesIntroExpanded,
+    setIsSchedulesIntroExpanded
+  } = useIntroductionState();
+
+  // Get derived values
+  const documentId = artifact?.documentId;
+  const chatId = params.id as string;
+
+  // Update metadata safely
+  const updateMetadata = useCallback((updates: Partial<AgentArtifactMetadata>) => {
+    if (setMetadata) {
+      setMetadata({ ...safeMetadata, ...updates });
+    }
+  }, [safeMetadata, setMetadata]);
+
+  // Update content when agent data changes
+  const updateAgentData = useCallback((newData: AgentData) => {
+    console.log('🔄 updateAgentData called with:', {
+      currentModels: agentData.models?.length || 0,
+      currentActions: agentData.actions?.length || 0,
+      currentSchedules: agentData.schedules?.length || 0,
+      newModels: newData.models?.length || 0,
+      newActions: newData.actions?.length || 0,
+      newSchedules: newData.schedules?.length || 0,
+      currentModelNames: (agentData.models || []).map((m: AgentModel) => m.name),
+      newModelNames: (newData.models || []).map((m: AgentModel) => m.name),
+      currentActionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
+      newActionNames: (newData.actions || []).map((a: AgentAction) => a.name),
+      currentScheduleNames: (agentData.schedules || []).map((s: AgentSchedule) => s.name),
+      newScheduleNames: (newData.schedules || []).map((s: AgentSchedule) => s.name)
+    });
+    
+    setAgentData(newData);
+    setHasUnsavedChanges(true);
+  }, [agentData.models, agentData.actions, agentData.schedules]);
+
+  // Enhanced save function
+  const saveAgentToConversation = useCallback(async () => {
+    setIsSaving(true);
+    try {
+      const agentContent = JSON.stringify(agentData, null, 2);
+      onSaveContent(agentContent, false);
+      
+      setHasUnsavedChanges(false);
+      console.log('✅ Agent data saved through standard document mechanism');
+      
+      setShowDeploymentModal(true);
+    } catch (error) {
+      console.error('❌ Failed to save agent data:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [agentData, onSaveContent]);
+
+  // Agent actions hooks
+  const { addModel, addSchedule, addAction } = useAgentActions(agentData, updateAgentData, updateMetadata);
+
+  // Modal handlers
+  const { openExplanationModal, closeExplanationModal } = useModalHandlers(safeMetadata, setMetadata);
 
   // Tab configuration
-  const tabs = [
+  const tabs = useMemo(() => [
     {
       id: 'onboard' as const,
       label: 'Onboard',
@@ -780,26 +758,70 @@ const AgentBuilderContent = memo(({
       label: 'Schedules',
       count: agentData.schedules?.length || 0
     }
-  ];
+  ], [agentData.models?.length, agentData.actions?.length, agentData.schedules?.length]);
 
-  // Debug logging for tab counts
-  console.log('📊 Tab counts:', {
-    models: agentData.models?.length || 0,
-    actions: agentData.actions?.length || 0,
-    schedules: agentData.schedules?.length || 0,
-    modelNames: (agentData.models || []).map((m: AgentModel) => m.name),
-    actionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
-    scheduleNames: (agentData.schedules || []).map((s: AgentSchedule) => s.name)
-  });
+  // Monitor content changes from external sources
+  useEffect(() => {
+    // Skip if content is explicitly empty or just whitespace
+    if (!content || content.trim() === '') {
+      return;
+    }
 
-  // Add explanation modal handlers
-  const openExplanationModal = useCallback((type: 'models' | 'actions' | 'schedules') => {
-    setMetadata({ ...safeMetadata, showExplanationModal: type });
-  }, [safeMetadata]);
+    try {
+      const parsed = JSON.parse(content);
+      
+      // Check if this is meaningful agent data
+      const hasRealData = (parsed.name && parsed.name !== 'New Agent' && parsed.name.trim() !== '') ||
+                         (parsed.description && parsed.description.trim() !== '') ||
+                         (parsed.domain && parsed.domain.trim() !== '') ||
+                         (parsed.models && parsed.models.length > 0) ||
+                         (parsed.actions && parsed.actions.length > 0) ||
+                         (parsed.schedules && parsed.schedules.length > 0);
 
-  const closeExplanationModal = useCallback(() => {
-    setMetadata({ ...safeMetadata, showExplanationModal: null });
-  }, [safeMetadata]);
+      // Only update if we have real data
+      if (hasRealData) {
+        const updatedData = {
+          id: parsed.id,
+          name: parsed.name || 'New Agent',
+          description: parsed.description || '',
+          domain: parsed.domain || '',
+          models: Array.isArray(parsed.models) ? parsed.models : [],
+          actions: Array.isArray(parsed.actions) ? parsed.actions : [],
+          schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
+          createdAt: parsed.createdAt || new Date().toISOString(),
+          metadata: parsed.metadata
+        };
+        
+        // Only update if data has actually changed
+        const currentDataString = JSON.stringify({
+          name: agentData.name,
+          description: agentData.description,
+          domain: agentData.domain,
+          models: agentData.models,
+          actions: agentData.actions,
+          schedules: agentData.schedules
+        });
+        const newDataString = JSON.stringify(updatedData);
+        
+        if (currentDataString !== newDataString) {
+          setAgentData(updatedData);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse updated content:', e);
+    }
+  }, [content]);
+
+  // NOW ALL HOOKS ARE DECLARED - we can safely do early returns
+  if (isLoading) {
+    return <DocumentSkeleton artifactKind="agent" />;
+  }
+
+  if (mode === 'diff') {
+    const oldContent = getDocumentContentById(currentVersionIndex - 1);
+    const newContent = getDocumentContentById(currentVersionIndex);
+    return <DiffView oldContent={oldContent} newContent={newContent} />;
+  }
 
   return (
     <div className="h-full bg-black text-green-200 flex flex-col relative overflow-hidden font-mono">
@@ -1834,41 +1856,14 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
         }));
       }
       
-      // Handle final completion - keep streaming until we get the completion event
+      // Handle final completion - immediately set to idle when complete step is received
       if (stepData.status === 'complete' && (stepData.step === 'complete' || mappedStepId === 'complete')) {
-        // setArtifact((draftArtifact) => ({
-        //   ...draftArtifact,
-        //   isVisible: true,
-        //   status: 'streaming', // Keep as streaming initially
-        // }));
-        
-        // Set to idle after a brief delay to ensure all text-delta content has been processed
-        // The status change from 'streaming' to 'idle' will trigger document refetch in the main component
-        setTimeout(() => {
-          setArtifact((draftArtifact) => ({
-            ...draftArtifact,
-            status: 'idle',
-          }));
-        }, 1500); // 1.5 second delay to allow orchestrator to complete saving
-      }
-    }
-
-    // Handle dedicated completion events (would need to be added to server-side)
-    // For now, we'll use the existing agent-step complete detection but make it more reliable
-    if (streamPart.type === 'agent-step') {
-      const stepData = typeof streamPart.content === 'string' 
-        ? JSON.parse(streamPart.content) 
-        : streamPart.content;
-      
-      // When we receive the final complete step, set artifact to idle after a brief delay
-      // to ensure all text-delta content has been processed
-      if (stepData.status === 'complete' && stepData.step === 'complete') {
-        setTimeout(() => {
-          setArtifact((draftArtifact) => ({
-            ...draftArtifact,
-            status: 'idle',
-          }));
-        }, 1200); // 1.2 second delay to allow orchestrator to complete saving
+        console.log('🎉 Agent build completed! Setting status to idle...');
+        setArtifact((draftArtifact) => ({
+          ...draftArtifact,
+          isVisible: true,
+          status: 'idle', // Immediately set to idle
+        }));
       }
     }
     
@@ -1880,7 +1875,7 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
           ...draftArtifact,
           content: newContent,
           isVisible: draftArtifact.status === 'streaming' && newContent.length > 200,
-          // Don't change status here - let the completion timeout handle it
+          // Don't change status here - let the completion handler manage it
         };
       });
     }
