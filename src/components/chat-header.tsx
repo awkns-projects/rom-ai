@@ -79,7 +79,6 @@ function PureChatHeader({
       >
         <Link
           href={`/deployment`}
-          target="_noblank"
         >
           My Agents
         </Link>
