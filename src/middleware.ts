@@ -18,8 +18,8 @@ export async function middleware(request: NextRequest) {
   }
 
   // Skip middleware for cron endpoints - they handle their own authentication
-  if (pathname.startsWith('/api/cron/') || 
-      (pathname.startsWith('/api/agent/execute-schedule') && 
+  if (pathname.startsWith('/(cron)/api/execute-schedules') || 
+      (pathname.startsWith('/api/execute-schedule') && 
        request.headers.get('authorization')?.startsWith('Bearer '))) {
     return NextResponse.next();
   }
