@@ -21,16 +21,22 @@ interface ModelDataViewerProps {
   allModels: AgentModel[];
 }
 
+// Model Data Viewer Component
 export const ModelDataViewer = memo(({ 
   model, 
   onUpdateModel, 
   onBack,
   allModels
-}: ModelDataViewerProps) => {
+}: { 
+  model: AgentModel;
+  onUpdateModel: (model: AgentModel) => void;
+  onBack: () => void;
+  allModels: AgentModel[];
+}) => {
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
   const [isAddingRecord, setIsAddingRecord] = useState(false);
 
-  const records = (model.records || []) as ModelRecord[];
+  const records = model.records || [];
 
   // Collect all enums from all models
   const allEnums = useMemo(() => {
@@ -257,4 +263,4 @@ export const ModelDataViewer = memo(({
       )}
     </div>
   );
-}); 
+});

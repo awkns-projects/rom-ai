@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { guestRegex, isDevelopmentEnvironment } from './src/lib/constants';
+import { guestRegex, isDevelopmentEnvironment } from './lib/constants';
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -18,7 +18,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Skip middleware for cron endpoints - they handle their own authentication
-  if (pathname.startsWith('/api/cron/') || 
+  if (pathname.startsWith('/api/execute-schedules') || 
       (pathname.startsWith('/api/agent/execute-schedule') && 
        request.headers.get('authorization')?.startsWith('Bearer '))) {
     return NextResponse.next();
@@ -41,7 +41,7 @@ export async function middleware(request: NextRequest) {
   const isGuest = guestRegex.test(token?.email ?? '');
 
   if (token && !isGuest && ['/login', '/register'].includes(pathname)) {
-    return NextResponse.redirect(new URL('/', request.url));
+    return NextResponse.redirect(new URL('/chat', request.url));
   }
 
   return NextResponse.next();

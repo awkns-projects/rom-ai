@@ -25,6 +25,7 @@ interface RecordEditorProps {
   onDelete?: () => void;
 }
 
+// Record Editor Component  
 export const RecordEditor = memo(({ 
   model, 
   record, 
@@ -33,7 +34,15 @@ export const RecordEditor = memo(({
   onDelete,
   allModels = [],
   allEnums = []
-}: RecordEditorProps) => {
+}: { 
+  model: AgentModel;
+  record?: ModelRecord | null;
+  onSave: (data: Record<string, any>, recordId?: string) => void;
+  onCancel: () => void;
+  onDelete?: () => void;
+  allModels?: AgentModel[];
+  allEnums?: AgentEnum[];
+}) => {
   const [formData, setFormData] = useState<Record<string, any>>(
     record?.data || {}
   );
@@ -435,4 +444,4 @@ export const RecordEditor = memo(({
       </div>
     </div>
   );
-}); 
+});
