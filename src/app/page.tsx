@@ -37,28 +37,28 @@ const features = [
   {
     icon: Bot,
     title: 'Smart AI Apps',
-    description: 'Build AI apps that remember conversations, learn from your customers, and get smarter over time',
+    description: 'Build AI apps that remember conversations, learn from your customers, and get smarter over time - like having your own JARVIS',
     gradient: 'from-green-500/20 via-green-600/10 to-green-700/20',
     border: 'border-green-500/30'
   },
   {
     icon: Database,
     title: 'Customer Memory',
-    description: 'Your AI remembers every customer interaction, preferences, and history automatically',
+    description: 'Your AI remembers every customer interaction, preferences, and history automatically - just like JARVIS remembers everything for Tony Stark',
     gradient: 'from-blue-500/20 via-blue-600/10 to-blue-700/20',
     border: 'border-blue-500/30'
   },
   {
     icon: Clock,
     title: 'Auto Scheduling',
-    description: 'Set your AI to work on schedules - daily reports, weekly follow-ups, monthly analysis',
+    description: 'Set your AI to work on schedules - daily reports, weekly follow-ups, monthly analysis. Your personal assistant that never sleeps',
     gradient: 'from-purple-500/20 via-purple-600/10 to-purple-700/20',
     border: 'border-purple-500/30'
   },
   {
     icon: Zap,
     title: 'Data Sync',
-    description: 'Connect to any website, database, or app to keep your AI updated with fresh information',
+    description: 'Connect to any website, database, or app to keep your AI updated with fresh information - complete situational awareness',
     gradient: 'from-orange-500/20 via-orange-600/10 to-orange-700/20',
     border: 'border-orange-500/30'
   }
@@ -68,32 +68,32 @@ const useCases = [
   {
     emoji: '🗂️',
     title: 'Smart CMS',
-    description: 'AI that writes, updates, and organizes your website content automatically'
+    description: 'AI that writes, updates, and organizes your website content automatically - like having JARVIS manage your digital presence'
   },
   {
     emoji: '📋',
     title: 'Customer CRM',
-    description: 'Track customers, send follow-ups, and never miss a sale opportunity'
+    description: 'Track customers, send follow-ups, and never miss a sale opportunity - your business intelligence system'
   },
   {
     emoji: '🤖',
     title: 'Personal Assistant',
-    description: 'AI that handles emails, schedules meetings, and manages your daily tasks'
+    description: 'AI that handles emails, schedules meetings, and manages your daily tasks - just like Tony Stark\'s JARVIS but for your business'
   },
   {
     emoji: '📊',
     title: 'Business Dashboard',
-    description: 'Get daily reports on sales, customers, and business performance'
+    description: 'Get daily reports on sales, customers, and business performance with Iron Man-level analytics'
   },
   {
     emoji: '💬',
     title: 'Customer Support Bot',
-    description: 'Answer customer questions 24/7 with context from past conversations'
+    description: 'Answer customer questions 24/7 with context from past conversations - always ready, always helpful'
   },
   {
     emoji: '📈',
     title: 'Sales Tracker',
-    description: 'Monitor leads, send reminders, and track deals from start to finish'
+    description: 'Monitor leads, send reminders, and track deals from start to finish with superhero-level efficiency'
   }
 ];
 
@@ -315,6 +315,9 @@ function TypewriterEffect() {
     'I need a CRM that remembers all my customers',
     'Build me a support bot that knows our products',
     'Create a dashboard that updates every morning',
+    'I want an AI like JARVIS for my business',
+    'Make me an Iron Man-style personal assistant',
+    'Build me a JARVIS that handles customer support',
     'I want an AI that follows up with leads',
     'Make me an app that tracks competitor prices'
   ];
@@ -599,13 +602,13 @@ function EnhancedHeroSection() {
               </h1>
               
               <p className="text-xl md:text-2xl lg:text-3xl text-white max-w-4xl leading-relaxed">
-                Build
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 font-semibold"> smart AI apps </span>
+                Build your own
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 font-semibold"> JARVIS </span>
                 using only prompts
               </p>
               
               <p className="text-base md:text-lg lg:text-xl text-white/70 max-w-3xl leading-relaxed">
-                Just type what you want in plain English. Our AI builds apps that remember customers, work on schedules, and sync with your tools - all from simple prompts! ✨
+                Just like Tony Stark, describe what you want in plain English. Our AI builds Iron Man-level smart apps that remember customers, work on schedules, and sync with your tools - all from simple prompts! ✨
               </p>
             </div>
 
@@ -619,7 +622,7 @@ function EnhancedHeroSection() {
                   <span className="text-white/80 ml-3 font-mono text-sm">your-dream-app.txt</span>
                 </div>
                 <div className="text-left space-y-4">
-                  <div className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 font-mono text-sm opacity-75">💭 What's your million-dollar idea?</div>
+                  <div className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 font-mono text-sm opacity-75">💭 What's your Iron Man moment?</div>
                   <TypewriterEffect />
                   <div className="text-white/60 font-mono text-sm mt-4">
                     → AI is building this for you right now... 🤖✨
@@ -1474,10 +1477,10 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Watch AI Build Your Business App
+              Watch AI Build Your JARVIS-Level Business App
             </h2>
             <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
-              See how simple descriptions become working AI apps with memory and smart features
+              See how simple descriptions become working AI apps with memory and smart features - like Tony Stark's workshop
             </p>
           </div>
 
@@ -1514,7 +1517,7 @@ export default function HomePage() {
               Build AI Apps That Actually Help Your Business
             </h2>
             <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
-              From simple requests to powerful AI apps with memory, scheduling, and data connections
+              From simple requests to powerful AI apps with memory, scheduling, and data connections - your personal JARVIS awaits
             </p>
           </div>
 
@@ -1534,7 +1537,7 @@ export default function HomePage() {
               Turn Ideas Into Revenue Streams
             </h2>
             <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
-              Real businesses built with simple prompts
+              Real businesses built with simple prompts - Iron Man-level automation for everyone
             </p>
           </div>
 
@@ -1683,7 +1686,7 @@ export default function HomePage() {
                 Ready to Build Your AI Empire?
               </h2>
               <p className="text-xl text-green-300/80 mb-8 font-mono max-w-2xl mx-auto">
-                Join thousands of entrepreneurs using AI agents to automate their businesses and create passive income streams.
+                Join thousands of entrepreneurs using JARVIS-level AI agents to automate their businesses and create passive income streams.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link href="/register">
