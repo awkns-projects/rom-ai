@@ -2,7 +2,7 @@
 
 import { startTransition, useMemo, useOptimistic, useState, useEffect } from 'react';
 
-import { saveChatModelAsCookie, saveProviderAsCookie } from '@/app/(chat)/actions';
+import { saveChatModelAsCookie, saveProviderAsCookie } from '@/app/(builder)/actions';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,

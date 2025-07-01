@@ -14,6 +14,14 @@ import {
   SelectValue 
 } from '@/components/ui/select';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   CopyIcon,
   PlusIcon,
   CrossIcon,
@@ -33,6 +41,8 @@ import { ModelsListEditor } from './components/lists/ModelsListEditor';
 import { ActionsListEditor } from './components/lists/ActionsListEditor';
 import { SchedulesListEditor } from './components/lists/SchedulesListEditor';
 import { OnboardContent } from './components/OnboardContent';
+import { useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 
 interface AgentModel {
   id: string;
@@ -211,6 +221,7 @@ interface AgentArtifactMetadata {
     editingRecordId?: string | null;
     isAddingRecord?: boolean;
   } | null;
+  showExplanationModal?: 'models' | 'actions' | 'schedules' | null;
 }
 
 // Interface for recurring scheduled tasks
@@ -1812,6 +1823,11 @@ const AgentBuilderContent = memo(({
 }) => {
   const { artifact } = useArtifact();
   const documentId = artifact?.documentId; // Get documentId from artifact
+  const router = useRouter();
+  const params = useParams();
+  
+  // Get chatId from router query parameters
+  const chatId = params.id as string;
   
   // Initialize metadata with defaults if null
   const safeMetadata: AgentArtifactMetadata = metadata || {
@@ -1821,12 +1837,14 @@ const AgentBuilderContent = memo(({
     editingSchedule: null,
     viewingModelData: null,
     editingRecord: null,
-    dataManagement: null
+    dataManagement: null,
+    showExplanationModal: null
   };
 
   // Track unsaved changes
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showDeploymentModal, setShowDeploymentModal] = useState(false);
 
   const [agentData, setAgentData] = useState<AgentData>(() => {
     console.log('🚀 Initializing agent data with content:', {
@@ -1948,6 +1966,9 @@ const AgentBuilderContent = memo(({
       
       setHasUnsavedChanges(false); // Clear unsaved changes flag
       console.log('✅ Agent data saved through standard document mechanism');
+      
+      // Show deployment modal after successful save
+      setShowDeploymentModal(true);
     } catch (error) {
       console.error('❌ Failed to save agent data:', error);
     } finally {
@@ -2181,6 +2202,15 @@ const AgentBuilderContent = memo(({
     actionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
     scheduleNames: (agentData.schedules || []).map((s: AgentSchedule) => s.name)
   });
+
+  // Add explanation modal handlers
+  const openExplanationModal = useCallback((type: 'models' | 'actions' | 'schedules') => {
+    setMetadata({ ...safeMetadata, showExplanationModal: type });
+  }, [safeMetadata]);
+
+  const closeExplanationModal = useCallback(() => {
+    setMetadata({ ...safeMetadata, showExplanationModal: null });
+  }, [safeMetadata]);
 
   return (
     <div className="h-full bg-black text-green-200 flex flex-col relative overflow-hidden font-mono">
@@ -2463,17 +2493,48 @@ const AgentBuilderContent = memo(({
                   editingId: safeMetadata.editingModel
                 });
                 return (
-                  <ModelsListEditor
-                    models={agentData.models || []}
-                    onModelsChange={(models) => updateAgentData({ ...agentData, models })}
-                    updateMetadata={(updates) => {
-                      setMetadata({ 
-                        ...safeMetadata, 
-                        ...updates
-                      });
-                    }}
-                    status={'idle'}
-                  />
+                  <div className="space-y-6">
+                    {/* Introduction Section */}
+                    <div className="p-4 sm:p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+                              <span className="text-lg">🗃️</span>
+                            </div>
+                            <h2 className="text-xl font-bold text-blue-200 font-mono">Data Models</h2>
+                          </div>
+                          <p className="text-blue-300 text-sm font-mono leading-relaxed mb-3">
+                            Define the structure of your data with custom models. Each model represents a table in your database with fields, types, and relationships. Models store and organize all the information your agent will work with.
+                          </p>
+                          <div className="flex flex-wrap gap-2 text-xs font-mono">
+                            <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-300">📊 Database Tables</span>
+                            <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-300">🔗 Relationships</span>
+                            <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-300">✅ Validation</span>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => openExplanationModal('models')}
+                          className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 text-base"
+                        >
+                          <span>📖</span>
+                          <span>How Models Work</span>
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <ModelsListEditor
+                      models={agentData.models || []}
+                      onModelsChange={(models) => updateAgentData({ ...agentData, models })}
+                      updateMetadata={(updates) => {
+                        setMetadata({ 
+                          ...safeMetadata, 
+                          ...updates
+                        });
+                      }}
+                      status={'idle'}
+                    />
+                  </div>
                 );
               }
               
@@ -2485,12 +2546,43 @@ const AgentBuilderContent = memo(({
                   editingId: safeMetadata.editingAction
                 });
                 return (
-                  <ActionsListEditor
-                    actions={agentData.actions || []}
-                    onUpdate={(actions) => updateAgentData({ ...agentData, actions })}
-                    allModels={agentData.models || []}
-                    documentId={documentId}
-                  />
+                  <div className="space-y-6">
+                    {/* Introduction Section */}
+                    <div className="p-4 sm:p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center border border-purple-500/30">
+                              <span className="text-lg">⚡</span>
+                            </div>
+                            <h2 className="text-xl font-bold text-purple-200 font-mono">Actions</h2>
+                          </div>
+                          <p className="text-purple-300 text-sm font-mono leading-relaxed mb-3">
+                            Create interactive actions that users can trigger to manipulate data. Actions can collect user input, process information, and create or update records in your models. Perfect for forms, workflows, and user interactions.
+                          </p>
+                          <div className="flex flex-wrap gap-2 text-xs font-mono">
+                            <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-300">🎯 User Triggered</span>
+                            <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-300">📝 Data Input</span>
+                            <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-300">🔄 Processing</span>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => openExplanationModal('actions')}
+                          className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-6 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 text-base"
+                        >
+                          <span>⚡</span>
+                          <span>How Actions Work</span>
+                        </Button>
+                      </div>
+                    </div>
+
+                    <ActionsListEditor
+                      actions={agentData.actions || []}
+                      onUpdate={(actions) => updateAgentData({ ...agentData, actions })}
+                      allModels={agentData.models || []}
+                      documentId={documentId}
+                    />
+                  </div>
                 );
               }
               
@@ -2502,12 +2594,43 @@ const AgentBuilderContent = memo(({
                   editingId: safeMetadata.editingSchedule
                 });
                 return (
-                  <SchedulesListEditor
-                    schedules={agentData.schedules || []}
-                    onUpdate={(schedules) => updateAgentData({ ...agentData, schedules })}
-                    allModels={agentData.models || []}
-                    documentId={documentId}
-                  />
+                  <div className="space-y-6">
+                    {/* Introduction Section */}
+                    <div className="p-4 sm:p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
+                              <span className="text-lg">⏰</span>
+                            </div>
+                            <h2 className="text-xl font-bold text-orange-200 font-mono">Schedules</h2>
+                          </div>
+                          <p className="text-orange-300 text-sm font-mono leading-relaxed mb-3">
+                            Automate recurring tasks with scheduled actions that run at specific intervals. Perfect for data syncing, regular maintenance, reports, or any automated workflow that needs to happen on a timer.
+                          </p>
+                          <div className="flex flex-wrap gap-2 text-xs font-mono">
+                            <span className="px-2 py-1 rounded bg-orange-500/20 text-orange-300">🤖 Automated</span>
+                            <span className="px-2 py-1 rounded bg-orange-500/20 text-orange-300">⏱️ Time-based</span>
+                            <span className="px-2 py-1 rounded bg-orange-500/20 text-orange-300">🔄 Recurring</span>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => openExplanationModal('schedules')}
+                          variant="outline"
+                          className="btn-matrix border-orange-500/30 hover:border-orange-500/50 text-orange-200 hover:text-orange-100 bg-transparent hover:bg-orange-500/10 px-4 py-2 text-sm whitespace-nowrap"
+                        >
+                          Explain More
+                        </Button>
+                      </div>
+                    </div>
+
+                    <SchedulesListEditor
+                      schedules={agentData.schedules || []}
+                      onUpdate={(schedules) => updateAgentData({ ...agentData, schedules })}
+                      allModels={agentData.models || []}
+                      documentId={documentId}
+                    />
+                  </div>
                 );
               }
               
@@ -2517,6 +2640,425 @@ const AgentBuilderContent = memo(({
                                 </div>
                                   </div>
       </div>
+      
+      {/* Deployment Modal */}
+      <Dialog open={showDeploymentModal} onOpenChange={setShowDeploymentModal}>
+        <DialogContent className="sm:max-w-[425px] bg-black/95 border-green-500/20 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="text-green-200 font-mono text-xl flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-green-600 to-green-700 flex items-center justify-center">
+                <span className="text-black text-lg">🚀</span>
+              </div>
+              Agent Saved Successfully!
+            </DialogTitle>
+            <DialogDescription className="text-green-400 font-mono">
+              Your agent "<span className="text-green-200 font-semibold">{agentData.name}</span>" has been saved. 
+              Would you like to proceed to the deployment page to make it live?
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex flex-col gap-4 mt-6">
+            <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-green-600 rounded-full" />
+                <span className="text-green-200 font-medium font-mono">What happens next?</span>
+              </div>
+              <ul className="text-sm text-green-400 font-mono space-y-1 ml-4">
+                <li>• Configure deployment environment</li>
+                <li>• Set up database connections</li>
+                <li>• Deploy agent to production</li>
+                <li>• Monitor and manage your agent</li>
+              </ul>
+            </div>
+          </div>
+          
+          <DialogFooter className="gap-3 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeploymentModal(false)}
+              className="btn-matrix border-green-500/30 hover:border-green-500/50 text-white hover:text-green-200 bg-transparent hover:bg-green-500/10"
+            >
+              <span className="font-mono">Maybe Later</span>
+            </Button>
+            <Button
+              onClick={() => {
+                setShowDeploymentModal(false);
+                // Navigate to deployment page with chatId
+                const deploymentUrl = chatId 
+                  ? `/deployment?chatId=${chatId}`
+                  : '/deployment';
+                router.push(deploymentUrl);
+              }}
+              className="btn-matrix bg-green-600 hover:bg-green-700 text-black font-bold"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-mono">Deploy Agent</span>
+                <span>🚀</span>
+              </div>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Explanation Modals */}
+      {/* Models Explanation Modal */}
+      <Dialog open={safeMetadata.showExplanationModal === 'models'} onOpenChange={closeExplanationModal}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-black/95 border-blue-500/20 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="text-blue-200 font-mono text-xl flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+                <span className="text-lg">🗃️</span>
+              </div>
+              Data Models Explained
+            </DialogTitle>
+            <DialogDescription className="text-blue-400 font-mono">
+              Learn how to structure and organize your data with powerful models
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 mt-6">
+            {/* What are Models */}
+            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <h3 className="text-blue-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-blue-400">📊</span> What are Data Models?
+              </h3>
+              <p className="text-blue-300 text-sm font-mono leading-relaxed mb-3">
+                Data models define the structure of information in your agent. Think of them as blueprints for database tables that specify what fields exist, their types, and how they relate to each other.
+              </p>
+              <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                <div className="text-xs font-mono text-blue-400 mb-2">Example Model: "User"</div>
+                <div className="space-y-1 text-xs font-mono text-blue-300">
+                  <div className="flex justify-between"><span>📝 name</span><span>String (required)</span></div>
+                  <div className="flex justify-between"><span>📧 email</span><span>String (unique)</span></div>
+                  <div className="flex justify-between"><span>🎂 age</span><span>Integer</span></div>
+                  <div className="flex justify-between"><span>✅ published</span><span>Boolean</span></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Key Features */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                <h4 className="text-blue-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-blue-400">🔗</span> Relationships
+                </h4>
+                <p className="text-blue-300 text-xs font-mono leading-relaxed">
+                  Connect models together. A "Post" can belong to a "User", creating powerful data relationships.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                <h4 className="text-blue-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-blue-400">✅</span> Validation
+                </h4>
+                <p className="text-blue-300 text-xs font-mono leading-relaxed">
+                  Set required fields, unique constraints, and default values to ensure data integrity.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                <h4 className="text-blue-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-blue-400">🎨</span> Custom Forms
+                </h4>
+                <p className="text-blue-300 text-xs font-mono leading-relaxed">
+                  Group fields into forms for better user experience when creating or editing records.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                <h4 className="text-blue-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-blue-400">📊</span> Data Management
+                </h4>
+                <p className="text-blue-300 text-xs font-mono leading-relaxed">
+                  View, edit, and manage actual records stored in your models with built-in interfaces.
+                </p>
+              </div>
+            </div>
+
+            {/* Visual Example */}
+            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <h3 className="text-blue-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-blue-400">🎯</span> Example: Blog System
+              </h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                  <div className="text-sm font-mono text-blue-200 mb-2">📝 Post Model</div>
+                  <div className="space-y-1 text-xs font-mono text-blue-300">
+                    <div>• title (String, required)</div>
+                    <div>• content (Text)</div>
+                    <div>• published (Boolean)</div>
+                    <div>• author → User</div>
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                  <div className="text-sm font-mono text-blue-200 mb-2">👤 User Model</div>
+                  <div className="space-y-1 text-xs font-mono text-blue-300">
+                    <div>• name (String, required)</div>
+                    <div>• email (String, unique)</div>
+                    <div>• role (Enum: admin/user)</div>
+                    <div>• posts ← Post[]</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Actions Explanation Modal */}
+      <Dialog open={safeMetadata.showExplanationModal === 'actions'} onOpenChange={closeExplanationModal}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-black/95 border-purple-500/20 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="text-purple-200 font-mono text-xl flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center border border-purple-500/30">
+                <span className="text-lg">⚡</span>
+              </div>
+              Actions Explained
+            </DialogTitle>
+            <DialogDescription className="text-purple-400 font-mono">
+              Create powerful user-triggered workflows and data processing
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 mt-6">
+            {/* What are Actions */}
+            <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
+              <h3 className="text-purple-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-purple-400">⚡</span> What are Actions?
+              </h3>
+              <p className="text-purple-300 text-sm font-mono leading-relaxed mb-3">
+                Actions are interactive workflows that users can trigger to process data. They collect input from users, execute custom logic, and create or update records in your models.
+              </p>
+              <div className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                <div className="text-xs font-mono text-purple-400 mb-2">Action Flow:</div>
+                <div className="flex items-center gap-2 text-xs font-mono text-purple-300 flex-wrap">
+                  <span className="px-2 py-1 rounded bg-purple-500/20">📥 User Input</span>
+                  <span>→</span>
+                  <span className="px-2 py-1 rounded bg-purple-500/20">🔄 Processing</span>
+                  <span>→</span>
+                  <span className="px-2 py-1 rounded bg-purple-500/20">💾 Database Update</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Key Features */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                <h4 className="text-purple-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-purple-400">📝</span> Input Forms
+                </h4>
+                <p className="text-purple-300 text-xs font-mono leading-relaxed">
+                  Collect data from users with custom forms that validate input and provide great UX.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                <h4 className="text-purple-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-purple-400">🤖</span> AI Processing
+                </h4>
+                <p className="text-purple-300 text-xs font-mono leading-relaxed">
+                  Use AI prompts to analyze, transform, or enhance user input before saving to models.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                <h4 className="text-purple-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-purple-400">🔧</span> Custom Code
+                </h4>
+                <p className="text-purple-300 text-xs font-mono leading-relaxed">
+                  Write custom JavaScript to handle complex business logic and data transformations.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                <h4 className="text-purple-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-purple-400">🎯</span> Role-based
+                </h4>
+                <p className="text-purple-300 text-xs font-mono leading-relaxed">
+                  Control who can trigger actions with admin or member role permissions.
+                </p>
+              </div>
+            </div>
+
+            {/* Visual Example */}
+            <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
+              <h3 className="text-purple-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-purple-400">🎯</span> Example: "Create Blog Post"
+              </h3>
+              <div className="space-y-3">
+                <div className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                  <div className="text-sm font-mono text-purple-200 mb-2">Step 1: Collect Input</div>
+                  <div className="grid grid-cols-2 gap-2 text-xs font-mono text-purple-300">
+                    <div>• Title (required)</div>
+                    <div>• Content (required)</div>
+                    <div>• Category (dropdown)</div>
+                    <div>• Tags (multi-select)</div>
+                  </div>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                  <div className="text-sm font-mono text-purple-200 mb-2">Step 2: AI Enhancement</div>
+                  <div className="text-xs font-mono text-purple-300">
+                    "Generate SEO-friendly slug and meta description from the title and content"
+                  </div>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                  <div className="text-sm font-mono text-purple-200 mb-2">Step 3: Save to Model</div>
+                  <div className="text-xs font-mono text-purple-300">
+                    Create new Post record with processed data + current user as author
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedules Explanation Modal */}
+      <Dialog open={safeMetadata.showExplanationModal === 'schedules'} onOpenChange={closeExplanationModal}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-black/95 border-orange-500/20 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="text-orange-200 font-mono text-xl flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
+                <span className="text-lg">⏰</span>
+              </div>
+              Schedules Explained
+            </DialogTitle>
+            <DialogDescription className="text-orange-400 font-mono">
+              Automate recurring tasks and workflows with intelligent scheduling
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 mt-6">
+            {/* What are Schedules */}
+            <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/20">
+              <h3 className="text-orange-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-orange-400">⏰</span> What are Schedules?
+              </h3>
+              <p className="text-orange-300 text-sm font-mono leading-relaxed mb-3">
+                Schedules automate tasks that need to run regularly without user intervention. Perfect for data syncing, maintenance, reports, or any workflow that should happen on a timer.
+              </p>
+              <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                <div className="text-xs font-mono text-orange-400 mb-2">Schedule Flow:</div>
+                <div className="flex items-center gap-2 text-xs font-mono text-orange-300 flex-wrap">
+                  <span className="px-2 py-1 rounded bg-orange-500/20">⏱️ Timer Triggers</span>
+                  <span>→</span>
+                  <span className="px-2 py-1 rounded bg-orange-500/20">🔄 Execute Code</span>
+                  <span>→</span>
+                  <span className="px-2 py-1 rounded bg-orange-500/20">💾 Update Data</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Key Features */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                <h4 className="text-orange-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-orange-400">📅</span> Flexible Timing
+                </h4>
+                <p className="text-orange-300 text-xs font-mono leading-relaxed">
+                  Run every minute, hour, day, week, or with custom cron expressions for precise timing.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                <h4 className="text-orange-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-orange-400">🤖</span> AI Processing
+                </h4>
+                <p className="text-orange-300 text-xs font-mono leading-relaxed">
+                  Use AI to analyze data, generate content, or make decisions during scheduled runs.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                <h4 className="text-orange-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-orange-400">🔄</span> Data Sync
+                </h4>
+                <p className="text-orange-300 text-xs font-mono leading-relaxed">
+                  Automatically sync with external APIs, update records, or perform maintenance tasks.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                <h4 className="text-orange-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-orange-400">🛡️</span> Safe Testing
+                </h4>
+                <p className="text-orange-300 text-xs font-mono leading-relaxed">
+                  Test schedules safely without affecting real data before activating them.
+                </p>
+              </div>
+            </div>
+
+            {/* Timing Examples */}
+            <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/20">
+              <h3 className="text-orange-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-orange-400">⏱️</span> Common Schedule Patterns
+              </h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="p-2 rounded bg-orange-500/10 text-xs font-mono text-orange-300">
+                    <span className="text-orange-200">Every 5 minutes:</span> Real-time data sync
+                  </div>
+                  <div className="p-2 rounded bg-orange-500/10 text-xs font-mono text-orange-300">
+                    <span className="text-orange-200">Every hour:</span> Update statistics
+                  </div>
+                  <div className="p-2 rounded bg-orange-500/10 text-xs font-mono text-orange-300">
+                    <span className="text-orange-200">Daily at 2 AM:</span> Generate reports
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="p-2 rounded bg-orange-500/10 text-xs font-mono text-orange-300">
+                    <span className="text-orange-200">Weekly on Monday:</span> Send newsletters
+                  </div>
+                  <div className="p-2 rounded bg-orange-500/10 text-xs font-mono text-orange-300">
+                    <span className="text-orange-200">Monthly:</span> Archive old data
+                  </div>
+                  <div className="p-2 rounded bg-orange-500/10 text-xs font-mono text-orange-300">
+                    <span className="text-orange-200">Custom cron:</span> Complex timing
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Visual Example */}
+            <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/20">
+              <h3 className="text-orange-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-orange-400">🎯</span> Example: "Daily Report Generator"
+              </h3>
+              <div className="space-y-3">
+                <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                  <div className="text-sm font-mono text-orange-200 mb-2">⏰ Timing: Every day at 8:00 AM</div>
+                  <div className="text-xs font-mono text-orange-300">
+                    Automatically runs every morning to prepare daily insights
+                  </div>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                  <div className="text-sm font-mono text-orange-200 mb-2">📊 Data Processing</div>
+                  <div className="text-xs font-mono text-orange-300">
+                    Analyze yesterday's Posts, count views, calculate engagement metrics
+                  </div>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                  <div className="text-sm font-mono text-orange-200 mb-2">🤖 AI Analysis</div>
+                  <div className="text-xs font-mono text-orange-300">
+                    "Generate insights and recommendations based on yesterday's performance data"
+                  </div>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                  <div className="text-sm font-mono text-orange-200 mb-2">💾 Save Results</div>
+                  <div className="text-xs font-mono text-orange-300">
+                    Create new Report record with AI-generated insights and metrics
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 });
@@ -2533,7 +3075,8 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
       editingSchedule: null,
       viewingModelData: null,
       editingRecord: null,
-      dataManagement: null
+      dataManagement: null,
+      showExplanationModal: null
     });
   },
   
