@@ -184,6 +184,18 @@ const TypewriterText = ({ text, speed = 50 }: { text: string; speed?: number }) 
   )
 }
 
+// Progress Bar Component
+const ProgressBar = ({ progress }: { progress: number }) => {
+  const filledBlocks = Math.floor((progress / 100) * 32)
+  const progressBar = Array.from({ length: 32 }, (_, i) => i < filledBlocks ? '█' : '░').join('')
+  
+  return (
+    <span className="font-mono text-green-400">
+      [{progressBar}] {progress.toFixed(0)}%
+    </span>
+  )
+}
+
 export default function Component() {
   const [cassettes, setCassettes] = useState<AICassette[]>([
     {
@@ -371,6 +383,7 @@ export default function Component() {
   const [selectedRomCard, setSelectedRomCard] = useState<string | null>("card-1") // Default to first ROM Card
   const [isMobile, setIsMobile] = useState(false)
   const [bootSequence, setBootSequence] = useState(true)
+  const [bootProgress, setBootProgress] = useState(0)
   const [systemTime, setSystemTime] = useState(new Date())
   const [originalBalances, setOriginalBalances] = useState<Record<string, number>>({})
 
@@ -594,12 +607,28 @@ export default function Component() {
     return () => clearInterval(timer)
   }, [])
 
+  // Boot sequence timer
   useEffect(() => {
-    const bootTimer = setTimeout(() => {
-      setBootSequence(false)
-    }, 3000)
-    return () => clearTimeout(bootTimer)
-  }, [])
+    if (bootSequence) {
+      const duration = 3000 // 3 seconds
+      const interval = 50 // Update every 50ms for smooth animation
+      const steps = duration / interval
+      let currentStep = 0
+
+      const progressTimer = setInterval(() => {
+        currentStep++
+        const progress = Math.min((currentStep / steps) * 100, 100)
+        setBootProgress(progress)
+
+        if (currentStep >= steps) {
+          clearInterval(progressTimer)
+          setBootSequence(false)
+        }
+      }, interval)
+
+      return () => clearInterval(progressTimer)
+    }
+  }, [bootSequence])
 
   const insertCassette = (cassetteId: string, slotId: number) => {
     if (!selectedRomCard) return
@@ -774,21 +803,21 @@ export default function Component() {
             </div>
             <div className="text-green-300 font-mono text-sm space-y-2">
               <div>
-                <TypewriterText text=">>> INITIALIZING ROM CARD PROTOCOLS..." speed={30} />
+                <TypewriterText text="INITIALIZING ROM CARD PROTOCOLS..." speed={30} />
               </div>
               <div className="mt-2">
-                <TypewriterText text=">>> LOADING ROM CARDS PAYMENT SYSTEM..." speed={25} />
+                <TypewriterText text="LOADING ROM CARDS PAYMENT SYSTEM..." speed={25} />
               </div>
               <div className="mt-2">
-                <TypewriterText text=">>> ESTABLISHING ROM NEURAL CONNECTIONS..." speed={35} />
+                <TypewriterText text="ESTABLISHING ROM CARDS CONNECTIONS..." speed={35} />
               </div>
             </div>
           </div>
           <div className="text-green-400 font-mono text-xs">
             <div className="flex justify-center space-x-4 mb-4">
-              <span>[████████████████████████████████] 100%</span>
+              <ProgressBar progress={bootProgress} />
             </div>
-            <div>ROM CARDS SYSTEM READY - ENTERING THE MATRIX...</div>
+            <div>ROM CARDS SYSTEM READY - ENTERING...</div>
           </div>
         </div>
       </div>
