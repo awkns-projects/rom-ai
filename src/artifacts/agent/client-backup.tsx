@@ -1,10 +1,10 @@
-import React, { useState, useCallback, useEffect, memo, } from 'react';
+import * as React from 'react';
+import { useState, useCallback, useEffect, memo, useMemo } from 'react';
 import { Artifact } from '@/components/create-artifact';
 import { DocumentSkeleton } from '@/components/document-skeleton';
 import { DiffView } from '@/components/diffview';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { 
   Select, 
@@ -13,6 +13,14 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   CopyIcon,
   PlusIcon,
@@ -28,6 +36,13 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import { useArtifact } from '@/hooks/use-artifact';
+import { generateNewId, calculateProgressPercentage } from './utils';
+import { ModelsListEditor } from './components/lists/ModelsListEditor';
+import { ActionsListEditor } from './components/lists/ActionsListEditor';
+import { SchedulesListEditor } from './components/lists/SchedulesListEditor';
+import { OnboardContent } from './components/OnboardContent';
+import { useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 
 interface AgentModel {
   id: string;
@@ -86,7 +101,6 @@ interface AgentAction {
   name: string;
   emoji?: string; // AI-generated emoji representing the action
   description: string;
-  type: 'Create' | 'Update';
   role: 'admin' | 'member';
   dataSource: {
     type: 'custom' | 'database';
@@ -118,6 +132,27 @@ interface AgentAction {
     fields?: Record<string, any>;
     fieldsToUpdate?: Record<string, any>;
   };
+  uiComponents?: {
+    stepForms: Array<{
+      stepNumber: number;
+      title: string;
+      description: string;
+      reactCode: string;
+      propsInterface: Record<string, any>;
+      validationLogic: string;
+      dataRequirements: Array<{
+        modelName: string;
+        fields: string[];
+        purpose: string;
+      }>;
+    }>;
+    resultView: {
+      title: string;
+      description: string;
+      reactCode: string;
+      propsInterface: Record<string, any>;
+    };
+  };
 }
 
 interface DatabaseModel {
@@ -141,6 +176,7 @@ interface EnvVar {
 }
 
 interface AgentData {
+  id?: string; // Optional for new agents, required for existing ones
   name: string;
   description: string;
   domain: string;
@@ -148,10 +184,19 @@ interface AgentData {
   actions: AgentAction[];
   schedules: AgentSchedule[];
   createdAt: string;
+  metadata?: {
+    createdAt: string;
+    updatedAt: string;
+    version: string;
+    lastModifiedBy: string;
+    tags: string[];
+    status: string;
+    [key: string]: any; // Allow additional metadata fields from orchestrator
+  };
 }
 
 interface AgentArtifactMetadata {
-  selectedTab: 'models' | 'actions' | 'schedules';
+  selectedTab: 'onboard' | 'models' | 'actions' | 'schedules';
   editingModel: string | null;
   editingAction: string | null;
   editingSchedule: string | null;
@@ -168,7 +213,7 @@ interface AgentArtifactMetadata {
     examples?: 'processing' | 'complete';
     actions?: 'processing' | 'complete';
     schedules?: 'processing' | 'complete';
-    integration?: 'processing' | 'complete';
+    complete?: 'processing' | 'complete';
   };
   stepMessages?: Record<string, string>;
   dataManagement?: {
@@ -176,6 +221,7 @@ interface AgentArtifactMetadata {
     editingRecordId?: string | null;
     isAddingRecord?: boolean;
   } | null;
+  showExplanationModal?: 'models' | 'actions' | 'schedules' | null;
 }
 
 // Interface for recurring scheduled tasks
@@ -257,333 +303,45 @@ const FIELD_KINDS = [
 ];
 
 // Helper function to generate new IDs
-function generateNewId(type: string, existingEntities: any[]): string {
-  const prefixMap: Record<string, string> = {
-    'model': 'mdl',
-    'field': 'fld',
-    'enum': 'enm',
-    'enumField': 'enf',
-    'action': 'act',
-    'form': 'frm',
-    'formField': 'ff'
-  };
-  
-  const prefix = prefixMap[type] || type.charAt(0);
-  
-  const highestId = existingEntities.reduce((max, entity) => {
-    if (entity.id?.startsWith(prefix)) {
-      const idNumber = Number.parseInt(entity.id.slice(prefix.length), 10);
-      return Number.isNaN(idNumber) ? max : Math.max(max, idNumber);
-    }
-    return max;
-  }, 0);
-  
-  return `${prefix}${highestId + 1}`;
-}
-
 // Helper function to determine step status consistently across all progress indicators
 const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>, agentData?: any) => {
-  // If we have explicit step progress for this step, use it
+  // If there's explicit progress for this step, use it
   if (stepProgress?.[stepId as keyof typeof stepProgress]) {
     return stepProgress[stepId as keyof typeof stepProgress];
   }
-
+  
+  // Check if we have data for this step
+  if (agentData) {
+    switch (stepId) {
+      case 'schedules':
+        return agentData.schedules && agentData.schedules.length > 0 ? 'complete' : 'pending';
+      case 'models':
+        return agentData.models && agentData.models.length > 0 ? 'complete' : 'pending';
+      case 'examples': {
+        // Check if any model has example records
+        const hasExamples = agentData.models?.some((model: AgentModel) => 
+          model.exampleRecords && model.exampleRecords.length > 0
+        );
+        return hasExamples ? 'complete' : 'pending';
+      }
+      case 'actions':
+        return agentData.actions && agentData.actions.length > 0 ? 'complete' : 'pending';
+      case 'overview':
+        return agentData.name && agentData.description && agentData.domain ? 'complete' : 'pending';
+      case 'complete':
+        return 'pending'; // This should be set explicitly
+      default:
+        return 'pending';
+    }
+  }
+  
   // If this is the current step, it's processing
   if (currentStep === stepId) {
     return 'processing';
   }
-
-  // For schedules, check if they exist
-  if (stepId === 'schedules') {
-    return agentData?.schedules && agentData.schedules.length > 0 ? 'complete' : 'pending';
-  }
   
-  // For models, check if they exist 
-  if (stepId === 'models') {
-    return agentData?.models && agentData.models.length > 0 ? 'complete' : 'pending';
-  }
-  
-  // For examples, check if they exist (only for new models)
-  if (stepId === 'examples') {
-    return agentData?.models?.some((model: any) => model.records && model.records.length > 0) ? 'complete' : 'pending';
-  }
-  
-  // For actions, check if they exist
-  if (stepId === 'actions') {
-    return agentData?.actions && agentData.actions.length > 0 ? 'complete' : 'pending';
-  }
-  
-  // For overview, check if basic info exists
-  if (stepId === 'overview') {
-    return agentData?.name && agentData?.description && agentData?.domain ? 'complete' : 'pending';
-  }
-  
-  // For integration, check if all components are complete
-  if (stepId === 'integration') {
-    const hasBasicInfo = agentData?.name && agentData?.description && agentData?.domain;
-    const hasModels = agentData?.models && agentData.models.length > 0;
-    const hasActions = agentData?.actions && agentData.actions.length > 0;
-    return hasBasicInfo && hasModels && hasActions ? 'complete' : 'pending';
-  }
-  
-  // For early analysis steps, we rely on stepProgress or currentStep
   return 'pending';
 };
-
-// Helper function to calculate progress percentage consistently
-const calculateProgressPercentage = (currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>, agentData?: any) => {
-  const steps = [
-    { id: 'prompt-understanding', name: 'Understanding Requirements' },
-    { id: 'granular-analysis', name: 'Granular Analysis' },
-    { id: 'analysis', name: 'Analysis' },
-    { id: 'change-analysis', name: 'Change Analysis' },
-    { id: 'overview', name: 'Overview' },
-    { id: 'models', name: 'Data Models' },
-    { id: 'examples', name: 'Example Records' },
-    { id: 'actions', name: 'Automated Actions' },
-    { id: 'schedules', name: 'Schedules' },
-    { id: 'integration', name: 'Integration' }
-  ];
-  
-  const completedSteps = steps.filter(step => getStepStatus(step.id, currentStep, stepProgress, agentData) === 'complete').length;
-  
-  return (completedSteps / steps.length) * 100;
-};
-
-// Progress Indicator Component
-const StepProgressIndicator = ({ currentStep = '', agentData, stepMessages = {}, stepProgress }: { 
-  currentStep?: string, 
-  agentData: any,
-  stepMessages?: Record<string, string>,
-  stepProgress?: {
-    'prompt-understanding'?: 'processing' | 'complete';
-    'granular-analysis'?: 'processing' | 'complete';
-    analysis?: 'processing' | 'complete';
-    'change-analysis'?: 'processing' | 'complete';
-    overview?: 'processing' | 'complete';
-    models?: 'processing' | 'complete';
-    actions?: 'processing' | 'complete';
-    schedules?: 'processing' | 'complete';
-    integration?: 'processing' | 'complete';
-  }
-}) => {
-  const steps = [
-    { 
-      id: 'prompt-understanding', 
-      title: 'Understanding Requirements',
-      description: 'Analyzing your request in detail',
-      icon: '🧠'
-    },
-    { 
-      id: 'granular-analysis', 
-      title: 'Detailed Planning',
-      description: 'Creating execution strategy',
-      icon: '🔍'
-    },
-    { 
-      id: 'analysis', 
-      title: 'AI Decision Making',
-      description: 'Determining optimal approach',
-      icon: '🤖'
-    },
-    { 
-      id: 'change-analysis', 
-      title: 'Change Impact Analysis',
-      description: 'Analyzing modifications needed',
-      icon: '📋'
-    },
-    { 
-      id: 'overview', 
-      title: 'System Architecture',
-      description: 'Designing system overview',
-      icon: '🏗️'
-    },
-    { 
-      id: 'models', 
-      title: 'Data Models',
-      description: 'Defining data structures',
-      icon: '📊'
-    },
-    { 
-      id: 'examples', 
-      title: 'Example Records',
-      description: 'Generating sample data',
-      icon: '📝'
-    },
-    { 
-      id: 'actions', 
-      title: 'Automated Actions',
-      description: 'Creating workflow automations',
-      icon: '⚡'
-    },
-    {
-      id: 'schedules',
-      title: 'Schedules & Timing',
-      description: 'Automated execution timing',
-      icon: '⏰'
-    },
-    {
-      id: 'integration',
-      title: 'System Integration',
-      description: 'Finalizing and integrating',
-      icon: '🔧'
-    }
-  ];
-
-  const completedSteps = steps.filter(step => getStepStatus(step.id, currentStep, stepProgress, agentData) === 'complete').length;
-  const progressPercentage = calculateProgressPercentage(currentStep, stepProgress, agentData);
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h3 className="text-lg font-semibold text-gray-900">Building Your AI Agent</h3>
-          <p className="text-sm text-gray-600 mt-1">
-            {completedSteps === steps.length 
-              ? '🎉 Agent successfully built!' 
-              : (() => {
-                  // Find the current active step or the next pending step
-                  const activeStep = steps.find(s => getStepStatus(s.id, currentStep, stepProgress, agentData) === 'processing');
-                  const nextPendingStep = steps.find(s => getStepStatus(s.id, currentStep, stepProgress, agentData) === 'pending');
-                  const currentStepLabel = activeStep?.title || nextPendingStep?.title || 'Processing';
-                  
-                  return `Step ${completedSteps + 1} of ${steps.length} - ${currentStepLabel}`;
-                })()
-            }
-          </p>
-        </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold text-blue-600">{Math.round(calculateProgressPercentage(currentStep, stepProgress, agentData))}%</div>
-          <div className="text-xs text-gray-500">Complete</div>
-        </div>
-      </div>
-
-      {/* Progress Bar */}
-      <div className="mb-6">
-        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-          <div 
-            className="h-full bg-gradient-to-r from-blue-500 to-purple-600 rounded-full transition-all duration-1000 ease-out"
-            style={{ width: `${progressPercentage}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Steps */}
-      <div className="space-y-4">
-        {steps.map((step, index) => {
-          const status = getStepStatus(step.id, currentStep, stepProgress, agentData);
-          const message = stepMessages[step.id];
-          
-          return (
-            <div 
-              key={step.id} 
-              className={`flex items-start space-x-4 p-4 rounded-lg transition-all duration-300 ${
-                status === 'complete' 
-                  ? 'bg-green-50 border border-green-200' 
-                  : status === 'processing' 
-                    ? 'bg-blue-50 border border-blue-200 shadow-md' 
-                    : 'bg-gray-50 border border-gray-200'
-              }`}
-            >
-              {/* Step Icon */}
-              <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg font-semibold transition-all duration-300 ${
-                status === 'complete'
-                  ? 'bg-green-500 text-white'
-                  : status === 'processing'
-                    ? 'bg-blue-500 text-white animate-pulse'
-                    : 'bg-gray-300 text-gray-600'
-              }`}>
-                {status === 'complete' ? '✓' : status === 'processing' ? step.icon : index + 1}
-              </div>
-
-              {/* Step Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className={`font-medium ${
-                    status === 'complete' ? 'text-green-900' : 
-                    status === 'processing' ? 'text-blue-900' : 'text-gray-700'
-                  }`}>
-                    {step.title}
-                  </h4>
-                </div>
-
-                {/* Step Description/Message */}
-                <p className={`text-sm ${
-                  status === 'complete' ? 'text-green-700' : 
-                  status === 'processing' ? 'text-blue-700' : 'text-gray-600'
-                }`}>
-                  {message || step.description}
-                </p>
-
-                {/* Processing Animation */}
-                {status === 'processing' && (
-                  <div className="mt-3 flex items-center space-x-2">
-                    <div className="flex space-x-1">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                    <span className="text-xs text-blue-600 font-medium">Working...</span>
-                  </div>
-                )}
-
-                {/* Completion Details */}
-                {status === 'complete' && agentData && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {step.id === 'overview' && agentData.domain && (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
-                        {agentData.domain}
-                      </span>
-                    )}
-                    {step.id === 'models' && agentData.models && (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
-                        {agentData.models.length} models created
-                      </span>
-                    )}
-                    {step.id === 'examples' && agentData.models && agentData.models.some((model: any) => model.records && model.records.length > 0) && (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
-                        {agentData.models.reduce((sum: number, model: any) => sum + (model.records?.length || 0), 0)} example records generated
-                      </span>
-                    )}
-                    {step.id === 'actions' && agentData.actions && (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
-                        {agentData.actions.length} actions automated
-                      </span>
-                    )}
-                    {step.id === 'schedules' && agentData.schedules && (
-                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-md">
-                        {agentData.schedules.length} schedules configured
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Completion Summary */}
-      {completedSteps === steps.length && agentData && (
-        <div className="mt-6 p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-lg">🎉</span>
-            </div>
-            <div>
-              <h4 className="font-semibold text-green-900">Agent Successfully Built!</h4>
-              <p className="text-sm text-green-700 mt-1">
-                Your <strong>{agentData.name}</strong> is ready with {agentData.models?.length || 0} models and {agentData.actions?.length || 0} automated actions.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
 // Model Editor Component
 const ModelEditor = memo(({ 
   model, 
@@ -1372,839 +1130,6 @@ const EnumEditor = memo(({
   );
 });
 
-// Action Editor Component
-const ActionEditor = memo(({ 
-  action, 
-  onUpdate, 
-  onDelete,
-  allModels 
-}: { 
-  action: AgentAction;
-  onUpdate: (action: AgentAction) => void;
-  onDelete: () => void;
-  allModels: AgentModel[];
-}) => {
-  return (
-    <div className="space-y-6">
-      {/* Action Basic Info */}
-      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
-            <span className="text-orange-400 text-xl">⚡</span>
-          </div>
-          <div>
-            <h3 className="text-xl font-bold text-green-200 font-mono">Action Configuration</h3>
-            <p className="text-green-400 text-sm font-mono">Define automated workflow behavior</p>
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Action Name</Label>
-            <Input
-              value={action.name}
-              onChange={(e) => onUpdate({ ...action, name: e.target.value })}
-              placeholder="Action name (e.g., createUser, processOrder)"
-              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Action Type</Label>
-            <Select
-              value={action.type}
-              onValueChange={(value: 'Create' | 'Update') => 
-                onUpdate({ ...action, type: value })
-              }
-            >
-              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-black border-green-500/30">
-                <SelectItem value="Create" className="text-green-200 focus:bg-green-500/20 font-mono">Create</SelectItem>
-                <SelectItem value="Update" className="text-green-200 focus:bg-green-500/20 font-mono">Update</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        
-        <div className="mt-4 space-y-2">
-          <Label className="text-green-300 font-mono font-medium">Description</Label>
-          <Textarea
-            value={action.description}
-            onChange={(e) => onUpdate({ ...action, description: e.target.value })}
-            placeholder="Describe what this action does..."
-            rows={3}
-            className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
-          />
-        </div>
-      </div>
-
-      {/* Role Configuration */}
-      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-6 bg-gradient-to-b from-orange-500 to-red-500 rounded-full" />
-          <h4 className="text-lg font-semibold text-green-200 font-mono">Role Configuration</h4>
-        </div>
-        
-        <div className="space-y-4">
-            <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Access Role</Label>
-            <Select
-              value={action.role}
-              onValueChange={(value: 'admin' | 'member') => onUpdate({
-                  ...action,
-                role: value
-              })}
-            >
-              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-black border-green-500/30">
-                <SelectItem value="admin" className="text-green-200 focus:bg-green-500/20 font-mono">Admin Only</SelectItem>
-                <SelectItem value="member" className="text-green-200 focus:bg-green-500/20 font-mono">All Members</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-green-500/70 text-sm font-mono">Control who can trigger this action</p>
-            </div>
-        </div>
-      </div>
-
-      {/* Data Source Configuration */}
-      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-cyan-500 rounded-full" />
-          <h4 className="text-lg font-semibold text-green-200 font-mono">Data Source</h4>
-        </div>
-        
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Source Type</Label>
-            <Select
-              value={action.dataSource.type}
-              onValueChange={(value: 'custom' | 'database') => 
-                onUpdate({
-                  ...action,
-                  dataSource: {
-                    type: value,
-                    ...(value === 'database' ? { database: { models: [] } } : { customFunction: { code: '' } })
-                  }
-                })
-              }
-            >
-              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-black border-green-500/30">
-                <SelectItem value="database" className="text-green-200 focus:bg-green-500/20 font-mono">Database Query</SelectItem>
-                <SelectItem value="custom" className="text-green-200 focus:bg-green-500/20 font-mono">Custom Function</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          {action.dataSource.type === 'custom' && (
-            <div className="space-y-2">
-              <Label className="text-green-300 font-mono font-medium">Custom Code</Label>
-              <Textarea
-                value={action.dataSource.customFunction?.code || ''}
-                onChange={(e) => onUpdate({
-                  ...action,
-                  dataSource: {
-                    ...action.dataSource,
-                    customFunction: {
-                      ...action.dataSource.customFunction,
-                      code: e.target.value
-                    }
-                  }
-                })}
-                placeholder="// Custom function code here..."
-                rows={6}
-                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-sm"
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Execute Configuration */}
-      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-6 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" />
-          <h4 className="text-lg font-semibold text-green-200 font-mono">Execution Logic</h4>
-        </div>
-        
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Execution Type</Label>
-            <Select
-              value={action.execute.type}
-              onValueChange={(value: 'code' | 'prompt') => 
-                onUpdate({
-                  ...action,
-                  execute: value === 'code' 
-                    ? { type: 'code', code: { script: '' } }
-                    : { type: 'prompt', prompt: { template: '' } }
-                })
-              }
-            >
-              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-black border-green-500/30">
-                <SelectItem value="code" className="text-green-200 focus:bg-green-500/20 font-mono">Code Script</SelectItem>
-                <SelectItem value="prompt" className="text-green-200 focus:bg-green-500/20 font-mono">AI Prompt</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          {action.execute.type === 'code' && (
-            <div className="space-y-2">
-              <Label className="text-green-300 font-mono font-medium">Script Code</Label>
-              <Textarea
-                value={action.execute.code?.script || ''}
-                onChange={(e) => onUpdate({
-                  ...action,
-                  execute: {
-                    ...action.execute,
-                    code: {
-                      ...action.execute.code,
-                      script: e.target.value
-                    }
-                  }
-                })}
-                placeholder="// Processing script here..."
-                rows={6}
-                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-sm"
-              />
-            </div>
-          )}
-          
-          {action.execute.type === 'prompt' && (
-            <div className="space-y-2">
-              <Label className="text-green-300 font-mono font-medium">AI Prompt Template</Label>
-              <Textarea
-                value={action.execute.prompt?.template || ''}
-                onChange={(e) => onUpdate({
-                  ...action,
-                  execute: {
-                    ...action.execute,
-                    prompt: {
-                      ...action.execute.prompt,
-                      template: e.target.value
-                    }
-                  }
-                })}
-                placeholder="Analyze the following data and..."
-                rows={6}
-                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Results Configuration */}
-      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
-          <h4 className="text-lg font-semibold text-green-200 font-mono">Results Configuration</h4>
-        </div>
-        
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Target Model</Label>
-            <Select
-              value={action.results.model}
-              onValueChange={(value) => onUpdate({
-                ...action,
-                results: { ...action.results, model: value }
-              })}
-            >
-              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent className="bg-black border-green-500/30">
-                {allModels.filter(model => model.name.trim() !== '').map(model => (
-                  <SelectItem key={model.id} value={model.name} className="text-green-200 focus:bg-green-500/20 font-mono">
-                    {model.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-
-      {/* Action Controls */}
-      <div className="flex justify-end pt-4 border-t border-green-500/20">
-        <Button
-          variant="destructive"
-          onClick={onDelete}
-          className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30 font-mono"
-        >
-          <CrossIcon size={16} />
-          <span className="ml-2">Delete Action</span>
-        </Button>
-      </div>
-    </div>
-  );
-});
-
-// Models List Editor Component
-const ModelsListEditor = memo(({ models, onModelsChange, updateMetadata, status }: {
-  models: AgentModel[];
-  onModelsChange: (models: AgentModel[]) => void;
-  updateMetadata: (updates: Partial<AgentArtifactMetadata>) => void;
-  status: 'streaming' | 'idle';
-}) => {
-  const [editingModelId, setEditingModelId] = useState<string | null>(null);
-  const [isAddingModel, setIsAddingModel] = useState(false);
-
-  // Helper function to check if a model has a published field
-  const hasPublishedField = useCallback((model: AgentModel): boolean => {
-    return model.fields.some(field => field.name === 'published' && field.type === 'Boolean');
-  }, []);
-
-  const addModel = useCallback(() => {
-    const newModel: AgentModel = {
-      id: generateNewId('model', models || []),
-      name: `Model${(models?.length || 0) + 1}`,
-      emoji: '🗃️', // Default emoji, will be auto-generated by AI
-      idField: 'id',
-      displayFields: [],
-      fields: [
-        {
-          id: 'fld1',
-          name: 'id',
-          type: 'String',
-          isId: true,
-          unique: true,
-          list: false,
-          required: true,
-          kind: 'scalar',
-          relationField: false,
-          title: 'ID',
-          sort: false,
-          order: 1
-        },
-        {
-          id: 'fld2',
-          name: 'published',
-          type: 'Boolean',
-          isId: false,
-          unique: false,
-          list: false,
-          required: false,
-          kind: 'scalar',
-          relationField: false,
-          title: 'Published',
-          sort: false,
-          order: 2,
-          defaultValue: 'false'
-        }
-      ],
-      enums: [],
-      hasPublishedField: true
-    };
-    
-    // Add to top of list and set to editing mode
-    onModelsChange([newModel, ...(models || [])]);
-    setEditingModelId(newModel.id);
-  }, [models, onModelsChange]);
-
-  const updateModel = useCallback((updatedModel: AgentModel) => {
-    const updatedModels = models.map(model => 
-      model.id === updatedModel.id ? updatedModel : model
-    );
-    onModelsChange(updatedModels);
-  }, [models, onModelsChange]);
-
-  const deleteModel = useCallback((modelId: string) => {
-    const model = models.find(m => m.id === modelId);
-    const modelName = model?.name || 'this model';
-    
-    if (window.confirm(`Are you sure you want to delete model "${modelName}"? This action cannot be undone and will remove all associated data.`)) {
-      onModelsChange(models.filter(model => model.id !== modelId));
-      if (editingModelId === modelId) {
-        setEditingModelId(null);
-      }
-    }
-  }, [models, onModelsChange, editingModelId]);
-
-  const viewModelData = useCallback((modelId: string) => {
-    console.log('🔍 Data button clicked for modelId:', modelId);
-    updateMetadata({
-      dataManagement: {
-        viewingModelId: modelId,
-        editingRecordId: null,
-        isAddingRecord: false
-      }
-    });
-    console.log('🔍 Called updateMetadata with viewingModelId:', modelId);
-  }, [updateMetadata]);
-
-  const backToModelsList = useCallback(() => {
-    setEditingModelId(null);
-    updateMetadata({ dataManagement: null });
-  }, [updateMetadata]);
-
-  if (editingModelId && models.find(m => m.id === editingModelId)) {
-    const editingModel = models.find(m => m.id === editingModelId)!;
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center">
-          <Button
-            onClick={backToModelsList}
-            className="btn-matrix px-4 py-2 mx-4"
-          >
-            ← Back
-          </Button>
-          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Model: {editingModel.name}</h3>
-         
-        </div>
-        <ModelEditor
-          model={editingModel}
-          onUpdate={updateModel}
-          onDelete={() => deleteModel(editingModel.id)}
-          allModels={models}
-          allEnums={editingModel.enums || []}
-          updateModel={updateModel}
-          allActions={[]}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Header - Updated to match Schedules style */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Data Models</h3>
-          <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
-            <span className="text-green-300 text-sm font-medium font-mono">{models.length} models</span>
-          </div>
-        </div>
-        <Button 
-          onClick={addModel}
-          disabled={status === 'streaming'}
-          className="btn-matrix px-3 sm:px-4 py-2"
-        >
-          <div className="flex items-center gap-2">
-            <PlusIcon size={16} />
-            <span>Add Model</span>
-          </div>
-        </Button>
-      </div>
-
-      <div className="grid gap-3 sm:gap-4">
-        {models.map((model) => (
-          <div key={model.id} className="p-4 sm:p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm hover:border-green-500/40 transition-colors">
-            {/* Mobile-first layout */}
-            <div className="flex flex-col gap-4">
-              {/* Top section with icon, title, and stats */}
-              <div className="flex items-start gap-3 sm:gap-4">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-green-500/20 flex items-center justify-center border border-green-500/30 flex-shrink-0">
-                  <span className="text-lg sm:text-xl">{model.emoji || '🗃️'}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{model.name || 'Unnamed Model'}</h4>
-                  {model.description && (
-                    <p className="text-green-300 text-xs sm:text-sm font-mono mt-1 opacity-80 leading-relaxed">
-                      {/* Truncate on mobile for better layout */}
-                      <span className="sm:hidden">
-                        {model.description.length > 60 
-                          ? `${model.description.substring(0, 60)}...` 
-                          : model.description}
-                      </span>
-                      <span className="hidden sm:inline">
-                        {model.description}
-                      </span>
-                    </p>
-                  )}
-                  {/* Stats row - responsive */}
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-2">
-                    <span className="text-green-400 text-xs sm:text-sm font-mono">
-                      {model.fields.length} fields • {model.enums?.length || 0} enums
-                    </span>
-                    <span className="text-blue-400 text-xs sm:text-sm font-mono">
-                      {model.records?.length || 0} records
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Action buttons - Full width on mobile */}
-              <div className="flex flex-col sm:flex-row gap-2 sm:gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-green-500/10">
-                <Button
-                  onClick={() => setEditingModelId(model.id)}
-                  size="sm"
-                  className="btn-matrix px-3 py-2 text-xs sm:text-sm w-full sm:w-auto flex-1 sm:flex-none"
-                >
-                  <span>Edit Model</span>
-                </Button>
-                <Button
-                  onClick={() => viewModelData(model.id)}
-                  size="sm"
-                  className="btn-matrix px-3 py-2 text-xs sm:text-sm w-full sm:w-auto flex-1 sm:flex-none"
-                >
-                  <div className="flex items-center gap-2 justify-center">
-                    <span className="text-sm">📊</span>
-                    <span>View Data</span>
-                  </div>
-                </Button>
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {models.length === 0 && (
-          <div className="text-center py-8 sm:py-12">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-green-800/30 flex items-center justify-center border border-green-500/20">
-              <span className="text-2xl sm:text-4xl">🗃️</span>
-            </div>
-            <h4 className="text-lg sm:text-xl font-semibold text-green-300 mb-2 font-mono">No Models Defined</h4>
-            <p className="text-green-500 text-sm font-mono mb-6 px-4">Create your first data model to get started</p>
-            <Button 
-              onClick={addModel}
-              disabled={status === 'streaming'}
-              className="btn-matrix px-4 sm:px-6 py-2 sm:py-3 w-full sm:w-auto max-w-xs"
-            >
-              <div className="flex items-center gap-2 justify-center">
-                <PlusIcon size={16} />
-                <span>Create First Model</span>
-              </div>
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-});
-
-// Actions List Editor Component  
-const ActionsListEditor = memo(({ 
-  actions, 
-  updateActions, 
-  editingId, 
-  setEditingId, 
-  addAction,
-  models,
-  status
-}: { 
-  actions: AgentAction[];
-  updateActions: (actions: AgentAction[]) => void;
-  editingId: string | null;
-  setEditingId: (id: string | null) => void;
-  addAction: () => void;
-  models: AgentModel[];
-  status: 'streaming' | 'idle';
-}) => {
-  const updateAction = useCallback((updatedAction: AgentAction) => {
-    updateActions(actions.map(action => 
-      action.id === updatedAction.id ? updatedAction : action
-    ));
-  }, [actions, updateActions]);
-
-  const deleteAction = useCallback((actionId: string) => {
-    const action = actions.find(a => a.id === actionId);
-    const actionName = action?.name || 'this action';
-    
-    if (window.confirm(`Are you sure you want to delete action "${actionName}"? This action cannot be undone.`)) {
-      updateActions(actions.filter(action => action.id !== actionId));
-      if (editingId === actionId) {
-        setEditingId(null);
-      }
-    }
-  }, [actions, updateActions, editingId, setEditingId]);
-
-  if (editingId && actions.find(a => a.id === editingId)) {
-    const editingAction = actions.find(a => a.id === editingId)!;
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center">
-          <Button
-            onClick={() => setEditingId(null)}
-            className="btn-matrix px-4 py-2 mx-4"
-          >
-            ← Back
-          </Button>
-          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Action: {editingAction.name}</h3>
-         
-        </div>
-        <ActionEditor
-          action={editingAction}
-          onUpdate={updateAction}
-          onDelete={() => deleteAction(editingAction.id)}
-          allModels={models}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Header - Updated to match Schedules style */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Automated Actions</h3>
-          <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
-            <span className="text-green-300 text-sm font-medium font-mono">{actions.length} actions</span>
-          </div>
-        </div>
-        <Button 
-          onClick={addAction}
-          disabled={status === 'streaming'}
-          className="btn-matrix px-3 sm:px-4 py-2"
-        >
-          <div className="flex items-center gap-2">
-            <PlusIcon size={16} />
-            <span>Add Action</span>
-          </div>
-        </Button>
-      </div>
-
-      <div className="grid gap-4">
-        {actions.map((action) => (
-          <div key={action.id} className="p-4 sm:p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm hover:border-blue-500/40 transition-colors">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-500/20 flex items-center justify-center border border-blue-500/30 flex-shrink-0">
-                  <span className="text-lg sm:text-xl">{action.emoji || '⚡'}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{action.name || 'Unnamed Action'}</h4>
-                  <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
-                    {action.type} • {action.role}
-                  </p>
-                  {action.description && (
-                    <p className="text-green-300/80 text-xs sm:text-sm font-mono leading-relaxed">
-                      {action.description.length > 100 
-                        ? `${action.description.substring(0, 100)}...` 
-                        : action.description}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2 sm:ml-4">
-                <Button
-                  onClick={() => {
-                    console.log('Running action:', action.id);
-                    alert(`Running action: ${action.name}`);
-                  }}
-                  className="btn-matrix px-3 sm:px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 border-green-500/30"
-                >
-                  <div className="flex items-center gap-2 justify-center">
-                    <span>▶️</span>
-                    <span className="text-xs sm:text-sm">Run</span>
-                  </div>
-                </Button>
-                <Button
-                  onClick={() => setEditingId(action.id)}
-                  className="btn-matrix px-3 sm:px-4 py-2"
-                >
-                  <div className="flex items-center gap-2 justify-center">
-                    <PencilEditIcon size={14} />
-                    <span className="text-xs sm:text-sm">Edit</span>
-                  </div>
-                </Button>
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {actions.length === 0 && (
-          <div className="text-center py-8 sm:py-12">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-blue-800/30 flex items-center justify-center border border-blue-500/20">
-              <span className="text-3xl sm:text-4xl">⚡</span>
-            </div>
-            <h4 className="text-lg sm:text-xl font-semibold text-green-300 mb-2 font-mono">No Actions Defined</h4>
-            <p className="text-green-500 text-sm font-mono mb-4 sm:mb-6 px-4">Create automated actions for your agent</p>
-            <Button 
-              onClick={addAction}
-              disabled={status === 'streaming'}
-              className="btn-matrix px-4 sm:px-6 py-3"
-            >
-              <div className="flex items-center gap-2">
-                <PlusIcon size={16} />
-                <span>Create First Action</span>
-              </div>
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-});
-
-// Schedules List Editor Component
-const SchedulesListEditor = memo(({ 
-  schedules, 
-  updateSchedules, 
-  editingId, 
-  setEditingId, 
-  addSchedule,
-  models,
-  status
-}: { 
-  schedules: AgentSchedule[];
-  updateSchedules: (schedules: AgentSchedule[]) => void;
-  editingId: string | null;
-  setEditingId: (id: string | null) => void;
-  addSchedule: () => void;
-  models: AgentModel[];
-  status: 'streaming' | 'idle';
-}) => {
-  const updateSchedule = useCallback((updatedSchedule: AgentSchedule) => {
-    updateSchedules(schedules.map(schedule => 
-      schedule.id === updatedSchedule.id ? updatedSchedule : schedule
-    ));
-  }, [schedules, updateSchedules]);
-
-  const deleteSchedule = useCallback((scheduleId: string) => {
-    const schedule = schedules.find(s => s.id === scheduleId);
-    const scheduleName = schedule?.name || 'this schedule';
-    
-    if (window.confirm(`Are you sure you want to delete schedule "${scheduleName}"? This action cannot be undone.`)) {
-      updateSchedules(schedules.filter(schedule => schedule.id !== scheduleId));
-      if (editingId === scheduleId) {
-        setEditingId(null);
-      }
-    }
-  }, [schedules, updateSchedules, editingId, setEditingId]);
-
-  if (editingId && schedules.find(s => s.id === editingId)) {
-    const editingSchedule = schedules.find(s => s.id === editingId)!;
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center">
-          <Button
-            onClick={() => setEditingId(null)}
-            className="btn-matrix px-4 py-2 mx-4"
-          >
-            ← Back
-          </Button>
-          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Schedule: {editingSchedule.name}</h3>
-
-        </div>
-        <div className="p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
-          <ScheduleEditor
-            schedule={editingSchedule}
-            onUpdate={updateSchedule}
-            onDelete={() => deleteSchedule(editingSchedule.id)}
-            allModels={models}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Schedules & Timing</h3>
-          <div className="px-3 py-1 rounded-lg bg-green-800/50 border border-green-700">
-            <span className="text-green-300 text-sm font-medium font-mono">{schedules.length} schedules</span>
-          </div>
-        </div>
-        <Button 
-          onClick={addSchedule}
-          disabled={status === 'streaming'}
-          className="btn-matrix px-3 sm:px-4 py-2"
-        >
-          <div className="flex items-center gap-2">
-            <PlusIcon size={16} />
-            <span>Add Schedule</span>
-          </div>
-        </Button>
-      </div>
-
-      <div className="grid gap-4">
-        {schedules.map((schedule) => (
-          <div key={schedule.id} className="p-4 sm:p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm hover:border-purple-500/40 transition-colors">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-500/20 flex items-center justify-center border border-purple-500/30 flex-shrink-0">
-                  <span className="text-lg sm:text-xl">{schedule.emoji || '⏰'}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{schedule.name || 'Unnamed Schedule'}</h4>
-                  <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
-                    {schedule.type} • {schedule.interval.pattern} • {schedule.interval.active ? 'Active' : 'Inactive'}
-                  </p>
-                  {schedule.description && (
-                    <p className="text-green-300/80 text-xs sm:text-sm font-mono leading-relaxed">
-                      {schedule.description.length > 100 
-                        ? `${schedule.description.substring(0, 100)}...` 
-                        : schedule.description}
-                    </p>
-                  )}
-                </div>
-              </div>
-              
-              {/* Mobile-optimized controls */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-2">
-
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => {
-                      // Toggle activation
-                      const updatedSchedule = {
-                        ...schedule,
-                        interval: { ...schedule.interval, active: !schedule.interval.active }
-                      };
-                      updateSchedule(updatedSchedule);
-                    }}
-                    className={`font-mono px-3 sm:px-4 py-2 flex-1 sm:flex-initial ${
-                      schedule.interval.active 
-                        ? 'bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30'
-                        : 'bg-green-500/20 hover:bg-green-500/30 text-green-400 border-green-500/30'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 justify-center">
-                      <span>{schedule.interval.active ? '⏸️' : '▶️'}</span>
-                      <span className="text-xs sm:text-sm">{schedule.interval.active ? 'Pause' : 'Activate'}</span>
-                    </div>
-                  </Button>
-                  <Button
-                    onClick={() => setEditingId(schedule.id)}
-                    className="btn-matrix px-3 sm:px-4 py-2 flex-1 sm:flex-initial"
-                  >
-                    <div className="flex items-center gap-2 justify-center">
-                      <PencilEditIcon size={14} />
-                      <span className="text-xs sm:text-sm">Edit</span>
-                    </div>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {schedules.length === 0 && (
-          <div className="text-center py-8 sm:py-12">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-2xl bg-purple-800/30 flex items-center justify-center border border-purple-500/20">
-              <span className="text-3xl sm:text-4xl">⏰</span>
-            </div>
-            <h4 className="text-lg sm:text-xl font-semibold text-green-300 mb-2 font-mono">No Schedules Defined</h4>
-            <p className="text-green-500 text-sm font-mono mb-4 sm:mb-6 px-4">Create scheduled tasks for your agent</p>
-            <Button 
-              onClick={addSchedule}
-              disabled={status === 'streaming'}
-              className="btn-matrix px-4 sm:px-6 py-3"
-            >
-              <div className="flex items-center gap-2">
-                <PlusIcon size={16} />
-                <span>Create First Schedule</span>
-              </div>
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-});
-
 // Model Data Viewer Component
 const ModelDataViewer = memo(({ 
   model, 
@@ -2221,6 +1146,11 @@ const ModelDataViewer = memo(({
   const [isAddingRecord, setIsAddingRecord] = useState(false);
 
   const records = model.records || [];
+
+  // Collect all enums from all models
+  const allEnums = useMemo(() => {
+    return allModels.flatMap(model => model.enums || []);
+  }, [allModels]);
 
   const addRecord = useCallback(() => {
     setIsAddingRecord(true);
@@ -2274,6 +1204,7 @@ const ModelDataViewer = memo(({
       <RecordEditor
         model={model}
         allModels={allModels}
+        allEnums={allEnums}
         record={editingRecord}
         onSave={saveRecord}
         onCancel={cancelEdit}
@@ -2450,7 +1381,8 @@ const RecordEditor = memo(({
   onSave, 
   onCancel, 
   onDelete,
-  allModels = [] 
+  allModels = [],
+  allEnums = []
 }: { 
   model: AgentModel;
   record?: ModelRecord | null;
@@ -2458,6 +1390,7 @@ const RecordEditor = memo(({
   onCancel: () => void;
   onDelete?: () => void;
   allModels?: AgentModel[];
+  allEnums?: AgentEnum[];
 }) => {
   const [formData, setFormData] = useState<Record<string, any>>(
     record?.data || {}
@@ -2588,6 +1521,98 @@ const RecordEditor = memo(({
                   </SelectItem>
                 );
               })}
+            </SelectContent>
+          </Select>
+        );
+      }
+    }
+    
+    // Handle enum fields
+    if (field.kind === 'enum') {
+      const enumType = allEnums.find(e => e.name === field.type);
+      
+      if (!enumType) {
+        return (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+            <span className="text-red-400 text-sm font-mono">
+              Enum "{field.type}" not found
+            </span>
+          </div>
+        );
+      }
+
+      const enumValues = enumType.fields || [];
+      
+      if (enumValues.length === 0) {
+        return (
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+            <span className="text-yellow-400 text-sm font-mono">
+              No values defined for enum "{field.type}"
+            </span>
+          </div>
+        );
+      }
+
+      if (field.list) {
+        // Multi-select for list enums
+        const selectedValues = Array.isArray(getFieldValue(field)) ? getFieldValue(field) : [];
+        
+        return (
+          <div className="space-y-2">
+            <div className="text-green-400 text-xs font-mono mb-2">
+              Select multiple values ({selectedValues.length} selected)
+            </div>
+            <div className="max-h-40 overflow-y-auto space-y-1 p-2 rounded-lg bg-black/30 border border-green-500/20">
+              {enumValues.map(enumValue => {
+                const isSelected = selectedValues.includes(enumValue.name);
+                
+                return (
+                  <label key={enumValue.id} className="flex items-center gap-2 p-2 hover:bg-green-500/10 rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => {
+                        const newSelectedValues = e.target.checked
+                          ? [...selectedValues, enumValue.name]
+                          : selectedValues.filter((value: string) => value !== enumValue.name);
+                        updateField(field.name, newSelectedValues);
+                      }}
+                      className="w-4 h-4 rounded border-green-500/30 bg-black/50 text-green-400 focus:ring-green-400/20"
+                    />
+                    <span className="text-green-200 text-sm font-mono flex-1">
+                      {enumValue.name}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        );
+      } else {
+        // Single select for non-list enums
+        const selectedValue = getFieldValue(field);
+        
+        return (
+          <Select
+            value={selectedValue || 'none'}
+            onValueChange={(value) => updateField(field.name, value === 'none' ? '' : value)}
+          >
+            <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
+              <SelectValue placeholder={`Select ${field.type}`} />
+            </SelectTrigger>
+            <SelectContent className="bg-black border-green-500/30">
+              <SelectItem value="none" className="text-green-200 focus:bg-green-500/20 font-mono">
+                None selected
+              </SelectItem>
+              {enumValues.map(enumValue => (
+                <SelectItem 
+                  key={enumValue.id} 
+                  value={enumValue.name} 
+                  className="text-green-200 focus:bg-green-500/20 font-mono"
+                >
+                  {enumValue.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         );
@@ -2770,314 +1795,6 @@ const RecordEditor = memo(({
   );
 });
 
-// Schedule Editor Component
-const ScheduleEditor = memo(({ 
-  schedule, 
-  onUpdate, 
-  onDelete,
-  allModels
-}: { 
-  schedule: AgentSchedule;
-  onUpdate: (schedule: AgentSchedule) => void;
-  onDelete: () => void;
-  allModels: AgentModel[];
-}) => {
-  return (
-    <div className="space-y-6">
-      {/* Name and Description */}
-      <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
-          <h4 className="text-lg font-semibold text-green-200 font-mono">Schedule Configuration</h4>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Schedule Name</Label>
-            <Input
-              value={schedule.name}
-              onChange={(e) => onUpdate({ ...schedule, name: e.target.value })}
-              placeholder="e.g., Daily Report Generation"
-              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Schedule Type</Label>
-            <Select
-              value={schedule.type}
-              onValueChange={(value: 'Create' | 'Update') => onUpdate({ ...schedule, type: value })}
-            >
-              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-black border-green-500/30">
-                <SelectItem value="Create" className="text-green-200 focus:bg-green-500/20 font-mono">Create Records</SelectItem>
-                <SelectItem value="Update" className="text-green-200 focus:bg-green-500/20 font-mono">Update Records</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Required Role</Label>
-            <Select
-              value={schedule.role}
-              onValueChange={(value: 'admin' | 'member') => onUpdate({ ...schedule, role: value })}
-            >
-              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-black border-green-500/30">
-                <SelectItem value="admin" className="text-green-200 focus:bg-green-500/20 font-mono">Admin Only</SelectItem>
-                <SelectItem value="member" className="text-green-200 focus:bg-green-500/20 font-mono">All Members</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        
-        <div className="space-y-2">
-          <Label className="text-green-300 font-mono font-medium">Description</Label>
-          <Textarea
-            value={schedule.description}
-            onChange={(e) => onUpdate({ ...schedule, description: e.target.value })}
-            placeholder="Describe what this schedule does and its business purpose..."
-            rows={3}
-            className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
-          />
-          {schedule.description && (
-            <p className="text-green-400 text-sm font-mono mt-2">{schedule.description}</p>
-          )}
-        </div>
-      </div>
-
-      {/* Schedule Interval */}
-      <div className="p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
-          <h4 className="text-lg font-semibold text-green-200 font-mono">Schedule Timing</h4>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Schedule Pattern</Label>
-            <Input
-              value={schedule.interval.pattern}
-              onChange={(e) => onUpdate({
-                ...schedule,
-                interval: { ...schedule.interval, pattern: e.target.value }
-              })}
-              placeholder="e.g., daily, weekly, 0 9 * * 1-5"
-              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Timezone</Label>
-            <Input
-              value={schedule.interval.timezone || ''}
-              onChange={(e) => onUpdate({
-                ...schedule,
-                interval: { ...schedule.interval, timezone: e.target.value }
-              })}
-              placeholder="e.g., America/New_York"
-              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Status</Label>
-            <Select
-              value={schedule.interval.active ? 'active' : 'inactive'}
-              onValueChange={(value) => onUpdate({
-                ...schedule,
-                interval: { ...schedule.interval, active: value === 'active' }
-              })}
-            >
-              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-black border-green-500/30">
-                <SelectItem value="active" className="text-green-200 focus:bg-green-500/20 font-mono">Active</SelectItem>
-                <SelectItem value="inactive" className="text-green-200 focus:bg-green-500/20 font-mono">Inactive</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-
-      {/* Data Source Configuration */}
-      <div className="p-6 rounded-xl bg-yellow-500/10 border border-yellow-500/20 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
-          <h4 className="text-lg font-semibold text-green-200 font-mono">Data Source Configuration</h4>
-        </div>
-        
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Data Source Type</Label>
-            <Select
-              value={schedule.dataSource.type}
-              onValueChange={(value: 'custom' | 'database') => onUpdate({
-                ...schedule,
-                dataSource: { ...schedule.dataSource, type: value }
-              })}
-            >
-              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-black border-green-500/30">
-                <SelectItem value="database" className="text-green-200 focus:bg-green-500/20 font-mono">Database Query</SelectItem>
-                <SelectItem value="custom" className="text-green-200 focus:bg-green-500/20 font-mono">Custom Function</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          {schedule.dataSource.type === 'custom' && (
-            <div className="space-y-2">
-              <Label className="text-green-300 font-mono font-medium">Custom Function Code</Label>
-              <Textarea
-                value={schedule.dataSource.customFunction?.code || ''}
-                onChange={(e) => onUpdate({
-                  ...schedule,
-                  dataSource: {
-                    ...schedule.dataSource,
-                    customFunction: {
-                      ...schedule.dataSource.customFunction,
-                      code: e.target.value
-                    }
-                  }
-                })}
-                placeholder="// Custom data fetching logic here..."
-                rows={6}
-                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-sm"
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Execution Configuration */}
-      <div className="p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
-          <h4 className="text-lg font-semibold text-green-200 font-mono">Execution Configuration</h4>
-        </div>
-        
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Execution Type</Label>
-            <Select
-              value={schedule.execute.type}
-              onValueChange={(value: 'code' | 'prompt') => onUpdate({
-                ...schedule,
-                execute: value === 'code' 
-                  ? { type: 'code', code: { script: '' } }
-                  : { type: 'prompt', prompt: { template: '' } }
-              })}
-            >
-              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-black border-green-500/30">
-                <SelectItem value="code" className="text-green-200 focus:bg-green-500/20 font-mono">JavaScript Code</SelectItem>
-                <SelectItem value="prompt" className="text-green-200 focus:bg-green-500/20 font-mono">AI Prompt</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          
-          {schedule.execute.type === 'code' && (
-            <div className="space-y-2">
-              <Label className="text-green-300 font-mono font-medium">Script Code</Label>
-              <Textarea
-                value={schedule.execute.code?.script || ''}
-                onChange={(e) => onUpdate({
-                  ...schedule,
-                  execute: {
-                    ...schedule.execute,
-                    code: {
-                      ...schedule.execute.code,
-                      script: e.target.value
-                    }
-                  }
-                })}
-                placeholder="// Processing script here..."
-                rows={6}
-                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-sm"
-              />
-            </div>
-          )}
-          
-          {schedule.execute.type === 'prompt' && (
-            <div className="space-y-2">
-              <Label className="text-green-300 font-mono font-medium">AI Prompt Template</Label>
-              <Textarea
-                value={schedule.execute.prompt?.template || ''}
-                onChange={(e) => onUpdate({
-                  ...schedule,
-                  execute: {
-                    ...schedule.execute,
-                    prompt: {
-                      ...schedule.execute.prompt,
-                      template: e.target.value
-                    }
-                  }
-                })}
-                placeholder="Analyze the following data and..."
-                rows={6}
-                className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Results Configuration */}
-      <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-emerald-500 rounded-full" />
-          <h4 className="text-lg font-semibold text-green-200 font-mono">Results Configuration</h4>
-        </div>
-        
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label className="text-green-300 font-mono font-medium">Target Model</Label>
-            <Select
-              value={schedule.results.model}
-              onValueChange={(value) => onUpdate({
-                ...schedule,
-                results: { ...schedule.results, model: value }
-              })}
-            >
-              <SelectTrigger className="bg-black/50 border-green-500/30 text-green-200 focus:border-green-400 focus:ring-green-400/20 font-mono">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent className="bg-black border-green-500/30">
-                {allModels.filter(model => model.name.trim() !== '').map(model => (
-                  <SelectItem key={model.id} value={model.name} className="text-green-200 focus:bg-green-500/20 font-mono">
-                    {model.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </div>
-
-      {/* Schedule Controls */}
-      <div className="flex justify-end pt-4 border-t border-green-500/20">
-        <Button
-          variant="destructive"
-          onClick={onDelete}
-          className="bg-red-500/20 hover:bg-red-500/30 text-red-400 border-red-500/30 font-mono"
-        >
-          <CrossIcon size={16} />
-          <span className="ml-2">Delete Schedule</span>
-        </Button>
-      </div>
-    </div>
-  );
-});
-
 // Main Agent Builder Component
 const AgentBuilderContent = memo(({
   content,
@@ -3105,20 +1822,29 @@ const AgentBuilderContent = memo(({
   setMessages?: UseChatHelpers['setMessages'];
 }) => {
   const { artifact } = useArtifact();
+  const documentId = artifact?.documentId; // Get documentId from artifact
+  const router = useRouter();
+  const params = useParams();
+  
+  // Get chatId from router query parameters
+  const chatId = params.id as string;
   
   // Initialize metadata with defaults if null
-  const safeMetadata: AgentArtifactMetadata = {
-    selectedTab: metadata?.selectedTab || 'models',
-    editingModel: metadata?.editingModel || null,
-    editingAction: metadata?.editingAction || null,
-    editingSchedule: metadata?.editingSchedule || null,
-    viewingModelData: metadata?.viewingModelData || null,
-    editingRecord: metadata?.editingRecord || null,
-    currentStep: metadata?.currentStep,
-    stepProgress: metadata?.stepProgress,
-    stepMessages: metadata?.stepMessages,
-    dataManagement: metadata?.dataManagement || null
+  const safeMetadata: AgentArtifactMetadata = metadata || {
+    selectedTab: 'onboard',
+    editingModel: null,
+    editingAction: null,
+    editingSchedule: null,
+    viewingModelData: null,
+    editingRecord: null,
+    dataManagement: null,
+    showExplanationModal: null
   };
+
+  // Track unsaved changes
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showDeploymentModal, setShowDeploymentModal] = useState(false);
 
   const [agentData, setAgentData] = useState<AgentData>(() => {
     console.log('🚀 Initializing agent data with content:', {
@@ -3152,19 +1878,23 @@ const AgentBuilderContent = memo(({
         const schedules = Array.isArray(parsed.schedules) ? parsed.schedules : [];
         
         const initialData = {
-          name: typeof parsed.name === 'string' ? parsed.name : 'New Agent',
-          description: typeof parsed.description === 'string' ? parsed.description : '',
-          domain: typeof parsed.domain === 'string' ? parsed.domain : '',
+          id: parsed.id, // Keep id if it exists (from orchestrator)
+          name: parsed.name || 'New Agent',
+          description: parsed.description || '',
+          domain: parsed.domain || '',
           models,
           actions,
           schedules,
-          createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : new Date().toISOString()
+          createdAt: parsed.createdAt || new Date().toISOString(),
+          metadata: parsed.metadata // Keep metadata if it exists (from orchestrator)
         };
 
         console.log('📥 Initialized agent data from content:', {
+          id: initialData.id,
           name: initialData.name,
           modelCount: initialData.models.length,
-          actionCount: initialData.actions.length
+          actionCount: initialData.actions.length,
+          hasMetadata: !!initialData.metadata
         });
 
         return initialData;
@@ -3204,20 +1934,46 @@ const AgentBuilderContent = memo(({
 
   // Update content when agent data changes - moved to maintain hook order
   const updateAgentData = useCallback((newData: AgentData) => {
+    console.log('🔄 updateAgentData called with:', {
+      currentModels: agentData.models?.length || 0,
+      currentActions: agentData.actions?.length || 0,
+      currentSchedules: agentData.schedules?.length || 0,
+      newModels: newData.models?.length || 0,
+      newActions: newData.actions?.length || 0,
+      newSchedules: newData.schedules?.length || 0,
+      currentModelNames: (agentData.models || []).map((m: AgentModel) => m.name),
+      newModelNames: (newData.models || []).map((m: AgentModel) => m.name),
+      currentActionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
+      newActionNames: (newData.actions || []).map((a: AgentAction) => a.name),
+      currentScheduleNames: (agentData.schedules || []).map((s: AgentSchedule) => s.name),
+      newScheduleNames: (newData.schedules || []).map((s: AgentSchedule) => s.name)
+    });
+    
     setAgentData(newData);
-    const jsonContent = JSON.stringify(newData, null, 2);
-    // Save without debouncing to ensure document versions are created for navigation
-    // This allows the back/forward version navigation to work properly
-    onSaveContent(jsonContent, false);
-  }, [onSaveContent]);
+    setHasUnsavedChanges(true); // Mark as having unsaved changes
+    // Removed auto-save - only save when user explicitly clicks "Save Agent"
+    // const serializedData = JSON.stringify(newData, null, 2);
+    // onSaveContent(serializedData, true);
+  }, [agentData.models, agentData.actions, agentData.schedules]);
 
   // Enhanced save function - moved to maintain consistent hook order
   const saveAgentToConversation = useCallback(async () => {
-    // Save the current agent data using the standard document saving mechanism
-    const agentContent = JSON.stringify(agentData, null, 2);
-    onSaveContent(agentContent, false);
-    
-    console.log('✅ Agent data saved through standard document mechanism');
+    setIsSaving(true);
+    try {
+      // Save the current agent data using the standard document saving mechanism
+      const agentContent = JSON.stringify(agentData, null, 2);
+      onSaveContent(agentContent, false);
+      
+      setHasUnsavedChanges(false); // Clear unsaved changes flag
+      console.log('✅ Agent data saved through standard document mechanism');
+      
+      // Show deployment modal after successful save
+      setShowDeploymentModal(true);
+    } catch (error) {
+      console.error('❌ Failed to save agent data:', error);
+    } finally {
+      setIsSaving(false);
+    }
   }, [agentData, onSaveContent]);
 
   // Monitor content changes from external sources (like when opening from chat or refreshing page)
@@ -3227,14 +1983,6 @@ const AgentBuilderContent = memo(({
       return;
     }
 
-    // Debug logging to track content updates
-    console.log('🔍 Agent builder received content update:', {
-      contentLength: content.length,
-      contentPreview: content.substring(0, 100) + (content.length > 100 ? '...' : ''),
-      currentAgentName: agentData.name,
-      currentModelCount: agentData.models.length
-    });
-
     try {
       const parsed = JSON.parse(content);
       
@@ -3243,56 +1991,43 @@ const AgentBuilderContent = memo(({
                          (parsed.description && parsed.description.trim() !== '') ||
                          (parsed.domain && parsed.domain.trim() !== '') ||
                          (parsed.models && parsed.models.length > 0) ||
-                         (parsed.actions && parsed.actions.length > 0);
+                         (parsed.actions && parsed.actions.length > 0) ||
+                         (parsed.schedules && parsed.schedules.length > 0);
 
-      // Always update if we have real data, or if current state is just defaults
-      const currentIsDefaults = agentData.name === 'New Agent' && 
-                               !agentData.description && 
-                               !agentData.domain &&
-                               agentData.models.length === 0 && 
-                               agentData.actions.length === 0;
-
-      // Also update if content is not empty JSON object and we have defaults
-      const isEmptyJsonObject = content.trim() === '{}';
-      
-      if (hasRealData || (currentIsDefaults && !isEmptyJsonObject)) {
+      // Only update if we have real data
+      if (hasRealData) {
         const updatedData = {
+          id: parsed.id, // Keep id if it exists (from orchestrator)
           name: parsed.name || 'New Agent',
           description: parsed.description || '',
           domain: parsed.domain || '',
-          models: parsed.models || [],
-          actions: parsed.actions || [],
-          schedules: parsed.schedules || [],
-          createdAt: parsed.createdAt || new Date().toISOString()
+          models: Array.isArray(parsed.models) ? parsed.models : [],
+          actions: Array.isArray(parsed.actions) ? parsed.actions : [],
+          schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
+          createdAt: parsed.createdAt || new Date().toISOString(),
+          metadata: parsed.metadata // Keep metadata if it exists (from orchestrator)
         };
         
-        // Only update if the content is actually different
-        const currentDataString = JSON.stringify(agentData);
+        // Only update if data has actually changed
+        const currentDataString = JSON.stringify({
+          name: agentData.name,
+          description: agentData.description,
+          domain: agentData.domain,
+          models: agentData.models,
+          actions: agentData.actions,
+          schedules: agentData.schedules
+        });
         const newDataString = JSON.stringify(updatedData);
         
         if (currentDataString !== newDataString) {
-          console.log('📥 Updating agent data from fetched content:', {
-            hasRealData,
-            currentIsDefaults,
-            isEmptyJsonObject,
-            newName: updatedData.name,
-            modelCount: updatedData.models.length,
-            actionCount: updatedData.actions.length
-          });
-          
           setAgentData(updatedData);
         }
-      } else {
-        console.log('🔄 Skipping update - no real data and not replacing defaults:', {
-          hasRealData,
-          currentIsDefaults,
-          isEmptyJsonObject
-        });
       }
     } catch (e) {
-      console.warn('⚠️ Failed to parse updated content:', e);
+      console.warn('Failed to parse updated content:', e);
     }
-  }, [content]); // Only depend on content, not agentData to avoid loops
+  }, [content]); // Remove updateMetadata and agentData from dependencies to prevent loops
+
 
   if (isLoading) {
     return <DocumentSkeleton artifactKind="agent" />;
@@ -3365,7 +2100,7 @@ const AgentBuilderContent = memo(({
       interval: {
         pattern: '0 0 * * *',
         timezone: 'UTC',
-        active: true
+        active: false
       },
       dataSource: {
         type: 'database',
@@ -3395,19 +2130,33 @@ const AgentBuilderContent = memo(({
       name: `Action${(agentData.actions?.length || 0) + 1}`,
       emoji: '⚡', // Default emoji, will be auto-generated by AI
       description: '',
-      type: 'Create',
       role: 'admin',
       dataSource: {
         type: 'database',
-        database: { models: [] }
+        database: {
+          models: []
+        }
       },
       execute: {
         type: 'code',
-        code: { script: '' }
+        code: {
+          script: '',
+          envVars: []
+        }
       },
       results: {
         actionType: 'Create',
-        model: ''
+        model: '',
+        fields: {}
+      },
+      uiComponents: {
+        stepForms: [],
+        resultView: {
+          title: 'Action Results',
+          description: 'View the results of the action execution',
+          reactCode: '',
+          propsInterface: {}
+        }
       }
     };
     
@@ -3422,6 +2171,11 @@ const AgentBuilderContent = memo(({
 
   // Tab configuration
   const tabs = [
+    {
+      id: 'onboard' as const,
+      label: 'Onboard',
+      count: 0
+    },
     {
       id: 'models' as const,
       label: 'Models',
@@ -3438,6 +2192,25 @@ const AgentBuilderContent = memo(({
       count: agentData.schedules?.length || 0
     }
   ];
+
+  // Debug logging for tab counts
+  console.log('📊 Tab counts:', {
+    models: agentData.models?.length || 0,
+    actions: agentData.actions?.length || 0,
+    schedules: agentData.schedules?.length || 0,
+    modelNames: (agentData.models || []).map((m: AgentModel) => m.name),
+    actionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
+    scheduleNames: (agentData.schedules || []).map((s: AgentSchedule) => s.name)
+  });
+
+  // Add explanation modal handlers
+  const openExplanationModal = useCallback((type: 'models' | 'actions' | 'schedules') => {
+    setMetadata({ ...safeMetadata, showExplanationModal: type });
+  }, [safeMetadata]);
+
+  const closeExplanationModal = useCallback(() => {
+    setMetadata({ ...safeMetadata, showExplanationModal: null });
+  }, [safeMetadata]);
 
   return (
     <div className="h-full bg-black text-green-200 flex flex-col relative overflow-hidden font-mono">
@@ -3466,7 +2239,7 @@ const AgentBuilderContent = memo(({
               </div>
             </div>
             
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <div className="flex flex-row items-center justify-between sm:justify-start gap-3 sm:gap-4">
               {/* Status Indicator */}
               <div className="flex items-center gap-3 px-3 sm:px-4 py-2 rounded-xl bg-black/50 border border-green-500/20 backdrop-blur-sm">
                 <div className="status-indicator status-online">
@@ -3485,11 +2258,21 @@ const AgentBuilderContent = memo(({
               {/* Save Button */}
               <Button
                 onClick={saveAgentToConversation}
-                className="btn-matrix px-4 sm:px-6 py-2.5 text-sm font-medium font-mono"
+                disabled={isSaving}
+                className={cn(
+                  "px-4 sm:px-6 py-2.5 text-sm font-medium font-mono transition-all duration-200",
+                  hasUnsavedChanges 
+                    ? "btn-matrix border-yellow-500/50 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300" 
+                    : "btn-matrix"
+                )}
               >
                 <div className="flex items-center gap-2 justify-center">
-                  <div className="w-4 h-4">💾</div>
-                  <span>Save Agent</span>
+                  <div className="w-4 h-4">
+                    {isSaving ? '⏳' : hasUnsavedChanges ? '📝' : '💾'}
+                  </div>
+                  <span>
+                    {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'Save Agent'}
+                  </span>
                 </div>
               </Button>
             </div>
@@ -3497,22 +2280,22 @@ const AgentBuilderContent = memo(({
           
           {/* Enhanced Progress Indicator - Only show when AI is actually running */}
           {status === 'streaming' && (
-            <div className="mt-4 sm:mt-6 p-3 sm:p-4 rounded-2xl bg-black/50 border border-green-500/20 backdrop-blur-sm shadow-lg shadow-green-500/10">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0 mb-3">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                  <div className="text-sm font-medium text-green-200 font-mono">Build Progress</div>
-                  <div className="px-2 py-1 rounded-lg bg-green-500/20 text-green-300 text-xs font-medium font-mono border border-green-500/30 self-start">
+            <div className="mt-3 sm:mt-6 p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-black/50 border border-green-500/20 backdrop-blur-sm shadow-lg shadow-green-500/10">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-2 sm:mb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                  <div className="text-xs sm:text-sm font-medium text-green-200 font-mono">Build Progress</div>
+                  <div className="px-2 py-0.5 sm:py-1 rounded-lg bg-green-500/20 text-green-300 text-xs font-medium font-mono border border-green-500/30 self-start">
                     {agentData?.name || 'AI Agent System'}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-blue-600">{Math.round(calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData))}%</div>
+                  <div className="text-xl sm:text-2xl font-bold text-blue-600">{Math.round(calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData))}%</div>
                   <div className="text-xs text-gray-500">Complete</div>
                 </div>
               </div>
               
               {/* Progress Bar */}
-              <div className="relative h-2 bg-green-500/10 rounded-full overflow-hidden border border-green-500/20">
+              <div className="relative h-1.5 sm:h-2 bg-green-500/10 rounded-full overflow-hidden border border-green-500/20">
                 <div 
                   className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-700 rounded-full transition-all duration-1000 ease-out shadow-lg shadow-green-500/30"
                   style={{ width: `${calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData)}%` }}
@@ -3522,20 +2305,70 @@ const AgentBuilderContent = memo(({
               </div>
               
               {/* Progress Steps */}
-              {/* <div className="flex justify-between mt-4 text-xs font-mono">
-                {[
-                  { id: 'overview', label: 'Overview' },
-                  { id: 'models', label: 'Models' },
-                  { id: 'enums', label: 'Enums' },
-                  { id: 'actions', label: 'Actions' },
-                  { id: 'schedules', label: 'Schedules' }
-                ].map((step) => {
-                  const stepStatus = getStepStatus(step.id, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
+               <div className="flex justify-center mt-2 sm:mt-4 text-xs font-mono">
+                {(() => {
+                  const steps = [
+                    { id: 'prompt-understanding', label: 'Analysis' },
+                    { id: 'overview', label: 'Overview' },
+                    { id: 'models', label: 'Models' },
+                    { id: 'actions', label: 'Actions' },
+                    { id: 'schedules', label: 'Schedules' },
+                    { id: 'complete', label: 'Complete' }
+                  ];
+                  
+                  // Use the enhanced step status function to properly handle API sync
+                  const getEnhancedStepStatus = (stepId: string) => {
+                    // Map orchestrator step IDs to UI step IDs
+                    const stepIdMapping: Record<string, string> = {
+                      'step0': 'prompt-understanding',
+                      'step1': 'analysis',
+                      'step2': 'overview',
+                      'step3': 'models',
+                      'step4': 'actions',
+                      'step5': 'schedules',
+                      'complete': 'complete'
+                    };
+                    
+                    // Check both the UI step ID and orchestrator step ID
+                    const orchestratorStepId = Object.keys(stepIdMapping).find(key => stepIdMapping[key] === stepId) || stepId;
+                    const uiStepId = stepIdMapping[stepId] || stepId;
+                    
+                    // Check stepProgress for both IDs
+                    if (safeMetadata.stepProgress) {
+                      if (safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress]) {
+                        return safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress];
+                      }
+                      if (orchestratorStepId && safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress]) {
+                        return safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress];
+                      }
+                      if (uiStepId && safeMetadata.stepProgress[uiStepId as keyof typeof safeMetadata.stepProgress]) {
+                        return safeMetadata.stepProgress[uiStepId as keyof typeof safeMetadata.stepProgress];
+                      }
+                    }
+                    
+                    // Check if this is the current step
+                    if (safeMetadata.currentStep === stepId || safeMetadata.currentStep === orchestratorStepId || safeMetadata.currentStep === uiStepId) {
+                      return 'processing';
+                    }
+                    
+                    // Use the existing getStepStatus function as fallback
+                    return getStepStatus(stepId, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
+                  };
+                  
+                  // Find the current step
+                  const currentStep = steps.find(step => {
+                    const stepStatus = getEnhancedStepStatus(step.id);
+                    return stepStatus === 'processing';
+                  }) || steps.find(step => step.id === 'complete');
+                  
+                  if (!currentStep) return null;
+                  
+                  const stepStatus = getEnhancedStepStatus(currentStep.id);
                   const isComplete = stepStatus === 'complete';
                   const isProcessing = stepStatus === 'processing';
                   
                   return (
-                    <div key={step.id} className="flex flex-col items-center gap-1">
+                    <div className="flex items-center gap-2">
                       <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
                         isComplete 
                           ? 'bg-green-400 shadow-lg shadow-green-500/50 animate-matrix-glow' 
@@ -3550,19 +2383,19 @@ const AgentBuilderContent = memo(({
                           ? 'text-yellow-400'
                           : 'text-green-500/50'
                       }`}>
-                        {step.label}
+                        {currentStep.label}
                       </span>
                     </div>
                   );
-                })}
-              </div> */}
+                })()}
+              </div>
             </div>
           )}
         </div>
       </div>
 
       {/* Navigation */}
-      <div className="relative border-b border-green-500/20 backdrop-blur-xl bg-black/50">
+      <div className="relative border-b border-green-500/20 backdrop-blur-xl bg-black/50 sticky top-0 z-50 md:static md:z-auto">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex gap-1 sm:gap-2 -mb-px overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {tabs.map((tab) => (
@@ -3581,14 +2414,16 @@ const AgentBuilderContent = memo(({
               >
                 <div className="flex items-center gap-2 sm:gap-3">
                   <span className="font-medium">{tab.label}</span>
-                  <div className={cn(
-                    "px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-bold font-mono transition-colors border",
-                    safeMetadata.selectedTab === tab.id
-                      ? "bg-green-500/20 text-green-300 border-green-500/30"
-                      : "bg-green-500/10 text-green-400 border-green-500/20 group-hover:bg-green-500/20 group-hover:text-green-300"
-                  )}>
-                    {tab.count}
-                  </div>
+                  {tab.id !== 'onboard' && (
+                    <div className={cn(
+                      "px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-bold font-mono transition-colors border",
+                      safeMetadata.selectedTab === tab.id
+                        ? "bg-green-500/20 text-green-300 border-green-500/30"
+                        : "bg-green-500/10 text-green-400 border-green-500/20 group-hover:bg-green-500/20 group-hover:text-green-300"
+                    )}>
+                      {tab.count}
+                    </div>
+                  )}
                 </div>
                 
                 {/* Active tab indicator */}
@@ -3622,7 +2457,7 @@ const AgentBuilderContent = memo(({
                       allModels={agentData.models || []}
                       onUpdateModel={(updatedModel) => {
                         console.log('🔄 Updating model:', updatedModel);
-                        const updatedModels = (agentData.models || []).map(m => 
+                        const updatedModels = (agentData.models || []).map((m: AgentModel) => 
                           m.id === updatedModel.id ? updatedModel : m
                         );
                               updateAgentData({ ...agentData, models: updatedModels });
@@ -3639,44 +2474,163 @@ const AgentBuilderContent = memo(({
               }
               
               // Show appropriate tab content
-              if (safeMetadata.selectedTab === 'models') {
+              if (safeMetadata.selectedTab === 'onboard') {
                 return (
-                  <ModelsListEditor
-                    models={agentData.models || []}
-                    onModelsChange={(models) => updateAgentData({ ...agentData, models })}
-                    updateMetadata={updateMetadata}
-                    status={status}
+                  <OnboardContent 
+                    onTabChange={(tab) => setMetadata({ 
+                      ...safeMetadata, 
+                      selectedTab: tab 
+                    })} 
                   />
+                );
+              }
+              
+              if (safeMetadata.selectedTab === 'models') {
+                console.log('🗂️ Rendering ModelsListEditor');
+                console.log('🗂️ Models data:', {
+                  modelsCount: agentData.models?.length || 0,
+                  modelNames: (agentData.models || []).map((m: AgentModel) => m.name),
+                  editingId: safeMetadata.editingModel
+                });
+                return (
+                  <div className="space-y-6">
+                    {/* Introduction Section */}
+                    <div className="p-4 sm:p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+                              <span className="text-lg">🗃️</span>
+                            </div>
+                            <h2 className="text-xl font-bold text-blue-200 font-mono">Data Models</h2>
+                          </div>
+                          <p className="text-blue-300 text-sm font-mono leading-relaxed mb-3">
+                            Define the structure of your data with custom models. Each model represents a table in your database with fields, types, and relationships. Models store and organize all the information your agent will work with.
+                          </p>
+                          <div className="flex flex-wrap gap-2 text-xs font-mono">
+                            <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-300">📊 Database Tables</span>
+                            <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-300">🔗 Relationships</span>
+                            <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-300">✅ Validation</span>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => openExplanationModal('models')}
+                          className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 text-base"
+                        >
+                          <span>📖</span>
+                          <span>How Models Work</span>
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <ModelsListEditor
+                      models={agentData.models || []}
+                      onModelsChange={(models) => updateAgentData({ ...agentData, models })}
+                      updateMetadata={(updates) => {
+                        setMetadata({ 
+                          ...safeMetadata, 
+                          ...updates
+                        });
+                      }}
+                      status={'idle'}
+                    />
+                  </div>
                 );
               }
               
               if (safeMetadata.selectedTab === 'actions') {
                 console.log('⚡ Rendering ActionsListEditor');
+                console.log('⚡ Actions data:', {
+                  actionsCount: agentData.actions?.length || 0,
+                  actionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
+                  editingId: safeMetadata.editingAction
+                });
                 return (
-                  <ActionsListEditor
-                    actions={agentData.actions || []}
-                    updateActions={(actions) => updateAgentData({ ...agentData, actions })}
-                    editingId={safeMetadata.editingAction}
-                    setEditingId={(id) => updateMetadata({ editingAction: id })}
-                    addAction={addAction}
-                    models={agentData.models || []}
-                    status={status}
-                  />
+                  <div className="space-y-6">
+                    {/* Introduction Section */}
+                    <div className="p-4 sm:p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center border border-purple-500/30">
+                              <span className="text-lg">⚡</span>
+                            </div>
+                            <h2 className="text-xl font-bold text-purple-200 font-mono">Actions</h2>
+                          </div>
+                          <p className="text-purple-300 text-sm font-mono leading-relaxed mb-3">
+                            Create interactive actions that users can trigger to manipulate data. Actions can collect user input, process information, and create or update records in your models. Perfect for forms, workflows, and user interactions.
+                          </p>
+                          <div className="flex flex-wrap gap-2 text-xs font-mono">
+                            <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-300">🎯 User Triggered</span>
+                            <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-300">📝 Data Input</span>
+                            <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-300">🔄 Processing</span>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => openExplanationModal('actions')}
+                          className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-6 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 text-base"
+                        >
+                          <span>⚡</span>
+                          <span>How Actions Work</span>
+                        </Button>
+                      </div>
+                    </div>
+
+                    <ActionsListEditor
+                      actions={agentData.actions || []}
+                      onUpdate={(actions) => updateAgentData({ ...agentData, actions })}
+                      allModels={agentData.models || []}
+                      documentId={documentId}
+                    />
+                  </div>
                 );
               }
               
               if (safeMetadata.selectedTab === 'schedules') {
                 console.log('⏰ Rendering SchedulesListEditor');
+                console.log('⏰ Schedules data:', {
+                  schedulesCount: agentData.schedules?.length || 0,
+                  scheduleNames: (agentData.schedules || []).map((s: AgentSchedule) => s.name),
+                  editingId: safeMetadata.editingSchedule
+                });
                 return (
-                  <SchedulesListEditor
-                    schedules={agentData.schedules || []}
-                    updateSchedules={(schedules) => updateAgentData({ ...agentData, schedules })}
-                    editingId={safeMetadata.editingSchedule}
-                    setEditingId={(id) => updateMetadata({ editingSchedule: id })}
-                    addSchedule={addSchedule}
-                    models={agentData.models || []}
-                    status={status}
-                  />
+                  <div className="space-y-6">
+                    {/* Introduction Section */}
+                    <div className="p-4 sm:p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
+                              <span className="text-lg">⏰</span>
+                            </div>
+                            <h2 className="text-xl font-bold text-orange-200 font-mono">Schedules</h2>
+                          </div>
+                          <p className="text-orange-300 text-sm font-mono leading-relaxed mb-3">
+                            Automate recurring tasks with scheduled actions that run at specific intervals. Perfect for data syncing, regular maintenance, reports, or any automated workflow that needs to happen on a timer.
+                          </p>
+                          <div className="flex flex-wrap gap-2 text-xs font-mono">
+                            <span className="px-2 py-1 rounded bg-orange-500/20 text-orange-300">🤖 Automated</span>
+                            <span className="px-2 py-1 rounded bg-orange-500/20 text-orange-300">⏱️ Time-based</span>
+                            <span className="px-2 py-1 rounded bg-orange-500/20 text-orange-300">🔄 Recurring</span>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => openExplanationModal('schedules')}
+                          className="bg-orange-600 hover:bg-orange-700 text-white font-semibold px-6 py-3 rounded-lg transition-colors duration-200 flex items-center gap-2 shadow-lg hover:shadow-orange-500/25"
+                        >
+                          <span>📅</span>
+                          How Schedules Work
+                        </Button>
+                      </div>
+                    </div>
+
+                    <SchedulesListEditor
+                      schedules={agentData.schedules || []}
+                      onUpdate={(schedules) => updateAgentData({ ...agentData, schedules })}
+                      allModels={agentData.models || []}
+                      documentId={documentId}
+                    />
+                  </div>
                 );
               }
               
@@ -3686,6 +2640,425 @@ const AgentBuilderContent = memo(({
                                 </div>
                                   </div>
       </div>
+      
+      {/* Deployment Modal */}
+      <Dialog open={showDeploymentModal} onOpenChange={setShowDeploymentModal}>
+        <DialogContent className="sm:max-w-[425px] bg-black/95 border-green-500/20 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="text-green-200 font-mono text-xl flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-green-600 to-green-700 flex items-center justify-center">
+                <span className="text-black text-lg">🚀</span>
+              </div>
+              Agent Saved Successfully!
+            </DialogTitle>
+            <DialogDescription className="text-green-400 font-mono">
+              Your agent "<span className="text-green-200 font-semibold">{agentData.name}</span>" has been saved. 
+              Would you like to proceed to the deployment page to make it live?
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex flex-col gap-4 mt-6">
+            <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-green-600 rounded-full" />
+                <span className="text-green-200 font-medium font-mono">What happens next?</span>
+              </div>
+              <ul className="text-sm text-green-400 font-mono space-y-1 ml-4">
+                <li>• Configure deployment environment</li>
+                <li>• Set up database connections</li>
+                <li>• Deploy agent to production</li>
+                <li>• Monitor and manage your agent</li>
+              </ul>
+            </div>
+          </div>
+          
+          <DialogFooter className="gap-3 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeploymentModal(false)}
+              className="btn-matrix border-green-500/30 hover:border-green-500/50 text-white hover:text-green-200 bg-transparent hover:bg-green-500/10"
+            >
+              <span className="font-mono">Maybe Later</span>
+            </Button>
+            <Button
+              onClick={() => {
+                setShowDeploymentModal(false);
+                // Navigate to deployment page with chatId
+                const deploymentUrl = chatId 
+                  ? `/deployment?chatId=${chatId}`
+                  : '/deployment';
+                router.push(deploymentUrl);
+              }}
+              className="btn-matrix bg-green-600 hover:bg-green-700 text-black font-bold"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-mono">Deploy Agent</span>
+                <span>🚀</span>
+              </div>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Explanation Modals */}
+      {/* Models Explanation Modal */}
+      <Dialog open={safeMetadata.showExplanationModal === 'models'} onOpenChange={closeExplanationModal}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-black/95 border-blue-500/20 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="text-blue-200 font-mono text-xl flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+                <span className="text-lg">🗃️</span>
+              </div>
+              Data Models Explained
+            </DialogTitle>
+            <DialogDescription className="text-blue-400 font-mono">
+              Learn how to structure and organize your data with powerful models
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 mt-6">
+            {/* What are Models */}
+            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <h3 className="text-blue-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-blue-400">📊</span> What are Data Models?
+              </h3>
+              <p className="text-blue-300 text-sm font-mono leading-relaxed mb-3">
+                Data models define the structure of information in your agent. Think of them as blueprints for database tables that specify what fields exist, their types, and how they relate to each other.
+              </p>
+              <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                <div className="text-xs font-mono text-blue-400 mb-2">Example Model: "User"</div>
+                <div className="space-y-1 text-xs font-mono text-blue-300">
+                  <div className="flex justify-between"><span>📝 name</span><span>String (required)</span></div>
+                  <div className="flex justify-between"><span>📧 email</span><span>String (unique)</span></div>
+                  <div className="flex justify-between"><span>🎂 age</span><span>Integer</span></div>
+                  <div className="flex justify-between"><span>✅ published</span><span>Boolean</span></div>
+                </div>
+              </div>
+            </div>
+
+            {/* Key Features */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                <h4 className="text-blue-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-blue-400">🔗</span> Relationships
+                </h4>
+                <p className="text-blue-300 text-xs font-mono leading-relaxed">
+                  Connect models together. A "Post" can belong to a "User", creating powerful data relationships.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                <h4 className="text-blue-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-blue-400">✅</span> Validation
+                </h4>
+                <p className="text-blue-300 text-xs font-mono leading-relaxed">
+                  Set required fields, unique constraints, and default values to ensure data integrity.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                <h4 className="text-blue-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-blue-400">🎨</span> Custom Forms
+                </h4>
+                <p className="text-blue-300 text-xs font-mono leading-relaxed">
+                  Group fields into forms for better user experience when creating or editing records.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                <h4 className="text-blue-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-blue-400">📊</span> Data Management
+                </h4>
+                <p className="text-blue-300 text-xs font-mono leading-relaxed">
+                  View, edit, and manage actual records stored in your models with built-in interfaces.
+                </p>
+              </div>
+            </div>
+
+            {/* Visual Example */}
+            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <h3 className="text-blue-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-blue-400">🎯</span> Example: Blog System
+              </h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                  <div className="text-sm font-mono text-blue-200 mb-2">📝 Post Model</div>
+                  <div className="space-y-1 text-xs font-mono text-blue-300">
+                    <div>• title (String, required)</div>
+                    <div>• content (Text)</div>
+                    <div>• published (Boolean)</div>
+                    <div>• author → User</div>
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                  <div className="text-sm font-mono text-blue-200 mb-2">👤 User Model</div>
+                  <div className="space-y-1 text-xs font-mono text-blue-300">
+                    <div>• name (String, required)</div>
+                    <div>• email (String, unique)</div>
+                    <div>• role (Enum: admin/user)</div>
+                    <div>• posts ← Post[]</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Actions Explanation Modal */}
+      <Dialog open={safeMetadata.showExplanationModal === 'actions'} onOpenChange={closeExplanationModal}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-black/95 border-purple-500/20 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="text-purple-200 font-mono text-xl flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center border border-purple-500/30">
+                <span className="text-lg">⚡</span>
+              </div>
+              Actions Explained
+            </DialogTitle>
+            <DialogDescription className="text-purple-400 font-mono">
+              Create powerful user-triggered workflows and data processing
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 mt-6">
+            {/* What are Actions */}
+            <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
+              <h3 className="text-purple-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-purple-400">⚡</span> What are Actions?
+              </h3>
+              <p className="text-purple-300 text-sm font-mono leading-relaxed mb-3">
+                Actions are interactive workflows that users can trigger to process data. They collect input from users, execute custom logic, and create or update records in your models.
+              </p>
+              <div className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                <div className="text-xs font-mono text-purple-400 mb-2">Action Flow:</div>
+                <div className="flex items-center gap-2 text-xs font-mono text-purple-300 flex-wrap">
+                  <span className="px-2 py-1 rounded bg-purple-500/20">📥 User Input</span>
+                  <span>→</span>
+                  <span className="px-2 py-1 rounded bg-purple-500/20">🔄 Processing</span>
+                  <span>→</span>
+                  <span className="px-2 py-1 rounded bg-purple-500/20">💾 Database Update</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Key Features */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                <h4 className="text-purple-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-purple-400">📝</span> Input Forms
+                </h4>
+                <p className="text-purple-300 text-xs font-mono leading-relaxed">
+                  Collect data from users with custom forms that validate input and provide great UX.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                <h4 className="text-purple-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-purple-400">🤖</span> AI Processing
+                </h4>
+                <p className="text-purple-300 text-xs font-mono leading-relaxed">
+                  Use AI prompts to analyze, transform, or enhance user input before saving to models.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                <h4 className="text-purple-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-purple-400">🔧</span> Custom Code
+                </h4>
+                <p className="text-purple-300 text-xs font-mono leading-relaxed">
+                  Write custom JavaScript to handle complex business logic and data transformations.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                <h4 className="text-purple-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-purple-400">🎯</span> Role-based
+                </h4>
+                <p className="text-purple-300 text-xs font-mono leading-relaxed">
+                  Control who can trigger actions with admin or member role permissions.
+                </p>
+              </div>
+            </div>
+
+            {/* Visual Example */}
+            <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/20">
+              <h3 className="text-purple-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-purple-400">🎯</span> Example: "Create Blog Post"
+              </h3>
+              <div className="space-y-3">
+                <div className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                  <div className="text-sm font-mono text-purple-200 mb-2">Step 1: Collect Input</div>
+                  <div className="grid grid-cols-2 gap-2 text-xs font-mono text-purple-300">
+                    <div>• Title (required)</div>
+                    <div>• Content (required)</div>
+                    <div>• Category (dropdown)</div>
+                    <div>• Tags (multi-select)</div>
+                  </div>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                  <div className="text-sm font-mono text-purple-200 mb-2">Step 2: AI Enhancement</div>
+                  <div className="text-xs font-mono text-purple-300">
+                    "Generate SEO-friendly slug and meta description from the title and content"
+                  </div>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-purple-500/5 border border-purple-500/10">
+                  <div className="text-sm font-mono text-purple-200 mb-2">Step 3: Save to Model</div>
+                  <div className="text-xs font-mono text-purple-300">
+                    Create new Post record with processed data + current user as author
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedules Explanation Modal */}
+      <Dialog open={safeMetadata.showExplanationModal === 'schedules'} onOpenChange={closeExplanationModal}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto bg-black/95 border-orange-500/20 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="text-orange-200 font-mono text-xl flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
+                <span className="text-lg">⏰</span>
+              </div>
+              Schedules Explained
+            </DialogTitle>
+            <DialogDescription className="text-orange-400 font-mono">
+              Automate recurring tasks and workflows with intelligent scheduling
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 mt-6">
+            {/* What are Schedules */}
+            <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/20">
+              <h3 className="text-orange-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-orange-400">⏰</span> What are Schedules?
+              </h3>
+              <p className="text-orange-300 text-sm font-mono leading-relaxed mb-3">
+                Schedules automate tasks that need to run regularly without user intervention. Perfect for data syncing, maintenance, reports, or any workflow that should happen on a timer.
+              </p>
+              <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                <div className="text-xs font-mono text-orange-400 mb-2">Schedule Flow:</div>
+                <div className="flex items-center gap-2 text-xs font-mono text-orange-300 flex-wrap">
+                  <span className="px-2 py-1 rounded bg-orange-500/20">⏱️ Timer Triggers</span>
+                  <span>→</span>
+                  <span className="px-2 py-1 rounded bg-orange-500/20">🔄 Execute Code</span>
+                  <span>→</span>
+                  <span className="px-2 py-1 rounded bg-orange-500/20">💾 Update Data</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Key Features */}
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="p-4 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                <h4 className="text-orange-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-orange-400">📅</span> Flexible Timing
+                </h4>
+                <p className="text-orange-300 text-xs font-mono leading-relaxed">
+                  Run every minute, hour, day, week, or with custom cron expressions for precise timing.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                <h4 className="text-orange-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-orange-400">🤖</span> AI Processing
+                </h4>
+                <p className="text-orange-300 text-xs font-mono leading-relaxed">
+                  Use AI to analyze data, generate content, or make decisions during scheduled runs.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                <h4 className="text-orange-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-orange-400">🔄</span> Data Sync
+                </h4>
+                <p className="text-orange-300 text-xs font-mono leading-relaxed">
+                  Automatically sync with external APIs, update records, or perform maintenance tasks.
+                </p>
+              </div>
+              
+              <div className="p-4 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                <h4 className="text-orange-200 font-semibold font-mono mb-2 flex items-center gap-2">
+                  <span className="text-orange-400">🛡️</span> Safe Testing
+                </h4>
+                <p className="text-orange-300 text-xs font-mono leading-relaxed">
+                  Test schedules safely without affecting real data before activating them.
+                </p>
+              </div>
+            </div>
+
+            {/* Timing Examples */}
+            <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/20">
+              <h3 className="text-orange-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-orange-400">⏱️</span> Common Schedule Patterns
+              </h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <div className="p-2 rounded bg-orange-500/10 text-xs font-mono text-orange-300">
+                    <span className="text-orange-200">Every 5 minutes:</span> Real-time data sync
+                  </div>
+                  <div className="p-2 rounded bg-orange-500/10 text-xs font-mono text-orange-300">
+                    <span className="text-orange-200">Every hour:</span> Update statistics
+                  </div>
+                  <div className="p-2 rounded bg-orange-500/10 text-xs font-mono text-orange-300">
+                    <span className="text-orange-200">Daily at 2 AM:</span> Generate reports
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="p-2 rounded bg-orange-500/10 text-xs font-mono text-orange-300">
+                    <span className="text-orange-200">Weekly on Monday:</span> Send newsletters
+                  </div>
+                  <div className="p-2 rounded bg-orange-500/10 text-xs font-mono text-orange-300">
+                    <span className="text-orange-200">Monthly:</span> Archive old data
+                  </div>
+                  <div className="p-2 rounded bg-orange-500/10 text-xs font-mono text-orange-300">
+                    <span className="text-orange-200">Custom cron:</span> Complex timing
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Visual Example */}
+            <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/20">
+              <h3 className="text-orange-200 font-semibold font-mono mb-3 flex items-center gap-2">
+                <span className="text-orange-400">🎯</span> Example: "Daily Report Generator"
+              </h3>
+              <div className="space-y-3">
+                <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                  <div className="text-sm font-mono text-orange-200 mb-2">⏰ Timing: Every day at 8:00 AM</div>
+                  <div className="text-xs font-mono text-orange-300">
+                    Automatically runs every morning to prepare daily insights
+                  </div>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                  <div className="text-sm font-mono text-orange-200 mb-2">📊 Data Processing</div>
+                  <div className="text-xs font-mono text-orange-300">
+                    Analyze yesterday's Posts, count views, calculate engagement metrics
+                  </div>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                  <div className="text-sm font-mono text-orange-200 mb-2">🤖 AI Analysis</div>
+                  <div className="text-xs font-mono text-orange-300">
+                    "Generate insights and recommendations based on yesterday's performance data"
+                  </div>
+                </div>
+                
+                <div className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/10">
+                  <div className="text-sm font-mono text-orange-200 mb-2">💾 Save Results</div>
+                  <div className="text-xs font-mono text-orange-300">
+                    Create new Report record with AI-generated insights and metrics
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 });
@@ -3696,13 +3069,14 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
   
   initialize: ({ setMetadata }) => {
     setMetadata({
-      selectedTab: 'models',
+      selectedTab: 'onboard',
       editingModel: null,
       editingAction: null,
       editingSchedule: null,
       viewingModelData: null,
       editingRecord: null,
-      dataManagement: null
+      dataManagement: null,
+      showExplanationModal: null
     });
   },
   
@@ -3711,7 +3085,7 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
       const agentData = typeof streamPart.content === 'string' 
         ? JSON.parse(streamPart.content) 
         : streamPart.content;
-        
+      
       setArtifact((draftArtifact) => {
         return {
           ...draftArtifact,
@@ -3726,6 +3100,19 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
       const stepData = typeof streamPart.content === 'string' 
         ? JSON.parse(streamPart.content) 
         : streamPart.content;
+      
+      // Map orchestrator step IDs to UI step IDs for consistency
+      const stepIdMapping: Record<string, string> = {
+        'step0': 'prompt-understanding',
+        'step1': 'analysis', 
+        'step2': 'overview',
+        'step3': 'models',
+        'step4': 'actions',
+        'step5': 'schedules',
+        'complete': 'complete'
+      };
+      
+      const mappedStepId = stepIdMapping[stepData.step] || stepData.step;
         
       setMetadata((draftMetadata) => {
         const newMetadata: AgentArtifactMetadata = {
@@ -3734,13 +3121,17 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
           editingModel: draftMetadata?.editingModel || null,
           editingAction: draftMetadata?.editingAction || null,
           editingSchedule: draftMetadata?.editingSchedule || null,
-          currentStep: stepData.step,
+          currentStep: mappedStepId,
           stepProgress: {
             ...(draftMetadata?.stepProgress || {}),
+            [mappedStepId]: stepData.status,
+            // Also store the original step ID for compatibility
             [stepData.step]: stepData.status
           },
           stepMessages: {
             ...(draftMetadata?.stepMessages || {}),
+            [mappedStepId]: stepData.message || '',
+            // Also store the original step ID for compatibility
             [stepData.step]: stepData.message || ''
           }
         };
@@ -3754,15 +3145,65 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
           status: 'streaming',
         }));
       }
+      
+      // Handle any step completion to ensure visibility (but not for the final complete step)
+      if (stepData.status === 'complete' && stepData.step !== 'complete' && mappedStepId !== 'complete') {
+        setArtifact((draftArtifact) => ({
+          ...draftArtifact,
+          isVisible: true,
+          status: 'streaming',
+        }));
+      }
+      
+      // Handle final completion - keep streaming until we get the completion event
+      if (stepData.status === 'complete' && (stepData.step === 'complete' || mappedStepId === 'complete')) {
+        // setArtifact((draftArtifact) => ({
+        //   ...draftArtifact,
+        //   isVisible: true,
+        //   status: 'streaming', // Keep as streaming initially
+        // }));
+        
+        // Set to idle after a brief delay to ensure all text-delta content has been processed
+        // The status change from 'streaming' to 'idle' will trigger document refetch in the main component
+        setTimeout(() => {
+          setArtifact((draftArtifact) => ({
+            ...draftArtifact,
+            status: 'idle',
+          }));
+        }, 1500); // 1.5 second delay to allow orchestrator to complete saving
+      }
+    }
+
+    // Handle dedicated completion events (would need to be added to server-side)
+    // For now, we'll use the existing agent-step complete detection but make it more reliable
+    if (streamPart.type === 'agent-step') {
+      const stepData = typeof streamPart.content === 'string' 
+        ? JSON.parse(streamPart.content) 
+        : streamPart.content;
+      
+      // When we receive the final complete step, set artifact to idle after a brief delay
+      // to ensure all text-delta content has been processed
+      if (stepData.status === 'complete' && stepData.step === 'complete') {
+        setTimeout(() => {
+          setArtifact((draftArtifact) => ({
+            ...draftArtifact,
+            status: 'idle',
+          }));
+        }, 1200); // 1.2 second delay to allow orchestrator to complete saving
+      }
     }
     
     if (streamPart.type === 'text-delta') {
-      setArtifact((draftArtifact) => ({
-        ...draftArtifact,
-        content: draftArtifact.content + (streamPart.content as string),
-        isVisible: draftArtifact.status === 'streaming' && draftArtifact.content.length > 200,
-        status: 'streaming',
-      }));
+      setArtifact((draftArtifact) => {
+        const newContent = draftArtifact.content + (streamPart.content as string);
+        
+        return {
+          ...draftArtifact,
+          content: newContent,
+          isVisible: draftArtifact.status === 'streaming' && newContent.length > 200,
+          // Don't change status here - let the completion timeout handle it
+        };
+      });
     }
   },
 

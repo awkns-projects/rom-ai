@@ -22,9 +22,6 @@ import {
   deletionOperationsSchema
 } from './schemas';
 import { z } from 'zod';
-import { mergeModelsIntelligently, mergeActionsIntelligently, mergeSchedulesIntelligently } from './merging';
-// import type { PseudoCodeStep } from '../../../artifacts/agent/types/action';
-// import { mergeDatabaseChanges, mergeActionChanges, mergeScheduleChanges, logMergingDecision } from './merging';
 
 // Define PseudoCodeStep interface locally to avoid import issues
 interface PseudoCodeStep {
@@ -547,13 +544,13 @@ Each enum should have:
   // If this is an incremental update, we need to merge with existing models
   if (isIncrementalUpdate) {
     console.log(`🔄 Incremental update: Generated ${fixedModels.length} new models`);
-    const existingModelEnums = (existingAgent.models || []).reduce((sum, model) => sum + (model.enums?.length || 0), 0);
-    const newModelEnums = fixedModels.reduce((sum, model) => sum + (model.enums?.length || 0), 0);
+    const existingModelEnums = (existingAgent.models || []).reduce((sum: number, model: any) => sum + (model.enums?.length || 0), 0);
+    const newModelEnums = fixedModels.reduce((sum: number, model: any) => sum + (model.enums?.length || 0), 0);
     console.log(`📊 Existing agent has ${(existingAgent.models || []).length} models with ${existingModelEnums} total enums`);
     
-    // Use intelligent merging instead of simple concatenation
-    const mergedModels = mergeModelsIntelligently(existingAgent.models || [], fixedModels);
-    const finalModelEnums = mergedModels.reduce((sum, model) => sum + (model.enums?.length || 0), 0);
+    // Simple merge approach: concatenate existing and new models
+    const mergedModels = [...(existingAgent.models || []), ...fixedModels];
+    const finalModelEnums = mergedModels.reduce((sum: number, model: any) => sum + (model.enums?.length || 0), 0);
     
     console.log(`📊 Final result: ${mergedModels.length} total models with ${finalModelEnums} total enums`);
     
@@ -853,8 +850,8 @@ try {
     console.log(`🔄 Incremental update: Generated ${fixedActions.length} new actions`);
     console.log(`📊 Existing agent has ${(existingAgent.actions || []).length} actions`);
     
-    // Use intelligent merging instead of simple concatenation
-    const mergedActions = mergeActionsIntelligently(existingAgent.actions || [], fixedActions);
+    // Simple merge approach: concatenate existing and new actions
+    const mergedActions = [...(existingAgent.actions || []), ...fixedActions];
     
     console.log(`📊 Final result: ${mergedActions.length} total actions`);
     
@@ -1085,8 +1082,8 @@ try {
     console.log(`🔄 Incremental update: Generated ${fixedSchedules.length} new schedules`);
     console.log(`📊 Existing agent has ${(existingAgent.schedules || []).length} schedules`);
     
-    // Use intelligent merging instead of simple concatenation
-    const mergedSchedules = mergeSchedulesIntelligently(existingAgent.schedules || [], fixedSchedules);
+    // Simple merge approach: concatenate existing and new schedules
+    const mergedSchedules = [...(existingAgent.schedules || []), ...fixedSchedules];
     
     console.log(`📊 Final result: ${mergedSchedules.length} total schedules`);
     
@@ -3009,8 +3006,8 @@ STEP TYPES TO USE:
 - Database update many: Update multiple records
 - Database delete unique: Delete one specific record
 - Database delete many: Delete multiple records
-- Call External API: Make API calls to external services (Shopify, payment processors, etc.)
-- AI Analysis: Use AI for analysis, decision making, or data processing
+- call external api: Make API calls to external services (Shopify, payment processors, etc.)
+- ai analysis: Use AI for analysis, decision making, or data processing
 
 **CRITICAL FIELD TYPE RULES**:
 When defining field types, follow these EXACT patterns:

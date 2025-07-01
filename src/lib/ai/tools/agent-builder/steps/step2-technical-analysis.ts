@@ -6,10 +6,11 @@ import type { Step0Output } from './step0-prompt-understanding';
 import type { Step1Output } from './step1-decision-making';
 
 /**
- * STEP 2: Technical Analysis & System Design
+ * STEP 2: Technical Analysis and Prisma Schema Generation
  * 
- * Analyze technical requirements and design the system architecture.
- * This step bridges the gap between understanding and implementation.
+ * Enhanced technical analysis that includes comprehensive Prisma schema generation.
+ * This step analyzes technical requirements and generates a complete Prisma schema
+ * that will be used by subsequent steps for database generation, actions, and schedules.
  */
 
 export interface Step2Input {
@@ -21,238 +22,404 @@ export interface Step2Input {
 }
 
 export interface Step2Output {
-  // Technical Requirements Analysis
-  technicalRequirements: {
-    dataModels: string[];
-    integrations: string[];
-    scalabilityNeeds: string[];
-    securityRequirements: string[];
-    performanceRequirements: string[];
-  };
-  
-  // System Architecture Design
+  // Original technical analysis fields
+  complexity: 'simple' | 'moderate' | 'complex';
   systemArchitecture: {
-    components: Array<{
-      name: string;
-      purpose: string;
-      dependencies: string[];
-      type: 'model' | 'action' | 'schedule' | 'integration';
-    }>;
-    dataFlow: Array<{
-      from: string;
-      to: string;
-      data: string;
-      trigger: string;
-    }>;
-    integrationPoints: string[];
+    components: string[];
+    dataFlow: string[];
+    integrations: string[];
   };
-  
-  // Design Decisions
-  designDecisions: Array<{
-    decision: string;
+  technicalRequirements: {
+    databaseComplexity: 'simple' | 'moderate' | 'complex';
+    apiIntegrations: string[];
+    backgroundJobs: boolean;
+    realTimeFeatures: boolean;
+  };
+  recommendedApproach: {
+    architecture: string;
     rationale: string;
-    alternatives: string[];
-    tradeoffs: string;
-  }>;
-  
-  // Implementation Strategy
-  implementationStrategy: {
-    approach: 'unified' | 'phased' | 'incremental';
-    phases: string[];
-    dependencies: string[];
-    riskMitigation: Array<{
-      risk: string;
-      mitigation: string;
-      contingency: string;
-    }>;
+    tradeoffs: string[];
+  };
+  riskAssessment: {
+    technicalRisks: string[];
+    mitigationStrategies: string[];
+    complexityScore: number;
   };
   
-  // Quality Assurance Plan
-  qualityPlan: {
-    testingStrategy: string;
-    validationPoints: string[];
-    monitoringNeeds: string[];
-    maintenanceConsiderations: string[];
+  // NEW: Prisma Schema Generation
+  prismaSchema: {
+    schema: string;
   };
-  
-  // Enhanced metrics
-  complexity: 'simple' | 'moderate' | 'complex' | 'enterprise';
-  confidence: number;
-  estimatedEffort: 'low' | 'medium' | 'high' | 'very-high';
-  technicalRisks: string[];
 }
 
 /**
- * Execute Step 2: Technical Analysis and System Design
+ * Execute Step 2: Technical Analysis with Prisma Schema Generation
  */
 export async function executeStep2TechnicalAnalysis(
   input: Step2Input
 ): Promise<Step2Output> {
-  console.log('🔧 STEP 2: Starting technical analysis and system design...');
+  console.log('🏗️ STEP 2: Starting technical analysis with Prisma schema generation...');
   
   const { promptUnderstanding, decision, existingAgent, conversationContext, command } = input;
   
   try {
+    // PHASE 1: Original Technical Analysis
+    console.log('📊 Phase 1: Performing technical analysis...');
+    
     const model = await getAgentBuilderModel();
     
-    // Enhanced system prompt with comprehensive technical analysis guidance
-    const systemPrompt = `You are a senior technical architect performing comprehensive system analysis.
+    const technicalAnalysisSchema = z.object({
+      complexity: z.enum(['simple', 'moderate', 'complex']).describe('Overall system complexity based on requirements'),
+      systemArchitecture: z.object({
+        components: z.array(z.string()).describe('Key system components needed'),
+        dataFlow: z.array(z.string()).describe('How data flows through the system'),
+        integrations: z.array(z.string()).describe('External systems or APIs to integrate with')
+      }),
+      technicalRequirements: z.object({
+        databaseComplexity: z.enum(['simple', 'moderate', 'complex']).describe('Database design complexity'),
+        apiIntegrations: z.array(z.string()).describe('Required API integrations'),
+        backgroundJobs: z.boolean().describe('Whether background job processing is needed'),
+        realTimeFeatures: z.boolean().describe('Whether real-time features are required')
+      }),
+      recommendedApproach: z.object({
+        architecture: z.string().describe('Recommended technical architecture approach'),
+        rationale: z.string().describe('Why this approach was chosen'),
+        tradeoffs: z.array(z.string()).describe('Technical tradeoffs and considerations')
+      }),
+      riskAssessment: z.object({
+        technicalRisks: z.array(z.string()).describe('Potential technical risks'),
+        mitigationStrategies: z.array(z.string()).describe('Strategies to mitigate risks'),
+        complexityScore: z.number().min(0).max(100).describe('Overall complexity score (0-100)')
+      })
+    });
 
-ANALYSIS CONTEXT:
-${JSON.stringify(promptUnderstanding, null, 2)}
+    const technicalAnalysisPrompt = `You are a senior software architect analyzing technical requirements for an AI agent system.
 
-STRATEGIC DECISION:
-${JSON.stringify(decision, null, 2)}
+BUSINESS REQUIREMENTS:
+${JSON.stringify(promptUnderstanding.userRequestAnalysis, null, 2)}
 
-${existingAgent ? `EXISTING SYSTEM:
-${JSON.stringify(existingAgent, null, 2)}` : 'NEW SYSTEM CREATION'}
+DECISION CONTEXT:
+Operation: ${decision.operation}
+Priority: ${decision.priority}
+Needs Full Agent: ${decision.needsFullAgent}
+Needs Database: ${decision.needsDatabase}
+Needs Actions: ${decision.needsActions}
 
-TECHNICAL ANALYSIS REQUIREMENTS:
+DATA MODELING NEEDS:
+${JSON.stringify(promptUnderstanding.dataModelingNeeds, null, 2)}
 
-You must provide a comprehensive technical analysis covering:
+WORKFLOW AUTOMATION NEEDS:
+${JSON.stringify(promptUnderstanding.workflowAutomationNeeds, null, 2)}
 
-1. TECHNICAL REQUIREMENTS ANALYSIS:
-   - Identify specific data models/entities needed
-   - List required integrations with external systems
-   - Define scalability needs and considerations
-   - Specify security requirements and constraints
-   - Outline performance requirements and benchmarks
+${existingAgent ? `
+EXISTING AGENT CONTEXT:
+${JSON.stringify({
+  name: existingAgent.name,
+  domain: existingAgent.domain,
+  modelCount: existingAgent.models?.length || 0,
+  actionCount: existingAgent.actions?.length || 0,
+  scheduleCount: existingAgent.schedules?.length || 0
+}, null, 2)}
+` : ''}
 
-2. SYSTEM ARCHITECTURE DESIGN:
-   - Define system components and their relationships
-   - Map data flow patterns between components
-   - Identify key integration points
+Analyze the technical requirements and provide:
 
-3. DESIGN DECISIONS:
-   - Document key architectural decisions with rationale
-   - List alternatives considered
-   - Explain tradeoffs
+1. **System Complexity**: Assess overall complexity (simple/moderate/complex)
+2. **System Architecture**: Define components, data flow, and integrations needed
+3. **Technical Requirements**: Database complexity, API needs, background jobs, real-time features
+4. **Recommended Approach**: Architecture strategy with rationale and tradeoffs
+5. **Risk Assessment**: Technical risks, mitigation strategies, and complexity scoring
 
-4. IMPLEMENTATION STRATEGY:
-   - Choose implementation approach (unified/phased/incremental)
-   - Define implementation phases in order
-   - Identify critical dependencies
-   - Plan risk mitigation strategies
+Focus on practical, scalable solutions that can handle the business requirements efficiently.`;
 
-5. QUALITY ASSURANCE PLAN:
-   - Define testing strategy
-   - Identify validation checkpoints
-   - Specify monitoring needs
-   - Consider maintenance requirements
-
-6. ASSESSMENT METRICS:
-   - Assess overall system complexity
-   - Provide confidence level (0-100)
-   - Estimate implementation effort
-   - Identify technical risks
-
-CRITICAL: You must respond with a valid JSON object that exactly matches the required schema structure. All fields are required.
-
-Provide specific, actionable technical guidance that will inform the database, action, and schedule generation phases.`;
-
-    console.log('🔧 Attempting Step 2 technical analysis with enhanced debugging...');
-    
-    const result = await generateObject({
+    const technicalAnalysisResult = await generateObject({
       model,
-      schema: z.object({
-        technicalRequirements: z.object({
-          dataModels: z.array(z.string()).describe('Specific data models/entities needed'),
-          integrations: z.array(z.string()).describe('Required integrations with external systems'),
-          scalabilityNeeds: z.array(z.string()).describe('Scalability requirements and considerations'),
-          securityRequirements: z.array(z.string()).describe('Security requirements and constraints'),
-          performanceRequirements: z.array(z.string()).describe('Performance requirements and benchmarks')
-        }).describe('Technical requirements analysis'),
-        systemArchitecture: z.object({
-          components: z.array(z.object({
-            name: z.string().describe('Component name'),
-            purpose: z.string().describe('Component purpose'),
-            dependencies: z.array(z.string()).describe('Component dependencies'),
-            type: z.enum(['model', 'action', 'schedule', 'integration']).describe('Component type')
-          })).describe('System components and their relationships'),
-          dataFlow: z.array(z.object({
-            from: z.string().describe('Data source'),
-            to: z.string().describe('Data destination'),
-            data: z.string().describe('Data description'),
-            trigger: z.string().describe('Trigger condition')
-          })).describe('Data flow patterns between components'),
-          integrationPoints: z.array(z.string()).describe('Key integration points in the system')
-        }).describe('System architecture design'),
-        designDecisions: z.array(z.object({
-          decision: z.string().describe('Design decision'),
-          rationale: z.string().describe('Decision rationale'),
-          alternatives: z.array(z.string()).describe('Alternative options considered'),
-          tradeoffs: z.string().describe('Tradeoffs and implications')
-        })).describe('Key architectural decisions with rationale'),
-        implementationStrategy: z.object({
-          approach: z.enum(['unified', 'phased', 'incremental']).describe('Overall implementation approach'),
-          phases: z.array(z.string()).describe('Implementation phases in order'),
-          dependencies: z.array(z.string()).describe('Critical dependencies between phases'),
-          riskMitigation: z.array(z.object({
-            risk: z.string().describe('Risk description'),
-            mitigation: z.string().describe('Mitigation strategy'),
-            contingency: z.string().describe('Contingency plan')
-          })).describe('Risk mitigation strategies')
-        }).describe('Implementation strategy and planning'),
-        qualityPlan: z.object({
-          testingStrategy: z.string().describe('Overall testing approach'),
-          validationPoints: z.array(z.string()).describe('Key validation checkpoints'),
-          monitoringNeeds: z.array(z.string()).describe('Monitoring and observability needs'),
-          maintenanceConsiderations: z.array(z.string()).describe('Long-term maintenance considerations')
-        }).describe('Quality assurance planning'),
-        complexity: z.enum(['simple', 'moderate', 'complex', 'enterprise']).describe('Overall system complexity'),
-        confidence: z.number().min(0).max(100).describe('Confidence level in the technical analysis'),
-        estimatedEffort: z.enum(['low', 'medium', 'high', 'very-high']).describe('Estimated implementation effort'),
-        technicalRisks: z.array(z.string()).describe('Key technical risks and concerns')
-      }).describe('Complete technical analysis output'),
+      schema: technicalAnalysisSchema,
       messages: [
         {
           role: 'system',
-          content: systemPrompt
-        },
-        {
-          role: 'user',
-          content: `Perform comprehensive technical analysis and system design for this request. Return a complete JSON object with all required fields.`
+          content: technicalAnalysisPrompt
         }
       ],
-      temperature: 0.1, // Very low temperature for consistent structured output
-      maxTokens: 4000 // Ensure enough tokens for complete response
+      temperature: 0.1
     });
 
-    console.log('🔧 Step 2 generateObject completed, validating result...');
+    console.log('✅ Phase 1: Technical analysis completed');
+
+    // PHASE 2: Enhanced Prisma Schema Generation with Existing Schema Consideration
+    console.log('🗄️ Phase 2: Generating/updating Prisma schema...');
     
-    // Additional validation logging
-    if (!result.object) {
-      console.error('❌ No object returned from generateObject');
-      throw new Error('No object generated from AI response');
+    // Extract existing schema information for updating
+    let existingPrismaSchema = '';
+    let existingModels: string[] = [];
+    let existingActions: string[] = [];
+    let existingSchedules: string[] = [];
+    
+    if (existingAgent) {
+      // Get existing Prisma schema string
+      existingPrismaSchema = existingAgent.metadata?.prismaSchema || '';
+      
+      // Extract existing model names
+      existingModels = (existingAgent.models || []).map(m => m.name);
+      
+      // Extract existing action names and their referenced models
+      existingActions = (existingAgent.actions || []).map(a => a.name);
+      
+      // Extract existing schedule names and their referenced models
+      existingSchedules = (existingAgent.schedules || []).map(s => s.name);
+      
+      console.log(`📋 Found existing schema with ${existingModels.length} models, ${existingActions.length} actions, ${existingSchedules.length} schedules`);
     }
     
-    console.log('🔧 Validating required fields...');
-    const requiredFields = [
-      'technicalRequirements', 'systemArchitecture', 'designDecisions', 
-      'implementationStrategy', 'qualityPlan', 'complexity', 'confidence', 
-      'estimatedEffort', 'technicalRisks'
-    ];
+    const prismaSchemaSchema = z.object({
+      schema: z.string().describe('Complete Prisma schema string with models, enums, and relationships'),
+    });
+
+    const prismaSchemaPrompt = `You are a database expert specializing in Prisma ORM. Generate a complete, production-ready Prisma schema based on the business requirements and technical analysis.
+
+BUSINESS CONTEXT: ${promptUnderstanding.userRequestAnalysis.businessContext}
+
+REQUIRED MODELS FROM ANALYSIS:
+${JSON.stringify(promptUnderstanding.dataModelingNeeds.requiredModels, null, 2)}
+
+WORKFLOW AUTOMATION NEEDS:
+${JSON.stringify(promptUnderstanding.workflowAutomationNeeds, null, 2)}
+
+TECHNICAL REQUIREMENTS:
+- Database Complexity: ${technicalAnalysisResult.object.technicalRequirements.databaseComplexity}
+- Background Jobs: ${technicalAnalysisResult.object.technicalRequirements.backgroundJobs}
+- Real-time Features: ${technicalAnalysisResult.object.technicalRequirements.realTimeFeatures}
+- API Integrations: ${technicalAnalysisResult.object.technicalRequirements.apiIntegrations.join(', ')}
+
+${existingAgent && existingPrismaSchema ? `
+EXISTING PRISMA SCHEMA (MUST preserve and extend, DO NOT remove existing models unless explicitly requested):
+${existingPrismaSchema}
+
+EXISTING MODELS TO PRESERVE: ${existingModels.join(', ')}
+EXISTING ACTIONS: ${existingActions.join(', ')}
+EXISTING SCHEDULES: ${existingSchedules.join(', ')}
+
+CRITICAL UPDATE RULES:
+1. PRESERVE all existing models unless explicitly requested to remove them
+2. PRESERVE all existing fields - NEVER delete existing fields
+3. EXTEND existing models with new fields if needed for new functionality
+4. ADD new models required by the new request
+5. MAINTAIN all existing relationships
+6. ENSURE backward compatibility with existing actions and schedules
+7. Make ALL new fields optional (except id fields) to ensure compatibility
+` : ''}
+
+PRISMA SCHEMA GENERATION REQUIREMENTS:
+
+1. **Schema Structure**:
+   - Include proper generator client configuration
+   - Include datasource db configuration for PostgreSQL
+   - Convert all required models to proper Prisma model syntax
+   - Include all model relationships with proper Prisma syntax
+   ${existingAgent ? '- PRESERVE existing models and extend them as needed' : ''}
+
+2. **Field Requirements - CRITICAL**:
+   - ALL fields must be OPTIONAL except for id fields (use ? syntax)
+   - ID fields should use @id @default(cuid())
+   - Use String? instead of String for all non-id fields
+   - Use Int? instead of Int for all non-id fields
+   - Use Float? instead of Float for all non-id fields
+   - Use Boolean? instead of Boolean for all non-id fields
+   - Use DateTime? instead of DateTime for all non-id fields
+   - Make relation fields optional with ?
+   ${existingAgent ? '- NEVER delete existing fields, only add new optional fields' : ''}
+
+3. **Field Type Mapping**:
+   - String → String?
+   - Int → Int?  
+   - Float → Float?
+   - Boolean → Boolean?
+   - DateTime → DateTime?
+   - Json → Json?
+   - ID fields should use @id @default(cuid()) and remain required
+
+4. **Relationship Mapping**:
+   - One-to-one: Use proper relation syntax with @relation
+   - One-to-many: Parent has array field, child has single field
+   - Many-to-many: Use explicit join tables when needed
+   - Foreign keys: Generate proper references
+   - Make all relation fields optional with ?
+   ${existingAgent ? '- PRESERVE existing relationships and add new ones as needed' : ''}
+
+5. **Indexes and Constraints**:
+   - Add @unique for unique fields
+   - Add @@index for performance optimization
+   - Add @@map for custom table names if needed
+   - Add proper @default values where appropriate
+
+6. **Enums**:
+   - Convert model enums to Prisma enum types
+   - Reference enums properly in model fields with ?
+   ${existingAgent ? '- PRESERVE existing enums and add new ones as needed' : ''}
+
+7. **Performance Optimization**:
+   - Add indexes on foreign key fields
+   - Add indexes on frequently queried fields
+   - Consider composite indexes for complex queries
+
+8. **Workflow Support**:
+   - Include status/state fields for workflow tracking (optional)
+   - Include audit fields (createdAt?, updatedAt?, createdBy?, updatedBy?) - all optional except timestamps with @default
+   - Include soft delete fields if needed (deletedAt?, deleted?) - all optional
+
+EXAMPLE PRISMA SCHEMA STRUCTURE:
+
+\`\`\`
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OrderStatus {
+  pending
+  processing
+  completed
+  cancelled
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  name      String?
+  orders    Order[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@map("users")
+}
+
+model Order {
+  id       String       @id @default(cuid())
+  userId   String?
+  user     User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status   OrderStatus? @default(pending)
+  total    Float?
+  items    OrderItem[]
+  
+  @@index([userId])
+  @@index([status])
+  @@map("orders")
+}
+\`\`\`
+
+Generate a complete Prisma schema that:
+- Follows best practices for production use
+- Makes ALL fields optional except id fields for maximum flexibility
+- Includes proper relationships and constraints
+- Has performance optimizations
+- Includes realistic default values
+- Uses camelCase for field names
+- Uses snake_case for table names (with @@map)
+- Supports the workflow automation needs
+- Includes proper validation and scoring
+${existingAgent ? '- PRESERVES and EXTENDS existing schema rather than replacing it' : ''}
+${existingAgent ? '- NEVER deletes existing fields, only adds new optional fields' : ''}
+- Does NOT include migration script generation (we handle migrations separately)
+
+REMEMBER: Make every field optional except id fields to ensure backward compatibility!`;
+
+    const prismaSchemaResult = await generateObject({
+      model,
+      schema: prismaSchemaSchema,
+      messages: [
+        {
+          role: 'system',
+          content: prismaSchemaPrompt
+        }
+      ],
+      temperature: 0.1
+    });
+
+    console.log('✅ Phase 2: Prisma schema generation completed');
     
-    for (const field of requiredFields) {
-      if (!(field in result.object)) {
-        console.error(`❌ Missing required field: ${field}`);
-        console.error('Available fields:', Object.keys(result.object));
-        throw new Error(`Missing required field: ${field}`);
+    // Validate that the schema contains models
+    if (!prismaSchemaResult.object.schema.includes('model ')) {
+      console.warn('⚠️ Generated Prisma schema contains no models, regenerating...');
+      
+      // Fallback: Generate a minimal schema based on the required models
+      const requiredModels = promptUnderstanding.dataModelingNeeds.requiredModels || [];
+      let fallbackSchema = `generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+`;
+
+      // Add basic models if none were generated
+      if (requiredModels.length > 0) {
+        for (const modelSpec of requiredModels) {
+          fallbackSchema += `model ${modelSpec.name} {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("${modelSpec.name.toLowerCase()}")
+}
+
+`;
+        }
+      } else {
+        // Create a basic model if no requirements specified
+        fallbackSchema += `model Record {
+  id        String   @id @default(cuid())
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("records")
+}
+
+`;
       }
+      
+      // Override the generated schema with the fallback
+      prismaSchemaResult.object.schema = fallbackSchema;
+      console.log('🔄 Using fallback Prisma schema with basic models');
     }
-    
-    console.log('✅ All required fields present');
 
-    console.log('✅ STEP 2: Technical analysis completed successfully');
-    console.log(`🔧 Technical Analysis Summary:
-- System Complexity: ${result.object.complexity}
-- Implementation Effort: ${result.object.estimatedEffort}
-- Confidence Level: ${result.object.confidence}%
-- Components Identified: ${result.object.systemArchitecture.components.length}
-- Technical Risks: ${result.object.technicalRisks.length}
-- Design Decisions: ${result.object.designDecisions.length}`);
+    const result: Step2Output = {
+      // Technical analysis results
+      complexity: technicalAnalysisResult.object.complexity,
+      systemArchitecture: technicalAnalysisResult.object.systemArchitecture,
+      technicalRequirements: technicalAnalysisResult.object.technicalRequirements,
+      recommendedApproach: technicalAnalysisResult.object.recommendedApproach,
+      riskAssessment: technicalAnalysisResult.object.riskAssessment,
+      
+      // Prisma schema results
+      prismaSchema: {
+        ...prismaSchemaResult.object,
+        // Override migration script to be empty since we don't generate migrations
+      }
+    };
 
-    return result.object;
+    console.log('✅ STEP 2: Technical analysis with Prisma schema completed successfully');
+    console.log(`🏗️ Technical Summary:
+- System Complexity: ${result.complexity}
+- Database Complexity: ${result.technicalRequirements.databaseComplexity}
+- Components: ${result.systemArchitecture.components.length}
+- API Integrations: ${result.technicalRequirements.apiIntegrations.length}
+- Background Jobs: ${result.technicalRequirements.backgroundJobs ? 'Yes' : 'No'}
+- Real-time Features: ${result.technicalRequirements.realTimeFeatures ? 'Yes' : 'No'}`);
+
+    console.log(`🗄️ Prisma Schema Summary:
+
+${existingAgent ? `- Existing Models Preserved: ${existingModels.length}` : ''}`);
+
+    return result;
     
   } catch (error) {
     console.error('❌ STEP 2: Technical analysis failed:', error);
@@ -265,29 +432,40 @@ Provide specific, actionable technical guidance that will inform the database, a
  */
 export function validateStep2Output(output: Step2Output): boolean {
   try {
-    // Check essential technical requirements
-    if (!output.technicalRequirements.dataModels.length) {
-      console.warn('⚠️ No data models identified');
+    // Validate technical analysis
+    if (!output.complexity || !output.systemArchitecture || !output.technicalRequirements) {
+      console.warn('⚠️ Technical analysis incomplete');
       return false;
     }
     
-    if (!output.systemArchitecture.components.length) {
-      console.warn('⚠️ No system components defined');
+    if (output.riskAssessment.complexityScore > 90) {
+      console.warn(`⚠️ Very high complexity score: ${output.riskAssessment.complexityScore}/100`);
       return false;
     }
     
-    if (output.confidence < 60) {
-      console.warn(`⚠️ Low confidence level: ${output.confidence}%`);
+    // Validate Prisma schema
+    if (!output.prismaSchema.schema || output.prismaSchema.schema.length < 100) {
+      console.warn('⚠️ Prisma schema too short or missing');
       return false;
     }
     
-    if (!output.designDecisions.length) {
-      console.warn('⚠️ No design decisions documented');
+    if (!output.prismaSchema.migrationScript) {
+      console.warn('⚠️ Migration script missing');
       return false;
     }
     
-    if (output.complexity === 'enterprise' && output.implementationStrategy.riskMitigation.length < 2) {
-      console.warn('⚠️ Enterprise complexity requires more risk mitigation strategies');
+    if (output.prismaSchema.validationResults.overallScore < 70) {
+      console.warn(`⚠️ Low Prisma schema validation score: ${output.prismaSchema.validationResults.overallScore}/100`);
+      return false;
+    }
+    
+    if (!output.prismaSchema.validationResults.schemaValidity) {
+      console.warn('⚠️ Prisma schema is not valid');
+      return false;
+    }
+    
+    if (output.prismaSchema.models.length === 0) {
+      console.warn('⚠️ No models defined in Prisma schema');
       return false;
     }
     
@@ -306,59 +484,78 @@ export function validateStep2Output(output: Step2Output): boolean {
 export function extractTechnicalInsights(output: Step2Output) {
   return {
     complexity: output.complexity,
-    confidence: output.confidence,
-    estimatedEffort: output.estimatedEffort,
+    databaseComplexity: output.technicalRequirements.databaseComplexity,
     componentCount: output.systemArchitecture.components.length,
-    modelComponents: output.systemArchitecture.components.filter(c => c.type === 'model'),
-    actionComponents: output.systemArchitecture.components.filter(c => c.type === 'action'),
-    scheduleComponents: output.systemArchitecture.components.filter(c => c.type === 'schedule'),
-    integrationComponents: output.systemArchitecture.components.filter(c => c.type === 'integration'),
-    dataFlowComplexity: output.systemArchitecture.dataFlow.length > 5 ? 'complex' : 
-                       output.systemArchitecture.dataFlow.length > 2 ? 'moderate' : 'simple',
-    riskLevel: output.technicalRisks.length > 3 ? 'high' : 
-               output.technicalRisks.length > 1 ? 'medium' : 'low',
-    implementationApproach: output.implementationStrategy.approach,
-    requiresPhasing: output.implementationStrategy.approach !== 'unified',
-    requiresCarefulHandling: output.complexity === 'complex' || output.complexity === 'enterprise' || 
-                            output.confidence < 70 || output.technicalRisks.length > 2,
-    primaryDataModels: output.technicalRequirements.dataModels.slice(0, 5),
-    criticalIntegrations: output.technicalRequirements.integrations,
-    keyDesignDecisions: output.designDecisions.map(d => d.decision)
+    integrationCount: output.technicalRequirements.apiIntegrations.length,
+    requiresBackgroundJobs: output.technicalRequirements.backgroundJobs,
+    requiresRealTime: output.technicalRequirements.realTimeFeatures,
+    complexityScore: output.riskAssessment.complexityScore,
+    technicalRisks: output.riskAssessment.technicalRisks.length,
+    recommendedArchitecture: output.recommendedApproach.architecture,
+    
+    // Prisma schema insights
+    prismaSchemaLength: output.prismaSchema.schema.length,
+    modelCount: output.prismaSchema.models.length,
+    relationCount: output.prismaSchema.relations.length,
+    enumCount: output.prismaSchema.enums.length,
+    indexCount: output.prismaSchema.indexes.length,
+    prismaValidationScore: output.prismaSchema.validationResults.overallScore,
+    hasComplexRelationships: output.prismaSchema.relations.some(r => r.type === 'many-to-many'),
+    requiresCarefulMigration: !output.prismaSchema.validationResults.migrationSafety,
+    primaryModels: output.prismaSchema.models.slice(0, 3).map(m => m.name),
+    performanceOptimized: output.prismaSchema.validationResults.performanceOptimization,
+    readyForDatabase: output.prismaSchema.validationResults.schemaValidity && output.prismaSchema.validationResults.relationshipConsistency
   };
 }
 
 /**
- * Generate implementation guidance based on technical analysis
+ * Generate human-readable guidance from technical insights
  */
-export function generateImplementationGuidance(output: Step2Output): string {
+export function generateTechnicalGuidance(output: Step2Output): string {
   const insights = extractTechnicalInsights(output);
   
-  let guidance = `## Implementation Guidance\n\n`;
+  let guidance = `## Technical Analysis Summary\n\n`;
   
   guidance += `**Complexity Level**: ${output.complexity}\n`;
-  guidance += `**Recommended Approach**: ${output.implementationStrategy.approach}\n`;
-  guidance += `**Estimated Effort**: ${output.estimatedEffort}\n\n`;
+  guidance += `**Recommended Approach**: ${output.recommendedApproach.architecture}\n`;
+  guidance += `**Database Complexity**: ${output.technicalRequirements.databaseComplexity}\n\n`;
   
-  if (insights.requiresPhasing) {
-    guidance += `### Phased Implementation\n`;
-    output.implementationStrategy.phases.forEach((phase, index) => {
-      guidance += `${index + 1}. ${phase}\n`;
+  if (output.systemArchitecture.components.length > 0) {
+    guidance += `### System Components\n`;
+    output.systemArchitecture.components.forEach((component, index) => {
+      guidance += `${index + 1}. ${component}\n`;
     });
     guidance += `\n`;
   }
   
-  if (output.technicalRisks.length > 0) {
+  if (output.riskAssessment.technicalRisks.length > 0) {
     guidance += `### Key Risks\n`;
-    output.technicalRisks.forEach(risk => {
+    output.riskAssessment.technicalRisks.forEach(risk => {
       guidance += `- ${risk}\n`;
     });
     guidance += `\n`;
   }
   
-  if (output.designDecisions.length > 0) {
-    guidance += `### Critical Design Decisions\n`;
-    output.designDecisions.slice(0, 3).forEach(decision => {
-      guidance += `- **${decision.decision}**: ${decision.rationale}\n`;
+  if (output.recommendedApproach.tradeoffs.length > 0) {
+    guidance += `### Tradeoffs\n`;
+    output.recommendedApproach.tradeoffs.forEach(tradeoff => {
+      guidance += `- ${tradeoff}\n`;
+    });
+    guidance += `\n`;
+  }
+
+  if (output.prismaSchema.models.length > 0) {
+    guidance += `### Database Models\n`;
+    output.prismaSchema.models.forEach(model => {
+      guidance += `- **${model.name}**: ${model.fields.length} fields\n`;
+    });
+    guidance += `\n`;
+  }
+
+  if (output.prismaSchema.relations.length > 0) {
+    guidance += `### Key Relationships\n`;
+    output.prismaSchema.relations.forEach(relation => {
+      guidance += `- ${relation.fromModel} → ${relation.toModel} (${relation.type})\n`;
     });
   }
   

@@ -29,6 +29,7 @@ export interface AgentArtifactMetadata {
   editingSchedule: string | null;
   viewingModelData: string | null; // For viewing/editing model records
   editingRecord: string | null; // For editing specific record
+  showExplanationModal?: 'models' | 'actions' | 'schedules' | null; // For explanation modals
   currentStep?: string;
   stepProgress?: {
     'prompt-understanding'?: 'processing' | 'complete';

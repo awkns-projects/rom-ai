@@ -18,6 +18,7 @@ export type DataStreamDelta = {
     | 'action-step'
     | 'agent-data'
     | 'agent-step'
+    | 'artifact-ready'
     | 'title'
     | 'id'
     | 'suggestion'

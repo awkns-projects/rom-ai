@@ -23,6 +23,7 @@ export interface AgentAction {
   name: string;
   emoji?: string; // AI-generated emoji representing the action
   description: string;
+  type: 'Create' | 'Update';
   role: 'admin' | 'member';
   pseudoSteps?: PseudoCodeStep[];
   dataSource: {
@@ -54,6 +55,11 @@ export interface AgentAction {
     identifierIds?: string[];
     fields?: Record<string, any>;
     fieldsToUpdate?: Record<string, any>;
+  };
+  savedInputs?: {
+    inputParameters: Record<string, any>;
+    envVars: Record<string, string>;
+    lastUpdated: string;
   };
   uiComponents?: {
     stepForms: Array<{

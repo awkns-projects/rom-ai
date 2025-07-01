@@ -3,7 +3,7 @@ import { memo, useState, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { PlusIcon } from '@/components/icons';
 import { RecordEditor } from './RecordEditor';
-import type { AgentModel, } from '../../types';
+import type { AgentModel, AgentEnum } from '../../types';
 import { generateNewId } from '../../utils';
 
 interface ModelRecord {
@@ -26,11 +26,16 @@ export const ModelDataViewer = memo(({
   onUpdateModel, 
   onBack,
   allModels
-}: ModelDataViewerProps) => {
+}: { 
+  model: AgentModel;
+  onUpdateModel: (model: AgentModel) => void;
+  onBack: () => void;
+  allModels: AgentModel[];
+}) => {
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
   const [isAddingRecord, setIsAddingRecord] = useState(false);
 
-  const records = (model.records || []) as ModelRecord[];
+  const records = model.records || [];
 
   // Collect all enums from all models
   const allEnums = useMemo(() => {

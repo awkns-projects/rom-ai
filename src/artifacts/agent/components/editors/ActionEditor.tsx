@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CrossIcon, PlusIcon } from '@/components/icons';
 import { StepFieldEditor } from './StepFieldEditor';
 import { ModelExecutionChangesViewer } from './ModelExecutionChangesViewer';
-import type { AgentAction, EnvVar, PseudoCodeStep, StepField, AgentModel } from '../../types';
+import type { AgentAction, EnvVar, AgentModel } from '../../types';
+import type { PseudoCodeStep, StepField } from '../../types/action';
 import { generateNewId } from '../../utils';
 
 interface ActionEditorProps {

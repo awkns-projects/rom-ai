@@ -1,15 +1,44 @@
-import { generateSchedules } from '../generation';
-import type { AgentSchedule, AgentData } from '../types';
+import { generatePseudoSteps, getAgentBuilderModel } from '../generation';
+import { generateObject } from 'ai';
+import { z } from 'zod';
+import type { AgentSchedule, AgentData, PseudoCodeStep, StepField } from '../types';
 import type { Step0Output } from './step0-prompt-understanding';
 import type { Step1Output } from './step1-decision-making';
 import type { Step3Output } from './step3-database-generation';
 import type { Step4Output } from './step4-action-generation';
 
+// Schema for schedule code generation
+const ScheduleCodeGenerationSchema = z.object({
+  code: z.string().describe('Complete executable code for the schedule'),
+  envVars: z.array(z.object({
+    name: z.string(),
+    description: z.string(),
+    required: z.boolean(),
+    sensitive: z.boolean(),
+    defaultValue: z.string().optional()
+  })).describe('Environment variables required by the schedule'),
+  inputParameters: z.array(z.object({
+    name: z.string(),
+    type: z.string(),
+    description: z.string(),
+    required: z.boolean(),
+    validation: z.record(z.any()).optional()
+  })).describe('Input parameters for the schedule'),
+  outputParameters: z.array(z.object({
+    name: z.string(),
+    type: z.string(),
+    description: z.string()
+  })).describe('Expected output parameters from the schedule'),
+  cronPattern: z.string().describe('Cron pattern for schedule timing'),
+  timezone: z.string().describe('Timezone for schedule execution')
+});
+
 /**
  * STEP 5: Intelligent Schedule Generation
  * 
- * Generate automated schedules that work seamlessly with the database and actions.
- * Enhanced with hybrid approach for schedule coordination and validation.
+ * Generate automated schedules using a two-phase approach:
+ * 1. Generate pseudo-code steps for each schedule
+ * 2. Generate executable code from the pseudo-code steps
  */
 
 export interface Step5Input {
@@ -55,55 +84,124 @@ export interface Step5Output {
 }
 
 /**
- * Enhanced schedule generation with hybrid approach logic
- * Preserves original generateSchedules functionality while adding comprehensive validation
+ * Enhanced schedule generation with two-phase approach
  */
 export async function executeStep5ScheduleGeneration(
   input: Step5Input
 ): Promise<Step5Output> {
-  console.log('⏰ STEP 5: Starting enhanced schedule generation...');
+  console.log('⏰ STEP 5: Starting two-phase schedule generation...');
   
   const { promptUnderstanding, decision, databaseGeneration, actionGeneration, existingAgent, changeAnalysis } = input;
   
   try {
-    // Use original generateSchedules function with enhanced context
-    console.log('📅 Generating schedules with database and action awareness...');
-    const schedulesResult = await generateSchedules(
-      promptUnderstanding,
-      databaseGeneration, // Pass database schema
-      actionGeneration.actions, // Pass actions for coordination
-      existingAgent,
-      changeAnalysis
-    );
-
+    // Extract schedule requirements from prompt understanding
+    const scheduleRequests = extractScheduleRequests(promptUnderstanding, actionGeneration);
+    
+    // Transform database models for compatibility
+    const availableModels = transformStep3ModelsToAgentModels(databaseGeneration.models);
+    
+    const schedules: AgentSchedule[] = [];
+    
+    // Process each schedule request using two-phase approach
+    for (const scheduleRequest of scheduleRequests) {
+      console.log(`📅 Processing schedule: ${scheduleRequest.name}`);
+      
+      // Phase 1: Generate pseudo-code steps
+      const pseudoSteps = await generatePseudoSteps(
+        scheduleRequest.name,
+        scheduleRequest.purpose || `Schedule for ${scheduleRequest.name}`,
+        'Create', // Default to Create type
+        availableModels,
+        'schedule',
+        `Business context: ${promptUnderstanding.userRequestAnalysis.businessContext}. ` +
+        `Target models: ${databaseGeneration.models.map(m => m.name).join(', ')}. ` +
+        `Available actions: ${actionGeneration.actions.map(a => a.name).join(', ')}. ` +
+        `Schedule frequency: ${scheduleRequest.frequency}. ` +
+        `Prisma schema context: Use fields from the database models for accurate data operations.`
+      );
+      
+      // Phase 2: Generate executable code from pseudo steps
+      const codeResult = await generateScheduleCode(
+        scheduleRequest.name,
+        scheduleRequest.purpose || `Schedule for ${scheduleRequest.name}`,
+        pseudoSteps,
+        availableModels,
+        databaseGeneration,
+        scheduleRequest.frequency,
+        promptUnderstanding.userRequestAnalysis.businessContext
+      );
+      
+      // Create AgentSchedule object
+      const schedule: AgentSchedule = {
+        id: `schedule_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: scheduleRequest.name,
+        description: scheduleRequest.purpose || `Schedule for ${scheduleRequest.name}`,
+        emoji: getScheduleEmoji(scheduleRequest.name),
+        type: determineScheduleType(pseudoSteps),
+        role: 'admin', // Default to admin for schedules
+        pseudoSteps: pseudoSteps.map(step => ({
+          id: step.id,
+          inputFields: step.inputFields || [],
+          outputFields: step.outputFields || [],
+          description: step.description,
+          type: step.type as 'Database find unique' | 'Database find many' | 'Database update unique' | 'Database update many' | 'Database create' | 'Database create many' | 'Database delete unique' | 'Database delete many' | 'call external api' | 'ai analysis'
+        })),
+        interval: {
+          pattern: codeResult.cronPattern,
+          timezone: codeResult.timezone,
+          active: true
+        },
+        dataSource: {
+          type: 'database',
+          database: {
+            models: extractReferencedModels(pseudoSteps, availableModels)
+          }
+        },
+        execute: {
+          type: 'code',
+          code: {
+            script: codeResult.code,
+            envVars: codeResult.envVars
+          }
+        },
+        results: {
+          actionType: determineScheduleType(pseudoSteps),
+          model: extractPrimaryModel(pseudoSteps, availableModels) || 'Unknown',
+          fields: extractResultFields(codeResult.outputParameters)
+        }
+      };
+      
+      schedules.push(schedule);
+    }
+    
     // Enhanced validation and coordination analysis
     console.log('🔍 Analyzing schedule coordination and validation...');
     const validationResults = await validateScheduleGeneration(
-      schedulesResult.schedules, 
+      schedules, 
       databaseGeneration, 
       actionGeneration,
       promptUnderstanding
     );
     
     // Analyze schedule coordination patterns
-    const scheduleCoordination = analyzeScheduleCoordination(schedulesResult.schedules);
+    const scheduleCoordination = analyzeScheduleCoordination(schedules);
     
     // Calculate automation coverage
     const automationCoverage = calculateAutomationCoverage(
-      schedulesResult.schedules, 
+      schedules, 
       promptUnderstanding
     );
     
     // Calculate quality metrics
     const qualityMetrics = calculateScheduleQualityMetrics(
-      schedulesResult.schedules, 
+      schedules, 
       databaseGeneration, 
       actionGeneration,
       promptUnderstanding
     );
 
     const result: Step5Output = {
-      schedules: schedulesResult.schedules,
+      schedules,
       scheduleCoordination,
       validationResults,
       automationCoverage,
@@ -124,6 +222,237 @@ export async function executeStep5ScheduleGeneration(
     console.error('❌ STEP 5: Schedule generation failed:', error);
     throw new Error(`Step 5 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
+}
+
+/**
+ * Extract schedule requests from prompt understanding
+ */
+function extractScheduleRequests(promptUnderstanding: Step0Output, actionGeneration: Step4Output) {
+  const requests = [];
+  
+  // Extract from recurring schedules
+  for (const schedule of promptUnderstanding.workflowAutomationNeeds.recurringSchedules || []) {
+    requests.push({
+      name: schedule.name,
+      purpose: schedule.purpose,
+      frequency: schedule.frequency,
+      timing: schedule.timing,
+      priority: schedule.priority
+    });
+  }
+  
+  // Extract from business processes that require schedules
+  for (const process of promptUnderstanding.workflowAutomationNeeds.businessProcesses || []) {
+    if (process.requiresSchedules) {
+      requests.push({
+        name: `${process.name} Schedule`,
+        purpose: `Automated schedule for ${process.name}`,
+        frequency: 'daily',
+        timing: '09:00',
+        priority: 'medium'
+      });
+    }
+  }
+  
+  // If no explicit schedules, create some based on actions
+  if (requests.length === 0) {
+    for (const action of actionGeneration.actions.slice(0, 3)) { // Limit to first 3 actions
+      requests.push({
+        name: `${action.name} Schedule`,
+        purpose: `Regular execution of ${action.name}`,
+        frequency: 'daily',
+        timing: '09:00',
+        priority: 'medium'
+      });
+    }
+  }
+  
+  return requests;
+}
+
+/**
+ * Generate executable code for a schedule
+ */
+async function generateScheduleCode(
+  name: string,
+  description: string,
+  pseudoSteps: any[],
+  availableModels: any[],
+  databaseGeneration: Step3Output,
+  frequency: string,
+  businessContext?: string
+): Promise<z.infer<typeof ScheduleCodeGenerationSchema>> {
+  const model = await getAgentBuilderModel();
+  
+  const systemPrompt = `You are an expert schedule code generator. Generate complete, executable code for a schedule based on pseudo-code steps.
+
+SCHEDULE DETAILS:
+- Name: ${name}
+- Description: ${description}
+- Frequency: ${frequency}
+- Business Context: ${businessContext || 'General business operations'}
+
+PSEUDO-CODE STEPS:
+${JSON.stringify(pseudoSteps, null, 2)}
+
+AVAILABLE DATABASE MODELS:
+${availableModels.map(model => `- ${model.name}: ${model.fields.map((f: any) => f.name).join(', ')}`).join('\n')}
+
+REQUIREMENTS:
+1. Generate complete executable JavaScript code that implements the pseudo-code steps
+2. Use proper error handling and validation
+3. Include database operations using the available models
+4. Return structured results with clear success/failure indication
+5. Include proper logging for monitoring and debugging
+6. Use environment variables for configuration where appropriate
+7. Generate appropriate cron pattern based on frequency
+8. Handle edge cases and potential failures gracefully
+
+The code should follow this structure:
+- Validate input parameters
+- Check permissions and business rules  
+- Execute the main schedule logic
+- Update database records as needed
+- Return structured results
+
+Generate practical, production-ready code that can be executed safely in a business environment.`;
+
+  const result = await generateObject({
+    model,
+    schema: ScheduleCodeGenerationSchema,
+    messages: [
+      {
+        role: 'system' as const,
+        content: systemPrompt
+      }
+    ],
+    temperature: 0.3,
+  });
+
+  return result.object;
+}
+
+/**
+ * Determine schedule type based on pseudo steps
+ */
+function determineScheduleType(pseudoSteps: any[]): AgentSchedule['type'] {
+  const stepsText = JSON.stringify(pseudoSteps).toLowerCase();
+  
+  if (stepsText.includes('create') || stepsText.includes('add') || stepsText.includes('insert') || stepsText.includes('new')) {
+    return 'Create';
+  } else if (stepsText.includes('update') || stepsText.includes('edit') || stepsText.includes('modify') || stepsText.includes('change')) {
+    return 'Update';
+  } else {
+    return 'Create'; // Default fallback
+  }
+}
+
+/**
+ * Get appropriate emoji for schedule
+ */
+function getScheduleEmoji(scheduleName: string): string {
+  const name = scheduleName.toLowerCase();
+  
+  if (name.includes('backup') || name.includes('save')) return '💾';
+  if (name.includes('report') || name.includes('summary')) return '📊';
+  if (name.includes('email') || name.includes('notification')) return '📧';
+  if (name.includes('cleanup') || name.includes('maintenance')) return '🧹';
+  if (name.includes('sync') || name.includes('update')) return '🔄';
+  if (name.includes('check') || name.includes('monitor')) return '🔍';
+  if (name.includes('process') || name.includes('workflow')) return '⚙️';
+  
+  return '⏰'; // Default schedule emoji
+}
+
+/**
+ * Extract referenced models from pseudo steps
+ */
+function extractReferencedModels(pseudoSteps: any[], availableModels: any[]): any[] {
+  const stepsText = JSON.stringify(pseudoSteps).toLowerCase();
+  const referencedModels = [];
+  
+  for (const model of availableModels) {
+    if (stepsText.includes(model.name.toLowerCase())) {
+      referencedModels.push({
+        id: model.id,
+        name: model.name,
+        fields: model.fields.slice(0, 5) // Limit fields for performance
+      });
+    }
+  }
+  
+  // If no models found, include the first available model as fallback
+  if (referencedModels.length === 0 && availableModels.length > 0) {
+    referencedModels.push({
+      id: availableModels[0].id,
+      name: availableModels[0].name,
+      fields: availableModels[0].fields.slice(0, 3)
+    });
+  }
+  
+  return referencedModels;
+}
+
+/**
+ * Extract primary model from pseudo steps
+ */
+function extractPrimaryModel(pseudoSteps: any[], availableModels: any[]): string | undefined {
+  const stepsText = JSON.stringify(pseudoSteps).toLowerCase();
+  
+  for (const model of availableModels) {
+    if (stepsText.includes(model.name.toLowerCase())) {
+      return model.name;
+    }
+  }
+  
+  return availableModels[0]?.name;
+}
+
+/**
+ * Extract result fields from output parameters
+ */
+function extractResultFields(outputParameters: any[]): Record<string, any> {
+  const fields: Record<string, any> = {};
+  
+  for (const param of outputParameters) {
+    fields[param.name] = {
+      type: param.type,
+      description: param.description
+    };
+  }
+  
+  return fields;
+}
+
+/**
+ * Transform Step3Output models to AgentModel format for compatibility
+ */
+function transformStep3ModelsToAgentModels(step3Models: Step3Output['models']): any[] {
+  return step3Models.map(model => ({
+    id: model.name.toLowerCase(),
+    name: model.name,
+    displayName: model.displayName,
+    description: model.description,
+    tableName: model.tableName,
+    fields: model.fields.map(field => ({
+      id: `${model.name}.${field.name}`,
+      name: field.name,
+      displayName: field.displayName,
+      type: field.type,
+      description: field.description,
+      required: field.isRequired,
+      isId: field.isPrimary,
+      isUnique: field.isUnique,
+      defaultValue: field.defaultValue,
+      kind: field.type === 'Enum' ? 'enum' : 'scalar',
+      relationField: !!field.relationship,
+      list: false,
+      enumValues: field.enumValues
+    })),
+    idField: model.fields.find(f => f.isPrimary)?.name || 'id',
+    displayFields: model.fields.slice(0, 3).map(f => f.name),
+    enums: []
+  }));
 }
 
 /**

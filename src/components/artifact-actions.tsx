@@ -25,8 +25,7 @@ function PureArtifactActions({
   metadata,
   setMetadata,
 }: ArtifactActionsProps) {
-  const [isLoading, setIsLoading] = useState(false);
-
+  // Check artifact definition early to avoid hooks rule violation
   const artifactDefinition = artifactDefinitions.find(
     (definition) => definition.kind === artifact.kind,
   );
@@ -34,6 +33,8 @@ function PureArtifactActions({
   if (!artifactDefinition) {
     throw new Error('Artifact definition not found!');
   }
+
+  const [isLoading, setIsLoading] = useState(false);
 
   const actionContext: ArtifactActionContext = {
     content: artifact.content,

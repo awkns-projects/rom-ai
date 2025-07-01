@@ -7,7 +7,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CrossIcon, PlusIcon } from '@/components/icons';
 import { StepFieldEditor } from './StepFieldEditor';
-import type { AgentSchedule, EnvVar, PseudoCodeStep, StepField, AgentModel } from '../../types';
+import type { AgentSchedule, EnvVar, AgentModel } from '../../types';
+import type { PseudoCodeStep, StepField } from '../../types/action';
 import { generateNewId } from '../../utils';
 
 interface ScheduleEditorProps {

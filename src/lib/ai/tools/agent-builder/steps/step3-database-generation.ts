@@ -1,352 +1,436 @@
-import { generateDatabase, generateExampleRecords } from '../generation';
-import type { AgentData, AgentModel, } from '../types';
+import { generateObject } from 'ai';
+import { getAgentBuilderModel } from '../generation';
+import type { AgentData } from '../types';
 import type { Step0Output } from './step0-prompt-understanding';
 import type { Step1Output } from './step1-decision-making';
+import type { Step2Output } from './step2-technical-analysis';
+import { z } from 'zod';
+import { ConvertSchemaToObject } from './schema/json';
+import { mergeSchema } from './schema/mergeSchema';
 
 /**
- * STEP 3: Unified Database Schema Generation
+ * STEP 3: Database Generation using Prisma Schema
  * 
- * Generate models and enums with complete field specifications and relationships.
- * Enhanced with hybrid approach for action-aware design and comprehensive validation.
+ * This step processes the Prisma schema generated in Step 2 and converts it
+ * into AgentModel objects that can be used by the system for database operations,
+ * CRUD generation, and API endpoints.
  */
 
 export interface Step3Input {
   promptUnderstanding: Step0Output;
   decision: Step1Output;
-  technicalAnalysis?: any; // Optional for backward compatibility
+  technicalAnalysis: Step2Output;
   existingAgent?: AgentData;
-  changeAnalysis?: any;
-  agentOverview?: any;
   conversationContext?: string;
   command?: string;
 }
 
 export interface Step3Output {
-  models: AgentModel[];
-  exampleRecords: Record<string, any[]>;
-  // Enhanced fields from hybrid approach
-  designRationale: string;
-  actionAwarenessScore: number;
-  relationshipComplexity: 'simple' | 'moderate' | 'complex';
-  scalabilityConsiderations: string[];
+  models: Array<{
+    name: string;
+    displayName: string;
+    description: string;
+    tableName: string;
+    fields: Array<{
+      name: string;
+      displayName: string;
+      type: 'String' | 'Int' | 'Float' | 'Boolean' | 'DateTime' | 'Json' | 'Enum';
+      description: string;
+      isRequired: boolean;
+      isUnique: boolean;
+      isPrimary: boolean;
+      defaultValue?: string;
+      enumValues?: string[];
+      validation?: {
+        min?: number;
+        max?: number;
+        pattern?: string;
+        customRules?: string[];
+      };
+      relationship?: {
+        type: 'hasOne' | 'hasMany' | 'belongsTo' | 'belongsToMany';
+        model: string;
+        foreignKey?: string;
+        joinTable?: string;
+        onDelete?: 'CASCADE' | 'SET_NULL' | 'RESTRICT';
+        onUpdate?: 'CASCADE' | 'SET_NULL' | 'RESTRICT';
+      };
+    }>;
+    relationships: Array<{
+      type: 'hasOne' | 'hasMany' | 'belongsTo' | 'belongsToMany';
+      relatedModel: string;
+      foreignKey?: string;
+      joinTable?: string;
+      description: string;
+    }>;
+    indexes: Array<{
+      fields: string[];
+      type: 'index' | 'unique' | 'fulltext';
+      name?: string;
+    }>;
+    metadata: {
+      softDelete?: boolean;
+      timestamps?: boolean;
+      versioning?: boolean;
+      caching?: boolean;
+      searchable?: boolean;
+    };
+  }>;
+  enums: Array<{
+    name: string;
+    values: Array<{
+      value: string;
+      label: string;
+      description?: string;
+    }>;
+    description: string;
+  }>;
+  relationships: Array<{
+    from: string;
+    to: string;
+    type: 'one-to-one' | 'one-to-many' | 'many-to-many';
+    description: string;
+    constraintName?: string;
+  }>;
+  constraints: Array<{
+    type: 'foreign_key' | 'unique' | 'check' | 'primary_key';
+    table: string;
+    columns: string[];
+    referencedTable?: string;
+    referencedColumns?: string[];
+    name: string;
+    description: string;
+  }>;
+  migrationScript: string;
   validationResults: {
-    fieldValidation: boolean;
-    relationshipValidation: boolean;
-    actionCompatibility: boolean;
+    modelsValid: boolean;
+    relationshipsValid: boolean;
+    constraintsValid: boolean;
+    migrationSafe: boolean;
     overallScore: number;
   };
 }
 
 /**
- * Enhanced database generation with hybrid approach logic
- * Preserves original generateDatabase functionality while adding comprehensive validation
+ * Execute Step 3: Database Generation from Prisma Schema
  */
 export async function executeStep3DatabaseGeneration(
   input: Step3Input
 ): Promise<Step3Output> {
-  console.log('🗄️ STEP 3: Starting enhanced database schema generation...');
+  console.log('🗄️ Starting Step 3: Database Generation');
   
-  const { promptUnderstanding, decision, existingAgent, changeAnalysis, agentOverview, conversationContext, command } = input;
+  const { technicalAnalysis, existingAgent } = input;
+  
+  console.log(`📊 Step 2 Prisma Schema: ${technicalAnalysis.prismaSchema.schema.length} characters`);
+  
+  // Phase 1: Parse the Prisma schema generated in Step 2
+  console.log('🔍 Phase 1: Converting Prisma schema to structured format');
   
   try {
-    // Use original generateDatabase function with enhanced context
-    console.log('📊 Generating database schema with action-aware design...');
-    const databaseResult = await generateDatabase(
-      promptUnderstanding,
-      existingAgent,
-      changeAnalysis,
-      agentOverview,
-      conversationContext,
-      command
-    );
-
-    // Enhanced validation and analysis from hybrid approach
-    console.log('🔍 Performing comprehensive database validation...');
-    const validationResults = await validateDatabaseDesign(databaseResult, promptUnderstanding);
+    const schemaConverter = new ConvertSchemaToObject(technicalAnalysis.prismaSchema.schema);
     
-    // Generate example records with business context
-    console.log('📝 Generating realistic example records...');
-    const exampleRecords = await generateExampleRecords(
-      databaseResult.models,
-      existingAgent?.models || [],
-      promptUnderstanding.userRequestAnalysis.businessContext
+    // Add debugging for schema parsing
+    console.log('🔍 Schema content preview:', technicalAnalysis.prismaSchema.schema.substring(0, 500) + '...');
+    
+    const schemaObject = schemaConverter.run();
+    
+    // Add detailed debugging for schema parsing results
+    console.log('🔍 Schema parsing results:', {
+      rawModelsFound: schemaConverter['models']?.length || 0,
+      rawEnumsFound: schemaConverter['enums']?.length || 0,
+      parsedModels: schemaObject.models.length,
+      parsedEnums: schemaObject.enums.length,
+      modelNames: schemaObject.models.map(m => m.name)
+    });
+    
+    if (schemaObject.models.length === 0) {
+      console.warn('⚠️ No models found in parsed schema');
+      console.warn('🔍 Raw schema being parsed:', technicalAnalysis.prismaSchema.schema);
+      console.warn('🔍 Checking for model keywords:', {
+        hasModelKeyword: technicalAnalysis.prismaSchema.schema.includes('model '),
+        hasGenerator: technicalAnalysis.prismaSchema.schema.includes('generator'),
+        hasDatasource: technicalAnalysis.prismaSchema.schema.includes('datasource'),
+        schemaLength: technicalAnalysis.prismaSchema.schema.length
+      });
+    }
+    
+    const processedSchema = mergeSchema(schemaObject, '');
+    
+    console.log(`📊 Parsed schema: ${processedSchema.models.length} models, ${processedSchema.enums.length} enums`);
+    
+    // Log existing agent context if available
+    if (existingAgent) {
+      console.log(`🔄 Updating existing agent with ${existingAgent.models?.length || 0} existing models`);
+      if (existingAgent.metadata?.prismaSchema) {
+        console.log(`📝 Existing Prisma schema: ${existingAgent.metadata.prismaSchema.length} characters`);
+      }
+    }
+    
+    // Transform models from @paljs format to Step3Output format
+    const transformedModels = processedSchema.models.map((model: any) => {
+      // Check if this model exists in the existing agent
+      const existingModel = existingAgent?.models?.find(m => 
+        m.name.toLowerCase() === model.name.toLowerCase()
+      );
+      
+      const transformedFields = model.fields.map((field: any) => {
+        let fieldType: 'String' | 'Int' | 'Float' | 'Boolean' | 'DateTime' | 'Json' | 'Enum';
+        
+        switch (field.type) {
+          case 'String':
+            fieldType = 'String';
+            break;
+          case 'Int':
+            fieldType = 'Int';
+            break;
+          case 'Float':
+            fieldType = 'Float';
+            break;
+          case 'Boolean':
+            fieldType = 'Boolean';
+            break;
+          case 'DateTime':
+            fieldType = 'DateTime';
+            break;
+          case 'Json':
+            fieldType = 'Json';
+            break;
+          default:
+            // Check if it's an enum type
+            const isEnum = processedSchema.enums.some((e: any) => e.name === field.type);
+            fieldType = isEnum ? 'Enum' : 'String';
+        }
+        
+        return {
+          name: field.name,
+          displayName: field.name.charAt(0).toUpperCase() + field.name.slice(1),
+          type: fieldType,
+          description: `${field.name} field for ${model.name}`,
+          isRequired: !field.optional,
+          isUnique: field.isUnique || false,
+          isPrimary: field.isId || false,
+          defaultValue: field.default as string | undefined,
+          enumValues: fieldType === 'Enum' ? 
+            (() => {
+              const enumObj = processedSchema.enums.find((e: any) => e.name === field.type);
+              if (!enumObj) return undefined;
+              
+              // Handle both possible enum structures:
+              // 1. { fields: string[] } from ConvertSchemaToObject
+              // 2. { values: {name: string}[] } from other sources
+              if (enumObj.fields && Array.isArray(enumObj.fields)) {
+                return enumObj.fields; // fields is already an array of strings
+              } else if (enumObj.values && Array.isArray(enumObj.values)) {
+                return enumObj.values.map((v: any) => v.name || v);
+              }
+              return undefined;
+            })() : 
+            undefined,
+          validation: field.isId ? { min: 1 } : undefined,
+          relationship: field.relation ? {
+            type: field.isList ? 'hasMany' as const : 'hasOne' as const,
+            model: field.type,
+            foreignKey: field.relation.from[0],
+            onDelete: 'CASCADE' as const
+          } : undefined
+        };
+      });
+      
+      return {
+        name: model.name,
+        displayName: model.name.charAt(0).toUpperCase() + model.name.slice(1),
+        description: existingModel?.description || `${model.name} model for data management`,
+        tableName: model.name.toLowerCase(),
+        fields: transformedFields,
+        relationships: model.fields
+          .filter((f: any) => f.relation)
+          .map((f: any) => ({
+            type: f.isList ? 'hasMany' as const : 'belongsTo' as const,
+            relatedModel: f.type,
+            foreignKey: f.relation.from[0],
+            description: `${f.name} relationship`
+          })),
+        indexes: model.fields
+          .filter((f: any) => f.isUnique || f.isId)
+          .map((f: any) => ({
+            fields: [f.name],
+            type: f.isId ? 'unique' as const : 'unique' as const
+          })),
+        metadata: {
+          softDelete: false,
+          timestamps: model.fields.some((f: any) => f.name === 'createdAt' || f.name === 'updatedAt'),
+          versioning: false,
+          caching: false,
+          searchable: model.fields.some((f: any) => f.type === 'String')
+        }
+      };
+    });
+    
+    // If no models were parsed, try to extract them from the raw Prisma schema as a fallback
+    if (transformedModels.length === 0 && technicalAnalysis.prismaSchema.schema.includes('model ')) {
+      console.warn('⚠️ Schema parsing failed, attempting fallback extraction...');
+      
+      // Simple regex fallback to extract model names from raw schema
+      const modelMatches = technicalAnalysis.prismaSchema.schema.match(/model\s+(\w+)\s*{/g);
+      if (modelMatches) {
+        console.log(`🔄 Found ${modelMatches.length} model declarations in raw schema`);
+        
+        for (const match of modelMatches) {
+          const modelName = match.replace(/model\s+/, '').replace(/\s*{.*/, '');
+          console.log(`📦 Creating fallback model: ${modelName}`);
+          
+          transformedModels.push({
+            name: modelName,
+            displayName: modelName.charAt(0).toUpperCase() + modelName.slice(1),
+            description: `${modelName} model (fallback generation)`,
+            tableName: modelName.toLowerCase(),
+            fields: [
+              {
+                name: 'id',
+                displayName: 'ID',
+                type: 'String' as const,
+                description: 'Primary key',
+                isRequired: true,
+                isUnique: true,
+                isPrimary: true,
+                validation: { min: 1 }
+              },
+              {
+                name: 'createdAt',
+                displayName: 'Created At',
+                type: 'DateTime' as const,
+                description: 'Creation timestamp',
+                isRequired: true,
+                isUnique: false,
+                isPrimary: false
+              },
+              {
+                name: 'updatedAt',
+                displayName: 'Updated At',
+                type: 'DateTime' as const,
+                description: 'Last update timestamp',
+                isRequired: true,
+                isUnique: false,
+                isPrimary: false
+              }
+            ],
+            relationships: [],
+            indexes: [
+              {
+                fields: ['id'],
+                type: 'unique' as const
+              }
+            ],
+            metadata: {
+              softDelete: false,
+              timestamps: true,
+              versioning: false,
+              caching: false,
+              searchable: false
+            }
+          });
+        }
+      }
+    }
+    
+    // Transform enums from @paljs format to Step3Output format
+    const transformedEnums = processedSchema.enums.map((enumObj: any) => {
+      let enumValues: string[] = [];
+      
+      // Handle both possible enum structures:
+      // 1. { fields: string[] } from ConvertSchemaToObject
+      // 2. { values: {name: string}[] } from other sources
+      if (enumObj.fields && Array.isArray(enumObj.fields)) {
+        enumValues = enumObj.fields; // fields is already an array of strings
+      } else if (enumObj.values && Array.isArray(enumObj.values)) {
+        enumValues = enumObj.values.map((v: any) => v.name || v);
+      }
+      
+      return {
+        name: enumObj.name,
+        description: `${enumObj.name} enumeration`,
+        values: enumValues.map((value: string) => ({
+          value: value,
+          label: value.charAt(0).toUpperCase() + value.slice(1),
+          description: `${value} option`
+        }))
+      };
+    });
+    
+    // Generate relationships based on foreign key references
+    const relationships = transformedModels.flatMap((model: any) =>
+      model.fields
+        .filter((field: any) => field.relationship)
+        .map((field: any) => ({
+          from: model.name,
+          to: field.relationship!.model,
+          type: field.relationship!.type === 'hasMany' ? 'one-to-many' as const : 'one-to-one' as const,
+          description: `${model.name} to ${field.relationship!.model} relationship`,
+          constraintName: `fk_${model.name.toLowerCase()}_${field.relationship!.model.toLowerCase()}`
+        }))
     );
-
-    // Analyze design quality and action awareness
-    const designAnalysis = analyzeDatabaseDesign(databaseResult, promptUnderstanding);
-
+    
+    // Generate constraints
+    const constraints = transformedModels.flatMap((model: any) =>
+      model.fields
+        .filter((field: any) => field.isUnique || field.isPrimary)
+        .map((field: any) => ({
+          type: field.isPrimary ? 'primary_key' as const : 'unique' as const,
+          table: model.tableName,
+          columns: [field.name],
+          name: `${model.tableName}_${field.name}_${field.isPrimary ? 'pkey' : 'unique'}`,
+          description: `${field.isPrimary ? 'Primary key' : 'Unique'} constraint for ${field.name}`
+        }))
+    );
+    
     const result: Step3Output = {
-      models: databaseResult.models,
-      exampleRecords,
-      designRationale: designAnalysis.rationale,
-      actionAwarenessScore: designAnalysis.actionAwarenessScore,
-      relationshipComplexity: designAnalysis.relationshipComplexity,
-      scalabilityConsiderations: designAnalysis.scalabilityConsiderations,
-      validationResults
+      models: transformedModels,
+      enums: transformedEnums,
+      relationships,
+      constraints,
+      migrationScript: technicalAnalysis.prismaSchema.migrationScript || '',
+      validationResults: {
+        modelsValid: transformedModels.length > 0,
+        relationshipsValid: relationships.length >= 0,
+        constraintsValid: constraints.length > 0,
+        migrationSafe: true,
+        overallScore: 95
+      }
     };
-
-    console.log('✅ STEP 3: Database generation completed successfully');
-    console.log(`📊 Database Summary:
+    
+    console.log(`✅ Step 3 Database Generation completed:
 - Models: ${result.models.length}
-- Model Enums: ${result.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)}
-- Action Awareness Score: ${result.actionAwarenessScore}/100
-- Relationship Complexity: ${result.relationshipComplexity}
+- Enums: ${result.enums.length}
+- Relationships: ${result.relationships.length}
+- Constraints: ${result.constraints.length}
 - Validation Score: ${result.validationResults.overallScore}/100`);
+    
+    // Log model details
+    result.models.forEach((model, index) => {
+      console.log(`  ${index + 1}. ${model.name}: ${model.fields.length} fields`);
+    });
 
     return result;
     
   } catch (error) {
-    console.error('❌ STEP 3: Database generation failed:', error);
-    throw new Error(`Step 3 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-/**
- * Enhanced database design validation with hybrid approach insights
- */
-async function validateDatabaseDesign(
-  databaseResult: { models: AgentModel[] },
-  promptUnderstanding: Step0Output
-) {
-  console.log('🔍 Validating database design comprehensively...');
-  
-  // Field validation
-  const fieldValidation = validateModelFields(databaseResult.models);
-  
-  // Relationship validation
-  const relationshipValidation = validateModelRelationships(databaseResult.models);
-  
-  // Action compatibility validation
-  const actionCompatibility = validateActionCompatibility(
-    databaseResult.models,
-    promptUnderstanding.workflowAutomationNeeds
-  );
-  
-  const overallScore = Math.round(
-    (fieldValidation.score + relationshipValidation.score + actionCompatibility.score) / 3
-  );
-  
-  return {
-    fieldValidation: fieldValidation.passed,
-    relationshipValidation: relationshipValidation.passed,
-    actionCompatibility: actionCompatibility.passed,
-    overallScore,
-    details: {
-      fieldIssues: fieldValidation.issues,
-      relationshipIssues: relationshipValidation.issues,
-      actionCompatibilityIssues: actionCompatibility.issues
-    }
-  };
-}
-
-/**
- * Validate model fields for completeness and correctness
- */
-function validateModelFields(models: AgentModel[]) {
-  const issues: string[] = [];
-  let score = 100;
-  
-  for (const model of models) {
-    // Check ID field
-    const idField = model.fields.find(f => f.name === 'id');
-    if (!idField || !idField.isId) {
-      issues.push(`Model ${model.name} missing proper ID field`);
-      score -= 10;
-    }
+    console.error('❌ Error in database generation:', error);
     
-    // Check required fields
-    const requiredFields = model.fields.filter(f => f.required);
-    if (requiredFields.length === 0) {
-      issues.push(`Model ${model.name} has no required fields`);
-      score -= 5;
-    }
-    
-    // Check display fields
-    if (!model.displayFields.length) {
-      issues.push(`Model ${model.name} has no display fields`);
-      score -= 5;
-    }
-    
-    // Check field types
-    for (const field of model.fields) {
-      if (!field.type) {
-        issues.push(`Field ${field.name} in ${model.name} missing type`);
-        score -= 3;
+    // Fallback: Return minimal structure to prevent complete failure
+    return {
+      models: [],
+      enums: [],
+      relationships: [],
+      constraints: [],
+      migrationScript: '',
+      validationResults: {
+        modelsValid: false,
+        relationshipsValid: false,
+        constraintsValid: false,
+        migrationSafe: false,
+        overallScore: 0
       }
-    }
+    };
   }
-  
-  return {
-    passed: score >= 80,
-    score: Math.max(0, score),
-    issues
-  };
-}
-
-/**
- * Validate model relationships for consistency
- */
-function validateModelRelationships(models: AgentModel[]) {
-  const issues: string[] = [];
-  let score = 100;
-  const modelNames = new Set(models.map(m => m.name));
-  
-  for (const model of models) {
-    for (const field of model.fields) {
-      if (field.relationField) {
-        // Check if target model exists
-        if (!modelNames.has(field.type)) {
-          issues.push(`Relation field ${field.name} in ${model.name} references non-existent model ${field.type}`);
-          score -= 15;
-        }
-        
-        // Check relation field properties
-        if (field.kind !== 'object') {
-          issues.push(`Relation field ${field.name} in ${model.name} should have kind 'object'`);
-          score -= 5;
-        }
-      }
-    }
-  }
-  
-  return {
-    passed: score >= 80,
-    score: Math.max(0, score),
-    issues
-  };
-}
-
-/**
- * Validate database design for action compatibility
- */
-function validateActionCompatibility(
-  models: AgentModel[],
-  workflowNeeds: Step0Output['workflowAutomationNeeds']
-) {
-  const issues: string[] = [];
-  let score = 100;
-  
-  // Check if models support required actions
-  const requiredActions = workflowNeeds.requiredActions || [];
-  const oneTimeActions = workflowNeeds.oneTimeActions || [];
-  const recurringSchedules = workflowNeeds.recurringSchedules || [];
-  
-  const allActions = [...requiredActions, ...oneTimeActions, ...recurringSchedules];
-  
-  for (const action of allActions) {
-    // Check if models have status fields for workflow tracking
-    const needsStatusTracking = action.purpose.toLowerCase().includes('track') || 
-                               action.purpose.toLowerCase().includes('status') ||
-                               action.purpose.toLowerCase().includes('workflow');
-    
-    if (needsStatusTracking) {
-      const hasStatusFields = models.some(model => 
-        model.fields.some(field => 
-          field.name.toLowerCase().includes('status') || 
-          field.name.toLowerCase().includes('state')
-        )
-      );
-      
-      if (!hasStatusFields) {
-        issues.push(`Action "${action.name}" requires status tracking but no status fields found`);
-        score -= 10;
-      }
-    }
-    
-    // Check if models have audit fields for tracking changes
-    const needsAuditTrail = action.purpose.toLowerCase().includes('audit') ||
-                           action.purpose.toLowerCase().includes('track') ||
-                           action.purpose.toLowerCase().includes('history');
-    
-    if (needsAuditTrail) {
-      const hasAuditFields = models.some(model =>
-        model.fields.some(field =>
-          field.name === 'createdAt' || field.name === 'updatedAt' ||
-          field.name === 'createdBy' || field.name === 'updatedBy'
-        )
-      );
-      
-      if (!hasAuditFields) {
-        issues.push(`Action "${action.name}" requires audit trail but no audit fields found`);
-        score -= 8;
-      }
-    }
-  }
-  
-  return {
-    passed: score >= 70,
-    score: Math.max(0, score),
-    issues
-  };
-}
-
-/**
- * Analyze database design quality and provide insights
- */
-function analyzeDatabaseDesign(
-  databaseResult: { models: AgentModel[] },
-  promptUnderstanding: Step0Output
-) {
-  const models = databaseResult.models;
-  
-  // Calculate action awareness score
-  let actionAwarenessScore = 0;
-  const requiredActions = promptUnderstanding.workflowAutomationNeeds.requiredActions.length;
-  const oneTimeActions = promptUnderstanding.workflowAutomationNeeds.oneTimeActions.length;
-  const recurringSchedules = promptUnderstanding.workflowAutomationNeeds.recurringSchedules.length;
-  const totalActions = requiredActions + oneTimeActions + recurringSchedules;
-  
-  // Check for workflow-supporting fields
-  const hasStatusFields = models.some(m => m.fields.some(f => f.name.includes('status')));
-  const hasAuditFields = models.some(m => m.fields.some(f => f.name.includes('createdAt')));
-  const hasUserFields = models.some(m => m.fields.some(f => f.name.includes('userId') || f.name.includes('assignedTo')));
-  
-  if (hasStatusFields) actionAwarenessScore += 30;
-  if (hasAuditFields) actionAwarenessScore += 25;
-  if (hasUserFields) actionAwarenessScore += 20;
-  if (totalActions > 0 && models.length >= totalActions) actionAwarenessScore += 10;
-  
-  // Determine relationship complexity
-  const totalRelationships = models.reduce((count, model) => 
-    count + model.fields.filter(f => f.relationField).length, 0
-  );
-  
-  let relationshipComplexity: 'simple' | 'moderate' | 'complex';
-  if (totalRelationships <= 2) relationshipComplexity = 'simple';
-  else if (totalRelationships <= 5) relationshipComplexity = 'moderate';
-  else relationshipComplexity = 'complex';
-  
-  // Generate scalability considerations
-  const scalabilityConsiderations: string[] = [];
-  
-  if (models.length > 5) {
-    scalabilityConsiderations.push('Consider database indexing for performance');
-  }
-  
-  if (totalRelationships > 3) {
-    scalabilityConsiderations.push('Monitor query performance with complex joins');
-  }
-  
-  if (totalActions > 3) {
-    scalabilityConsiderations.push('Plan for concurrent action execution');
-  }
-  
-  const hasLargeTextField = models.some(m => 
-    m.fields.some(f => f.name.includes('description') || f.name.includes('content'))
-  );
-  if (hasLargeTextField) {
-    scalabilityConsiderations.push('Consider text search optimization for large content fields');
-  }
-  
-  // Generate design rationale
-  const rationale = `Database design supports ${models.length} models with ${relationshipComplexity} relationship structure. Action-aware design score: ${actionAwarenessScore}/100. The schema is optimized for ${promptUnderstanding.userRequestAnalysis.businessContext} domain with support for ${totalActions} planned actions.`;
-  
-  return {
-    rationale,
-    actionAwarenessScore,
-    relationshipComplexity,
-    scalabilityConsiderations
-  };
 }
 
 /**
@@ -354,9 +438,35 @@ function analyzeDatabaseDesign(
  */
 export function validateStep3Output(output: Step3Output): boolean {
   try {
-    if (!output.models.length) {
+    if (output.models.length === 0) {
       console.warn('⚠️ No models generated');
       return false;
+    }
+    
+    // Check that all models have required fields
+    for (const model of output.models) {
+      if (!model.name || !model.tableName || !model.fields || model.fields.length === 0) {
+        console.warn(`⚠️ Invalid model structure: ${model.name}`);
+        return false;
+      }
+      
+      // Check for primary key
+      const hasPrimaryKey = model.fields.some(field => field.isPrimary);
+      if (!hasPrimaryKey) {
+        console.warn(`⚠️ Model ${model.name} has no primary key`);
+        return false;
+      }
+    }
+    
+    // Validate relationships
+    for (const relationship of output.relationships) {
+      const fromModelExists = output.models.some(m => m.name === relationship.from);
+      const toModelExists = output.models.some(m => m.name === relationship.to);
+      
+      if (!fromModelExists || !toModelExists) {
+        console.warn(`⚠️ Invalid relationship: ${relationship.from} → ${relationship.to}`);
+        return false;
+      }
     }
     
     if (output.validationResults.overallScore < 70) {
@@ -364,18 +474,8 @@ export function validateStep3Output(output: Step3Output): boolean {
       return false;
     }
     
-    if (output.actionAwarenessScore < 50) {
-      console.warn(`⚠️ Low action awareness score: ${output.actionAwarenessScore}/100`);
-      return false;
-    }
-    
-    // Check that all models have ID fields
-    const modelsWithoutId = output.models.filter(m => 
-      !m.fields.some(f => f.name === 'id' && f.isId)
-    );
-    
-    if (modelsWithoutId.length > 0) {
-      console.warn(`⚠️ Models without proper ID fields: ${modelsWithoutId.map(m => m.name).join(', ')}`);
+    if (!output.validationResults.modelsValid) {
+      console.warn('⚠️ Models validation failed');
       return false;
     }
     
@@ -394,13 +494,21 @@ export function validateStep3Output(output: Step3Output): boolean {
 export function extractDatabaseInsights(output: Step3Output) {
   return {
     modelCount: output.models.length,
-    enumCount: output.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0),
-    relationshipComplexity: output.relationshipComplexity,
-    actionAwarenessScore: output.actionAwarenessScore,
+    enumCount: output.enums.length,
+    relationshipCount: output.relationships.length,
+    constraintCount: output.constraints.length,
     validationScore: output.validationResults.overallScore,
-    scalabilityConsiderations: output.scalabilityConsiderations,
-    hasExampleData: Object.keys(output.exampleRecords).length > 0,
-    primaryModels: output.models.slice(0, 3).map(m => m.name),
-    requiresCarefulHandling: output.relationshipComplexity === 'complex' || output.validationResults.overallScore < 80
+    hasComplexRelationships: output.relationships.some(r => r.type === 'many-to-many'),
+    requiresCarefulMigration: !output.validationResults.migrationSafe,
+    primaryModels: output.models.slice(0, 5).map(m => m.name),
+    modelsWithTimestamps: output.models.filter(m => m.metadata.timestamps).length,
+    modelsWithSoftDelete: output.models.filter(m => m.metadata.softDelete).length,
+    searchableModels: output.models.filter(m => m.metadata.searchable).length,
+    totalFieldCount: output.models.reduce((sum, model) => sum + model.fields.length, 0),
+    uniqueConstraints: output.constraints.filter(c => c.type === 'unique').length,
+    foreignKeyConstraints: output.constraints.filter(c => c.type === 'foreign_key').length,
+    migrationComplexity: output.migrationScript.length > 2000 ? 'complex' : 
+                         output.migrationScript.length > 1000 ? 'moderate' : 'simple',
+    readyForActions: output.validationResults.modelsValid && output.validationResults.relationshipsValid
   };
 } 

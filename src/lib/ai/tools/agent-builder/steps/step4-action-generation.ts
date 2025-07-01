@@ -1,24 +1,28 @@
 import { generateActions } from '../generation';
-import type { AgentAction, AgentData } from '../types';
+import type { AgentAction, AgentData, PseudoCodeStep, StepField } from '../types';
 import type { Step0Output } from './step0-prompt-understanding';
 import type { Step1Output } from './step1-decision-making';
-import type { Step3Output } from './step3-database-generation';
+import type { Step2Output } from './step2-technical-analysis';
+import type { Step3Output, extractDatabaseInsights } from './step3-database-generation';
+import { generatePseudoSteps } from '../generation';
+import { generateObject } from 'ai';
+import { getAgentBuilderModel } from '../generation';
+import { z } from 'zod';
 
 /**
- * STEP 4: Comprehensive Action Generation
+ * STEP 4: Two-Phase Action Generation
  * 
- * Generate intelligent actions that work seamlessly with the database schema.
- * Enhanced with hybrid approach for action coordination and validation.
+ * Phase 1: Generate pseudo-code steps using Prisma schema context
+ * Phase 2: Generate executable code from pseudo-code steps
+ * Uses the database models and fields from Step 3 for accurate action generation
  */
 
 export interface Step4Input {
   promptUnderstanding: Step0Output;
   decision: Step1Output;
-  technicalAnalysis?: any; // Optional for backward compatibility
+  technicalAnalysis: Step2Output;
   databaseGeneration: Step3Output;
   existingAgent?: AgentData;
-  changeAnalysis?: any;
-  agentOverview?: any;
   conversationContext?: string;
   command?: string;
 }
@@ -51,48 +55,159 @@ export interface Step4Output {
   };
 }
 
+// Code generation schema for actions
+const ActionCodeGenerationSchema = z.object({
+  code: z.string().describe('Complete JavaScript code that can be executed with new Function()'),
+  envVars: z.array(z.object({
+    name: z.string(),
+    description: z.string(),
+    required: z.boolean(),
+    sensitive: z.boolean().default(false)
+  })).describe('Environment variables needed for the code'),
+  inputParameters: z.array(z.object({
+    name: z.string(),
+    type: z.string(),
+    required: z.boolean(),
+    description: z.string(),
+    defaultValue: z.any().optional()
+  })).describe('Input parameters required before execution'),
+  outputParameters: z.array(z.object({
+    name: z.string(),
+    type: z.string(),
+    description: z.string()
+  })).describe('Expected output parameters'),
+  estimatedExecutionTime: z.string().describe('Estimated execution time'),
+  testData: z.object({
+    input: z.record(z.any()).optional().default({}),
+    expectedOutput: z.record(z.any()).optional().default({})
+  }).describe('Test data for validation')
+});
+
 /**
- * Enhanced action generation with hybrid approach logic
- * Preserves original generateActions functionality while adding comprehensive validation
+ * Two-phase action generation with database-aware design
  */
 export async function executeStep4ActionGeneration(
   input: Step4Input
 ): Promise<Step4Output> {
-  console.log('⚡ STEP 4: Starting enhanced action generation...');
+  console.log('⚡ STEP 4: Starting two-phase action generation...');
   
-  const { promptUnderstanding, decision, databaseGeneration, existingAgent, changeAnalysis, agentOverview, conversationContext, command } = input;
+  const { promptUnderstanding, decision, technicalAnalysis, databaseGeneration, existingAgent, conversationContext, command } = input;
   
   try {
-    // Use original generateActions function with enhanced context
-    console.log('🎯 Generating actions with database-aware design...');
-    const actionsResult = await generateActions(
-      promptUnderstanding,
-      databaseGeneration, // Pass the full databaseGeneration object which has models and enums
-      existingAgent,
-      changeAnalysis,
-      agentOverview,
-      conversationContext,
-      command
+    // PHASE 1: Generate pseudo-code steps for each required action
+    console.log('📋 Phase 1: Generating pseudo-code steps from prompt understanding...');
+    
+    const requiredActions = promptUnderstanding.workflowAutomationNeeds.requiredActions || [];
+    const oneTimeActions = promptUnderstanding.workflowAutomationNeeds.oneTimeActions || [];
+    const allActionRequests = [...requiredActions, ...oneTimeActions];
+    
+    console.log(`Found ${allActionRequests.length} actions to generate`);
+    
+    // Transform database models for pseudo step generation
+    const availableModels = transformStep3ModelsToAgentModels(databaseGeneration.models);
+    
+    // Generate pseudo steps for each action
+    const actionsWithPseudoSteps = await Promise.all(
+      allActionRequests.map(async (actionRequest) => {
+        console.log(`🔄 Generating pseudo steps for: ${actionRequest.name}`);
+        
+        const pseudoSteps = await generatePseudoSteps(
+          actionRequest.name,
+          actionRequest.purpose || `Action to ${actionRequest.name}`,
+          'Create', // Default to Create type
+          availableModels,
+          'action',
+          `Business context: ${promptUnderstanding.userRequestAnalysis.businessContext}. ` +
+          `Target models: ${databaseGeneration.models.map(m => m.name).join(', ')}. ` +
+          `Prisma schema context: Use fields from the database models for accurate data operations.`
+        );
+        
+        return {
+          actionRequest,
+          pseudoSteps
+        };
+      })
     );
+
+    // PHASE 2: Generate executable code for each action
+    console.log('💻 Phase 2: Generating executable code from pseudo steps...');
+    
+    const actionsWithCode = await Promise.all(
+      actionsWithPseudoSteps.map(async ({ actionRequest, pseudoSteps }) => {
+        console.log(`🔧 Generating code for: ${actionRequest.name}`);
+        
+        const codeResult = await generateActionCode(
+          actionRequest.name,
+          actionRequest.purpose || `Action to ${actionRequest.name}`,
+          pseudoSteps,
+          availableModels,
+          databaseGeneration,
+          promptUnderstanding.userRequestAnalysis.businessContext
+        );
+        
+        // Create AgentAction object
+        const action: AgentAction = {
+          id: `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          name: actionRequest.name,
+          description: actionRequest.purpose || `Action to ${actionRequest.name}`,
+          type: determineActionType(pseudoSteps),
+          emoji: getActionEmoji(actionRequest.name),
+          role: 'member', // Default to member since role property doesn't exist on actionRequest
+          pseudoSteps: pseudoSteps.map(step => ({
+            id: step.id,
+            inputFields: step.inputFields || [],
+            outputFields: step.outputFields || [],
+            description: step.description,
+            type: step.type as 'Database find unique' | 'Database find many' | 'Database update unique' | 'Database update many' | 'Database create' | 'Database create many' | 'Database delete unique' | 'Database delete many' | 'call external api' | 'ai analysis'
+          })),
+          execute: {
+            type: 'code',
+            code: {
+              script: codeResult.code,
+              envVars: codeResult.envVars
+            }
+          },
+          dataSource: {
+            type: 'database',
+            database: {
+              models: extractReferencedModels(pseudoSteps, availableModels)
+            }
+          },
+          results: {
+            actionType: determineActionType(pseudoSteps),
+            model: extractPrimaryModel(pseudoSteps, availableModels) || 'Unknown',
+            fields: extractResultFields(codeResult.outputParameters)
+          },
+          uiComponents: {
+            stepForms: generateStepForms(codeResult.inputParameters, availableModels),
+            resultView: generateResultView(actionRequest.name, codeResult.outputParameters)
+          }
+        };
+        
+        return action;
+      })
+    );
+
+    console.log(`✅ Generated ${actionsWithCode.length} actions with code`);
 
     // Enhanced validation and coordination analysis
     console.log('🔍 Analyzing action coordination and validation...');
-    const validationResults = await validateActionGeneration(actionsResult.actions, databaseGeneration, promptUnderstanding);
+    const validationResults = await validateActionGeneration(actionsWithCode, databaseGeneration, promptUnderstanding);
     
     // Analyze action coordination patterns
-    const actionCoordination = analyzeActionCoordination(actionsResult.actions, promptUnderstanding);
+    const actionCoordination = analyzeActionCoordination(actionsWithCode, promptUnderstanding);
     
     // Assess implementation complexity
-    const implementationComplexity = assessImplementationComplexity(actionsResult.actions, databaseGeneration);
+    const implementationComplexity = assessImplementationComplexity(actionsWithCode, databaseGeneration);
     
     // Analyze resource requirements
-    const resourceRequirements = analyzeResourceRequirements(actionsResult.actions);
+    const resourceRequirements = analyzeResourceRequirements(actionsWithCode);
     
     // Calculate quality metrics
-    const qualityMetrics = calculateQualityMetrics(actionsResult.actions, databaseGeneration, promptUnderstanding);
+    const qualityMetrics = calculateQualityMetrics(actionsWithCode, databaseGeneration, promptUnderstanding);
 
     const result: Step4Output = {
-      actions: actionsResult.actions,
+      actions: actionsWithCode,
       actionCoordination,
       validationResults,
       implementationComplexity,
@@ -100,7 +215,7 @@ export async function executeStep4ActionGeneration(
       qualityMetrics
     };
 
-    console.log('✅ STEP 4: Action generation completed successfully');
+    console.log('✅ STEP 4: Two-phase action generation completed successfully');
     console.log(`⚡ Action Summary:
 - Total Actions: ${result.actions.length}
 - Implementation Complexity: ${result.implementationComplexity}
@@ -114,6 +229,214 @@ export async function executeStep4ActionGeneration(
     console.error('❌ STEP 4: Action generation failed:', error);
     throw new Error(`Step 4 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
+}
+
+/**
+ * Generate executable code for an action based on pseudo steps
+ */
+async function generateActionCode(
+  name: string,
+  description: string,
+  pseudoSteps: any[],
+  availableModels: any[],
+  databaseGeneration: Step3Output,
+  businessContext?: string
+): Promise<z.infer<typeof ActionCodeGenerationSchema>> {
+  const model = await getAgentBuilderModel();
+  
+  // Extract input parameters from first step
+  const extractedInputParams = pseudoSteps.length > 0 && pseudoSteps[0].inputFields ? 
+    pseudoSteps[0].inputFields
+      .filter((field: any) => field.name && field.name.trim() !== '')
+      .map((field: any) => ({
+        name: field.name,
+        type: field.type,
+        required: field.required,
+        description: field.description || `Input parameter for ${field.name}`,
+        kind: field.kind === 'object' ? 'object' : 'scalar',
+        relationModel: field.relationModel
+      })) : [];
+
+  const systemPrompt = `You are a senior JavaScript developer generating executable code for action operations.
+
+TASK: Generate complete, executable JavaScript code based on the provided pseudo steps.
+
+CONTEXT:
+- Name: ${name}
+- Description: ${description}
+- Business Context: ${businessContext || 'General business operations'}
+- Available Models: ${JSON.stringify(availableModels?.map((m: any) => ({ name: m.name, fields: m.fields?.map((f: any) => ({ name: f.name, type: f.type })) })) || [])}
+- Prisma Schema Models: ${databaseGeneration.models.map(m => `${m.name}: ${m.fields.map(f => `${f.name} (${f.type})`).join(', ')}`).join(' | ')}
+
+PSEUDO STEPS TO IMPLEMENT:
+${JSON.stringify(pseudoSteps, null, 2)}
+
+REQUIRED INPUT PARAMETERS (from first step):
+${JSON.stringify(extractedInputParams, null, 2)}
+
+CODE GENERATION REQUIREMENTS:
+
+1. EXECUTION CONTEXT:
+   The code will be executed using: new Function('context', code)
+   Where context = { db, ai, input, envVars }
+   
+   - db: Database operations referencing Prisma schema models
+   - ai: AI operations using generateObject function
+   - input: User-provided input parameters (MUST include all parameters from the first step)
+   - envVars: Environment variables for external APIs
+
+2. DATABASE OPERATIONS WITH PRISMA SCHEMA:
+   Use the actual Prisma schema models and fields from Step 3:
+   
+   Available Models and Fields:
+   ${databaseGeneration.models.map(model => `
+   - ${model.name} (table: ${model.tableName}):
+     Fields: ${model.fields.map(f => `${f.name}: ${f.type}${f.isRequired ? ' (required)' : ''}${f.isPrimary ? ' (primary)' : ''}${f.relationship ? ` -> ${f.relationship.model}` : ''}`).join(', ')}
+   `).join('')}
+   
+   Database API format:
+   - db.findMany(modelName, { where: filter, limit: number })
+   - db.findUnique(modelName, where)
+   - db.create(modelName, data)
+   - db.update(modelName, where, data)
+   - db.delete(modelName, where)
+
+3. INPUT PARAMETER HANDLING:
+   ${extractedInputParams.length > 0 ? `
+   The code MUST expect these input parameters in the input object:
+   ${extractedInputParams.map((param: any) => `
+   - input.${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}
+     ${param.kind === 'object' ? `This is a database relation ID for ${param.relationModel} model` : ''}
+   `).join('')}
+   
+   Always validate required input parameters at the start of your code:
+   ${extractedInputParams.filter((p: any) => p.required).map((param: any) => `
+   if (!input.${param.name}) throw new Error('Required parameter ${param.name} is missing');`).join('')}
+   ` : 'No input parameters required.'}
+
+4. RETURN FORMAT:
+   Always return: { success: boolean, data: any, message: string, executionTime: number }
+
+Generate production-ready, executable JavaScript code that implements the business logic described in the pseudo steps and properly uses the Prisma schema models and fields.`;
+
+  const result = await generateObject({
+    model,
+    schema: ActionCodeGenerationSchema,
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      },
+      {
+        role: 'user',
+        content: `Generate executable JavaScript code for: ${name}
+
+Pseudo Steps:
+${pseudoSteps.map((step: any, index: number) => 
+  `Step ${index + 1}: ${step.description}
+  - Type: ${step.type}
+  - Inputs: ${step.inputFields?.map((f: any) => `${f.name} (${f.type})`).join(', ') || 'None'}
+  - Outputs: ${step.outputFields?.map((f: any) => `${f.name} (${f.type})`).join(', ') || 'None'}`
+).join('\n\n')}
+
+Use the Prisma schema models and fields provided in the context for accurate database operations.`
+      }
+    ],
+    temperature: 0.2,
+  });
+
+  return result.object;
+}
+
+/**
+ * Helper functions for action generation
+ */
+function determineActionType(pseudoSteps: any[]): AgentAction['type'] {
+  // Extract action type based on pseudo steps content
+  const stepsText = JSON.stringify(pseudoSteps).toLowerCase();
+  
+  if (stepsText.includes('create') || stepsText.includes('add') || stepsText.includes('insert') || stepsText.includes('new')) {
+    return 'Create';
+  } else if (stepsText.includes('update') || stepsText.includes('edit') || stepsText.includes('modify') || stepsText.includes('change')) {
+    return 'Update';
+  } else {
+    return 'Create'; // Default fallback
+  }
+}
+
+function getActionEmoji(actionName: string): string {
+  const name = actionName.toLowerCase();
+  if (name.includes('create') || name.includes('add')) return '➕';
+  if (name.includes('update') || name.includes('edit')) return '✏️';
+  if (name.includes('delete') || name.includes('remove')) return '🗑️';
+  if (name.includes('send') || name.includes('email')) return '📧';
+  if (name.includes('process') || name.includes('analyze')) return '⚙️';
+  return '🔄'; // Default
+}
+
+function extractReferencedModels(pseudoSteps: any[], availableModels: any[]): any[] {
+  const referencedModelNames = new Set<string>();
+  
+  pseudoSteps.forEach(step => {
+    [...(step.inputFields || []), ...(step.outputFields || [])].forEach((field: any) => {
+      if (field.relationModel) {
+        referencedModelNames.add(field.relationModel);
+      }
+    });
+  });
+  
+  return availableModels.filter(model => referencedModelNames.has(model.name));
+}
+
+function extractPrimaryModel(pseudoSteps: any[], availableModels: any[]): string | undefined {
+  // Look for the most frequently referenced model
+  const modelCounts: Record<string, number> = {};
+  
+  pseudoSteps.forEach(step => {
+    [...(step.inputFields || []), ...(step.outputFields || [])].forEach((field: any) => {
+      if (field.relationModel) {
+        modelCounts[field.relationModel] = (modelCounts[field.relationModel] || 0) + 1;
+      }
+    });
+  });
+  
+  const primaryModel = Object.entries(modelCounts).sort(([,a], [,b]) => b - a)[0];
+  return primaryModel ? primaryModel[0] : undefined;
+}
+
+function extractResultFields(outputParameters: any[]): Record<string, any> {
+  const fields: Record<string, any> = {};
+  
+  outputParameters.forEach(param => {
+    fields[param.name] = {
+      type: param.type,
+      description: param.description
+    };
+  });
+  
+  return fields;
+}
+
+function generateStepForms(inputParameters: any[], availableModels: any[]): any[] {
+  return inputParameters.map(param => ({
+    id: param.name,
+    type: param.type,
+    label: param.description || param.name,
+    required: param.required || false,
+    validation: param.validation || {}
+  }));
+}
+
+function generateResultView(actionName: string, outputParameters: any[]): any {
+  return {
+    type: 'table',
+    title: `${actionName} Results`,
+    columns: outputParameters.map(param => ({
+      key: param.name,
+      label: param.description || param.name,
+      type: param.type
+    }))
+  };
 }
 
 /**
@@ -351,9 +674,10 @@ function analyzeActionCoordination(actions: AgentAction[], promptUnderstanding: 
 function assessImplementationComplexity(actions: AgentAction[], databaseGeneration: Step3Output): 'low' | 'medium' | 'high' {
   let complexityScore = 0;
   
-  // Database complexity factor
-  if (databaseGeneration.relationshipComplexity === 'complex') complexityScore += 30;
-  else if (databaseGeneration.relationshipComplexity === 'moderate') complexityScore += 15;
+  // Database complexity factor based on relationship count and model complexity
+  const relationshipCount = databaseGeneration.relationships.length;
+  if (relationshipCount > 10) complexityScore += 30;
+  else if (relationshipCount > 5) complexityScore += 15;
   
   // Action count factor
   if (actions.length > 10) complexityScore += 25;
@@ -441,9 +765,9 @@ function calculateQualityMetrics(
   const actionsWithComplexCode = actions.filter(a => 
     a.execute?.code?.script && a.execute.code.script.length > 200
   ).length;
-  const complexityPenalty = databaseGeneration.relationshipComplexity === 'complex' ? 20 : 
-                           databaseGeneration.relationshipComplexity === 'moderate' ? 10 : 0;
-  const maintainability = Math.max(0, 100 - (actionsWithComplexCode * 10) - complexityPenalty);
+  const relationshipComplexity = databaseGeneration.relationships.length > 10 ? 20 : 
+                                databaseGeneration.relationships.length > 5 ? 10 : 0;
+  const maintainability = Math.max(0, 100 - (actionsWithComplexCode * 10) - relationshipComplexity);
   
   return {
     actionCoverage: Math.round(actionCoverage),
@@ -516,4 +840,35 @@ export function extractActionInsights(output: Step4Output) {
     primaryActionTypes: [...new Set(output.actions.map(a => a.type))],
     requiresCarefulHandling: output.implementationComplexity === 'high' || output.validationResults.overallScore < 80
   };
+}
+
+/**
+ * Transform Step3Output models to AgentModel format for compatibility
+ */
+function transformStep3ModelsToAgentModels(step3Models: Step3Output['models']): any[] {
+  return step3Models.map(model => ({
+    id: model.name.toLowerCase(),
+    name: model.name,
+    displayName: model.displayName,
+    description: model.description,
+    tableName: model.tableName,
+    fields: model.fields.map(field => ({
+      id: `${model.name}.${field.name}`,
+      name: field.name,
+      displayName: field.displayName,
+      type: field.type,
+      description: field.description,
+      required: field.isRequired,
+      isId: field.isPrimary,
+      isUnique: field.isUnique,
+      defaultValue: field.defaultValue,
+      kind: field.type === 'Enum' ? 'enum' : 'scalar',
+      relationField: !!field.relationship,
+      list: false,
+      enumValues: field.enumValues
+    })),
+    idField: model.fields.find(f => f.isPrimary)?.name || 'id',
+    displayFields: model.fields.slice(0, 3).map(f => f.name),
+    enums: []
+  }));
 } 

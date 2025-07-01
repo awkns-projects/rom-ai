@@ -8,6 +8,7 @@ import {
   useCallback,
   useEffect,
   useState,
+  useMemo,
 } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { useDebounceCallback, useWindowSize } from 'usehooks-ts';
@@ -88,6 +89,13 @@ function PureArtifact({
   selectedVisibilityType: VisibilityType;
 }) {
   const { artifact, setArtifact, metadata, setMetadata } = useArtifact();
+
+  // Find artifact definition and memoize it to prevent lookup issues during race conditions
+  const artifactDefinition = useMemo(() => {
+    return artifactDefinitions.find(
+      (definition) => definition.kind === artifact.kind,
+    );
+  }, [artifact.kind]);
 
   const apiEndpoint = artifact.documentId !== 'init' && artifact.status !== 'streaming'
     ? `/api/document?id=${artifact.documentId}`
@@ -189,13 +197,18 @@ function PureArtifact({
         
         setDocument(mostRecentDocument);
         setCurrentVersionIndex(documents.length - 1);
-        setArtifact((currentArtifact) => ({
-          ...currentArtifact,
-          content: mostRecentDocument.content ?? '',
-        }));
+        
+        // Only update artifact content if it's actually different
+        // This prevents race conditions during save operations
+        if (mostRecentDocument.content !== artifact.content) {
+          setArtifact((currentArtifact) => ({
+            ...currentArtifact,
+            content: mostRecentDocument.content ?? '',
+          }));
+        }
       }
     }
-  }, [documents, setArtifact]);
+  }, [documents, setArtifact, artifact.content]);
 
   useEffect(() => {
     mutateDocuments();
@@ -358,17 +371,9 @@ function PureArtifact({
   const { width: windowWidth, height: windowHeight } = useWindowSize();
   const isMobile = windowWidth ? windowWidth < 768 : false;
 
-  const artifactDefinition = artifactDefinitions.find(
-    (definition) => definition.kind === artifact.kind,
-  );
-
-  if (!artifactDefinition) {
-    throw new Error('Artifact definition not found!');
-  }
-
   useEffect(() => {
     if (artifact.documentId !== 'init') {
-      if (artifactDefinition.initialize) {
+      if (artifactDefinition?.initialize) {
         artifactDefinition.initialize({
           documentId: artifact.documentId,
           setMetadata,
@@ -376,6 +381,22 @@ function PureArtifact({
       }
     }
   }, [artifact.documentId, artifactDefinition, setMetadata]);
+
+  // Handle missing artifact definition after all hooks have been called
+  if (!artifactDefinition) {
+    return (
+      <div className="flex items-center justify-center h-dvh w-dvw fixed top-0 left-0 z-50 bg-background">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-destructive mb-2">
+            Artifact Error
+          </h2>
+          <p className="text-muted-foreground">
+            Artifact definition not found for kind: {artifact.kind}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AnimatePresence>

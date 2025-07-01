@@ -311,6 +311,21 @@ const PureToolbar = ({
   setMessages: UseChatHelpers['setMessages'];
   artifactKind: ArtifactKind;
 }) => {
+  // Check artifact definition early to avoid hooks rule violation
+  const artifactDefinition = artifactDefinitions.find(
+    (definition) => definition.kind === artifactKind,
+  );
+
+  if (!artifactDefinition) {
+    throw new Error('Artifact definition not found!');
+  }
+
+  const toolsByArtifactKind = artifactDefinition.toolbar;
+
+  if (toolsByArtifactKind.length === 0) {
+    return null;
+  }
+
   const toolbarRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -352,20 +367,6 @@ const PureToolbar = ({
       setIsToolbarVisible(false);
     }
   }, [status, setIsToolbarVisible]);
-
-  const artifactDefinition = artifactDefinitions.find(
-    (definition) => definition.kind === artifactKind,
-  );
-
-  if (!artifactDefinition) {
-    throw new Error('Artifact definition not found!');
-  }
-
-  const toolsByArtifactKind = artifactDefinition.toolbar;
-
-  if (toolsByArtifactKind.length === 0) {
-    return null;
-  }
 
   return (
     <TooltipProvider delayDuration={0}>
