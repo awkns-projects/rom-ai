@@ -716,7 +716,7 @@ async function handleErrorReset(request: NextRequest, body: any) {
     console.error('Error reset failed:', error);
     return Response.json({
       error: 'Failed to reset errors',
-      details: error instanceof Error ? error.message : 'Unknown error'Add commentMore actions
+      details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
 } 
