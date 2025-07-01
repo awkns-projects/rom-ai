@@ -536,7 +536,7 @@ function DemoModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
                 <div className="text-purple-400">🎯 Configuring discount code generation...</div>
                 <div className="text-orange-400">⏰ Setting up 24-hour trigger scheduling...</div>
                 <div className="text-green-400">✅ Your cart recovery system is ready!</div>
-                <div className="text-cyan-400">🌐 Live at: https://cart-recovery.romcards.app</div>
+                <div className="text-cyan-400">🌐 Live at: https://cart-recovery.rom.cards</div>
                 <div className="text-green-300">📊 Database: Customer cart tracking</div>
                 <div className="text-yellow-300">💰 Ready to recover abandoned sales!</div>
               </div>
