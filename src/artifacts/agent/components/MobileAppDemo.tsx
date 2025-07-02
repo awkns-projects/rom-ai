@@ -18,160 +18,160 @@ interface MobileAppDemoWrapperProps {
 // Theme color definitions
 const themes = {
   green: {
-    name: 'Matrix Green',
+    name: 'Matrix',
     primary: 'green',
-    gradient: 'from-green-500/10 via-green-600/5 to-green-700/10',
-    border: 'border-green-500/20',
+    gradient: 'from-green-400/20 via-green-500/15 to-emerald-400/20',
+    border: 'border-green-400/30',
     accent: 'text-green-400',
     light: 'text-green-200',
     dim: 'text-green-300/70',
-    bg: 'bg-green-500/10',
-    bgHover: 'hover:bg-green-500/20',
-    borderActive: 'border-green-500/30',
-    bgActive: 'bg-green-500/20'
+    bg: 'bg-green-500/15',
+    bgHover: 'hover:bg-green-500/25',
+    borderActive: 'border-green-400/50',
+    bgActive: 'bg-green-500/25'
   },
   blue: {
-    name: 'Ocean Blue',
+    name: 'Ocean',
     primary: 'blue',
-    gradient: 'from-blue-500/10 via-blue-600/5 to-blue-700/10',
-    border: 'border-blue-500/20',
+    gradient: 'from-blue-400/20 via-sky-500/15 to-cyan-400/20',
+    border: 'border-blue-400/30',
     accent: 'text-blue-400',
     light: 'text-blue-200',
     dim: 'text-blue-300/70',
-    bg: 'bg-blue-500/10',
-    bgHover: 'hover:bg-blue-500/20',
-    borderActive: 'border-blue-500/30',
-    bgActive: 'bg-blue-500/20'
+    bg: 'bg-blue-500/15',
+    bgHover: 'hover:bg-blue-500/25',
+    borderActive: 'border-blue-400/50',
+    bgActive: 'bg-blue-500/25'
   },
   purple: {
-    name: 'Royal Purple',
+    name: 'Royal',
     primary: 'purple',
-    gradient: 'from-purple-500/10 via-purple-600/5 to-purple-700/10',
-    border: 'border-purple-500/20',
+    gradient: 'from-purple-400/20 via-violet-500/15 to-indigo-400/20',
+    border: 'border-purple-400/30',
     accent: 'text-purple-400',
     light: 'text-purple-200',
     dim: 'text-purple-300/70',
-    bg: 'bg-purple-500/10',
-    bgHover: 'hover:bg-purple-500/20',
-    borderActive: 'border-purple-500/30',
-    bgActive: 'bg-purple-500/20'
+    bg: 'bg-purple-500/15',
+    bgHover: 'hover:bg-purple-500/25',
+    borderActive: 'border-purple-400/50',
+    bgActive: 'bg-purple-500/25'
   },
   cyan: {
-    name: 'Cyber Cyan',
+    name: 'Cyber',
     primary: 'cyan',
-    gradient: 'from-cyan-500/10 via-cyan-600/5 to-cyan-700/10',
-    border: 'border-cyan-500/20',
-    accent: 'text-cyan-400',
-    light: 'text-cyan-200',
-    dim: 'text-cyan-300/70',
-    bg: 'bg-cyan-500/10',
-    bgHover: 'hover:bg-cyan-500/20',
-    borderActive: 'border-cyan-500/30',
-    bgActive: 'bg-cyan-500/20'
+    gradient: 'from-cyan-300/20 via-teal-400/15 to-emerald-300/20',
+    border: 'border-cyan-400/30',
+    accent: 'text-cyan-300',
+    light: 'text-cyan-100',
+    dim: 'text-cyan-200/70',
+    bg: 'bg-cyan-500/15',
+    bgHover: 'hover:bg-cyan-500/25',
+    borderActive: 'border-cyan-400/50',
+    bgActive: 'bg-cyan-500/25'
   },
   orange: {
-    name: 'Sunset Orange',
+    name: 'Sunset',
     primary: 'orange',
-    gradient: 'from-orange-500/10 via-orange-600/5 to-orange-700/10',
-    border: 'border-orange-500/20',
-    accent: 'text-orange-400',
-    light: 'text-orange-200',
-    dim: 'text-orange-300/70',
-    bg: 'bg-orange-500/10',
-    bgHover: 'hover:bg-orange-500/20',
-    borderActive: 'border-orange-500/30',
-    bgActive: 'bg-orange-500/20'
+    gradient: 'from-orange-400/20 via-amber-500/15 to-yellow-400/20',
+    border: 'border-orange-400/30',
+    accent: 'text-orange-300',
+    light: 'text-orange-100',
+    dim: 'text-orange-200/70',
+    bg: 'bg-orange-500/15',
+    bgHover: 'hover:bg-orange-500/25',
+    borderActive: 'border-orange-400/50',
+    bgActive: 'bg-orange-500/25'
   },
   pink: {
-    name: 'Neon Pink',
+    name: 'Neon',
     primary: 'pink',
-    gradient: 'from-pink-500/10 via-pink-600/5 to-pink-700/10',
-    border: 'border-pink-500/20',
-    accent: 'text-pink-400',
-    light: 'text-pink-200',
-    dim: 'text-pink-300/70',
-    bg: 'bg-pink-500/10',
-    bgHover: 'hover:bg-pink-500/20',
-    borderActive: 'border-pink-500/30',
-    bgActive: 'bg-pink-500/20'
+    gradient: 'from-pink-400/20 via-rose-500/15 to-fuchsia-400/20',
+    border: 'border-pink-400/30',
+    accent: 'text-pink-300',
+    light: 'text-pink-100',
+    dim: 'text-pink-200/70',
+    bg: 'bg-pink-500/15',
+    bgHover: 'hover:bg-pink-500/25',
+    borderActive: 'border-pink-400/50',
+    bgActive: 'bg-pink-500/25'
   },
   yellow: {
-    name: 'Golden Yellow',
+    name: 'Golden',
     primary: 'yellow',
-    gradient: 'from-yellow-500/10 via-yellow-600/5 to-yellow-700/10',
-    border: 'border-yellow-500/20',
-    accent: 'text-yellow-400',
-    light: 'text-yellow-200',
-    dim: 'text-yellow-300/70',
-    bg: 'bg-yellow-500/10',
-    bgHover: 'hover:bg-yellow-500/20',
-    borderActive: 'border-yellow-500/30',
-    bgActive: 'bg-yellow-500/20'
+    gradient: 'from-yellow-300/20 via-amber-400/15 to-orange-300/20',
+    border: 'border-yellow-400/30',
+    accent: 'text-yellow-300',
+    light: 'text-yellow-100',
+    dim: 'text-yellow-200/70',
+    bg: 'bg-yellow-500/15',
+    bgHover: 'hover:bg-yellow-500/25',
+    borderActive: 'border-yellow-400/50',
+    bgActive: 'bg-yellow-500/25'
   },
   red: {
-    name: 'Fire Red',
+    name: 'Fire',
     primary: 'red',
-    gradient: 'from-red-500/10 via-red-600/5 to-red-700/10',
-    border: 'border-red-500/20',
-    accent: 'text-red-400',
-    light: 'text-red-200',
-    dim: 'text-red-300/70',
-    bg: 'bg-red-500/10',
-    bgHover: 'hover:bg-red-500/20',
-    borderActive: 'border-red-500/30',
-    bgActive: 'bg-red-500/20'
+    gradient: 'from-red-400/20 via-rose-500/15 to-pink-400/20',
+    border: 'border-red-400/30',
+    accent: 'text-red-300',
+    light: 'text-red-100',
+    dim: 'text-red-200/70',
+    bg: 'bg-red-500/15',
+    bgHover: 'hover:bg-red-500/25',
+    borderActive: 'border-red-400/50',
+    bgActive: 'bg-red-500/25'
   },
   indigo: {
-    name: 'Deep Indigo',
+    name: 'Deep',
     primary: 'indigo',
-    gradient: 'from-indigo-500/10 via-indigo-600/5 to-indigo-700/10',
-    border: 'border-indigo-500/20',
-    accent: 'text-indigo-400',
-    light: 'text-indigo-200',
-    dim: 'text-indigo-300/70',
-    bg: 'bg-indigo-500/10',
-    bgHover: 'hover:bg-indigo-500/20',
-    borderActive: 'border-indigo-500/30',
-    bgActive: 'bg-indigo-500/20'
+    gradient: 'from-indigo-400/20 via-blue-600/15 to-slate-400/20',
+    border: 'border-indigo-400/30',
+    accent: 'text-indigo-300',
+    light: 'text-indigo-100',
+    dim: 'text-indigo-200/70',
+    bg: 'bg-indigo-500/15',
+    bgHover: 'hover:bg-indigo-500/25',
+    borderActive: 'border-indigo-400/50',
+    bgActive: 'bg-indigo-500/25'
   },
   emerald: {
-    name: 'Emerald Green',
+    name: 'Emerald',
     primary: 'emerald',
-    gradient: 'from-emerald-500/10 via-emerald-600/5 to-emerald-700/10',
-    border: 'border-emerald-500/20',
-    accent: 'text-emerald-400',
-    light: 'text-emerald-200',
-    dim: 'text-emerald-300/70',
-    bg: 'bg-emerald-500/10',
-    bgHover: 'hover:bg-emerald-500/20',
-    borderActive: 'border-emerald-500/30',
-    bgActive: 'bg-emerald-500/20'
+    gradient: 'from-emerald-400/20 via-green-600/15 to-teal-400/20',
+    border: 'border-emerald-400/30',
+    accent: 'text-emerald-300',
+    light: 'text-emerald-100',
+    dim: 'text-emerald-200/70',
+    bg: 'bg-emerald-500/15',
+    bgHover: 'hover:bg-emerald-500/25',
+    borderActive: 'border-emerald-400/50',
+    bgActive: 'bg-emerald-500/25'
   },
   teal: {
-    name: 'Teal Blue',
+    name: 'Teal',
     primary: 'teal',
-    gradient: 'from-teal-500/10 via-teal-600/5 to-teal-700/10',
-    border: 'border-teal-500/20',
-    accent: 'text-teal-400',
-    light: 'text-teal-200',
-    dim: 'text-teal-300/70',
-    bg: 'bg-teal-500/10',
-    bgHover: 'hover:bg-teal-500/20',
-    borderActive: 'border-teal-500/30',
-    bgActive: 'bg-teal-500/20'
+    gradient: 'from-teal-400/20 via-cyan-600/15 to-blue-400/20',
+    border: 'border-teal-400/30',
+    accent: 'text-teal-300',
+    light: 'text-teal-100',
+    dim: 'text-teal-200/70',
+    bg: 'bg-teal-500/15',
+    bgHover: 'hover:bg-teal-500/25',
+    borderActive: 'border-teal-400/50',
+    bgActive: 'bg-teal-500/25'
   },
   rose: {
-    name: 'Rose Gold',
+    name: 'Rose',
     primary: 'rose',
-    gradient: 'from-rose-500/10 via-rose-600/5 to-rose-700/10',
-    border: 'border-rose-500/20',
-    accent: 'text-rose-400',
-    light: 'text-rose-200',
-    dim: 'text-rose-300/70',
-    bg: 'bg-rose-500/10',
-    bgHover: 'hover:bg-rose-500/20',
-    borderActive: 'border-rose-500/30',
-    bgActive: 'bg-rose-500/20'
+    gradient: 'from-rose-400/20 via-pink-600/15 to-red-400/20',
+    border: 'border-rose-400/30',
+    accent: 'text-rose-300',
+    light: 'text-rose-100',
+    dim: 'text-rose-200/70',
+    bg: 'bg-rose-500/15',
+    bgHover: 'hover:bg-rose-500/25',
+    borderActive: 'border-rose-400/50',
+    bgActive: 'bg-rose-500/25'
   }
 };
 
@@ -238,20 +238,29 @@ export const MobileAppDemoWrapper = memo(({ agentData, onThemeChange, onDataChan
               <button
                 key={key}
                 onClick={() => handleThemeChange(key as keyof typeof themes)}
-                className={`group flex flex-col items-center gap-2 p-2 rounded-lg transition-all duration-200 ${
+                className={`group flex flex-col items-center gap-2 p-3 rounded-lg transition-all duration-300 transform hover:scale-105 ${
                   currentTheme === key 
-                    ? `bg-${themeOption.primary}-500/20 border-2 border-${themeOption.primary}-400 shadow-lg shadow-${themeOption.primary}-500/30` 
-                    : `border-2 border-${themeOption.primary}-500/20 hover:border-${themeOption.primary}-400/60 hover:bg-${themeOption.primary}-500/10`
+                    ? `bg-${themeOption.primary}-500/25 border-2 border-${themeOption.primary}-400/60 shadow-xl shadow-${themeOption.primary}-500/40 scale-105` 
+                    : `border-2 border-${themeOption.primary}-500/30 hover:border-${themeOption.primary}-400/70 hover:bg-${themeOption.primary}-500/15 hover:shadow-lg hover:shadow-${themeOption.primary}-500/20`
                 }`}
                 title={themeOption.name}
               >
-                <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${themeOption.gradient} border border-${themeOption.primary}-500/30`}></div>
-                <span className={`text-xs font-mono font-medium transition-colors ${
+                <div className={`relative w-10 h-10 rounded-xl bg-gradient-to-br ${themeOption.gradient} border-2 border-${themeOption.primary}-400/40 shadow-lg transition-all duration-300 ${
+                  currentTheme === key 
+                    ? `shadow-${themeOption.primary}-500/50 border-${themeOption.primary}-300/60` 
+                    : `group-hover:shadow-${themeOption.primary}-500/40`
+                }`}>
+                  {/* Inner glow effect */}
+                  <div className={`absolute inset-1 rounded-lg bg-gradient-to-br from-${themeOption.primary}-300/30 to-transparent`}></div>
+                  {/* Center highlight */}
+                  <div className={`absolute top-2 left-2 w-2 h-2 rounded-full bg-${themeOption.primary}-200/80 blur-sm`}></div>
+                </div>
+                <span className={`text-xs font-mono font-bold transition-colors duration-300 ${
                   currentTheme === key 
                     ? themeOption.accent.replace('text-', 'text-')
                     : 'text-green-400/70 group-hover:text-green-300'
                 }`}>
-                  {themeOption.name.split(' ')[0]}
+                  {themeOption.name}
                 </span>
               </button>
             ))}
