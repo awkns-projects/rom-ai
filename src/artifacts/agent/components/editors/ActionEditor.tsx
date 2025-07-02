@@ -823,22 +823,17 @@ export const ActionEditor = memo(({
           <p className="text-blue-400 text-sm font-mono">Choose your preferred editing experience</p>
         </div>
       </div>
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
+        {/* <span className="text-xs text-blue-400 font-mono">
+          {viewMode === 'mindmap' ? '🧠 Mind Map' : '📝 Traditional'}
+        </span> */}
         <Button
-          onClick={() => setViewMode('mindmap')}
-          variant={viewMode === 'mindmap' ? 'default' : 'outline'}
+          onClick={() => setViewMode(viewMode === 'mindmap' ? 'traditional' : 'mindmap')}
+          variant="outline"
           size="sm"
-          className="font-mono"
+          className="w-8 h-8 p-0 border-blue-500/30 hover:border-blue-400"
         >
-          🧠 Mind Map
-        </Button>
-        <Button
-          onClick={() => setViewMode('traditional')}
-          variant={viewMode === 'traditional' ? 'default' : 'outline'}
-          size="sm"
-          className="font-mono"
-        >
-          📝 Traditional
+          <span className="text-sm">🔄</span>
         </Button>
       </div>
     </div>
@@ -947,13 +942,13 @@ export const ActionEditor = memo(({
             <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
               <div className="flex items-center justify-between mb-6">
                 <h4 className="text-lg font-bold text-blue-200 font-mono">2. AI-Generated Pseudo Steps</h4>
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   <Button
                     onClick={addPseudoStep}
-                    className="btn-matrix px-4 py-2 text-sm font-mono"
+                    className="btn-matrix px-6 py-3 text-sm font-mono flex items-center gap-2"
                   >
                     <PlusIcon size={16} />
-                    <span className="ml-2">Add Step</span>
+                    <span>Add Step</span>
                   </Button>
                 </div>
               </div>
@@ -966,9 +961,9 @@ export const ActionEditor = memo(({
                       <Button
                         onClick={() => deletePseudoStep(step.id)}
                         variant="destructive"
-                        size="sm"
+                        className="px-3 py-2 h-8 min-w-[80px]"
                       >
-                        <CrossIcon size={16} />
+                        <CrossIcon size={14} />
                       </Button>
                     </div>
                     
@@ -1104,10 +1099,10 @@ export const ActionEditor = memo(({
                     <Label className="text-blue-300 font-mono font-medium">Environment Variables</Label>
                     <Button
                       onClick={addEnvVar}
-                      className="btn-matrix px-4 py-2 text-sm font-mono"
+                      className="btn-matrix px-6 py-3 text-sm font-mono flex items-center gap-2"
                     >
                       <PlusIcon size={16} />
-                      <span className="ml-2">Add Env Var</span>
+                      <span>Add Env Var</span>
                     </Button>
                   </div>
                   
@@ -1149,9 +1144,9 @@ export const ActionEditor = memo(({
                         <Button
                           onClick={() => deleteEnvVar(index)}
                           variant="destructive"
-                          size="sm"
+                          size="lg"
                         >
-                          <CrossIcon size={16} />
+                          <CrossIcon size={14} />
                         </Button>
                       </div>
                     ))}
@@ -1315,7 +1310,7 @@ export const ActionEditor = memo(({
 
                       {executionResult.result && (
                         <div className="space-y-2">
-                          <div className="text-sm font-medium text-blue-400 font-mono">�� Execution Result</div>
+                          <div className="text-sm font-medium text-blue-400 font-mono">Execution Result</div>
                           <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
                             <pre className="text-xs text-blue-200 font-mono whitespace-pre-wrap overflow-x-auto">
                               {typeof executionResult.result === 'string' 
@@ -1374,7 +1369,7 @@ export const ActionEditor = memo(({
                         setShowRunModeModal(true);
                       }}
                       disabled={isExecuting}
-                      className="btn-matrix px-6 py-2"
+                      className="btn-matrix px-8 py-3 text-base font-medium"
                     >
                       {isExecuting ? 'Running...' : 'Run'}
                     </Button>

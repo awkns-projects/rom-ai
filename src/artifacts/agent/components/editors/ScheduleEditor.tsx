@@ -738,12 +738,11 @@ export const ScheduleEditor = memo(({
                 />
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="lg"
                   onClick={() => {
                     const newArray = arrayValue.filter((_, i) => i !== index);
                     setInputValues(prev => ({ ...prev, [param.name]: newArray }));
                   }}
-                  className="px-2"
                 >
                   <CrossIcon size={14} />
                 </Button>
@@ -859,22 +858,17 @@ export const ScheduleEditor = memo(({
           <p className="text-orange-400 text-sm font-mono">Choose your preferred editing experience</p>
         </div>
       </div>
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
+        {/* <span className="text-xs text-orange-400 font-mono">
+          {viewMode === 'mindmap' ? '🧠 Mind Map' : '📝 Traditional'}
+        </span> */}
         <Button
-          onClick={() => setViewMode('mindmap')}
-          variant={viewMode === 'mindmap' ? 'default' : 'outline'}
+          onClick={() => setViewMode(viewMode === 'mindmap' ? 'traditional' : 'mindmap')}
+          variant="outline"
           size="sm"
-          className="font-mono"
+          className="w-8 h-8 p-0 border-orange-500/30 hover:border-orange-400"
         >
-          🧠 Mind Map
-        </Button>
-        <Button
-          onClick={() => setViewMode('traditional')}
-          variant={viewMode === 'traditional' ? 'default' : 'outline'}
-          size="sm"
-          className="font-mono"
-        >
-          📝 Traditional
+          <span className="text-sm">🔄</span>
         </Button>
       </div>
     </div>
@@ -986,10 +980,10 @@ export const ScheduleEditor = memo(({
                 <div className="flex gap-2">
                   <Button
                     onClick={addPseudoStep}
-                    className="bg-orange-600 hover:bg-orange-700 text-white border-orange-500/30 px-4 py-2 text-sm font-mono"
+                    className="btn-matrix px-6 py-3 text-sm font-mono flex items-center gap-2"
                   >
                     <PlusIcon size={16} />
-                    <span className="ml-2">Add Step</span>
+                    <span>Add Step</span>
                   </Button>
                 </div>
               </div>
@@ -1002,9 +996,9 @@ export const ScheduleEditor = memo(({
                       <Button
                         onClick={() => deletePseudoStep(step.id)}
                         variant="destructive"
-                        size="sm"
+                        size="lg"
                       >
-                        <CrossIcon size={16} />
+                        <CrossIcon size={14} />
                       </Button>
                     </div>
                     
@@ -1185,9 +1179,9 @@ export const ScheduleEditor = memo(({
                         <Button
                           onClick={() => deleteEnvVar(index)}
                           variant="destructive"
-                          size="sm"
+                          size="lg"
                         >
-                          <CrossIcon size={16} />
+                          <CrossIcon size={14} />
                         </Button>
                       </div>
                     ))}
@@ -1499,7 +1493,7 @@ export const ScheduleEditor = memo(({
                 <Button
                   onClick={() => setShowRunModeModal(false)}
                   variant="outline"
-                  className="px-4 py-2"
+                  size="lg"
                 >
                   Cancel
                 </Button>
@@ -1585,7 +1579,7 @@ export const ScheduleEditor = memo(({
                 <Button
                   onClick={() => setShowInputDialog(false)}
                   variant="outline"
-                  className="px-4 py-2"
+                  size="lg"
                 >
                   Cancel
                 </Button>
