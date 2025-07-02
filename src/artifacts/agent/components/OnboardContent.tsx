@@ -1,15 +1,69 @@
 import * as React from 'react';
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { MobileAppDemoWrapper } from './MobileAppDemo';
+import { MobileAppDemoWrapper, MobileAppDemo, themes } from './MobileAppDemo';
 
 interface OnboardContentProps {
-  onTabChange?: (tab: 'models' | 'actions' | 'schedules') => void;
+  onTabChange?: (tab: 'models' | 'actions' | 'schedules' | 'chat') => void;
   models?: any[]; // Array of models to determine default view
   agentData?: any; // Add agentData prop
   onThemeChange?: (theme: string) => void; // Add theme change callback
   onDataChange?: (agentData: any) => void; // Add data change callback
 }
+
+// Simple wrapper to set the correct tab for the demo
+const DemoWithTab = memo(({ agentData, currentTheme, viewMode, targetTab, onDataChange }: {
+  agentData: any;
+  currentTheme: string;
+  viewMode: string;
+  targetTab: number;
+  onDataChange?: (agentData: any) => void;
+}) => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [key, setKey] = useState(0);
+
+  // Force re-render when targetTab changes to reset the component state
+  useEffect(() => {
+    setKey(prev => prev + 1);
+  }, [targetTab]);
+
+  // Set the correct tab after component mounts
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (containerRef.current) {
+        // Look for tab buttons within this specific demo instance
+        const tabButtons = containerRef.current.querySelectorAll('button');
+        // Find the tab button by looking for the one that contains the tab content we want
+        const targetButton = Array.from(tabButtons).find((button, index) => {
+          // The tab buttons are typically in a specific order: Dashboard(0), Models(1), Schedules(2), Chat(3)
+          const buttonText = button.textContent?.toLowerCase() || '';
+          if (targetTab === 0 && buttonText.includes('dashboard')) return true;
+          if (targetTab === 1 && buttonText.includes('models')) return true;
+          if (targetTab === 2 && buttonText.includes('schedules')) return true;
+          if (targetTab === 3 && buttonText.includes('chat')) return true;
+          return false;
+        });
+        
+        if (targetButton) {
+          targetButton.click();
+        }
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [targetTab, key]);
+
+  return (
+    <div ref={containerRef} key={`${key}-${targetTab}`}>
+      <MobileAppDemo
+        agentData={agentData}
+        currentTheme={currentTheme as any}
+        viewMode={viewMode as any}
+        onDataChange={onDataChange}
+      />
+    </div>
+  );
+});
 
 export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThemeChange, onDataChange }: OnboardContentProps) => {
   // Determine initial view based on models length
@@ -17,19 +71,234 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
   const [showDemo, setShowDemo] = useState(hasModels);
   const [currentSlide, setCurrentSlide] = useState(0);
 
+  // Get the current theme from agent data or default to green
+  const currentAgentTheme = agentData?.theme || 'green';
+  const currentTheme = themes[currentAgentTheme as keyof typeof themes] || themes.green;
+
+  // Sample data for each tutorial slide
+  const getSampleDataForSlide = (slideId: 'models' | 'actions' | 'schedules' | 'chat') => {
+    const baseData = {
+      id: 'tutorial-agent-' + slideId,
+      name: 'Tutorial Agent',
+      description: 'Interactive tutorial demonstration agent',
+      domain: 'E-commerce',
+      theme: currentAgentTheme, // Use the actual agent theme
+      createdAt: new Date().toISOString(),
+      models: [] as any[],
+      actions: [] as any[],
+      schedules: [] as any[]
+    };
+
+    switch (slideId) {
+      case 'models':
+        return {
+          ...baseData,
+          theme: currentAgentTheme, // Use the actual agent theme
+          models: [
+            {
+              id: 'customer-model',
+              name: 'Customer',
+              emoji: '👤',
+              hasPublishedField: true,
+              idField: 'id',
+              displayFields: ['name', 'email'],
+              fields: [
+                { id: '1', name: 'id', type: 'String', description: 'Unique identifier', isId: true, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'ID', sort: true, order: 1 },
+                { id: '2', name: 'email', type: 'String', description: 'Customer email', isId: false, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'Email', sort: true, order: 2 },
+                { id: '3', name: 'name', type: 'String', description: 'Full name', isId: false, unique: false, list: false, required: true, kind: 'scalar', relationField: false, title: 'Name', sort: true, order: 3 },
+                { id: '4', name: 'status', type: 'String', description: 'Customer status', isId: false, unique: false, list: false, required: false, kind: 'enum', relationField: false, title: 'Status', sort: true, order: 4 }
+              ],
+              enums: [],
+              records: [
+                { id: '1', modelId: 'customer-model', data: { id: '1', email: 'john@example.com', name: 'John Doe', status: 'active' }, createdAt: '2024-01-15T10:00:00Z', updatedAt: '2024-01-15T10:00:00Z' },
+                { id: '2', modelId: 'customer-model', data: { id: '2', email: 'jane@example.com', name: 'Jane Smith', status: 'pending' }, createdAt: '2024-01-16T10:00:00Z', updatedAt: '2024-01-16T10:00:00Z' },
+                { id: '3', modelId: 'customer-model', data: { id: '3', email: 'bob@example.com', name: 'Bob Wilson', status: 'active' }, createdAt: '2024-01-17T10:00:00Z', updatedAt: '2024-01-17T10:00:00Z' }
+              ]
+            },
+            {
+              id: 'cart-model',
+              name: 'Shopping Cart',
+              emoji: '🛒',
+              hasPublishedField: false,
+              idField: 'id',
+              displayFields: ['customer_email', 'total'],
+              fields: [
+                { id: '1', name: 'id', type: 'String', description: 'Unique identifier', isId: true, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'ID', sort: true, order: 1 },
+                { id: '2', name: 'customer_email', type: 'String', description: 'Customer email', isId: false, unique: false, list: false, required: true, kind: 'scalar', relationField: false, title: 'Customer', sort: true, order: 2 },
+                { id: '3', name: 'total', type: 'Float', description: 'Cart total', isId: false, unique: false, list: false, required: false, kind: 'scalar', relationField: false, title: 'Total', sort: true, order: 3 },
+                { id: '4', name: 'abandoned_at', type: 'DateTime', description: 'When abandoned', isId: false, unique: false, list: false, required: false, kind: 'scalar', relationField: false, title: 'Abandoned At', sort: true, order: 4 }
+              ],
+              enums: [],
+              records: [
+                { id: '1', modelId: 'cart-model', data: { id: '1', customer_email: 'john@example.com', total: 299.99, abandoned_at: '2024-01-18T10:00:00Z' }, createdAt: '2024-01-18T10:00:00Z', updatedAt: '2024-01-18T10:00:00Z' },
+                { id: '2', modelId: 'cart-model', data: { id: '2', customer_email: 'jane@example.com', total: 149.50, abandoned_at: '2024-01-19T10:00:00Z' }, createdAt: '2024-01-19T10:00:00Z', updatedAt: '2024-01-19T10:00:00Z' }
+              ]
+            }
+          ]
+        };
+
+      case 'actions':
+        return {
+          ...baseData,
+          theme: currentAgentTheme, // Use the actual agent theme
+          models: [
+            {
+              id: 'customer-model',
+              name: 'Customer',
+              emoji: '👤',
+              idField: 'id',
+              displayFields: ['name', 'email'],
+              fields: [
+                { id: '1', name: 'id', type: 'String', description: 'Unique identifier', isId: true, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'ID', sort: true, order: 1 },
+                { id: '2', name: 'email', type: 'String', description: 'Customer email', isId: false, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'Email', sort: true, order: 2 }
+              ],
+              enums: [],
+              records: [
+                { id: '1', modelId: 'customer-model', data: { id: '1', email: 'john@example.com', name: 'John Doe' }, createdAt: '2024-01-15T10:00:00Z', updatedAt: '2024-01-15T10:00:00Z' }
+              ]
+            }
+          ],
+          actions: [
+            {
+              id: 'send-email-action',
+              name: 'Send Recovery Email',
+              description: 'Send automated cart recovery email to customers',
+              results: { actionType: 'Email Automation', status: 'Active', lastRun: '2024-01-20T10:00:00Z', successRate: '94%' }
+            },
+            {
+              id: 'update-customer-action',
+              name: 'Update Customer Status',
+              description: 'Automatically update customer engagement status',
+              results: { actionType: 'Data Update', status: 'Ready', lastRun: '2024-01-20T09:30:00Z', successRate: '100%' }
+            },
+            {
+              id: 'slack-notification-action',
+              name: 'Slack Notification',
+              description: 'Send alerts to team when high-value carts are abandoned',
+              results: { actionType: 'Notification', status: 'Active', lastRun: '2024-01-20T11:15:00Z', successRate: '98%' }
+            }
+          ]
+        };
+
+      case 'schedules':
+        return {
+          ...baseData,
+          theme: currentAgentTheme, // Use the actual agent theme
+          models: [
+            {
+              id: 'customer-model',
+              name: 'Customer',
+              emoji: '👤',
+              idField: 'id',
+              displayFields: ['name', 'email'],
+              fields: [
+                { id: '1', name: 'id', type: 'String', description: 'Unique identifier', isId: true, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'ID', sort: true, order: 1 }
+              ],
+              enums: [],
+              records: []
+            }
+          ],
+          actions: [
+            {
+              id: 'send-email-action',
+              name: 'Send Recovery Email',
+              results: { actionType: 'Email Automation' }
+            }
+          ],
+          schedules: [
+            {
+              id: 'daily-email-schedule',
+              name: 'Daily Email Campaign',
+              description: 'Send cart recovery emails every day at 10 AM',
+              interval: { pattern: '0 10 * * *', active: true },
+              nextRun: '2024-01-21T10:00:00Z',
+              lastRun: '2024-01-20T10:00:00Z',
+              status: 'Active'
+            },
+            {
+              id: 'weekly-report-schedule',
+              name: 'Weekly Analytics Report',
+              description: 'Generate and send weekly performance reports',
+              interval: { pattern: '0 9 * * 1', active: true },
+              nextRun: '2024-01-22T09:00:00Z',
+              lastRun: '2024-01-15T09:00:00Z',
+              status: 'Active'
+            },
+            {
+              id: 'hourly-check-schedule',
+              name: 'Abandoned Cart Check',
+              description: 'Check for new abandoned carts every hour',
+              interval: { pattern: '0 * * * *', active: false },
+              nextRun: null,
+              lastRun: '2024-01-20T11:00:00Z',
+              status: 'Paused'
+            }
+          ]
+        };
+
+      case 'chat':
+        return {
+          ...baseData,
+          theme: currentAgentTheme, // Use the actual agent theme
+          models: [
+            {
+              id: 'customer-model',
+              name: 'Customer',
+              emoji: '👤',
+              idField: 'id',
+              displayFields: ['name', 'email'],
+              fields: [
+                { id: '1', name: 'id', type: 'String', description: 'Unique identifier', isId: true, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'ID', sort: true, order: 1 },
+                { id: '2', name: 'email', type: 'String', description: 'Customer email', isId: false, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'Email', sort: true, order: 2 },
+                { id: '3', name: 'name', type: 'String', description: 'Full name', isId: false, unique: false, list: false, required: true, kind: 'scalar', relationField: false, title: 'Name', sort: true, order: 3 }
+              ],
+              enums: [],
+              records: [
+                { id: '1', modelId: 'customer-model', data: { id: '1', email: 'john@example.com', name: 'John Doe' }, createdAt: '2024-01-15T10:00:00Z', updatedAt: '2024-01-15T10:00:00Z' },
+                { id: '2', modelId: 'customer-model', data: { id: '2', email: 'jane@example.com', name: 'Jane Smith' }, createdAt: '2024-01-16T10:00:00Z', updatedAt: '2024-01-16T10:00:00Z' }
+              ]
+            }
+          ],
+          actions: [
+            {
+              id: 'send-email-action',
+              name: 'Send Recovery Email',
+              description: 'Send automated cart recovery email to customers',
+              results: { actionType: 'Email Automation', status: 'Active', lastRun: '2024-01-20T10:00:00Z', successRate: '94%' }
+            }
+          ],
+          schedules: [
+            {
+              id: 'daily-email-schedule',
+              name: 'Daily Email Campaign',
+              description: 'Send cart recovery emails every day at 10 AM',
+              interval: { pattern: '0 10 * * *', active: true },
+              nextRun: '2024-01-21T10:00:00Z',
+              lastRun: '2024-01-20T10:00:00Z',
+              status: 'Active'
+            }
+          ]
+        };
+
+      default:
+        return baseData;
+    }
+  };
+
   const slides = [
     {
       id: 'models' as const,
       title: 'Data Models & Structures',
       description: 'Define your data architecture with custom models, fields, relationships, and validation rules. Create the foundation for your agent\'s knowledge base.',
-      icon: '🗃️',
-      gradient: 'from-green-500/20 via-green-600/10 to-green-700/20',
-      border: 'border-green-500/30',
+      icon: '📊',
+      gradient: `from-${currentTheme.primary}-500/20 via-${currentTheme.primary}-600/10 to-${currentTheme.primary}-700/20`,
+      border: `border-${currentTheme.primary}-500/30`,
       buttonText: 'Start Building Models',
-      visualItems: [
-        { icon: '📋', color: 'green', label: 'Schema Design', description: 'Build custom data structures with fields, types, and relationships' },
-        { icon: '💾', color: 'blue', label: 'Data Management', description: 'Store, query, and manipulate your agent\'s knowledge data' },
-        { icon: '🔗', color: 'purple', label: 'Relationships', description: 'Connect models with foreign keys and complex associations' }
+      demoTab: 1, // Models tab
+      features: [
+        'Schema Design - Build custom data structures with fields, types, and relationships',
+        'Data Management - Store, query, and manipulate your agent\'s knowledge data',
+        'Relationships - Connect models with foreign keys and complex associations'
       ]
     },
     {
@@ -37,13 +306,14 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
       title: 'Automated Actions & Workflows',
       description: 'Design intelligent workflows that respond to events and execute complex operations. Connect to APIs, databases, and external services with custom actions.',
       icon: '⚡',
-      gradient: 'from-blue-500/20 via-blue-600/10 to-blue-700/20',
-      border: 'border-blue-500/30',
+      gradient: `from-${currentTheme.primary}-500/20 via-${currentTheme.primary}-600/10 to-${currentTheme.primary}-700/20`,
+      border: `border-${currentTheme.primary}-500/30`,
       buttonText: 'Create Actions',
-      visualItems: [
-        { icon: '🔄', color: 'blue', label: 'Event Triggers', description: 'Automatically respond to data changes and user interactions' },
-        { icon: '🌐', color: 'orange', label: 'API Integration', description: 'Connect to external services and REST APIs seamlessly' },
-        { icon: '⚙️', color: 'purple', label: 'Custom Logic', description: 'Build complex workflows with conditional logic and loops' }
+      demoTab: 0, // Dashboard tab to show actions in use
+      features: [
+        'Event Triggers - Automatically respond to data changes and user interactions',
+        'API Integration - Connect to external services and REST APIs seamlessly',
+        'Custom Logic - Build complex workflows with conditional logic and loops'
       ]
     },
     {
@@ -51,13 +321,29 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
       title: 'Scheduled Automation & Timing',
       description: 'Create time-based triggers and recurring workflows that execute automatically. Set up cron schedules, intervals, and event-driven timing for your actions.',
       icon: '⏰',
-      gradient: 'from-purple-500/20 via-purple-600/10 to-purple-700/20',
-      border: 'border-purple-500/30',
+      gradient: `from-${currentTheme.primary}-500/20 via-${currentTheme.primary}-600/10 to-${currentTheme.primary}-700/20`,
+      border: `border-${currentTheme.primary}-500/30`,
       buttonText: 'Setup Schedules',
-      visualItems: [
-        { icon: '⏰', color: 'purple', label: 'Cron Scheduling', description: 'Set precise timing with cron expressions and intervals' },
-        { icon: '🔄', color: 'blue', label: 'Recurring Tasks', description: 'Execute actions on regular intervals automatically' },
-        { icon: '📊', color: 'green', label: 'Monitoring', description: 'Track execution history and performance metrics' }
+      demoTab: 2, // Schedules tab
+      features: [
+        'Cron Scheduling - Set precise timing with cron expressions and intervals',
+        'Recurring Tasks - Execute actions on regular intervals automatically',
+        'Monitoring - Track execution history and performance metrics'
+      ]
+    },
+    {
+      id: 'chat' as const,
+      title: 'AI Assistant & Chat Interface',
+      description: 'Interact with your intelligent AI assistant that understands your data, executes actions, and provides insights. Get help, run queries, and manage your agent through natural conversation.',
+      icon: '🤖',
+      gradient: `from-${currentTheme.primary}-500/20 via-${currentTheme.primary}-600/10 to-${currentTheme.primary}-700/20`,
+      border: `border-${currentTheme.primary}-500/30`,
+      buttonText: 'Try AI Chat',
+      demoTab: 3, // Chat tab
+      features: [
+        'Natural Language - Ask questions and give commands in plain English',
+        'Data Insights - Get analytics and reports about your models and actions',
+        'Smart Actions - Execute workflows and automations through conversation'
       ]
     }
   ];
@@ -74,24 +360,11 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
     setCurrentSlide(index);
   }, []);
 
-  const handleTabNavigation = useCallback((tabId: 'models' | 'actions' | 'schedules') => {
+  const handleTabNavigation = useCallback((tabId: 'models' | 'actions' | 'schedules' | 'chat') => {
     if (onTabChange) {
       onTabChange(tabId);
     }
   }, [onTabChange]);
-
-  const getColorClasses = (color: string) => {
-    const colorMap = {
-      green: 'bg-green-500/20 border-green-500/30 text-green-200',
-      blue: 'bg-blue-500/20 border-blue-500/30 text-blue-200',
-      purple: 'bg-purple-500/20 border-purple-500/30 text-purple-200',
-      orange: 'bg-orange-500/20 border-orange-500/30 text-orange-200',
-      yellow: 'bg-yellow-500/20 border-yellow-500/30 text-yellow-200',
-      red: 'bg-red-500/20 border-red-500/30 text-red-200',
-      cyan: 'bg-cyan-500/20 border-cyan-500/30 text-cyan-200'
-    };
-    return colorMap[color as keyof typeof colorMap] || colorMap.green;
-  };
 
   const currentSlideData = slides[currentSlide];
 
@@ -100,7 +373,7 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
       {/* Switch Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold text-green-200 font-mono">Getting Started</h2>
+          <h2 className={`text-2xl font-bold ${currentTheme.light} font-mono`}>Getting Started</h2>
           <div className="flex gap-2 hidden md:flex">
             {!showDemo && slides.map((_, index) => (
               <button
@@ -108,8 +381,8 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
                 onClick={() => goToSlide(index)}
                 className={`w-2 h-2 rounded-full transition-colors ${
                   index === currentSlide 
-                    ? 'bg-green-400' 
-                    : 'bg-green-400/30 hover:bg-green-400/60'
+                    ? `bg-${currentTheme.primary}-400` 
+                    : `bg-${currentTheme.primary}-400/30 hover:bg-${currentTheme.primary}-400/60`
                 }`}
               />
             ))}
@@ -118,13 +391,13 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
         
         {/* View Switch */}
         <div className="flex items-center gap-2">
-          <div className="flex bg-green-500/10 border border-green-500/20 rounded-lg p-1">
+          <div className={`flex ${currentTheme.bg} border ${currentTheme.border} rounded-lg p-1`}>
             <button
               onClick={() => setShowDemo(false)}
               className={`px-3 py-2 text-xs font-mono rounded-md transition-all duration-200 ${
                 !showDemo
-                  ? 'bg-green-500/30 text-green-200 border border-green-500/40'
-                  : 'text-green-400 hover:bg-green-500/10'
+                  ? `${currentTheme.bgActive} ${currentTheme.light} border ${currentTheme.borderActive}`
+                  : `${currentTheme.accent} ${currentTheme.bgHover}`
               }`}
             >
               Tutorial
@@ -133,8 +406,8 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
               onClick={() => setShowDemo(true)}
               className={`px-3 py-2 text-xs font-mono rounded-md transition-all duration-200 ${
                 showDemo
-                  ? 'bg-green-500/30 text-green-200 border border-green-500/40'
-                  : 'text-green-400 hover:bg-green-500/10'
+                  ? `${currentTheme.bgActive} ${currentTheme.light} border ${currentTheme.borderActive}`
+                  : `${currentTheme.accent} ${currentTheme.bgHover}`
               }`}
             >
               Demo App
@@ -166,10 +439,10 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
       {showDemo ? (
         <div className="space-y-6">
           <div className="text-center space-y-4">
-            <h3 className="text-xl font-bold text-green-200 font-mono">
+            <h3 className={`text-xl font-bold ${currentTheme.light} font-mono`}>
               Your AI App Demo
             </h3>
-            <p className="text-green-300/80 font-mono text-sm max-w-2xl mx-auto leading-relaxed">
+            <p className={`${currentTheme.dim} font-mono text-sm max-w-2xl mx-auto leading-relaxed`}>
               This is what your agent builds - a fully functional cart recovery system with real-time data, 
               automated workflows, and intelligent AI assistance. Built from simple prompts like "help me recover abandoned shopping carts".
             </p>
@@ -180,14 +453,14 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
           </div>
           
           <div className="text-center space-y-4 pt-4">
-            <p className="text-green-400/70 font-mono text-xs">
+            <p className={`${currentTheme.dim} font-mono text-xs`}>
               ✨ This demo shows what's possible when you describe your business needs to our AI
             </p>
             <div className="flex flex-wrap justify-center gap-2 text-xs font-mono">
-              <span className="px-2 py-1 rounded bg-green-500/20 text-green-300">📊 Real-time Dashboard</span>
-              <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-300">🤖 AI Assistant</span>
-              <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-300">⏰ Smart Scheduling</span>
-              <span className="px-2 py-1 rounded bg-orange-500/20 text-orange-300">📧 Email Automation</span>
+              <span className={`px-2 py-1 rounded ${currentTheme.bg} ${currentTheme.accent}`}>📊 Real-time Dashboard</span>
+              <span className={`px-2 py-1 rounded ${currentTheme.bg} ${currentTheme.accent}`}>🤖 AI Assistant</span>
+              <span className={`px-2 py-1 rounded ${currentTheme.bg} ${currentTheme.accent}`}>⏰ Smart Scheduling</span>
+              <span className={`px-2 py-1 rounded ${currentTheme.bg} ${currentTheme.accent}`}>📧 Email Automation</span>
             </div>
           </div>
         </div>
@@ -205,166 +478,91 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
                   className="w-full flex-shrink-0"
                 >
                   <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${slide.gradient} border ${slide.border} backdrop-blur-sm`}>
-                    <div className="relative p-8">
-                      <div className="text-center space-y-6">
-                        {/* Main Icon and Decorative Elements */}
-                        <div className="flex justify-center items-center gap-4">
-                          <div className={`w-16 h-16 rounded-2xl bg-${slide.id === 'models' ? 'green' : slide.id === 'actions' ? 'blue' : 'purple'}-500/30 flex items-center justify-center border border-${slide.id === 'models' ? 'green' : slide.id === 'actions' ? 'blue' : 'purple'}-400/40`}>
-                            <span className="text-3xl">{slide.icon}</span>
-                          </div>
-                          
-                          {/* Decorative visual elements specific to each slide */}
-                          {slide.id === 'models' && (
-                            <>
-                              <div className="flex flex-col items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                                <div className="w-1 h-8 bg-gradient-to-b from-green-400 to-transparent"></div>
-                                <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="w-12 h-8 rounded-lg bg-green-400/20 border border-green-400/40 flex items-center justify-center">
-                                  <span className="text-xs font-mono text-green-300">📋</span>
-                                </div>
-                                <div className="w-12 h-8 rounded-lg bg-blue-400/20 border border-blue-400/40 flex items-center justify-center">
-                                  <span className="text-xs font-mono text-blue-300">💾</span>
-                                </div>
-                                <div className="w-12 h-8 rounded-lg bg-purple-400/20 border border-purple-400/40 flex items-center justify-center">
-                                  <span className="text-xs font-mono text-purple-300">🔗</span>
-                                </div>
-                                <div className="w-12 h-8 rounded-lg bg-yellow-400/20 border border-yellow-400/40 flex items-center justify-center">
-                                  <span className="text-xs font-mono text-yellow-300">📊</span>
-                                </div>
-                              </div>
-                            </>
-                          )}
-                          
-                          {slide.id === 'actions' && (
-                            <>
-                              <div className="flex items-center gap-3">
-                                <div className="flex flex-col items-center gap-1">
-                                  <div className="w-8 h-8 rounded-lg bg-blue-400/20 border border-blue-400/40 flex items-center justify-center">
-                                    <span className="text-xs">🔄</span>
-                                  </div>
-                                  <div className="w-0.5 h-6 bg-blue-400/50"></div>
-                                </div>
-                                <div className="flex flex-col items-center gap-1">
-                                  <div className="w-8 h-8 rounded-lg bg-green-400/20 border border-green-400/40 flex items-center justify-center">
-                                    <span className="text-xs">🎯</span>
-                                  </div>
-                                  <div className="w-0.5 h-6 bg-green-400/50"></div>
-                                </div>
-                                <div className="flex flex-col items-center gap-1">
-                                  <div className="w-8 h-8 rounded-lg bg-purple-400/20 border border-purple-400/40 flex items-center justify-center">
-                                    <span className="text-xs">✅</span>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="w-12 h-8 rounded-lg bg-orange-400/20 border border-orange-400/40 flex items-center justify-center">
-                                  <span className="text-xs font-mono text-orange-300">API</span>
-                                </div>
-                                <div className="w-12 h-8 rounded-lg bg-yellow-400/20 border border-yellow-400/40 flex items-center justify-center">
-                                  <span className="text-xs font-mono text-yellow-300">DB</span>
-                                </div>
-                                <div className="w-12 h-8 rounded-lg bg-red-400/20 border border-red-400/40 flex items-center justify-center">
-                                  <span className="text-xs font-mono text-red-300">MSG</span>
-                                </div>
-                                <div className="w-12 h-8 rounded-lg bg-cyan-400/20 border border-cyan-400/40 flex items-center justify-center">
-                                  <span className="text-xs font-mono text-cyan-300">CMD</span>
-                                </div>
-                              </div>
-                            </>
-                          )}
-                          
-                          {slide.id === 'schedules' && (
-                            <>
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-full border-2 border-purple-400/40 bg-purple-500/10 flex items-center justify-center relative">
-                                  <div className="w-0.5 h-4 bg-purple-400 absolute transform rotate-45 origin-bottom"></div>
-                                  <div className="w-0.5 h-3 bg-purple-300 absolute transform rotate-90 origin-bottom"></div>
-                                  <div className="w-1 h-1 rounded-full bg-purple-400 absolute"></div>
-                                </div>
-                                <div className="flex flex-col gap-1">
-                                  <div className="flex gap-1">
-                                    <div className="w-2 h-2 rounded-full bg-purple-400"></div>
-                                    <div className="w-2 h-2 rounded-full bg-purple-300"></div>
-                                    <div className="w-2 h-2 rounded-full bg-purple-200"></div>
-                                  </div>
-                                  <div className="flex gap-1">
-                                    <div className="w-2 h-2 rounded-full bg-purple-200"></div>
-                                    <div className="w-2 h-2 rounded-full bg-purple-300"></div>
-                                    <div className="w-2 h-2 rounded-full bg-purple-400"></div>
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="w-12 h-8 rounded-lg bg-blue-400/20 border border-blue-400/40 flex items-center justify-center">
-                                  <span className="text-xs font-mono text-blue-300">1h</span>
-                                </div>
-                                <div className="w-12 h-8 rounded-lg bg-green-400/20 border border-green-400/40 flex items-center justify-center">
-                                  <span className="text-xs font-mono text-green-300">24h</span>
-                                </div>
-                                <div className="w-12 h-8 rounded-lg bg-yellow-400/20 border border-yellow-400/40 flex items-center justify-center">
-                                  <span className="text-xs font-mono text-yellow-300">@</span>
-                                </div>
-                                <div className="w-12 h-8 rounded-lg bg-red-400/20 border border-red-400/40 flex items-center justify-center">
-                                  <span className="text-xs font-mono text-red-300">∞</span>
-                                </div>
-                              </div>
-                            </>
-                          )}
-                        </div>
+                    <div className="relative p-6">
+                      {/* Two Column Layout */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
                         
-                        {/* Title and Description */}
-                        <div className="space-y-3">
-                          <h3 className={`text-2xl font-bold font-mono ${
-                            slide.id === 'models' ? 'text-green-200' : 
-                            slide.id === 'actions' ? 'text-blue-200' : 
-                            'text-purple-200'
-                          }`}>
-                            {slide.title}
-                          </h3>
-                          <p className={`font-mono text-sm max-w-2xl mx-auto leading-relaxed ${
-                            slide.id === 'models' ? 'text-green-300' : 
-                            slide.id === 'actions' ? 'text-blue-300' : 
-                            'text-purple-300'
-                          }`}>
-                            {slide.description}
-                          </p>
-                        </div>
+                        {/* Left Column - Text Content */}
+                        <div className="space-y-6">
+                          {/* Icon and Title */}
+                          <div className="text-center lg:text-left space-y-4">
+                            <div className={`w-16 h-16 mx-auto lg:mx-0 rounded-2xl ${currentTheme.bg} flex items-center justify-center border ${currentTheme.borderActive}`}>
+                              <span className="text-3xl">{slide.icon}</span>
+                            </div>
+                            
+                            <div className="space-y-3">
+                              <h3 className={`text-2xl font-bold font-mono ${currentTheme.light}`}>
+                                {slide.title}
+                              </h3>
+                              <p className={`font-mono text-sm leading-relaxed ${currentTheme.dim}`}>
+                                {slide.description}
+                              </p>
+                            </div>
+                          </div>
 
-                        {/* Feature Cards */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto">
-                          {slide.visualItems.map((item, itemIndex) => (
-                            <div key={itemIndex} className={`p-4 rounded-xl backdrop-blur-sm ${getColorClasses(item.color)} border`}>
-                              <div className="text-center space-y-2">
-                                <div className={`w-10 h-10 mx-auto rounded-lg flex items-center justify-center ${getColorClasses(item.color).replace('border-', 'bg-').replace('/30', '/30')}`}>
-                                  <span className="text-lg">{item.icon}</span>
+                          {/* Feature List */}
+                          <div className="space-y-3">
+                            {slide.features.map((feature, featureIndex) => {
+                              const [title, description] = feature.split(' - ');
+                              return (
+                                <div key={featureIndex} className="flex items-start gap-3">
+                                  <div className={`w-2 h-2 rounded-full mt-2 bg-${currentTheme.primary}-400`}></div>
+                                  <div>
+                                    <div className={`font-mono font-semibold text-sm ${currentTheme.light}`}>
+                                      {title}
+                                    </div>
+                                    <div className={`font-mono text-xs mt-1 ${currentTheme.dim}`}>
+                                      {description}
+                                    </div>
+                                  </div>
                                 </div>
-                                <h4 className="font-mono font-semibold text-sm">{item.label}</h4>
-                                <p className="text-xs font-mono opacity-80">{item.description}</p>
+                              );
+                            })}
+                          </div>
+
+                          {/* Get Started Button */}
+                          <div className="pt-4">
+                            <Button
+                              onClick={() => {
+                                if (slide.id === 'chat') {
+                                  // For chat slide, switch to demo app mode
+                                  setShowDemo(true);
+                                } else {
+                                  // For other slides, navigate to the specific tab
+                                  handleTabNavigation(slide.id);
+                                }
+                              }}
+                              className={`px-6 py-3 font-mono text-sm font-semibold transition-all duration-200 ${currentTheme.bg} ${currentTheme.bgHover} ${currentTheme.light} border ${currentTheme.borderActive} backdrop-blur-sm`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span>{slide.buttonText}</span>
+                                <span className="text-lg">→</span>
                               </div>
-                            </div>
-                          ))}
+                            </Button>
+                          </div>
                         </div>
 
-                        {/* Get Started Button */}
-                        <div className="pt-4">
-                          <Button
-                            onClick={() => handleTabNavigation(slide.id)}
-                            className={`px-6 py-3 font-mono text-sm font-semibold transition-all duration-200 ${
-                              slide.id === 'models' 
-                                ? 'bg-green-500/20 hover:bg-green-500/30 text-green-200 border-green-500/40 hover:border-green-400'
-                                : slide.id === 'actions'
-                                ? 'bg-blue-500/20 hover:bg-blue-500/30 text-blue-200 border-blue-500/40 hover:border-blue-400'
-                                : 'bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 border-purple-500/40 hover:border-purple-400'
-                            } border backdrop-blur-sm`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span>{slide.buttonText}</span>
-                              <span className="text-lg">→</span>
+                        {/* Right Column - Interactive Demo */}
+                        <div className="flex justify-center">
+                          <div className="w-full max-w-sm">
+                            <div className="text-center mb-4">
+                              <h4 className={`font-mono text-sm font-semibold mb-2 ${currentTheme.light}`}>
+                                Interactive Demo
+                              </h4>
+                              <p className={`font-mono text-xs ${currentTheme.dim}`}>
+                                Try the {slide.title.split(' ')[0].toLowerCase()} features
+                              </p>
                             </div>
-                          </Button>
+                            
+                            {/* Interactive Demo Component */}
+                            <DemoWithTab
+                              agentData={getSampleDataForSlide(slide.id)}
+                              currentTheme={currentAgentTheme} // Use the actual agent theme
+                              viewMode="mobile"
+                              targetTab={slide.demoTab}
+                              onDataChange={onDataChange}
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -376,7 +574,7 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
 
           {/* Slide Counter */}
           <div className="text-center">
-            <span className="text-green-400 text-sm font-mono">
+            <span className={`${currentTheme.accent} text-sm font-mono`}>
               {currentSlide + 1} of {slides.length}
             </span>
           </div>

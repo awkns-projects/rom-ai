@@ -1145,8 +1145,8 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <h3 className={`font-mono font-bold text-lg ${theme.light}`}>{tabs[activeTab].label}</h3>
-                </div>
-                <div className="flex gap-1">
+          </div>
+          <div className="flex gap-1">
                   <div className={`w-1 h-1 bg-${theme.primary}-400 rounded-full`}></div>
                   <div className={`w-1 h-1 bg-${theme.primary}-400 rounded-full`}></div>
                   <div className={`w-1 h-1 bg-${theme.primary}-400 rounded-full`}></div>
@@ -1189,29 +1189,29 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
               <div className={`w-1 h-1 bg-${theme.primary}-400 rounded-full`}></div>
               <div className={`w-1 h-1 bg-${theme.primary}-400 rounded-full`}></div>
               <div className={`w-1 h-1 bg-${theme.primary}-400 rounded-full`}></div>
-            </div>
           </div>
         </div>
+      </div>
 
-        {/* Content Area */}
+      {/* Content Area */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          {renderTabContent()}
-        </div>
+        {renderTabContent()}
+      </div>
 
-        {/* Bottom Tab Navigation */}
+      {/* Bottom Tab Navigation */}
         <div className={`bg-black/60 border-t ${theme.border} p-2 flex-shrink-0`}>
-          <div className={`grid gap-1`} style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
-            {tabs.map((tab, index) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(index)}
-                className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all duration-200 ${
-                  activeTab === index
+        <div className={`grid gap-1`} style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
+          {tabs.map((tab, index) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(index)}
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all duration-200 ${
+                activeTab === index
                     ? `${theme.bgActive} border ${theme.borderActive}`
                     : theme.bgHover
-                }`}
-              >
-                <span className="text-lg mb-1">{tab.icon}</span>
+              }`}
+            >
+              <span className="text-lg mb-1">{tab.icon}</span>
                 <span className={`text-xs font-mono font-medium ${
                   activeTab === index 
                     ? theme.light
@@ -1219,11 +1219,11 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
                 }`}>
                   {tab.label}
                 </span>
-              </button>
-            ))}
-          </div>
+            </button>
+          ))}
         </div>
       </div>
+    </div>
       {/* Model Modal */}
       {renderModelModal()}
     </>
