@@ -288,62 +288,62 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
   const slides = [
     {
       id: 'models' as const,
-      title: 'Data Models & Structures',
-      description: 'Define your data architecture with custom models, fields, relationships, and validation rules. Create the foundation for your agent\'s knowledge base.',
+      title: 'Your Data & Information',
+      description: 'Set up what information your AI assistant knows about - like customer details, products, or any data that matters to your business. Think of it as organizing your digital filing cabinet.',
       icon: '📊',
       gradient: `from-${currentTheme.primary}-500/20 via-${currentTheme.primary}-600/10 to-${currentTheme.primary}-700/20`,
       border: `border-${currentTheme.primary}-500/30`,
-      buttonText: 'Start Building Models',
+      buttonText: 'Organize My Data',
       demoTab: 1, // Models tab
       features: [
-        'Schema Design - Build custom data structures with fields, types, and relationships',
-        'Data Management - Store, query, and manipulate your agent\'s knowledge data',
-        'Relationships - Connect models with foreign keys and complex associations'
+        'Information Setup - Tell your AI what customer info, products, or business data to track',
+        'Smart Organization - Store and find your important business information easily',
+        'Connect the Dots - Link related information together (like customers to their orders)'
       ]
     },
     {
       id: 'actions' as const,
-      title: 'Automated Actions & Workflows',
-      description: 'Design intelligent workflows that respond to events and execute complex operations. Connect to APIs, databases, and external services with custom actions.',
+      title: 'Smart Actions & Helpers',
+      description: 'Create helpful automations that do things for you automatically - like sending emails, updating information, or connecting with your favorite apps and tools.',
       icon: '⚡',
       gradient: `from-${currentTheme.primary}-500/20 via-${currentTheme.primary}-600/10 to-${currentTheme.primary}-700/20`,
       border: `border-${currentTheme.primary}-500/30`,
-      buttonText: 'Create Actions',
+      buttonText: 'Add Smart Actions',
       demoTab: 0, // Dashboard tab to show actions in use
       features: [
-        'Event Triggers - Automatically respond to data changes and user interactions',
-        'API Integration - Connect to external services and REST APIs seamlessly',
-        'Custom Logic - Build complex workflows with conditional logic and loops'
+        'Auto-Responses - Your AI automatically reacts when things happen in your business',
+        'App Connections - Connect to email, Slack, spreadsheets, and other tools you use',
+        'Smart Decisions - Set up "if this, then that" logic to handle different situations'
       ]
     },
     {
       id: 'schedules' as const,
-      title: 'Scheduled Automation & Timing',
-      description: 'Create time-based triggers and recurring workflows that execute automatically. Set up cron schedules, intervals, and event-driven timing for your actions.',
+      title: 'Timing & Reminders',
+      description: 'Set up when things should happen automatically - like sending weekly reports, daily check-ins, or reminders. Your AI assistant works around the clock, even when you\'re sleeping.',
       icon: '⏰',
       gradient: `from-${currentTheme.primary}-500/20 via-${currentTheme.primary}-600/10 to-${currentTheme.primary}-700/20`,
       border: `border-${currentTheme.primary}-500/30`,
-      buttonText: 'Setup Schedules',
+      buttonText: 'Set Up Timing',
       demoTab: 2, // Schedules tab
       features: [
-        'Cron Scheduling - Set precise timing with cron expressions and intervals',
-        'Recurring Tasks - Execute actions on regular intervals automatically',
-        'Monitoring - Track execution history and performance metrics'
+        'Perfect Timing - Choose exactly when things should happen (daily, weekly, or custom)',
+        'Repeat Tasks - Set up things to happen automatically on a regular schedule',
+        'Stay Informed - See what happened and when, so you\'re always in the loop'
       ]
     },
     {
       id: 'chat' as const,
-      title: 'AI Assistant & Chat Interface',
-      description: 'Interact with your intelligent AI assistant that understands your data, executes actions, and provides insights. Get help, run queries, and manage your agent through natural conversation.',
+      title: 'Your AI Assistant & Chat',
+      description: 'Talk to your intelligent AI helper that knows your business inside and out. Ask questions, get insights, and tell it what to do - all in plain English, just like texting a friend.',
       icon: '🤖',
       gradient: `from-${currentTheme.primary}-500/20 via-${currentTheme.primary}-600/10 to-${currentTheme.primary}-700/20`,
       border: `border-${currentTheme.primary}-500/30`,
-      buttonText: 'Try AI Chat',
+      buttonText: 'Chat with My AI',
       demoTab: 3, // Chat tab
       features: [
-        'Natural Language - Ask questions and give commands in plain English',
-        'Data Insights - Get analytics and reports about your models and actions',
-        'Smart Actions - Execute workflows and automations through conversation'
+        'Talk Naturally - Just type what you want, no special commands or technical language needed',
+        'Business Insights - Ask about your customers, sales, or trends and get smart answers',
+        'Easy Commands - Tell your AI to send emails, update info, or run tasks through chat'
       ]
     }
   ];
