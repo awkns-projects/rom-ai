@@ -277,6 +277,43 @@
     }
 }
 
+/* AI Generation Effect Animations */
+@keyframes ai-glow {
+
+    0%,
+    100% {
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), 0 0 30px rgba(59, 130, 246, 0.2);
+    }
+
+    50% {
+        box-shadow: 0 0 30px rgba(59, 130, 246, 0.6), 0 0 40px rgba(59, 130, 246, 0.4), 0 0 50px rgba(59, 130, 246, 0.2);
+    }
+}
+
+@keyframes ai-shimmer {
+    0% {
+        background-position: -200px 0;
+    }
+
+    100% {
+        background-position: calc(200px + 100%) 0;
+    }
+}
+
+.ai-generating {
+    position: relative;
+    overflow: hidden;
+}
+
+.ai-generating::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.2), transparent);
+    transform: translateX(-100%);
+    animation: ai-shimmer 2s infinite;
+}
+
 .animate-matrix-glow {
     animation: matrix-glow 2s ease-in-out infinite;
 }

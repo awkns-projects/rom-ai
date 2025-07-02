@@ -994,12 +994,15 @@ async function executeAction(input, env) {
                       : 'bg-blue-950/40 border-blue-500/30 hover:border-blue-400/50'
                   } ${
                     node.status === 'complete' ? 'ring-2 ring-emerald-400/50' :
-                    node.status === 'processing' ? 'ring-2 ring-blue-400/50' : ''
+                    node.status === 'processing' ? 'ring-2 ring-blue-400/50 ai-generating' : ''
                   }`}
                   style={{
                     backdropFilter: 'blur(8px)',
                     ...(selectedNode === node.id && {
                       boxShadow: '0 0 30px rgba(59, 130, 246, 0.3), inset 0 0 20px rgba(59, 130, 246, 0.1)'
+                    }),
+                    ...(node.status === 'processing' && {
+                      animation: 'ai-glow 2s ease-in-out infinite alternate, ai-shimmer 3s linear infinite'
                     })
                   }}
                 >
@@ -1011,7 +1014,12 @@ async function executeAction(input, env) {
                     </h4>
                     <div className="flex items-center gap-1">
                       {node.status === 'complete' && <span className="text-emerald-400 text-lg">✅</span>}
-                      {node.status === 'processing' && <span className="text-blue-400 text-lg animate-pulse">⚡</span>}
+                      {node.status === 'processing' && (
+                        <div className="flex items-center gap-1">
+                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-400 border-t-transparent"></div>
+                          <span className="text-blue-400 text-lg animate-pulse">⚡</span>
+                        </div>
+                      )}
                       {node.status === 'empty' && <span className="text-blue-500/50 text-lg">⭕</span>}
                     </div>
                   </div>

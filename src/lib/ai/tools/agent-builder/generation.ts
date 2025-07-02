@@ -1,6 +1,8 @@
 import { generateObject, type CoreMessage } from 'ai';
 import { getProvider } from '../../providers';
 import { getBestModelFor } from '../../models';
+import { createXai } from '@ai-sdk/xai';
+import { createOpenAI } from '@ai-sdk/openai';
 import type { 
   AgentData, 
   PromptUnderstanding, 
@@ -68,12 +70,25 @@ async function mockGenerateObject(config: any): Promise<{ object: any }> {
 
 // Helper function to get the best model for agent builder tasks
 export async function getAgentBuilderModel() {
-  const bestModel = getBestModelFor('generateObject');
-  if (!bestModel) {
-    throw new Error('No compatible model found for agent builder tasks');
+  // Debug logging
+  console.log('🔍 getAgentBuilderModel() - AI_PROVIDER:', process.env.AI_PROVIDER);
+  
+  // Respect the AI_PROVIDER environment variable
+  const envProvider = process.env.AI_PROVIDER?.toLowerCase();
+  
+  if (envProvider === 'xai') {
+    console.log('✅ Using xAI for agent builder: grok-3');
+    const xaiProvider = createXai({
+      apiKey: process.env.XAI_API_KEY,
+    });
+    return xaiProvider('grok-3');
+  } else {
+    console.log('⚠️ Using OpenAI for agent builder: gpt-4o (default)');
+    const openaiProvider = createOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+    return openaiProvider('gpt-4o');
   }
-  const provider = await getProvider(bestModel);
-  return provider(bestModel);
 }
 
 /**

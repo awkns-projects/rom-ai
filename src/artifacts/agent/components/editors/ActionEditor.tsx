@@ -78,6 +78,30 @@ export const ActionEditor = memo(({
   const [inputParametersCollapsed, setInputParametersCollapsed] = useState(true);
   const [outputParametersCollapsed, setOutputParametersCollapsed] = useState(true);
 
+  // AI Generation Effect CSS
+  const aiGeneratingCardClass = `
+    relative overflow-hidden
+    before:absolute before:inset-0 before:bg-gradient-to-r 
+    before:from-transparent before:via-blue-500/20 before:to-transparent
+    before:translate-x-[-100%] before:animate-[shimmer_2s_infinite]
+    border-blue-400/40 shadow-[0_0_20px_rgba(59,130,246,0.3)]
+    animate-pulse
+  `;
+
+  const aiGeneratingStyle = `
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    @keyframes aiGlow {
+      0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.3); }
+      50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.6), 0 0 40px rgba(59, 130, 246, 0.3); }
+    }
+    .ai-generating {
+      animation: aiGlow 2s ease-in-out infinite;
+    }
+  `;
+
   // Callback functions
   const extractInputParametersFromSteps = useCallback((steps: PseudoCodeStep[]): InputParameter[] => {
     if (!steps || steps.length === 0) return [];
@@ -861,6 +885,8 @@ export const ActionEditor = memo(({
   // Traditional view continues below (existing implementation)
   return (
     <div className="space-y-4">
+      <style dangerouslySetInnerHTML={{ __html: aiGeneratingStyle }} />
+      
       {viewToggleHeader}
       
       <div className="space-y-8">
@@ -899,9 +925,19 @@ export const ActionEditor = memo(({
               </div>
             </div>
 
-            <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+            <div className={`p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm ${
+              isGeneratingDescription ? `ai-generating ${aiGeneratingCardClass}` : ''
+            }`}>
               <div className="flex items-center justify-between mb-6">
-                <h4 className="text-lg font-bold text-blue-200 font-mono">1. Description</h4>
+                <div className="flex items-center gap-3">
+                  <h4 className="text-lg font-bold text-blue-200 font-mono">1. Description</h4>
+                  {isGeneratingDescription && (
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30">
+                      <div className="w-3 h-3 rounded-full bg-blue-400 animate-ping"></div>
+                      <span className="text-blue-300 text-sm font-mono">AI Generating...</span>
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div className="space-y-4">
@@ -933,15 +969,32 @@ export const ActionEditor = memo(({
                     disabled={!action.name.trim() || !action.description.trim() || isGeneratingDescription}
                     className="btn-matrix"
                   >
-                    {isGeneratingDescription ? "Generating..." : "Generate Steps"}
+                    {isGeneratingDescription ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full border-2 border-blue-300 border-t-transparent animate-spin"></div>
+                        <span>Generating...</span>
+                      </div>
+                    ) : (
+                      "Generate Steps"
+                    )}
                   </Button>
                 </div>
               </div>
             </div>
 
-            <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+            <div className={`p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm ${
+              isGeneratingSteps ? `ai-generating ${aiGeneratingCardClass}` : ''
+            }`}>
               <div className="flex items-center justify-between mb-6">
-                <h4 className="text-lg font-bold text-blue-200 font-mono">2. AI-Generated Pseudo Steps</h4>
+                <div className="flex items-center gap-3">
+                  <h4 className="text-lg font-bold text-blue-200 font-mono">2. AI-Generated Pseudo Steps</h4>
+                  {isGeneratingSteps && (
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/30">
+                      <div className="w-3 h-3 rounded-full bg-purple-400 animate-ping"></div>
+                      <span className="text-purple-300 text-sm font-mono">AI Thinking...</span>
+                    </div>
+                  )}
+                </div>
                 <div className="flex gap-3">
                   <Button
                     onClick={addPseudoStep}
@@ -1043,16 +1096,33 @@ export const ActionEditor = memo(({
                       disabled={isGeneratingCode}
                       className="btn-matrix"
                     >
-                      {isGeneratingCode ? "Generating..." : "Generate Code"}
+                      {isGeneratingCode ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded-full border-2 border-green-300 border-t-transparent animate-spin"></div>
+                          <span>Generating...</span>
+                        </div>
+                      ) : (
+                        "Generate Code"
+                      )}
                     </Button>
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+            <div className={`p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm ${
+              isGeneratingCode ? `ai-generating ${aiGeneratingCardClass}` : ''
+            }`}>
               <div className="flex items-center justify-between mb-6">
-                <h4 className="text-lg font-bold text-blue-200 font-mono">3. Generated Executable Code</h4>
+                <div className="flex items-center gap-3">
+                  <h4 className="text-lg font-bold text-blue-200 font-mono">3. Generated Executable Code</h4>
+                  {isGeneratingCode && (
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/20 border border-green-400/30">
+                      <div className="w-3 h-3 rounded-full bg-green-400 animate-ping"></div>
+                      <span className="text-green-300 text-sm font-mono">AI Coding...</span>
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div className="space-y-6">
@@ -1369,9 +1439,18 @@ export const ActionEditor = memo(({
                         setShowRunModeModal(true);
                       }}
                       disabled={isExecuting}
-                      className="btn-matrix px-8 py-3 text-base font-medium"
+                      className={`btn-matrix px-8 py-3 text-base font-medium ${
+                        isExecuting ? 'ai-generating opacity-75' : ''
+                      }`}
                     >
-                      {isExecuting ? 'Running...' : 'Run'}
+                      {isExecuting ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded-full border-2 border-yellow-300 border-t-transparent animate-spin"></div>
+                          <span>Running...</span>
+                        </div>
+                      ) : (
+                        'Run'
+                      )}
                     </Button>
                   </div>
                 )}

@@ -9,6 +9,8 @@ import {
 } from '@/lib/db/queries';
 import type { VisibilityType } from '@/components/visibility-selector';
 import { myProvider } from '@/lib/ai/providers';
+import { createXai } from '@ai-sdk/xai';
+import { createOpenAI } from '@ai-sdk/openai';
 
 export async function saveChatModelAsCookie(model: string) {
   const cookieStore = await cookies();
@@ -25,8 +27,31 @@ export async function generateTitleFromUserMessage({
 }: {
   message: UIMessage;
 }) {
+  // Debug logging to see what provider is being used
+  console.log('🔍 Title Generation Debug:');
+  console.log('  - AI_PROVIDER env var:', process.env.AI_PROVIDER);
+  console.log('  - myProvider details:', typeof myProvider);
+  
+  // Use dynamic provider selection based on current environment variable
+  const envProvider = process.env.AI_PROVIDER?.toLowerCase();
+  let titleModel;
+  
+  if (envProvider === 'xai') {
+    console.log('✅ Title generation using xAI grok-3');
+    const xaiProvider = createXai({
+      apiKey: process.env.XAI_API_KEY,
+    });
+    titleModel = xaiProvider('grok-3');
+  } else {
+    console.log('⚠️ Title generation using OpenAI gpt-4o-mini (default)');
+    const openaiProvider = createOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+    titleModel = openaiProvider('gpt-4o-mini');
+  }
+  
   const { text: title } = await generateText({
-    model: myProvider.languageModel('title-model'),
+    model: titleModel,
     system: `\n
     - you will generate a short title based on the first message a user begins a conversation with
     - ensure it is not more than 80 characters long

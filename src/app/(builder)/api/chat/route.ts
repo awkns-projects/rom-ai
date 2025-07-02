@@ -558,6 +558,17 @@ export async function POST(request: Request) {
     if (error instanceof ChatSDKError) {
       return error.toResponse();
     }
+    
+    // Fallback for any other errors to ensure we always return a response
+    console.error('Unexpected error in POST /api/chat:', error);
+    return Response.json(
+      { 
+        code: 'offline:chat',
+        message: 'Something went wrong. Please try again later.',
+        cause: error instanceof Error ? error.message : 'Unknown error'
+      }, 
+      { status: 500 }
+    );
   }
 }
 

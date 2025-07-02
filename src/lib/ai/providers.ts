@@ -60,6 +60,36 @@ const modelProviderMap: Record<string, 'openai' | 'xai'> = {
   'grok-3': 'xai',
 };
 
+// Helper function to get the appropriate title model based on AI_PROVIDER
+function getTitleModel() {
+  const envProvider = process.env.AI_PROVIDER?.toLowerCase();
+  console.log('🔍 getTitleModel() - AI_PROVIDER:', envProvider);
+  if (envProvider === 'xai') {
+    console.log('✅ Using xAI for title model: grok-3');
+    return xai('grok-3');
+  }
+  console.log('⚠️ Using OpenAI for title model: gpt-4o-mini (default)');
+  return openai('gpt-4o-mini'); // Default to OpenAI
+}
+
+// Helper function to get the appropriate chat model based on AI_PROVIDER
+function getChatModel() {
+  const envProvider = process.env.AI_PROVIDER?.toLowerCase();
+  if (envProvider === 'xai') {
+    return xai('grok-3');
+  }
+  return openai('gpt-4o'); // Default to OpenAI
+}
+
+// Helper function to get the appropriate artifact model based on AI_PROVIDER
+function getArtifactModel() {
+  const envProvider = process.env.AI_PROVIDER?.toLowerCase();
+  if (envProvider === 'xai') {
+    return xai('grok-3');
+  }
+  return openai('gpt-4o'); // Default to OpenAI
+}
+
 // Helper function to get OpenAI provider with user API key if available
 async function getOpenAIProvider() {
   let apiKey = process.env.OPENAI_API_KEY;
@@ -139,14 +169,14 @@ export const myProvider = isTestEnvironment
     })
   : customProvider({
       languageModels: {
-        // Legacy models - kept for backward compatibility (but hidden from UI)
-        'chat-model': openai('gpt-4o'),
+        // Legacy models - now dynamically use the correct provider based on AI_PROVIDER
+        'chat-model': getChatModel(),
         'chat-model-reasoning': wrapLanguageModel({
-          model: openai('gpt-4o'),
+          model: getChatModel(),
           middleware: extractReasoningMiddleware({ tagName: 'think' }),
         }),
-        'title-model': openai('gpt-4o-mini'),
-        'artifact-model': openai('gpt-4o'),
+        'title-model': getTitleModel(),
+        'artifact-model': getArtifactModel(),
         
         // Specific model mappings - each model uses its correct provider
         'grok-3': xai('grok-3'),
@@ -161,4 +191,5 @@ export const myProvider = isTestEnvironment
 console.log('✅ Provider configuration loaded:');
 console.log('   - xAI models: grok-3');
 console.log('   - OpenAI models: gpt-4o, gpt-4o-mini');
+console.log(`   - Legacy models now use: ${process.env.AI_PROVIDER || 'openai'} provider`);
 console.log('   - Each model uses its specific provider regardless of environment variables');

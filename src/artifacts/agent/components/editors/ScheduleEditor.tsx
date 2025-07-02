@@ -78,6 +78,30 @@ export const ScheduleEditor = memo(({
   const [inputParametersCollapsed, setInputParametersCollapsed] = useState(true);
   const [outputParametersCollapsed, setOutputParametersCollapsed] = useState(true);
 
+  // AI Generation Effect CSS
+  const aiGeneratingCardClass = `
+    relative overflow-hidden
+    before:absolute before:inset-0 before:bg-gradient-to-r 
+    before:from-transparent before:via-purple-500/20 before:to-transparent
+    before:translate-x-[-100%] before:animate-[shimmer_2s_infinite]
+    border-purple-400/40 shadow-[0_0_20px_rgba(147,51,234,0.3)]
+    animate-pulse
+  `;
+
+  const aiGeneratingStyle = `
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    @keyframes aiGlow {
+      0%, 100% { box-shadow: 0 0 20px rgba(147, 51, 234, 0.3); }
+      50% { box-shadow: 0 0 30px rgba(147, 51, 234, 0.6), 0 0 40px rgba(147, 51, 234, 0.3); }
+    }
+    .ai-generating {
+      animation: aiGlow 2s ease-in-out infinite;
+    }
+  `;
+
   // Callback functions
   const extractInputParametersFromSteps = useCallback((steps: PseudoCodeStep[]): InputParameter[] => {
     if (!steps || steps.length === 0) return [];
@@ -896,6 +920,8 @@ export const ScheduleEditor = memo(({
   // Traditional view continues below (main implementation)
   return (
     <div className="space-y-4 max-h-screen overflow-y-auto">
+      <style dangerouslySetInnerHTML={{ __html: aiGeneratingStyle }} />
+      
       {viewToggleHeader}
       
       <div className="space-y-8">
@@ -934,9 +960,19 @@ export const ScheduleEditor = memo(({
               </div>
             </div>
 
-            <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+            <div className={`p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm ${
+              isGeneratingDescription ? `ai-generating ${aiGeneratingCardClass}` : ''
+            }`}>
               <div className="flex items-center justify-between mb-6">
-                <h4 className="text-lg font-bold text-orange-200 font-mono">1. Description</h4>
+                <div className="flex items-center gap-3">
+                  <h4 className="text-lg font-bold text-orange-200 font-mono">1. Description</h4>
+                  {isGeneratingDescription && (
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/30">
+                      <div className="w-3 h-3 rounded-full bg-purple-400 animate-ping"></div>
+                      <span className="text-purple-300 text-sm font-mono">AI Generating...</span>
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div className="space-y-4">
@@ -968,15 +1004,32 @@ export const ScheduleEditor = memo(({
                     disabled={!schedule.name.trim() || !schedule.description.trim() || isGeneratingDescription}
                     className="bg-orange-600 hover:bg-orange-700 text-white border-orange-500/30"
                   >
-                    {isGeneratingDescription ? "Generating..." : "Generate Steps"}
+                    {isGeneratingDescription ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-4 h-4 rounded-full border-2 border-orange-300 border-t-transparent animate-spin"></div>
+                        <span>Generating...</span>
+                      </div>
+                    ) : (
+                      "Generate Steps"
+                    )}
                   </Button>
                 </div>
               </div>
             </div>
 
-            <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+            <div className={`p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm ${
+              isGeneratingSteps ? `ai-generating ${aiGeneratingCardClass}` : ''
+            }`}>
               <div className="flex items-center justify-between mb-6">
-                <h4 className="text-lg font-bold text-orange-200 font-mono">2. AI-Generated Pseudo Steps</h4>
+                <div className="flex items-center gap-3">
+                  <h4 className="text-lg font-bold text-orange-200 font-mono">2. AI-Generated Pseudo Steps</h4>
+                  {isGeneratingSteps && (
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/30">
+                      <div className="w-3 h-3 rounded-full bg-purple-400 animate-ping"></div>
+                      <span className="text-purple-300 text-sm font-mono">AI Thinking...</span>
+                    </div>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <Button
                     onClick={addPseudoStep}
@@ -1078,18 +1131,35 @@ export const ScheduleEditor = memo(({
                       disabled={isGeneratingCode}
                       className="bg-orange-600 hover:bg-orange-700 text-white border-orange-500/30"
                     >
-                      {isGeneratingCode ? "Generating..." : "Generate Code"}
+                      {isGeneratingCode ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded-full border-2 border-orange-300 border-t-transparent animate-spin"></div>
+                          <span>Generating...</span>
+                        </div>
+                      ) : (
+                        "Generate Code"
+                      )}
                     </Button>
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm">
+            <div className={`p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm ${
+              isGeneratingCode ? `ai-generating ${aiGeneratingCardClass}` : ''
+            }`}>
               <div className="flex items-center justify-between mb-6">
-                <h4 className="text-lg font-bold text-orange-200 font-mono">3. Generated Executable Code</h4>
+                <div className="flex items-center gap-3">
+                  <h4 className="text-lg font-bold text-orange-200 font-mono">3. Generated Executable Code</h4>
+                  {isGeneratingCode && (
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-green-500/20 border border-green-400/30">
+                      <div className="w-3 h-3 rounded-full bg-green-400 animate-ping"></div>
+                      <span className="text-green-300 text-sm font-mono">AI Coding...</span>
+                    </div>
+                  )}
+                </div>
               </div>
-              
+
               <div className="space-y-6">
                 {(scheduleInputParameters.length > 0 || (generatedCodeData?.inputParameters && generatedCodeData.inputParameters.length > 0)) && (
                   <div className="space-y-4">
@@ -1352,9 +1422,18 @@ export const ScheduleEditor = memo(({
                         setShowRunModeModal(true);
                       }}
                       disabled={isExecuting}
-                      className="bg-orange-600 hover:bg-orange-700 text-white border-orange-500/30 px-6 py-2"
+                      className={`bg-orange-600 hover:bg-orange-700 text-white border-orange-500/30 px-6 py-2 ${
+                        isExecuting ? 'ai-generating opacity-75' : ''
+                      }`}
                     >
-                      {isExecuting ? 'Running...' : 'Test Run'}
+                      {isExecuting ? (
+                        <div className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded-full border-2 border-orange-300 border-t-transparent animate-spin"></div>
+                          <span>Running...</span>
+                        </div>
+                      ) : (
+                        'Test Run'
+                      )}
                     </Button>
                   </div>
                 )}
