@@ -37,28 +37,28 @@ const features = [
   {
     icon: Bot,
     title: 'Smart AI Apps',
-    description: 'Build AI apps that remember conversations, learn from your customers, and get smarter over time - like having your own JARVIS',
+    description: 'Build AI apps that remember conversations, learn from your customers, and get smarter over time - like having a super-smart assistant',
     gradient: 'from-green-500/20 via-green-600/10 to-green-700/20',
     border: 'border-green-500/30'
   },
   {
     icon: Database,
     title: 'Customer Memory',
-    description: 'Your AI remembers every customer interaction, preferences, and history automatically - just like JARVIS remembers everything for Tony Stark',
+    description: 'Your AI remembers every customer interaction, preferences, and history automatically - perfect memory that never forgets',
     gradient: 'from-blue-500/20 via-blue-600/10 to-blue-700/20',
     border: 'border-blue-500/30'
   },
   {
     icon: Clock,
     title: 'Auto Scheduling',
-    description: 'Set your AI to work on schedules - daily reports, weekly follow-ups, monthly analysis. Your personal assistant that never sleeps',
+    description: 'Set your AI to work on schedules - daily reports, weekly follow-ups, monthly analysis. Your digital assistant that never sleeps',
     gradient: 'from-purple-500/20 via-purple-600/10 to-purple-700/20',
     border: 'border-purple-500/30'
   },
   {
     icon: Zap,
     title: 'Data Sync',
-    description: 'Connect to any website, database, or app to keep your AI updated with fresh information - complete situational awareness',
+    description: 'Connect to any website, database, or app to keep your AI updated with fresh information - complete data awareness',
     gradient: 'from-orange-500/20 via-orange-600/10 to-orange-700/20',
     border: 'border-orange-500/30'
   }
@@ -68,22 +68,22 @@ const useCases = [
   {
     emoji: '🗂️',
     title: 'Smart CMS',
-    description: 'AI that writes, updates, and organizes your website content automatically - like having JARVIS manage your digital presence'
+    description: 'AI that writes, updates, and organizes your website content automatically - like having a content manager that works 24/7'
   },
   {
     emoji: '📋',
     title: 'Customer CRM',
-    description: 'Track customers, send follow-ups, and never miss a sale opportunity - your business intelligence system'
+    description: 'Track customers, send follow-ups, and never miss a sale opportunity - your complete business intelligence system'
   },
   {
     emoji: '🤖',
     title: 'Personal Assistant',
-    description: 'AI that handles emails, schedules meetings, and manages your daily tasks - just like Tony Stark\'s JARVIS but for your business'
+    description: 'AI that handles emails, schedules meetings, and manages your daily tasks - your intelligent business assistant'
   },
   {
     emoji: '📊',
     title: 'Business Dashboard',
-    description: 'Get daily reports on sales, customers, and business performance with Iron Man-level analytics'
+    description: 'Get daily reports on sales, customers, and business performance with professional-level analytics'
   },
   {
     emoji: '💬',
@@ -93,7 +93,7 @@ const useCases = [
   {
     emoji: '📈',
     title: 'Sales Tracker',
-    description: 'Monitor leads, send reminders, and track deals from start to finish with superhero-level efficiency'
+    description: 'Monitor leads, send reminders, and track deals from start to finish with enterprise-level efficiency'
   }
 ];
 
@@ -606,12 +606,12 @@ function EnhancedHeroSection() {
               
               <p className="text-xl md:text-2xl lg:text-3xl text-white max-w-4xl leading-relaxed">
                 Build your own
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 font-semibold"> JARVIS DASHBOARD </span>
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 font-semibold"> AI Agent Apps </span>
                 using only prompts
               </p>
               
               <p className="text-base md:text-lg lg:text-xl text-white/70 max-w-3xl leading-relaxed">
-                Just like Tony Stark, describe what you want in plain English. Our AI builds Iron Man-level smart apps that remember customers, work on schedules, and sync with your tools - all from simple prompts! ✨
+                Just describe what you want in plain English. Our AI builds professional-level smart apps that remember customers, work on schedules, and sync with your tools - all from simple prompts! ✨
               </p>
             </div>
 
@@ -1804,10 +1804,10 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Watch AI Build Your Business App
+              Watch AI Build Your AI Agent App
             </h2>
             <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
-              See how simple descriptions become working AI apps with memory and smart features - like Tony Stark's workshop
+              See how simple descriptions become working AI apps with memory and smart features - like a professional development team
             </p>
           </div>
 
@@ -1863,7 +1863,7 @@ export default function HomePage() {
               Build AI Apps That Actually Help Your Business
             </h2>
             <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
-              From simple requests to powerful AI apps with memory, scheduling, and data connections - your personal JARVIS awaits
+              From simple requests to powerful AI apps with memory, scheduling, and data connections - your intelligent business assistant awaits
             </p>
           </div>
 
@@ -1883,7 +1883,7 @@ export default function HomePage() {
               Turn Ideas Into Revenue Streams
             </h2>
             <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
-              Real businesses built with simple prompts - Iron Man-level automation for everyone
+              Real businesses built with simple prompts - professional-level automation for everyone
             </p>
           </div>
 
@@ -2029,10 +2029,10 @@ export default function HomePage() {
                 </div>
               </div>
               <h2 className="text-4xl font-bold text-green-100 mb-6 font-mono">
-                Ready to Build Your AI Empire?
+                Ready to Build Your AI Business Empire?
               </h2>
               <p className="text-xl text-green-300/80 mb-8 font-mono max-w-2xl mx-auto">
-                Join thousands of entrepreneurs using JARVIS-level AI agents to automate their businesses and create passive income streams.
+                Join thousands of entrepreneurs using intelligent AI agents to automate their businesses and create passive income streams.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link href="/register">
