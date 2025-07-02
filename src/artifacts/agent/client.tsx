@@ -900,114 +900,152 @@ const AgentBuilderContent = memo(({
           
           {/* Enhanced Progress Indicator - Only show when AI is actually running */}
           {status === 'streaming' && (
-            <div className="mt-3 sm:mt-6 p-2 sm:p-4 rounded-xl sm:rounded-2xl bg-black/50 border border-green-500/20 backdrop-blur-sm shadow-lg shadow-green-500/10">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-2 sm:mb-3">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                  <div className="text-xs sm:text-sm font-medium text-green-200 font-mono">Build Progress</div>
-                  <div className="px-2 py-0.5 sm:py-1 rounded-lg bg-green-500/20 text-green-300 text-xs font-medium font-mono border border-green-500/30 self-start">
-                    {agentData?.name || 'AI Agent System'}
+            <div className="mt-2 sm:mt-6">
+              {/* Mobile: Ultra-compact single line */}
+              <div className="sm:hidden p-2 rounded-lg bg-black/50 border border-green-500/20 backdrop-blur-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1 h-1 bg-yellow-400 rounded-full animate-pulse" />
+                    <span className="text-xs font-mono text-green-200">
+                      {(() => {
+                        const steps = [
+                          { id: 'prompt-understanding', label: 'Analysis' },
+                          { id: 'overview', label: 'Overview' },
+                          { id: 'models', label: 'Models' },
+                          { id: 'actions', label: 'Actions' },
+                          { id: 'schedules', label: 'Schedules' },
+                          { id: 'complete', label: 'Complete' }
+                        ];
+                        
+                        const currentStep = steps.find(step => {
+                          const stepStatus = getStepStatus(step.id, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
+                          return stepStatus === 'processing';
+                        });
+                        
+                        return currentStep ? currentStep.label : 'Building...';
+                      })()}
+                    </span>
+                  </div>
+                  <div className="text-sm font-bold text-blue-600">{Math.round(calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData))}%</div>
+                </div>
+                <div className="relative h-0.5 bg-green-500/10 rounded-full overflow-hidden mt-1">
+                  <div 
+                    className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-700 rounded-full transition-all duration-1000 ease-out"
+                    style={{ width: `${calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData)}%` }}
+                  />
+                </div>
+              </div>
+              
+              {/* Desktop: Full version */}
+              <div className="hidden sm:block p-4 rounded-2xl bg-black/50 border border-green-500/20 backdrop-blur-sm shadow-lg shadow-green-500/10">
+                <div className="flex items-center justify-between gap-0 mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="text-sm font-medium text-green-200 font-mono">Build Progress</div>
+                    <div className="px-2 py-0.5 rounded bg-green-500/20 text-green-300 text-xs font-medium font-mono border border-green-500/30">
+                      {agentData?.name || 'AI Agent System'}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-blue-600">{Math.round(calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData))}%</div>
+                    <div className="text-xs text-gray-500">Complete</div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-xl sm:text-2xl font-bold text-blue-600">{Math.round(calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData))}%</div>
-                  <div className="text-xs text-gray-500">Complete</div>
+                
+                {/* Progress Bar */}
+                <div className="relative h-2 bg-green-500/10 rounded-full overflow-hidden border border-green-500/20 mb-4">
+                  <div 
+                    className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-700 rounded-full transition-all duration-1000 ease-out shadow-lg shadow-green-500/30"
+                    style={{ width: `${calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData)}%` }}
+                  />
+                  {/* Animated shimmer effect for active progress */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
                 </div>
-              </div>
-              
-              {/* Progress Bar */}
-              <div className="relative h-1.5 sm:h-2 bg-green-500/10 rounded-full overflow-hidden border border-green-500/20">
-                <div 
-                  className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-700 rounded-full transition-all duration-1000 ease-out shadow-lg shadow-green-500/30"
-                  style={{ width: `${calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData)}%` }}
-                />
-                {/* Animated shimmer effect for active progress */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
-              </div>
-              
-              {/* Progress Steps */}
-               <div className="flex justify-center mt-2 sm:mt-4 text-xs font-mono">
-                {(() => {
-                  const steps = [
-                    { id: 'prompt-understanding', label: 'Analysis' },
-                    { id: 'overview', label: 'Overview' },
-                    { id: 'models', label: 'Models' },
-                    { id: 'actions', label: 'Actions' },
-                    { id: 'schedules', label: 'Schedules' },
-                    { id: 'complete', label: 'Complete' }
-                  ];
-                  
-                  // Use the enhanced step status function to properly handle API sync
-                  const getEnhancedStepStatus = (stepId: string) => {
-                    // Map orchestrator step IDs to UI step IDs
-                    const stepIdMapping: Record<string, string> = {
-                      'step0': 'prompt-understanding',
-                      'step1': 'analysis',
-                      'step2': 'overview',
-                      'step3': 'models',
-                      'step4': 'actions',
-                      'step5': 'schedules',
-                      'complete': 'complete'
+                
+                {/* Progress Steps */}
+                 <div className="flex justify-center text-xs font-mono">
+                  {(() => {
+                    const steps = [
+                      { id: 'prompt-understanding', label: 'Analysis' },
+                      { id: 'overview', label: 'Overview' },
+                      { id: 'models', label: 'Models' },
+                      { id: 'actions', label: 'Actions' },
+                      { id: 'schedules', label: 'Schedules' },
+                      { id: 'complete', label: 'Complete' }
+                    ];
+                    
+                    // Use the enhanced step status function to properly handle API sync
+                    const getEnhancedStepStatus = (stepId: string) => {
+                      // Map orchestrator step IDs to UI step IDs
+                      const stepIdMapping: Record<string, string> = {
+                        'step0': 'prompt-understanding',
+                        'step1': 'analysis',
+                        'step2': 'overview',
+                        'step3': 'models',
+                        'step4': 'actions',
+                        'step5': 'schedules',
+                        'complete': 'complete'
+                      };
+                      
+                      // Check both the UI step ID and orchestrator step ID
+                      const orchestratorStepId = Object.keys(stepIdMapping).find(key => stepIdMapping[key] === stepId) || stepId;
+                      const uiStepId = stepIdMapping[stepId] || stepId;
+                      
+                      // Check stepProgress for both IDs
+                      if (safeMetadata.stepProgress) {
+                        if (safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress]) {
+                          return safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress];
+                        }
+                        if (orchestratorStepId && safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress]) {
+                          return safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress];
+                        }
+                        if (uiStepId && safeMetadata.stepProgress[uiStepId as keyof typeof safeMetadata.stepProgress]) {
+                          return safeMetadata.stepProgress[uiStepId as keyof typeof safeMetadata.stepProgress];
+                        }
+                      }
+                      
+                      // Check if this is the current step
+                      if (safeMetadata.currentStep === stepId || safeMetadata.currentStep === orchestratorStepId || safeMetadata.currentStep === uiStepId) {
+                        return 'processing';
+                      }
+                      
+                      // Use the existing getStepStatus function as fallback
+                      return getStepStatus(stepId, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
                     };
                     
-                    // Check both the UI step ID and orchestrator step ID
-                    const orchestratorStepId = Object.keys(stepIdMapping).find(key => stepIdMapping[key] === stepId) || stepId;
-                    const uiStepId = stepIdMapping[stepId] || stepId;
+                    // Find the current step
+                    const currentStep = steps.find(step => {
+                      const stepStatus = getEnhancedStepStatus(step.id);
+                      return stepStatus === 'processing';
+                    }) || steps.find(step => step.id === 'complete');
                     
-                    // Check stepProgress for both IDs
-                    if (safeMetadata.stepProgress) {
-                      if (safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress]) {
-                        return safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress];
-                      }
-                      if (orchestratorStepId && safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress]) {
-                        return safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress];
-                      }
-                      if (uiStepId && safeMetadata.stepProgress[uiStepId as keyof typeof safeMetadata.stepProgress]) {
-                        return safeMetadata.stepProgress[uiStepId as keyof typeof safeMetadata.stepProgress];
-                      }
-                    }
+                    if (!currentStep) return null;
                     
-                    // Check if this is the current step
-                    if (safeMetadata.currentStep === stepId || safeMetadata.currentStep === orchestratorStepId || safeMetadata.currentStep === uiStepId) {
-                      return 'processing';
-                    }
+                    const stepStatus = getEnhancedStepStatus(currentStep.id);
+                    const isComplete = stepStatus === 'complete';
+                    const isProcessing = stepStatus === 'processing';
                     
-                    // Use the existing getStepStatus function as fallback
-                    return getStepStatus(stepId, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
-                  };
-                  
-                  // Find the current step
-                  const currentStep = steps.find(step => {
-                    const stepStatus = getEnhancedStepStatus(step.id);
-                    return stepStatus === 'processing';
-                  }) || steps.find(step => step.id === 'complete');
-                  
-                  if (!currentStep) return null;
-                  
-                  const stepStatus = getEnhancedStepStatus(currentStep.id);
-                  const isComplete = stepStatus === 'complete';
-                  const isProcessing = stepStatus === 'processing';
-                  
-                  return (
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                        isComplete 
-                          ? 'bg-green-400 shadow-lg shadow-green-500/50 animate-matrix-glow' 
-                          : isProcessing 
-                          ? 'bg-yellow-400 shadow-lg shadow-yellow-500/50 animate-pulse'
-                          : 'bg-green-500/20 border border-green-500/30'
-                      }`} />
-                      <span className={`font-medium transition-colors duration-300 ${
-                        isComplete 
-                          ? 'text-green-400' 
-                          : isProcessing 
-                          ? 'text-yellow-400'
-                          : 'text-green-500/50'
-                      }`}>
-                        {currentStep.label}
-                      </span>
-                    </div>
-                  );
-                })()}
+                    return (
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                          isComplete 
+                            ? 'bg-green-400 shadow-lg shadow-green-500/50 animate-matrix-glow' 
+                            : isProcessing 
+                            ? 'bg-yellow-400 shadow-lg shadow-yellow-500/50 animate-pulse'
+                            : 'bg-green-500/20 border border-green-500/30'
+                        }`} />
+                        <span className={`font-medium transition-colors duration-300 ${
+                          isComplete 
+                            ? 'text-green-400' 
+                            : isProcessing 
+                            ? 'text-yellow-400'
+                            : 'text-green-500/50'
+                        }`}>
+                          {currentStep.label}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
           )}

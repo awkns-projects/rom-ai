@@ -376,66 +376,83 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
 
   return (
     <div className="relative space-y-6">
-      {/* Switch Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h2 className={`text-2xl font-bold ${currentTheme.light} font-mono`}>Getting Started</h2>
-          <div className="flex gap-2 hidden md:flex">
-            {!showDemo && slides.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => goToSlide(index)}
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  index === currentSlide 
-                    ? `bg-${currentTheme.primary}-400` 
-                    : `bg-${currentTheme.primary}-400/30 hover:bg-${currentTheme.primary}-400/60`
-                }`}
-              />
-            ))}
-          </div>
-        </div>
-        
-        {/* View Switch */}
-        <div className="flex items-center gap-2">
-          <div className={`flex ${currentTheme.bg} border ${currentTheme.border} rounded-lg p-1`}>
-            <button
-              onClick={() => setShowDemo(false)}
-              className={`px-3 py-2 text-xs font-mono rounded-md transition-all duration-200 ${
-                !showDemo
-                  ? `${currentTheme.bgActive} ${currentTheme.light} border ${currentTheme.borderActive}`
-                  : `${currentTheme.accent} ${currentTheme.bgHover}`
-              }`}
-            >
-              Tutorial
-            </button>
-            <button
-              onClick={() => setShowDemo(true)}
-              className={`px-3 py-2 text-xs font-mono rounded-md transition-all duration-200 ${
-                showDemo
-                  ? `${currentTheme.bgActive} ${currentTheme.light} border ${currentTheme.borderActive}`
-                  : `${currentTheme.accent} ${currentTheme.bgHover}`
-              }`}
-            >
-              Demo App
-            </button>
+      {/* Streamlined Header */}
+      <div className="space-y-3">
+        {/* Main Row - Compact layout */}
+        <div className="flex flex-col gap-3 sm:gap-4">
+          {/* Title and Switch in one row on desktop, stacked on mobile */}
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+            <div>
+              <h2 className={`text-xl sm:text-2xl font-bold ${currentTheme.light} font-mono`}>Getting Started</h2>
+            </div>
+            
+            {/* Compact View Switch */}
+            <div className="flex justify-center sm:justify-end">
+              <div className={`inline-flex ${currentTheme.bg} border ${currentTheme.border} rounded-lg p-0.5 shadow-sm`}>
+                <button
+                  onClick={() => setShowDemo(false)}
+                  className={`px-3 py-1.5 text-xs font-mono rounded-md transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap ${
+                    !showDemo
+                      ? `${currentTheme.bgActive} ${currentTheme.light} shadow-sm`
+                      : `${currentTheme.accent} hover:${currentTheme.light}`
+                  }`}
+                >
+                  <span>📚</span>
+                  <span>Tutorial</span>
+                </button>
+                <button
+                  onClick={() => setShowDemo(true)}
+                  className={`px-3 py-1.5 text-xs font-mono rounded-md transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap ${
+                    showDemo
+                      ? `${currentTheme.bgActive} ${currentTheme.light} shadow-sm`
+                      : `${currentTheme.accent} hover:${currentTheme.light}`
+                  }`}
+                >
+                  <span>🚀</span>
+                  <span>Demo</span>
+                </button>
+              </div>
+            </div>
           </div>
           
+          {/* Tutorial Navigation - Compact single row */}
           {!showDemo && (
-            <div className="flex gap-2">
-              <Button
-                onClick={prevSlide}
-                className="btn-matrix px-3 py-2"
-                size="sm"
-              >
-                ←
-              </Button>
-              <Button
-                onClick={nextSlide}
-                className="btn-matrix px-3 py-2"
-                size="sm"
-              >
-                →
-              </Button>
+            <div className="flex items-center justify-center sm:justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {/* Compact slide indicators */}
+                <div className="flex items-center gap-1.5">
+                  {slides.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => goToSlide(index)}
+                      className={`w-2 h-2 rounded-full transition-all duration-200 ${
+                        index === currentSlide 
+                          ? `bg-${currentTheme.primary}-400 scale-125` 
+                          : `bg-${currentTheme.primary}-400/30 hover:bg-${currentTheme.primary}-400/60 hover:scale-110`
+                      }`}
+                    />
+                  ))}
+                </div>
+                <div className={`${currentTheme.accent} text-xs font-mono px-2 py-0.5 rounded-full ${currentTheme.bg} border ${currentTheme.border}`}>
+                  {currentSlide + 1}/{slides.length}
+                </div>
+              </div>
+              
+              {/* Compact navigation buttons */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={prevSlide}
+                  className={`w-8 h-8 rounded-full ${currentTheme.bg} border ${currentTheme.border} ${currentTheme.accent} hover:${currentTheme.light} transition-all duration-200 flex items-center justify-center text-sm font-mono hover:shadow-sm`}
+                >
+                  ←
+                </button>
+                <button
+                  onClick={nextSlide}
+                  className={`w-8 h-8 rounded-full ${currentTheme.bg} border ${currentTheme.border} ${currentTheme.accent} hover:${currentTheme.light} transition-all duration-200 flex items-center justify-center text-sm font-mono hover:shadow-sm`}
+                >
+                  →
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -568,13 +585,6 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* Slide Counter */}
-          <div className="text-center">
-            <span className={`${currentTheme.accent} text-sm font-mono`}>
-              {currentSlide + 1} of {slides.length}
-            </span>
           </div>
         </>
       )}
