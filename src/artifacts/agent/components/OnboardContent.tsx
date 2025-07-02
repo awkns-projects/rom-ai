@@ -523,15 +523,7 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
                           {/* Get Started Button */}
                           <div className="pt-4">
                             <Button
-                              onClick={() => {
-                                if (slide.id === 'chat') {
-                                  // For chat slide, switch to demo app mode
-                                  setShowDemo(true);
-                                } else {
-                                  // For other slides, navigate to the specific tab
-                                  handleTabNavigation(slide.id);
-                                }
-                              }}
+                              onClick={() => handleTabNavigation(slide.id)}
                               className={`px-6 py-3 font-mono text-sm font-semibold transition-all duration-200 ${currentTheme.bg} ${currentTheme.bgHover} ${currentTheme.light} border ${currentTheme.borderActive} backdrop-blur-sm`}
                             >
                               <div className="flex items-center gap-2">
