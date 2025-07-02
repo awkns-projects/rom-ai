@@ -361,6 +361,12 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
   }, []);
 
   const handleTabNavigation = useCallback((tabId: 'models' | 'actions' | 'schedules' | 'chat') => {
+    // Special handling for chat - switch to demo app
+    if (tabId === 'chat') {
+      setShowDemo(true);
+      return;
+    }
+    
     if (onTabChange) {
       onTabChange(tabId);
     }
