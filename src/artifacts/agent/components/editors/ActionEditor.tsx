@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CrossIcon, PlusIcon } from '@/components/icons';
 import { StepFieldEditor } from './StepFieldEditor';
 import { ModelExecutionChangesViewer } from './ModelExecutionChangesViewer';
+import { ActionMindMapEditor } from './ActionMindMapEditor';
 import type { AgentAction, EnvVar, PseudoCodeStep, StepField, AgentModel } from '../../types';
 import { generateNewId } from '../../utils';
 
@@ -53,7 +54,10 @@ export const ActionEditor = memo(({
   allModels = [],
   documentId
 }: ActionEditorProps) => {
+  const [viewMode, setViewMode] = useState<'traditional' | 'mindmap'>('mindmap');
   const [pseudoSteps, setPseudoSteps] = useState<PseudoCodeStep[]>(action.pseudoSteps || []);
+  
+  // Traditional view state
   const [envVars, setEnvVars] = useState<EnvVar[]>(action.execute?.code?.envVars || []);
   const [executeCode, setExecuteCode] = useState(action.execute?.code?.script || '');
   const [isGeneratingSteps, setIsGeneratingSteps] = useState(false);
@@ -74,6 +78,7 @@ export const ActionEditor = memo(({
   const [inputParametersCollapsed, setInputParametersCollapsed] = useState(true);
   const [outputParametersCollapsed, setOutputParametersCollapsed] = useState(true);
 
+  // Callback functions
   const extractInputParametersFromSteps = useCallback((steps: PseudoCodeStep[]): InputParameter[] => {
     if (!steps || steps.length === 0) return [];
     
@@ -806,225 +811,685 @@ export const ActionEditor = memo(({
     );
   };
 
+  // Common header with view toggle
+  const viewToggleHeader = (
+    <div className="flex items-center justify-between p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
+      <div className="flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+          <span className="text-blue-400 text-lg">⚡</span>
+        </div>
+        <div>
+          <h3 className="text-lg font-bold text-blue-200 font-mono">Action Editor</h3>
+          <p className="text-blue-400 text-sm font-mono">Choose your preferred editing experience</p>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        <Button
+          onClick={() => setViewMode('mindmap')}
+          variant={viewMode === 'mindmap' ? 'default' : 'outline'}
+          size="sm"
+          className="font-mono"
+        >
+          🧠 Mind Map
+        </Button>
+        <Button
+          onClick={() => setViewMode('traditional')}
+          variant={viewMode === 'traditional' ? 'default' : 'outline'}
+          size="sm"
+          className="font-mono"
+        >
+          📝 Traditional
+        </Button>
+      </div>
+    </div>
+  );
+
+  // If mind map view is selected, render the mind map editor
+  if (viewMode === 'mindmap') {
+    return (
+      <div className="space-y-4">
+        {viewToggleHeader}
+        {/* Mind Map Editor */}
+        <div className="min-h-[600px] max-h-screen rounded-xl border border-blue-500/20 overflow-auto">
+          <ActionMindMapEditor
+            action={action}
+            onUpdate={onUpdate}
+            onDelete={onDelete}
+            allModels={allModels}
+            documentId={documentId}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Traditional view continues below (existing implementation)
   return (
-    <div className="space-y-8">
-      {/* Show ModelExecutionChangesViewer if a model is selected */}
-      {viewingModelChanges && (
-        <ModelExecutionChangesViewer
-          modelChange={viewingModelChanges}
-          onBack={() => setViewingModelChanges(null)}
-        />
-      )}
+    <div className="space-y-4">
+      {viewToggleHeader}
+      
+      <div className="space-y-8">
+        {/* Show ModelExecutionChangesViewer if a model is selected */}
+        {viewingModelChanges && (
+          <ModelExecutionChangesViewer
+            modelChange={viewingModelChanges}
+            onBack={() => setViewingModelChanges(null)}
+          />
+        )}
 
-      {/* Show main ActionEditor content when not viewing model changes */}
-      {!viewingModelChanges && (
-        <>
-          <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
-                  <span className="text-blue-400 text-xl">⚡</span>
+        {/* Show main ActionEditor content when not viewing model changes */}
+        {!viewingModelChanges && (
+          <>
+            <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+                    <span className="text-blue-400 text-xl">⚡</span>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-blue-200 font-mono">Action Configuration</h3>
+                    <p className="text-blue-400 text-sm font-mono">Define automated business actions</p>
+                  </div>
                 </div>
+                <Button
+                  onClick={onDelete}
+                  variant="destructive"
+                  className="px-4 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <CrossIcon size={16} />
+                    <span>Remove Action</span>
+                  </div>
+                </Button>
+              </div>
+            </div>
+
+            <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-6">
+                <h4 className="text-lg font-bold text-blue-200 font-mono">1. Description</h4>
+              </div>
+              
+              <div className="space-y-4">
                 <div>
-                  <h3 className="text-xl font-bold text-blue-200 font-mono">Action Configuration</h3>
-                  <p className="text-blue-400 text-sm font-mono">Define automated business actions</p>
+                  <Label htmlFor="action-name">Action Name</Label>
+                  <Input
+                    id="action-name"
+                    value={action.name}
+                    onChange={(e) => onUpdate({ ...action, name: e.target.value })}
+                    placeholder="e.g., Create Task, Send Email"
+                    className="bg-black/50 border-cyan-500/30 text-cyan-100"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="action-description">Description</Label>
+                  <Textarea
+                    id="action-description"
+                    value={action.description}
+                    onChange={(e) => onUpdate({ ...action, description: e.target.value })}
+                    placeholder="Describe what this action does and its purpose..."
+                    className="bg-black/50 border-cyan-500/30 text-cyan-100 min-h-[100px]"
+                  />
+                </div>
+
+                <div className="flex justify-center pt-2">
+                  <Button
+                    onClick={generatePseudoStepsFromDescription}
+                    disabled={!action.name.trim() || !action.description.trim() || isGeneratingDescription}
+                    className="btn-matrix"
+                  >
+                    {isGeneratingDescription ? "Generating..." : "Generate Steps"}
+                  </Button>
                 </div>
               </div>
-              <Button
-                onClick={onDelete}
-                variant="destructive"
-                className="px-4 py-2"
-              >
-                <div className="flex items-center gap-2">
-                  <CrossIcon size={16} />
-                  <span>Remove Action</span>
+            </div>
+
+            <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-6">
+                <h4 className="text-lg font-bold text-blue-200 font-mono">2. AI-Generated Pseudo Steps</h4>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={addPseudoStep}
+                    className="btn-matrix px-4 py-2 text-sm font-mono"
+                  >
+                    <PlusIcon size={16} />
+                    <span className="ml-2">Add Step</span>
+                  </Button>
                 </div>
-              </Button>
-            </div>
-          </div>
-
-          <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
-            <div className="flex items-center justify-between mb-6">
-              <h4 className="text-lg font-bold text-blue-200 font-mono">1. Description</h4>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="action-name">Action Name</Label>
-                <Input
-                  id="action-name"
-                  value={action.name}
-                  onChange={(e) => onUpdate({ ...action, name: e.target.value })}
-                  placeholder="e.g., Create Task, Send Email"
-                  className="bg-black/50 border-cyan-500/30 text-cyan-100"
-                />
               </div>
+              
+              <div className="space-y-4">
+                {pseudoSteps.map((step, index) => (
+                  <div key={step.id} className="p-4 rounded-xl bg-black/30 border border-blue-500/20">
+                    <div className="flex items-center justify-between mb-3">
+                      <h5 className="text-blue-300 font-mono font-medium">Step {index + 1}</h5>
+                      <Button
+                        onClick={() => deletePseudoStep(step.id)}
+                        variant="destructive"
+                        size="sm"
+                      >
+                        <CrossIcon size={16} />
+                      </Button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-4 mb-4">
+                      <div className="space-y-2">
+                        <Label className="text-blue-300 font-mono font-medium">Description</Label>
+                        <Input
+                          value={step.description}
+                          onChange={(e) => updatePseudoStep(step.id, { description: e.target.value })}
+                          placeholder="Describe this step"
+                          className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label className="text-blue-300 font-mono font-medium">Step Type</Label>
+                        <Select 
+                          value={step.type} 
+                          onValueChange={(value) => updatePseudoStep(step.id, { type: value as PseudoCodeStep['type'] })}
+                        >
+                          <SelectTrigger className="bg-black/50 border-blue-500/30 text-blue-200 focus:border-blue-400 focus:ring-blue-400/20 font-mono">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {stepTypes.map(type => (
+                              <SelectItem key={type.value} value={type.value} className="font-mono">
+                                {type.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <StepFieldEditor
+                          fields={step.inputFields || []}
+                          onFieldsChange={(fields: StepField[]) => updateStepInputFields(step.id, fields)}
+                          label={index === 0 ? "Input Fields (Action Inputs)" : "Input Fields"}
+                          color="blue"
+                          allModels={allModels}
+                        />
+                        {index === 0 && step.inputFields && step.inputFields.some(f => f.name && f.name.trim() !== '') && (
+                          <div className="text-xs text-blue-400/70 font-mono mt-1">
+                            ℹ️ These fields will be used as action input parameters
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <StepFieldEditor
+                          fields={step.outputFields || []}
+                          onFieldsChange={(fields: StepField[]) => updateStepOutputFields(step.id, fields)}
+                          label="Output Fields"
+                          color="blue"
+                          allModels={allModels}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {pseudoSteps.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400">
+                    <p>No steps defined yet.</p>
+                    <p className="text-sm mt-2">
+                      Click 'Generate Steps' at the bottom of Section 1 to get started.
+                    </p>
+                  </div>
+                ) : null}
 
-              <div>
-                <Label htmlFor="action-description">Description</Label>
-                <Textarea
-                  id="action-description"
-                  value={action.description}
-                  onChange={(e) => onUpdate({ ...action, description: e.target.value })}
-                  placeholder="Describe what this action does and its purpose..."
-                  className="bg-black/50 border-cyan-500/30 text-cyan-100 min-h-[100px]"
-                />
-              </div>
-
-              <div className="flex justify-center pt-2">
-                <Button
-                  onClick={generatePseudoStepsFromDescription}
-                  disabled={!action.name.trim() || !action.description.trim() || isGeneratingDescription}
-                  className="btn-matrix"
-                >
-                  {isGeneratingDescription ? "Generating..." : "Generate Steps"}
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
-            <div className="flex items-center justify-between mb-6">
-              <h4 className="text-lg font-bold text-blue-200 font-mono">2. AI-Generated Pseudo Steps</h4>
-              <div className="flex gap-2">
-                <Button
-                  onClick={addPseudoStep}
-                  className="btn-matrix px-4 py-2 text-sm font-mono"
-                >
-                  <PlusIcon size={16} />
-                  <span className="ml-2">Add Step</span>
-                </Button>
-              </div>
-            </div>
-            
-            <div className="space-y-4">
-              {pseudoSteps.map((step, index) => (
-                <div key={step.id} className="p-4 rounded-xl bg-black/30 border border-blue-500/20">
-                  <div className="flex items-center justify-between mb-3">
-                    <h5 className="text-blue-300 font-mono font-medium">Step {index + 1}</h5>
+                {pseudoSteps.length > 0 && (
+                  <div className="flex justify-center pt-4 border-t border-blue-500/20">
                     <Button
-                      onClick={() => deletePseudoStep(step.id)}
-                      variant="destructive"
-                      size="sm"
+                      onClick={generateCode}
+                      disabled={isGeneratingCode}
+                      className="btn-matrix"
                     >
-                      <CrossIcon size={16} />
+                      {isGeneratingCode ? "Generating..." : "Generate Code"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
+              <div className="flex items-center justify-between mb-6">
+                <h4 className="text-lg font-bold text-blue-200 font-mono">3. Generated Executable Code</h4>
+              </div>
+              
+              <div className="space-y-6">
+                {(actionInputParameters.length > 0 || (generatedCodeData?.inputParameters && generatedCodeData.inputParameters.length > 0)) && (
+                  <div className="space-y-4">
+                    <h5 className="text-blue-300 font-mono font-medium">Input Parameters</h5>
+                    <div className="space-y-3">
+                      {(generatedCodeData?.inputParameters || actionInputParameters).map((param: InputParameter, index: number) => (
+                        <div key={index} className="p-3 rounded-lg bg-black/30 border border-blue-500/20">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-1">
+                              <div className="text-sm text-blue-200 font-mono font-semibold">
+                                {param.name} {param.required && <span className="text-red-400">*</span>}
+                              </div>
+                              <div className="text-xs text-blue-400/70 font-mono">
+                                Type: {param.type} 
+                                {param.kind === 'object' && (
+                                  <span className="text-blue-400 ml-1">(Database Relation)</span>
+                                )}
+                                {param.list && <span className="text-blue-400 ml-1">[List]</span>}
+                              </div>
+                            </div>
+                            <div className="md:col-span-2">
+                              {param.description && (
+                                <div className="text-xs text-blue-400/70 font-mono">
+                                  📝 {param.description}
+                                </div>
+                              )}
+                              {param.defaultValue && (
+                                <div className="text-xs text-blue-400/70 font-mono">
+                                  Default: {typeof param.defaultValue === 'object' ? JSON.stringify(param.defaultValue) : param.defaultValue}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-blue-300 font-mono font-medium">Environment Variables</Label>
+                    <Button
+                      onClick={addEnvVar}
+                      className="btn-matrix px-4 py-2 text-sm font-mono"
+                    >
+                      <PlusIcon size={16} />
+                      <span className="ml-2">Add Env Var</span>
                     </Button>
                   </div>
                   
-                  <div className="grid grid-cols-1 gap-4 mb-4">
-                    <div className="space-y-2">
-                      <Label className="text-blue-300 font-mono font-medium">Description</Label>
-                      <Input
-                        value={step.description}
-                        onChange={(e) => updatePseudoStep(step.id, { description: e.target.value })}
-                        placeholder="Describe this step"
-                        className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    {envVars.map((envVar, index) => (
+                      <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2 p-3 rounded-lg bg-black/30 border border-blue-500/20">
+                        <Input
+                          value={envVar.name}
+                          onChange={(e) => updateEnvVar(index, { name: e.target.value })}
+                          placeholder="Variable name"
+                          className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono"
+                        />
+                        <Input
+                          value={envVar.description}
+                          onChange={(e) => updateEnvVar(index, { description: e.target.value })}
+                          placeholder="Description"
+                          className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono"
+                        />
+                        <div className="flex items-center gap-2">
+                          <label className="flex items-center gap-1 text-blue-300 text-sm font-mono">
+                            <input
+                              type="checkbox"
+                              checked={envVar.required}
+                              onChange={(e) => updateEnvVar(index, { required: e.target.checked })}
+                              className="rounded border-blue-500/30"
+                            />
+                            Required
+                          </label>
+                          <label className="flex items-center gap-1 text-blue-300 text-sm font-mono">
+                            <input
+                              type="checkbox"
+                              checked={envVar.sensitive}
+                              onChange={(e) => updateEnvVar(index, { sensitive: e.target.checked })}
+                              className="rounded border-blue-500/30"
+                            />
+                            Sensitive
+                          </label>
+                        </div>
+                        <Button
+                          onClick={() => deleteEnvVar(index)}
+                          variant="destructive"
+                          size="sm"
+                        >
+                          <CrossIcon size={16} />
+                        </Button>
+                      </div>
+                    ))}
                     
-                    <div className="space-y-2">
-                      <Label className="text-blue-300 font-mono font-medium">Step Type</Label>
-                      <Select 
-                        value={step.type} 
-                        onValueChange={(value) => updatePseudoStep(step.id, { type: value as PseudoCodeStep['type'] })}
-                      >
-                        <SelectTrigger className="bg-black/50 border-blue-500/30 text-blue-200 focus:border-blue-400 focus:ring-blue-400/20 font-mono">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {stepTypes.map(type => (
-                            <SelectItem key={type.value} value={type.value} className="font-mono">
-                              {type.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    {envVars.length === 0 && (
+                      <div className="text-center py-4 text-blue-400/70">
+                        <p className="text-sm font-mono">No environment variables defined.</p>
+                      </div>
+                    )}
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <StepFieldEditor
-                        fields={step.inputFields || []}
-                        onFieldsChange={(fields: StepField[]) => updateStepInputFields(step.id, fields)}
-                        label={index === 0 ? "Input Fields (Action Inputs)" : "Input Fields"}
-                        color="blue"
-                        allModels={allModels}
-                      />
-                      {index === 0 && step.inputFields && step.inputFields.some(f => f.name && f.name.trim() !== '') && (
-                        <div className="text-xs text-blue-400/70 font-mono mt-1">
-                          ℹ️ These fields will be used as action input parameters
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-blue-300 font-mono font-medium">Generated Code</Label>
+                  <Textarea
+                    value={executeCode}
+                    onChange={(e) => setExecuteCode(e.target.value)}
+                    onBlur={handleCodeUpdate}
+                    placeholder="Generated executable JavaScript will appear here after clicking 'Generate Code' in Section 2..."
+                    className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono text-sm"
+                    rows={12}
+                  />
+                </div>
+
+                {generatedCodeData && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-lg bg-black/30 border border-blue-500/20">
+                    <div>
+                      <div 
+                        className="flex items-center justify-between cursor-pointer mb-2" 
+                        onClick={() => setInputParametersCollapsed(!inputParametersCollapsed)}
+                      >
+                        <h5 className="text-blue-300 font-mono font-medium">
+                          Input Parameters ({(generatedCodeData.inputParameters || actionInputParameters).length})
+                        </h5>
+                        <svg 
+                          className={`w-4 h-4 text-blue-300 transition-transform duration-200 ${inputParametersCollapsed ? '-rotate-90' : 'rotate-0'}`}
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                      {!inputParametersCollapsed && (
+                        <div className="space-y-1 text-sm">
+                          {(generatedCodeData.inputParameters || actionInputParameters).map((param: InputParameter, index: number) => (
+                            <div key={index} className="text-blue-400 font-mono">
+                              • {param.name} ({param.type}) {param.required && <span className="text-red-400">*</span>}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
-                    
-                    <div className="space-y-2">
-                      <StepFieldEditor
-                        fields={step.outputFields || []}
-                        onFieldsChange={(fields: StepField[]) => updateStepOutputFields(step.id, fields)}
-                        label="Output Fields"
-                        color="blue"
-                        allModels={allModels}
-                      />
+                    <div>
+                      <div 
+                        className="flex items-center justify-between cursor-pointer mb-2" 
+                        onClick={() => setOutputParametersCollapsed(!outputParametersCollapsed)}
+                      >
+                        <h5 className="text-blue-300 font-mono font-medium">
+                          Output Parameters ({generatedCodeData.outputParameters.length})
+                        </h5>
+                        <svg 
+                          className={`w-4 h-4 text-blue-300 transition-transform duration-200 ${outputParametersCollapsed ? '-rotate-90' : 'rotate-0'}`}
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                      {!outputParametersCollapsed && (
+                        <div className="space-y-1 text-sm">
+                          {generatedCodeData.outputParameters.map((param, index) => (
+                            <div key={index} className="text-blue-400 font-mono">
+                              • {param.name} ({param.type})
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-              ))}
-              
-              {pseudoSteps.length === 0 ? (
-                <div className="text-center py-8 text-gray-400">
-                  <p>No steps defined yet.</p>
-                  <p className="text-sm mt-2">
-                    Click 'Generate Steps' at the bottom of Section 1 to get started.
-                  </p>
-                </div>
-              ) : null}
+                )}
 
-              {pseudoSteps.length > 0 && (
-                <div className="flex justify-center pt-4 border-t border-blue-500/20">
-                  <Button
-                    onClick={generateCode}
-                    disabled={isGeneratingCode}
-                    className="btn-matrix"
-                  >
-                    {isGeneratingCode ? "Generating..." : "Generate Code"}
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
+                {executionResult && (
+                  <div className="p-4 rounded-lg bg-black/30 border border-blue-500/20">
+                    <h5 className="text-blue-300 font-mono font-medium mb-4">Last Execution Result</h5>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-3 rounded-lg bg-black/20 border border-blue-500/10">
+                        <div className="space-y-1">
+                          <div className="text-xs text-blue-400/70 font-mono">Status</div>
+                          <div className={`text-sm font-bold font-mono ${executionResult.success ? 'text-green-400' : 'text-red-400'}`}>
+                            {executionResult.success ? 'SUCCESS' : 'FAILED'}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-xs text-blue-400/70 font-mono">Execution Time</div>
+                          <div className="text-sm text-blue-200 font-mono">
+                            {executionResult.executionTime || 0}ms
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-xs text-blue-400/70 font-mono">Mode</div>
+                          <div className="text-sm text-blue-200 font-mono">
+                            {executionResult.testMode ? 'Test' : 'Production'}
+                          </div>
+                        </div>
+                      </div>
 
-          <div className="p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
-            <div className="flex items-center justify-between mb-6">
-              <h4 className="text-lg font-bold text-blue-200 font-mono">3. Generated Executable Code</h4>
-            </div>
-            
-            <div className="space-y-6">
-              {(actionInputParameters.length > 0 || (generatedCodeData?.inputParameters && generatedCodeData.inputParameters.length > 0)) && (
-                <div className="space-y-4">
-                  <h5 className="text-blue-300 font-mono font-medium">Input Parameters</h5>
-                  <div className="space-y-3">
-                    {(generatedCodeData?.inputParameters || actionInputParameters).map((param: InputParameter, index: number) => (
-                      <div key={index} className="p-3 rounded-lg bg-black/30 border border-blue-500/20">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="space-y-1">
-                            <div className="text-sm text-blue-200 font-mono font-semibold">
-                              {param.name} {param.required && <span className="text-red-400">*</span>}
-                            </div>
-                            <div className="text-xs text-blue-400/70 font-mono">
-                              Type: {param.type} 
-                              {param.kind === 'object' && (
-                                <span className="text-blue-400 ml-1">(Database Relation)</span>
-                              )}
-                              {param.list && <span className="text-blue-400 ml-1">[List]</span>}
+                      {executionResult.success && executionResult.modelsAffected && executionResult.modelsAffected.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium text-green-400 font-mono">📊 Database Changes</div>
+                          <div className="space-y-2">
+                            {executionResult.modelsAffected.map((model: any, index: number) => (
+                              <div key={index} className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                                <div className="flex items-center justify-between mb-2">
+                                  <button
+                                    onClick={() => setViewingModelChanges(model)}
+                                    className="text-sm font-medium text-green-300 font-mono hover:text-green-200 hover:underline transition-colors cursor-pointer text-left"
+                                  >
+                                    {model.name} →
+                                  </button>
+                                  <div className="text-xs text-green-400/70 font-mono">
+                                    {model.recordCount} total records
+                                  </div>
+                                </div>
+                                {model.changes && model.changes.length > 0 && (
+                                  <div className="space-y-1">
+                                    <div className="text-xs text-green-400/70 font-mono">Recent Changes:</div>
+                                    {model.changes.slice(0, 2).map((change: any, changeIndex: number) => (
+                                      <div key={changeIndex} className="text-xs font-mono text-green-200 bg-green-500/5 p-2 rounded border border-green-500/10">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
+                                            change.operation === 'create' ? 'bg-blue-500/20 text-blue-300' :
+                                            change.operation === 'update' ? 'bg-yellow-500/20 text-yellow-300' :
+                                            change.operation === 'delete' ? 'bg-red-500/20 text-red-300' :
+                                            'bg-gray-500/20 text-gray-300'
+                                          }`}>
+                                            {change.operation?.toUpperCase()}
+                                          </span>
+                                          {change.recordId && (
+                                            <span className="text-green-400/70">ID: {change.recordId}</span>
+                                          )}
+                                        </div>
+                                        <div className="text-green-400/70 text-xs">
+                                          Click model name to view all changes
+                                        </div>
+                                      </div>
+                                    ))}
+                                    {model.changes.length > 2 && (
+                                      <div className="text-xs text-green-400/70 font-mono text-center py-1">
+                                        ... and {model.changes.length - 2} more changes
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {executionResult.result && (
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium text-blue-400 font-mono">�� Execution Result</div>
+                          <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                            <pre className="text-xs text-blue-200 font-mono whitespace-pre-wrap overflow-x-auto">
+                              {typeof executionResult.result === 'string' 
+                                ? executionResult.result 
+                                : JSON.stringify(executionResult.result, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+
+                      {!executionResult.success && executionResult.error && (
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium text-red-400 font-mono">❌ Error Details</div>
+                          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                            <pre className="text-xs text-red-200 font-mono whitespace-pre-wrap">
+                              {executionResult.error}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+
+                      {executionResult.execution?.data && (
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium text-blue-400 font-mono">📋 Legacy Data</div>
+                          <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                            <pre className="text-xs text-blue-200 font-mono whitespace-pre-wrap overflow-x-auto">
+                              {JSON.stringify(executionResult.execution.data, null, 2)}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+
+                      {(executionResult.execution?.message || executionResult.message) && (
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium text-blue-400 font-mono">💬 Message</div>
+                          <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                            <div className="text-sm text-blue-200 font-mono">
+                              {executionResult.execution?.message || executionResult.message || 'No message'}
                             </div>
                           </div>
-                          <div className="md:col-span-2">
-                            {param.description && (
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {(executeCode || actionInputParameters.length > 0) && (
+                  <div className="flex justify-center pt-4 border-t border-blue-500/20">
+                    <Button
+                      onClick={() => {
+                        // Check if we have code to execute
+                        if (!executeCode) {
+                          alert('No code generated yet. Please click "Generate Code" in Section 2 first.');
+                          return;
+                        }
+                        setShowRunModeModal(true);
+                      }}
+                      disabled={isExecuting}
+                      className="btn-matrix px-6 py-2"
+                    >
+                      {isExecuting ? 'Running...' : 'Run'}
+                    </Button>
+                  </div>
+                )}
+
+                {/* Show helpful message when no code is available */}
+                {!executeCode && actionInputParameters.length === 0 && (
+                  <div className="flex justify-center pt-4 border-t border-blue-500/20">
+                    <div className="text-center py-8 text-gray-400">
+                      <p className="font-mono">No executable code available.</p>
+                      <p className="text-sm mt-2 font-mono">
+                        Complete steps 1 and 2 above to generate executable code.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
+        {showRunModeModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-gray-900 border border-blue-500/30 rounded-xl p-6 max-w-md w-full mx-4">
+              <h3 className="text-xl font-bold text-blue-200 font-mono mb-4">
+                Choose Run Mode
+              </h3>
+              
+              <p className="text-blue-400 text-sm font-mono mb-6">
+                Select how you want to execute this action:
+              </p>
+
+              <div className="space-y-4">
+                <button
+                  onClick={() => handleRunModeSelection(true)}
+                  className="w-full p-4 text-left rounded-lg border border-yellow-500/30 bg-yellow-500/10 hover:bg-yellow-500/20 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                      <span className="text-yellow-400 text-lg">🧪</span>
+                    </div>
+                    <div>
+                      <h4 className="text-yellow-300 font-mono font-semibold">Test Mode</h4>
+                      <p className="text-yellow-400/70 text-sm font-mono">Run safely without affecting real data</p>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => handleRunModeSelection(false)}
+                  className="w-full p-4 text-left rounded-lg border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                      <span className="text-green-400 text-lg">🚀</span>
+                    </div>
+                    <div>
+                      <h4 className="text-green-300 font-mono font-semibold">Production Mode</h4>
+                      <p className="text-green-400/70 text-sm font-mono">Execute with real data and database updates</p>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <div className="flex justify-end gap-3 mt-6">
+                <Button
+                  onClick={() => setShowRunModeModal(false)}
+                  variant="outline"
+                  className="px-4 py-2"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showInputDialog && (generatedCodeData || actionInputParameters.length > 0) && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-gray-900 border border-blue-500/30 rounded-xl p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+              <h3 className="text-xl font-bold text-blue-200 font-mono mb-4">
+                Action Input Required
+              </h3>
+              
+              <div className="space-y-6">
+                {(generatedCodeData?.inputParameters || actionInputParameters).length > 0 && (
+                  <div>
+                    <h4 className="text-lg font-medium text-blue-300 font-mono mb-3">Input Parameters</h4>
+                    <div className="space-y-4">
+                      {(generatedCodeData?.inputParameters || actionInputParameters).map((param: InputParameter, index: number) => (
+                        <div key={index} className="p-4 rounded-lg bg-black/30 border border-blue-500/20">
+                          <div className="space-y-3">
+                            <div className="flex flex-col gap-1">
+                              <Label className="text-blue-300 font-mono text-sm font-semibold">
+                                {param.name} {param.required && <span className="text-red-400">*</span>}
+                              </Label>
                               <div className="text-xs text-blue-400/70 font-mono">
-                                📝 {param.description}
+                                Type: {param.type} 
+                                {param.kind === 'object' && (
+                                  <span className="text-blue-400 ml-1">(Database Relation)</span>
+                                )}
+                                {param.list && <span className="text-blue-400 ml-1">[List]</span>}
                               </div>
-                            )}
+                              {param.description && (
+                                <div className="text-xs text-blue-400/70 font-mono">
+                                  📝 {param.description}
+                                </div>
+                              )}
+                            </div>
+                            
+                            <div className="space-y-2">
+                              {renderParameterInput(param)}
+                            </div>
+
                             {param.defaultValue && (
                               <div className="text-xs text-blue-400/70 font-mono">
                                 Default: {typeof param.defaultValue === 'object' ? JSON.stringify(param.defaultValue) : param.defaultValue}
@@ -1032,457 +1497,54 @@ export const ActionEditor = memo(({
                             )}
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-blue-300 font-mono font-medium">Environment Variables</Label>
-                  <Button
-                    onClick={addEnvVar}
-                    className="btn-matrix px-4 py-2 text-sm font-mono"
-                  >
-                    <PlusIcon size={16} />
-                    <span className="ml-2">Add Env Var</span>
-                  </Button>
-                </div>
-                
-                <div className="space-y-2">
-                  {envVars.map((envVar, index) => (
-                    <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2 p-3 rounded-lg bg-black/30 border border-blue-500/20">
-                      <Input
-                        value={envVar.name}
-                        onChange={(e) => updateEnvVar(index, { name: e.target.value })}
-                        placeholder="Variable name"
-                        className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono"
-                      />
-                      <Input
-                        value={envVar.description}
-                        onChange={(e) => updateEnvVar(index, { description: e.target.value })}
-                        placeholder="Description"
-                        className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono"
-                      />
-                      <div className="flex items-center gap-2">
-                        <label className="flex items-center gap-1 text-blue-300 text-sm font-mono">
-                          <input
-                            type="checkbox"
-                            checked={envVar.required}
-                            onChange={(e) => updateEnvVar(index, { required: e.target.checked })}
-                            className="rounded border-blue-500/30"
+                {(generatedCodeData?.envVars || envVars).filter(e => e.required).length > 0 && (
+                  <div>
+                    <h4 className="text-lg font-medium text-blue-300 font-mono mb-3">Required Environment Variables</h4>
+                    <div className="space-y-3">
+                      {(generatedCodeData?.envVars || envVars).filter(e => e.required).map((envVar, index) => (
+                        <div key={index} className="space-y-1">
+                          <Label className="text-blue-300 font-mono text-sm">
+                            {envVar.name} {envVar.sensitive && <span className="text-yellow-400">(Sensitive)</span>}
+                          </Label>
+                          <Input
+                            type={envVar.sensitive ? 'password' : 'text'}
+                            value={envVarValues[envVar.name] || ''}
+                            onChange={(e) => setEnvVarValues(prev => ({ ...prev, [envVar.name]: e.target.value }))}
+                            placeholder={envVar.description}
+                            className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono"
                           />
-                          Required
-                        </label>
-                        <label className="flex items-center gap-1 text-blue-300 text-sm font-mono">
-                          <input
-                            type="checkbox"
-                            checked={envVar.sensitive}
-                            onChange={(e) => updateEnvVar(index, { sensitive: e.target.checked })}
-                            className="rounded border-blue-500/30"
-                          />
-                          Sensitive
-                        </label>
-                      </div>
-                      <Button
-                        onClick={() => deleteEnvVar(index)}
-                        variant="destructive"
-                        size="sm"
-                      >
-                        <CrossIcon size={16} />
-                      </Button>
+                          <p className="text-xs text-blue-400/70 font-mono">{envVar.description}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                  
-                  {envVars.length === 0 && (
-                    <div className="text-center py-4 text-blue-400/70">
-                      <p className="text-sm font-mono">No environment variables defined.</p>
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-blue-300 font-mono font-medium">Generated Code</Label>
-                <Textarea
-                  value={executeCode}
-                  onChange={(e) => setExecuteCode(e.target.value)}
-                  onBlur={handleCodeUpdate}
-                  placeholder="Generated executable JavaScript will appear here after clicking 'Generate Code' in Section 2..."
-                  className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono text-sm"
-                  rows={12}
-                />
+              <div className="flex justify-end gap-3 mt-6">
+                <Button
+                  onClick={() => setShowInputDialog(false)}
+                  variant="outline"
+                  className="px-4 py-2"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleInputDialogSubmit}
+                  className="btn-matrix px-4 py-2"
+                >
+                  Execute ({executionMode === 'test' ? 'Test' : 'Production'})
+                </Button>
               </div>
-
-              {generatedCodeData && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-lg bg-black/30 border border-blue-500/20">
-                  <div>
-                    <div 
-                      className="flex items-center justify-between cursor-pointer mb-2" 
-                      onClick={() => setInputParametersCollapsed(!inputParametersCollapsed)}
-                    >
-                      <h5 className="text-blue-300 font-mono font-medium">
-                        Input Parameters ({(generatedCodeData.inputParameters || actionInputParameters).length})
-                      </h5>
-                      <svg 
-                        className={`w-4 h-4 text-blue-300 transition-transform duration-200 ${inputParametersCollapsed ? '-rotate-90' : 'rotate-0'}`}
-                        fill="none" 
-                        stroke="currentColor" 
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    {!inputParametersCollapsed && (
-                      <div className="space-y-1 text-sm">
-                        {(generatedCodeData.inputParameters || actionInputParameters).map((param: InputParameter, index: number) => (
-                          <div key={index} className="text-blue-400 font-mono">
-                            • {param.name} ({param.type}) {param.required && <span className="text-red-400">*</span>}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <div 
-                      className="flex items-center justify-between cursor-pointer mb-2" 
-                      onClick={() => setOutputParametersCollapsed(!outputParametersCollapsed)}
-                    >
-                      <h5 className="text-blue-300 font-mono font-medium">
-                        Output Parameters ({generatedCodeData.outputParameters.length})
-                      </h5>
-                      <svg 
-                        className={`w-4 h-4 text-blue-300 transition-transform duration-200 ${outputParametersCollapsed ? '-rotate-90' : 'rotate-0'}`}
-                        fill="none" 
-                        stroke="currentColor" 
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                    {!outputParametersCollapsed && (
-                      <div className="space-y-1 text-sm">
-                        {generatedCodeData.outputParameters.map((param, index) => (
-                          <div key={index} className="text-blue-400 font-mono">
-                            • {param.name} ({param.type})
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {executionResult && (
-                <div className="p-4 rounded-lg bg-black/30 border border-blue-500/20">
-                  <h5 className="text-blue-300 font-mono font-medium mb-4">Last Execution Result</h5>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-3 rounded-lg bg-black/20 border border-blue-500/10">
-                      <div className="space-y-1">
-                        <div className="text-xs text-blue-400/70 font-mono">Status</div>
-                        <div className={`text-sm font-bold font-mono ${executionResult.success ? 'text-green-400' : 'text-red-400'}`}>
-                          {executionResult.success ? 'SUCCESS' : 'FAILED'}
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-xs text-blue-400/70 font-mono">Execution Time</div>
-                        <div className="text-sm text-blue-200 font-mono">
-                          {executionResult.executionTime || 0}ms
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-xs text-blue-400/70 font-mono">Mode</div>
-                        <div className="text-sm text-blue-200 font-mono">
-                          {executionResult.testMode ? 'Test' : 'Production'}
-                        </div>
-                      </div>
-                    </div>
-
-                    {executionResult.success && executionResult.modelsAffected && executionResult.modelsAffected.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium text-green-400 font-mono">📊 Database Changes</div>
-                        <div className="space-y-2">
-                          {executionResult.modelsAffected.map((model: any, index: number) => (
-                            <div key={index} className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                              <div className="flex items-center justify-between mb-2">
-                                <button
-                                  onClick={() => setViewingModelChanges(model)}
-                                  className="text-sm font-medium text-green-300 font-mono hover:text-green-200 hover:underline transition-colors cursor-pointer text-left"
-                                >
-                                  {model.name} →
-                                </button>
-                                <div className="text-xs text-green-400/70 font-mono">
-                                  {model.recordCount} total records
-                                </div>
-                              </div>
-                              {model.changes && model.changes.length > 0 && (
-                                <div className="space-y-1">
-                                  <div className="text-xs text-green-400/70 font-mono">Recent Changes:</div>
-                                  {model.changes.slice(0, 2).map((change: any, changeIndex: number) => (
-                                    <div key={changeIndex} className="text-xs font-mono text-green-200 bg-green-500/5 p-2 rounded border border-green-500/10">
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-                                          change.operation === 'create' ? 'bg-blue-500/20 text-blue-300' :
-                                          change.operation === 'update' ? 'bg-yellow-500/20 text-yellow-300' :
-                                          change.operation === 'delete' ? 'bg-red-500/20 text-red-300' :
-                                          'bg-gray-500/20 text-gray-300'
-                                        }`}>
-                                          {change.operation?.toUpperCase()}
-                                        </span>
-                                        {change.recordId && (
-                                          <span className="text-green-400/70">ID: {change.recordId}</span>
-                                        )}
-                                      </div>
-                                      <div className="text-green-400/70 text-xs">
-                                        Click model name to view all changes
-                                      </div>
-                                    </div>
-                                  ))}
-                                  {model.changes.length > 2 && (
-                                    <div className="text-xs text-green-400/70 font-mono text-center py-1">
-                                      ... and {model.changes.length - 2} more changes
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {executionResult.result && (
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium text-blue-400 font-mono">💾 Execution Result</div>
-                        <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                          <pre className="text-xs text-blue-200 font-mono whitespace-pre-wrap overflow-x-auto">
-                            {typeof executionResult.result === 'string' 
-                              ? executionResult.result 
-                              : JSON.stringify(executionResult.result, null, 2)}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-
-                    {!executionResult.success && executionResult.error && (
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium text-red-400 font-mono">❌ Error Details</div>
-                        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                          <pre className="text-xs text-red-200 font-mono whitespace-pre-wrap">
-                            {executionResult.error}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-
-                    {executionResult.execution?.data && (
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium text-blue-400 font-mono">📋 Legacy Data</div>
-                        <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                          <pre className="text-xs text-blue-200 font-mono whitespace-pre-wrap overflow-x-auto">
-                            {JSON.stringify(executionResult.execution.data, null, 2)}
-                          </pre>
-                        </div>
-                      </div>
-                    )}
-
-                    {(executionResult.execution?.message || executionResult.message) && (
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium text-blue-400 font-mono">💬 Message</div>
-                        <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                          <div className="text-sm text-blue-200 font-mono">
-                            {executionResult.execution?.message || executionResult.message || 'No message'}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {(executeCode || actionInputParameters.length > 0) && (
-                <div className="flex justify-center pt-4 border-t border-blue-500/20">
-                  <Button
-                    onClick={() => {
-                      // Check if we have code to execute
-                      if (!executeCode) {
-                        alert('No code generated yet. Please click "Generate Code" in Section 2 first.');
-                        return;
-                      }
-                      setShowRunModeModal(true);
-                    }}
-                    disabled={isExecuting}
-                    className="btn-matrix px-6 py-2"
-                  >
-                    {isExecuting ? 'Running...' : 'Run'}
-                  </Button>
-                </div>
-              )}
-
-              {/* Show helpful message when no code is available */}
-              {!executeCode && actionInputParameters.length === 0 && (
-                <div className="flex justify-center pt-4 border-t border-blue-500/20">
-                  <div className="text-center py-8 text-gray-400">
-                    <p className="font-mono">No executable code available.</p>
-                    <p className="text-sm mt-2 font-mono">
-                      Complete steps 1 and 2 above to generate executable code.
-                    </p>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
-        </>
-      )}
-
-      {showRunModeModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-900 border border-blue-500/30 rounded-xl p-6 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-blue-200 font-mono mb-4">
-              Choose Run Mode
-            </h3>
-            
-            <p className="text-blue-400 text-sm font-mono mb-6">
-              Select how you want to execute this action:
-            </p>
-
-            <div className="space-y-4">
-              <button
-                onClick={() => handleRunModeSelection(true)}
-                className="w-full p-4 text-left rounded-lg border border-yellow-500/30 bg-yellow-500/10 hover:bg-yellow-500/20 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                    <span className="text-yellow-400 text-lg">🧪</span>
-                  </div>
-                  <div>
-                    <h4 className="text-yellow-300 font-mono font-semibold">Test Mode</h4>
-                    <p className="text-yellow-400/70 text-sm font-mono">Run safely without affecting real data</p>
-                  </div>
-                </div>
-              </button>
-
-              <button
-                onClick={() => handleRunModeSelection(false)}
-                className="w-full p-4 text-left rounded-lg border border-green-500/30 bg-green-500/10 hover:bg-green-500/20 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
-                    <span className="text-green-400 text-lg">🚀</span>
-                  </div>
-                  <div>
-                    <h4 className="text-green-300 font-mono font-semibold">Production Mode</h4>
-                    <p className="text-green-400/70 text-sm font-mono">Execute with real data and database updates</p>
-                  </div>
-                </div>
-              </button>
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <Button
-                onClick={() => setShowRunModeModal(false)}
-                variant="outline"
-                className="px-4 py-2"
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showInputDialog && (generatedCodeData || actionInputParameters.length > 0) && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-900 border border-blue-500/30 rounded-xl p-6 max-w-4xl w-full mx-4 max-h-[80vh] overflow-y-auto">
-            <h3 className="text-xl font-bold text-blue-200 font-mono mb-4">
-              Action Input Required
-            </h3>
-            
-            <div className="space-y-6">
-              {(generatedCodeData?.inputParameters || actionInputParameters).length > 0 && (
-                <div>
-                  <h4 className="text-lg font-medium text-blue-300 font-mono mb-3">Input Parameters</h4>
-                  <div className="space-y-4">
-                    {(generatedCodeData?.inputParameters || actionInputParameters).map((param: InputParameter, index: number) => (
-                      <div key={index} className="p-4 rounded-lg bg-black/30 border border-blue-500/20">
-                        <div className="space-y-3">
-                          <div className="flex flex-col gap-1">
-                            <Label className="text-blue-300 font-mono text-sm font-semibold">
-                              {param.name} {param.required && <span className="text-red-400">*</span>}
-                            </Label>
-                            <div className="text-xs text-blue-400/70 font-mono">
-                              Type: {param.type} 
-                              {param.kind === 'object' && (
-                                <span className="text-blue-400 ml-1">(Database Relation)</span>
-                              )}
-                              {param.list && <span className="text-blue-400 ml-1">[List]</span>}
-                            </div>
-                            {param.description && (
-                              <div className="text-xs text-blue-400/70 font-mono">
-                                📝 {param.description}
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="space-y-2">
-                            {renderParameterInput(param)}
-                          </div>
-
-                          {param.defaultValue && (
-                            <div className="text-xs text-blue-400/70 font-mono">
-                              Default: {typeof param.defaultValue === 'object' ? JSON.stringify(param.defaultValue) : param.defaultValue}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {(generatedCodeData?.envVars || envVars).filter(e => e.required).length > 0 && (
-                <div>
-                  <h4 className="text-lg font-medium text-blue-300 font-mono mb-3">Required Environment Variables</h4>
-                  <div className="space-y-3">
-                    {(generatedCodeData?.envVars || envVars).filter(e => e.required).map((envVar, index) => (
-                      <div key={index} className="space-y-1">
-                        <Label className="text-blue-300 font-mono text-sm">
-                          {envVar.name} {envVar.sensitive && <span className="text-yellow-400">(Sensitive)</span>}
-                        </Label>
-                        <Input
-                          type={envVar.sensitive ? 'password' : 'text'}
-                          value={envVarValues[envVar.name] || ''}
-                          onChange={(e) => setEnvVarValues(prev => ({ ...prev, [envVar.name]: e.target.value }))}
-                          placeholder={envVar.description}
-                          className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono"
-                        />
-                        <p className="text-xs text-blue-400/70 font-mono">{envVar.description}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <Button
-                onClick={() => setShowInputDialog(false)}
-                variant="outline"
-                className="px-4 py-2"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleInputDialogSubmit}
-                className="btn-matrix px-4 py-2"
-              >
-                Execute ({executionMode === 'test' ? 'Test' : 'Production'})
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }); 
