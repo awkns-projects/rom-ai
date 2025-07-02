@@ -928,7 +928,7 @@ export const ActionEditor = memo(({
             <div className={`p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm ${
               isGeneratingDescription ? `ai-generating ${aiGeneratingCardClass}` : ''
             }`}>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
                   <h4 className="text-lg font-bold text-blue-200 font-mono">1. Description</h4>
                   {isGeneratingDescription && (
@@ -940,34 +940,34 @@ export const ActionEditor = memo(({
                 </div>
               </div>
               
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div>
-                  <Label htmlFor="action-name">Action Name</Label>
+                  <Label htmlFor="action-name" className="text-blue-300 font-mono font-medium text-sm mb-3 block">Action Name</Label>
                   <Input
                     id="action-name"
                     value={action.name}
                     onChange={(e) => onUpdate({ ...action, name: e.target.value })}
                     placeholder="e.g., Create Task, Send Email"
-                    className="bg-black/50 border-cyan-500/30 text-cyan-100"
+                    className="bg-black/50 border-cyan-500/30 text-cyan-100 h-11"
                   />
                 </div>
 
                 <div>
-                  <Label htmlFor="action-description">Description</Label>
+                  <Label htmlFor="action-description" className="text-blue-300 font-mono font-medium text-sm mb-3 block">Description</Label>
                   <Textarea
                     id="action-description"
                     value={action.description}
                     onChange={(e) => onUpdate({ ...action, description: e.target.value })}
                     placeholder="Describe what this action does and its purpose..."
-                    className="bg-black/50 border-cyan-500/30 text-cyan-100 min-h-[100px]"
+                    className="bg-black/50 border-cyan-500/30 text-cyan-100 min-h-[120px] resize-none"
                   />
                 </div>
 
-                <div className="flex justify-center pt-2">
+                <div className="flex justify-center pt-6">
                   <Button
                     onClick={generatePseudoStepsFromDescription}
                     disabled={!action.name.trim() || !action.description.trim() || isGeneratingDescription}
-                    className="btn-matrix"
+                    className="btn-matrix px-8 py-4 text-base"
                   >
                     {isGeneratingDescription ? (
                       <div className="flex items-center gap-2">
@@ -985,7 +985,7 @@ export const ActionEditor = memo(({
             <div className={`p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm ${
               isGeneratingSteps ? `ai-generating ${aiGeneratingCardClass}` : ''
             }`}>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
                   <h4 className="text-lg font-bold text-blue-200 font-mono">2. AI-Generated Pseudo Steps</h4>
                   {isGeneratingSteps && (
@@ -1006,38 +1006,39 @@ export const ActionEditor = memo(({
                 </div>
               </div>
               
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {pseudoSteps.map((step, index) => (
-                  <div key={step.id} className="p-4 rounded-xl bg-black/30 border border-blue-500/20">
-                    <div className="flex items-center justify-between mb-3">
-                      <h5 className="text-blue-300 font-mono font-medium">Step {index + 1}</h5>
+                  <div key={step.id} className="p-6 rounded-xl bg-black/30 border border-blue-500/20 space-y-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h5 className="text-blue-300 font-mono font-medium text-lg">Step {index + 1}</h5>
                       <Button
                         onClick={() => deletePseudoStep(step.id)}
                         variant="destructive"
-                        className="px-3 py-2 h-8 min-w-[80px]"
+                        className="px-4 py-2 h-9 min-w-[100px]"
                       >
                         <CrossIcon size={14} />
+                        <span className="ml-2">Remove</span>
                       </Button>
                     </div>
                     
-                    <div className="grid grid-cols-1 gap-4 mb-4">
-                      <div className="space-y-2">
-                        <Label className="text-blue-300 font-mono font-medium">Description</Label>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                      <div className="space-y-3">
+                        <Label className="text-blue-300 font-mono font-medium text-sm">Description</Label>
                         <Input
                           value={step.description}
                           onChange={(e) => updatePseudoStep(step.id, { description: e.target.value })}
                           placeholder="Describe this step"
-                          className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono"
+                          className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono h-11"
                         />
                       </div>
                       
-                      <div className="space-y-2">
-                        <Label className="text-blue-300 font-mono font-medium">Step Type</Label>
+                      <div className="space-y-3">
+                        <Label className="text-blue-300 font-mono font-medium text-sm">Step Type</Label>
                         <Select 
                           value={step.type} 
                           onValueChange={(value) => updatePseudoStep(step.id, { type: value as PseudoCodeStep['type'] })}
                         >
-                          <SelectTrigger className="bg-black/50 border-blue-500/30 text-blue-200 focus:border-blue-400 focus:ring-blue-400/20 font-mono">
+                          <SelectTrigger className="bg-black/50 border-blue-500/30 text-blue-200 focus:border-blue-400 focus:ring-blue-400/20 font-mono h-11">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -1051,8 +1052,8 @@ export const ActionEditor = memo(({
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                      <div className="space-y-3">
                         <StepFieldEditor
                           fields={step.inputFields || []}
                           onFieldsChange={(fields: StepField[]) => updateStepInputFields(step.id, fields)}
@@ -1061,13 +1062,13 @@ export const ActionEditor = memo(({
                           allModels={allModels}
                         />
                         {index === 0 && step.inputFields && step.inputFields.some(f => f.name && f.name.trim() !== '') && (
-                          <div className="text-xs text-blue-400/70 font-mono mt-1">
+                          <div className="text-xs text-blue-400/70 font-mono mt-2 p-2 rounded bg-blue-500/10 border border-blue-500/20">
                             ℹ️ These fields will be used as action input parameters
                           </div>
                         )}
                       </div>
                       
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         <StepFieldEditor
                           fields={step.outputFields || []}
                           onFieldsChange={(fields: StepField[]) => updateStepOutputFields(step.id, fields)}
@@ -1081,20 +1082,25 @@ export const ActionEditor = memo(({
                 ))}
                 
                 {pseudoSteps.length === 0 ? (
-                  <div className="text-center py-8 text-gray-400">
-                    <p>No steps defined yet.</p>
-                    <p className="text-sm mt-2">
-                      Click 'Generate Steps' at the bottom of Section 1 to get started.
-                    </p>
+                  <div className="text-center py-12 text-gray-400">
+                    <div className="max-w-md mx-auto space-y-4">
+                      <div className="w-16 h-16 mx-auto rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                        <span className="text-blue-400 text-2xl">🔄</span>
+                      </div>
+                      <p className="font-mono text-lg">No steps defined yet.</p>
+                      <p className="text-sm mt-2 font-mono text-gray-500">
+                        Click 'Generate Steps' at the bottom of Section 1 to get started.
+                      </p>
+                    </div>
                   </div>
                 ) : null}
 
                 {pseudoSteps.length > 0 && (
-                  <div className="flex justify-center pt-4 border-t border-blue-500/20">
+                  <div className="flex justify-center pt-6 border-t border-blue-500/20">
                     <Button
                       onClick={generateCode}
                       disabled={isGeneratingCode}
-                      className="btn-matrix"
+                      className="btn-matrix px-8 py-4 text-base"
                     >
                       {isGeneratingCode ? (
                         <div className="flex items-center gap-2">
@@ -1113,7 +1119,7 @@ export const ActionEditor = memo(({
             <div className={`p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm ${
               isGeneratingCode ? `ai-generating ${aiGeneratingCardClass}` : ''
             }`}>
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
                   <h4 className="text-lg font-bold text-blue-200 font-mono">3. Generated Executable Code</h4>
                   {isGeneratingCode && (
@@ -1125,15 +1131,15 @@ export const ActionEditor = memo(({
                 </div>
               </div>
               
-              <div className="space-y-6">
+              <div className="space-y-8">
                 {(actionInputParameters.length > 0 || (generatedCodeData?.inputParameters && generatedCodeData.inputParameters.length > 0)) && (
                   <div className="space-y-4">
-                    <h5 className="text-blue-300 font-mono font-medium">Input Parameters</h5>
-                    <div className="space-y-3">
+                    <h5 className="text-blue-300 font-mono font-medium text-lg">Input Parameters</h5>
+                    <div className="space-y-4">
                       {(generatedCodeData?.inputParameters || actionInputParameters).map((param: InputParameter, index: number) => (
-                        <div key={index} className="p-3 rounded-lg bg-black/30 border border-blue-500/20">
+                        <div key={index} className="p-4 rounded-lg bg-black/30 border border-blue-500/20">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="space-y-1">
+                            <div className="space-y-2">
                               <div className="text-sm text-blue-200 font-mono font-semibold">
                                 {param.name} {param.required && <span className="text-red-400">*</span>}
                               </div>
@@ -1147,7 +1153,7 @@ export const ActionEditor = memo(({
                             </div>
                             <div className="md:col-span-2">
                               {param.description && (
-                                <div className="text-xs text-blue-400/70 font-mono">
+                                <div className="text-xs text-blue-400/70 font-mono mb-2">
                                   📝 {param.description}
                                 </div>
                               )}
@@ -1164,9 +1170,9 @@ export const ActionEditor = memo(({
                   </div>
                 )}
 
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div className="flex items-center justify-between">
-                    <Label className="text-blue-300 font-mono font-medium">Environment Variables</Label>
+                    <Label className="text-blue-300 font-mono font-medium text-lg">Environment Variables</Label>
                     <Button
                       onClick={addEnvVar}
                       className="btn-matrix px-6 py-3 text-sm font-mono flex items-center gap-2"
@@ -1176,23 +1182,23 @@ export const ActionEditor = memo(({
                     </Button>
                   </div>
                   
-                  <div className="space-y-2">
+                  <div className="space-y-4">
                     {envVars.map((envVar, index) => (
-                      <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2 p-3 rounded-lg bg-black/30 border border-blue-500/20">
+                      <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 rounded-lg bg-black/30 border border-blue-500/20">
                         <Input
                           value={envVar.name}
                           onChange={(e) => updateEnvVar(index, { name: e.target.value })}
                           placeholder="Variable name"
-                          className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono"
+                          className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono h-11"
                         />
                         <Input
                           value={envVar.description}
                           onChange={(e) => updateEnvVar(index, { description: e.target.value })}
                           placeholder="Description"
-                          className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono"
+                          className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono h-11"
                         />
-                        <div className="flex items-center gap-2">
-                          <label className="flex items-center gap-1 text-blue-300 text-sm font-mono">
+                        <div className="flex items-center gap-4">
+                          <label className="flex items-center gap-2 text-blue-300 text-sm font-mono">
                             <input
                               type="checkbox"
                               checked={envVar.required}
@@ -1201,7 +1207,7 @@ export const ActionEditor = memo(({
                             />
                             Required
                           </label>
-                          <label className="flex items-center gap-1 text-blue-300 text-sm font-mono">
+                          <label className="flex items-center gap-2 text-blue-300 text-sm font-mono">
                             <input
                               type="checkbox"
                               checked={envVar.sensitive}
@@ -1215,6 +1221,7 @@ export const ActionEditor = memo(({
                           onClick={() => deleteEnvVar(index)}
                           variant="destructive"
                           size="lg"
+                          className="h-11"
                         >
                           <CrossIcon size={14} />
                         </Button>
@@ -1222,33 +1229,33 @@ export const ActionEditor = memo(({
                     ))}
                     
                     {envVars.length === 0 && (
-                      <div className="text-center py-4 text-blue-400/70">
+                      <div className="text-center py-8 text-blue-400/70">
                         <p className="text-sm font-mono">No environment variables defined.</p>
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-blue-300 font-mono font-medium">Generated Code</Label>
+                <div className="space-y-4">
+                  <Label className="text-blue-300 font-mono font-medium text-lg block">Generated Code</Label>
                   <Textarea
                     value={executeCode}
                     onChange={(e) => setExecuteCode(e.target.value)}
                     onBlur={handleCodeUpdate}
                     placeholder="Generated executable JavaScript will appear here after clicking 'Generate Code' in Section 2..."
-                    className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono text-sm"
-                    rows={12}
+                    className="bg-black/50 border-blue-500/30 text-blue-200 placeholder-blue-500/50 focus:border-blue-400 focus:ring-blue-400/20 font-mono text-sm resize-none"
+                    rows={15}
                   />
                 </div>
 
                 {generatedCodeData && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-lg bg-black/30 border border-blue-500/20">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-lg bg-black/30 border border-blue-500/20">
                     <div>
                       <div 
-                        className="flex items-center justify-between cursor-pointer mb-2" 
+                        className="flex items-center justify-between cursor-pointer mb-4" 
                         onClick={() => setInputParametersCollapsed(!inputParametersCollapsed)}
                       >
-                        <h5 className="text-blue-300 font-mono font-medium">
+                        <h5 className="text-blue-300 font-mono font-medium text-base">
                           Input Parameters ({(generatedCodeData.inputParameters || actionInputParameters).length})
                         </h5>
                         <svg 
@@ -1261,9 +1268,9 @@ export const ActionEditor = memo(({
                         </svg>
                       </div>
                       {!inputParametersCollapsed && (
-                        <div className="space-y-1 text-sm">
+                        <div className="space-y-2 text-sm">
                           {(generatedCodeData.inputParameters || actionInputParameters).map((param: InputParameter, index: number) => (
-                            <div key={index} className="text-blue-400 font-mono">
+                            <div key={index} className="text-blue-400 font-mono p-2 rounded bg-blue-500/5">
                               • {param.name} ({param.type}) {param.required && <span className="text-red-400">*</span>}
                             </div>
                           ))}
@@ -1272,10 +1279,10 @@ export const ActionEditor = memo(({
                     </div>
                     <div>
                       <div 
-                        className="flex items-center justify-between cursor-pointer mb-2" 
+                        className="flex items-center justify-between cursor-pointer mb-4" 
                         onClick={() => setOutputParametersCollapsed(!outputParametersCollapsed)}
                       >
-                        <h5 className="text-blue-300 font-mono font-medium">
+                        <h5 className="text-blue-300 font-mono font-medium text-base">
                           Output Parameters ({generatedCodeData.outputParameters.length})
                         </h5>
                         <svg 
@@ -1288,9 +1295,9 @@ export const ActionEditor = memo(({
                         </svg>
                       </div>
                       {!outputParametersCollapsed && (
-                        <div className="space-y-1 text-sm">
+                        <div className="space-y-2 text-sm">
                           {generatedCodeData.outputParameters.map((param, index) => (
-                            <div key={index} className="text-blue-400 font-mono">
+                            <div key={index} className="text-blue-400 font-mono p-2 rounded bg-blue-500/5">
                               • {param.name} ({param.type})
                             </div>
                           ))}
@@ -1428,7 +1435,7 @@ export const ActionEditor = memo(({
                 )}
 
                 {(executeCode || actionInputParameters.length > 0) && (
-                  <div className="flex justify-center pt-4 border-t border-blue-500/20">
+                  <div className="flex justify-center pt-8 border-t border-blue-500/20">
                     <Button
                       onClick={() => {
                         // Check if we have code to execute
@@ -1439,17 +1446,20 @@ export const ActionEditor = memo(({
                         setShowRunModeModal(true);
                       }}
                       disabled={isExecuting}
-                      className={`btn-matrix px-8 py-3 text-base font-medium ${
+                      className={`btn-matrix px-12 py-4 text-lg font-medium ${
                         isExecuting ? 'ai-generating opacity-75' : ''
                       }`}
                     >
                       {isExecuting ? (
-                        <div className="flex items-center gap-2">
-                          <div className="w-4 h-4 rounded-full border-2 border-yellow-300 border-t-transparent animate-spin"></div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-5 h-5 rounded-full border-2 border-yellow-300 border-t-transparent animate-spin"></div>
                           <span>Running...</span>
                         </div>
                       ) : (
-                        'Run'
+                        <div className="flex items-center gap-2">
+                          <span>🚀</span>
+                          <span>Run Action</span>
+                        </div>
                       )}
                     </Button>
                   </div>
@@ -1457,12 +1467,17 @@ export const ActionEditor = memo(({
 
                 {/* Show helpful message when no code is available */}
                 {!executeCode && actionInputParameters.length === 0 && (
-                  <div className="flex justify-center pt-4 border-t border-blue-500/20">
-                    <div className="text-center py-8 text-gray-400">
-                      <p className="font-mono">No executable code available.</p>
-                      <p className="text-sm mt-2 font-mono">
-                        Complete steps 1 and 2 above to generate executable code.
-                      </p>
+                  <div className="flex justify-center pt-8 border-t border-blue-500/20">
+                    <div className="text-center py-12 text-gray-400">
+                      <div className="max-w-md mx-auto space-y-4">
+                        <div className="w-16 h-16 mx-auto rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                          <span className="text-blue-400 text-2xl">💻</span>
+                        </div>
+                        <p className="font-mono text-lg">No executable code available.</p>
+                        <p className="text-sm mt-2 font-mono text-gray-500">
+                          Complete steps 1 and 2 above to generate executable code.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1553,11 +1568,6 @@ export const ActionEditor = memo(({
                                 )}
                                 {param.list && <span className="text-blue-400 ml-1">[List]</span>}
                               </div>
-                              {param.description && (
-                                <div className="text-xs text-blue-400/70 font-mono">
-                                  📝 {param.description}
-                                </div>
-                              )}
                             </div>
                             
                             <div className="space-y-2">
