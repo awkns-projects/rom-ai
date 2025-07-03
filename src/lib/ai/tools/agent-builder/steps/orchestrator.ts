@@ -1,6 +1,6 @@
 import type { AgentData } from '../types';
 import { executeStep0ComprehensiveAnalysis, validateStep0Output, extractStep0Insights, type Step0Output } from './step0-comprehensive-analysis';
-import { executeStep1DatabaseGeneration, validateStep1Output, extractDatabaseInsights, type Step1Output } from './step1-database-generation';
+import { executeStep1DatabaseGeneration, validateStep1Output, extractModelInsights, type Step1Output } from './step1-database-generation';
 import { executeStep2ActionGeneration, validateStep2Output, extractActionInsights, type Step2Output } from './step2-action-generation';
 import { executeStep3ScheduleGeneration, validateStep3Output, extractScheduleInsights, type Step3Output } from './step3-schedule-generation';
 import { performDeepMerge } from '../merging';
@@ -43,7 +43,7 @@ export interface OrchestratorResult {
   };
   insights: {
     comprehensive?: ReturnType<typeof extractStep0Insights>;
-    database?: ReturnType<typeof extractDatabaseInsights>;
+    database?: ReturnType<typeof extractModelInsights>;
     actions?: ReturnType<typeof extractActionInsights>;
     schedules?: ReturnType<typeof extractScheduleInsights>;
   };
@@ -65,12 +65,16 @@ export interface OrchestratorResult {
 }
 
 /**
- * Execute the complete agent generation process with enhanced orchestration
+ * Main orchestrator for the complete agent building process
  */
 export async function executeAgentGeneration(
   config: OrchestratorConfig
 ): Promise<OrchestratorResult> {
   const startTime = Date.now();
+  
+  console.log('🚀 Starting complete agent building process...');
+  console.log(`📝 User Request: ${config.userRequest}`);
+  
   const result: OrchestratorResult = {
     success: false,
     stepResults: {},
@@ -92,12 +96,11 @@ export async function executeAgentGeneration(
     warnings: []
   };
 
-  console.log('🚀 Starting Enhanced Agent Builder Orchestration...');
-  console.log(`📋 Request: ${config.userRequest}`);
-  console.log(`🔧 Configuration: Validation=${config.enableValidation !== false}, Insights=${config.enableInsights !== false}`);
-
   try {
-    // STEP 0: Comprehensive Analysis (combines original steps 0, 1, and 2)
+    // STEP 0: Comprehensive Analysis (Combined Phase A + Phase B)
+    sendStepUpdate(config, 'step0', 'processing', 'Executing comprehensive analysis...');
+    const step0StartTime = Date.now();
+    
     const step0Result = await executeStepWithRetry(
       'step0',
       () => executeStep0ComprehensiveAnalysis({
@@ -105,25 +108,24 @@ export async function executeAgentGeneration(
         existingAgent: config.existingAgent,
         conversationContext: config.conversationContext,
         command: config.command,
-        currentOperation: config.existingAgent ? 'update' : 'create'
+        currentOperation: undefined
       }),
       config,
       result
     );
 
     if (!step0Result) {
-      result.errors.push('Step 0 (Comprehensive Analysis) failed');
-      return result;
+      throw new Error('Step 0 (Comprehensive Analysis) failed');
     }
 
     result.stepResults.step0 = step0Result;
-
+    result.executionMetrics.stepDurations.step0 = Date.now() - step0StartTime;
+    
     // Validate Step 0
     if (config.enableValidation !== false) {
       result.validationResults.step0 = validateStep0Output(step0Result);
-      if (!result.validationResults.step0 && config.stopOnValidationFailure !== false) {
-        result.errors.push('Step 0 validation failed');
-        return result;
+      if (!result.validationResults.step0 && config.stopOnValidationFailure) {
+        throw new Error('Step 0 validation failed');
       }
     }
 
@@ -132,11 +134,16 @@ export async function executeAgentGeneration(
       result.insights.comprehensive = extractStep0Insights(step0Result);
     }
 
-    // STEP 1: Database Generation (models)
+    sendStepUpdate(config, 'step0', 'complete', `Analysis completed: ${step0Result.models.length} models, ${step0Result.actions.length} actions, ${step0Result.schedules.length} schedules`);
+
+    // STEP 1: Database Generation
+    sendStepUpdate(config, 'step1', 'processing', 'Generating database schema...');
+    const step1StartTime = Date.now();
+
     const step1Result = await executeStepWithRetry(
       'step1',
       () => executeStep1DatabaseGeneration({
-        promptUnderstanding: step0Result,
+        step0Analysis: step0Result,
         existingAgent: config.existingAgent,
         conversationContext: config.conversationContext,
         command: config.command
@@ -146,31 +153,57 @@ export async function executeAgentGeneration(
     );
 
     if (!step1Result) {
-      result.errors.push('Step 1 (Database Generation) failed');
-      return result;
+      throw new Error('Step 1 (Database Generation) failed');
+    }
+
+    config.existingAgent = {
+      ...config.existingAgent,
+      id: config.existingAgent?.id || crypto.randomUUID(),
+      name: config.existingAgent?.name || step0Result.agentName,
+      description: config.existingAgent?.description || step0Result.agentDescription,
+      domain: config.existingAgent?.domain || step0Result.domain,
+      models: step1Result.models,
+      enums: step1Result.enums,
+      prismaSchema: step1Result.prismaSchema,
+      actions: config.existingAgent?.actions || [],
+      schedules: config.existingAgent?.schedules || [],
+      createdAt: config.existingAgent?.createdAt || new Date().toISOString(),
+      metadata: config.existingAgent?.metadata || {
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        version: crypto.randomUUID(),
+        lastModifiedBy: 'ai-agent-builder',
+        tags: [],
+        status: 'generating'
+      }
     }
 
     result.stepResults.step1 = step1Result;
+    result.executionMetrics.stepDurations.step1 = Date.now() - step1StartTime;
 
     // Validate Step 1
     if (config.enableValidation !== false) {
       result.validationResults.step1 = validateStep1Output(step1Result);
-      if (!result.validationResults.step1 && config.stopOnValidationFailure !== false) {
-        result.errors.push('Step 1 validation failed');
-        return result;
+      if (!result.validationResults.step1 && config.stopOnValidationFailure) {
+        throw new Error('Step 1 validation failed');
       }
     }
 
     // Extract insights
     if (config.enableInsights !== false) {
-      result.insights.database = extractDatabaseInsights(step1Result);
+      result.insights.database = extractModelInsights(step1Result);
     }
 
+    sendStepUpdate(config, 'step1', 'complete', `Database generated: ${step1Result.models.length} models`);
+
     // STEP 2: Action Generation
+    sendStepUpdate(config, 'step2', 'processing', 'Generating actions...');
+    const step2StartTime = Date.now();
+
     const step2Result = await executeStepWithRetry(
       'step2',
       () => executeStep2ActionGeneration({
-        promptUnderstanding: step0Result,
+        step0Analysis: step0Result,
         databaseGeneration: step1Result,
         existingAgent: config.existingAgent,
         conversationContext: config.conversationContext,
@@ -181,18 +214,39 @@ export async function executeAgentGeneration(
     );
 
     if (!step2Result) {
-      result.errors.push('Step 2 (Action Generation) failed');
-      return result;
+      throw new Error('Step 2 (Action Generation) failed');
+    }
+
+    config.existingAgent = {
+      ...config.existingAgent,
+      id: config.existingAgent?.id || crypto.randomUUID(),
+      name: config.existingAgent?.name || step0Result.agentName,
+      description: config.existingAgent?.description || step0Result.agentDescription,
+      domain: config.existingAgent?.domain || step0Result.domain,
+      models: config.existingAgent?.models || [],
+      enums: config.existingAgent?.enums || [],
+      prismaSchema: config.existingAgent?.prismaSchema || '',
+      actions: step2Result.actions,
+      schedules: config.existingAgent?.schedules || [],
+      createdAt: config.existingAgent?.createdAt || new Date().toISOString(),
+      metadata: config.existingAgent?.metadata || {
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        version: crypto.randomUUID(),
+        lastModifiedBy: 'ai-agent-builder',
+        tags: [],
+        status: 'generating'
+      }
     }
 
     result.stepResults.step2 = step2Result;
+    result.executionMetrics.stepDurations.step2 = Date.now() - step2StartTime;
 
     // Validate Step 2
     if (config.enableValidation !== false) {
       result.validationResults.step2 = validateStep2Output(step2Result);
-      if (!result.validationResults.step2 && config.stopOnValidationFailure !== false) {
-        result.errors.push('Step 2 validation failed');
-        return result;
+      if (!result.validationResults.step2 && config.stopOnValidationFailure) {
+        throw new Error('Step 2 validation failed');
       }
     }
 
@@ -201,11 +255,16 @@ export async function executeAgentGeneration(
       result.insights.actions = extractActionInsights(step2Result);
     }
 
+    sendStepUpdate(config, 'step2', 'complete', `Actions generated: ${step2Result.actions.length} actions`);
+
     // STEP 3: Schedule Generation
+    sendStepUpdate(config, 'step3', 'processing', 'Generating schedules...');
+    const step3StartTime = Date.now();
+
     const step3Result = await executeStepWithRetry(
       'step3',
       () => executeStep3ScheduleGeneration({
-        promptUnderstanding: step0Result,
+        step0Analysis: step0Result,
         databaseGeneration: step1Result,
         actionGeneration: step2Result,
         existingAgent: config.existingAgent,
@@ -217,18 +276,17 @@ export async function executeAgentGeneration(
     );
 
     if (!step3Result) {
-      result.errors.push('Step 3 (Schedule Generation) failed');
-      return result;
+      throw new Error('Step 3 (Schedule Generation) failed');
     }
 
     result.stepResults.step3 = step3Result;
+    result.executionMetrics.stepDurations.step3 = Date.now() - step3StartTime;
 
     // Validate Step 3
     if (config.enableValidation !== false) {
       result.validationResults.step3 = validateStep3Output(step3Result);
-      if (!result.validationResults.step3 && config.stopOnValidationFailure !== false) {
-        result.errors.push('Step 3 validation failed');
-        return result;
+      if (!result.validationResults.step3 && config.stopOnValidationFailure) {
+        throw new Error('Step 3 validation failed');
       }
     }
 
@@ -237,34 +295,37 @@ export async function executeAgentGeneration(
       result.insights.schedules = extractScheduleInsights(step3Result);
     }
 
-    // FINAL ASSEMBLY: Merge all components into final agent
-    const finalAgent = assembleCompleteAgent(
-      config,
-      step0Result,
-      step1Result,
-      step2Result,
-      step3Result
-    );
+    sendStepUpdate(config, 'step3', 'complete', `Schedules generated: ${step3Result.schedules.length} schedules`);
 
-    result.agent = finalAgent;
+    // FINAL ASSEMBLY
+    console.log('🔧 FINAL ASSEMBLY: Combining all components...');
+    result.agent = assembleCompleteAgent(config, step0Result, step1Result, step2Result, step3Result);
+
+    // Calculate overall validation and quality
+    result.validationResults.overall = calculateOverallValidation(result.validationResults);
+    result.executionMetrics.qualityScore = calculateQualityScore(result);
+    result.executionMetrics.totalDuration = Date.now() - startTime;
+
     result.success = true;
 
-    // Calculate overall validation
-    result.validationResults.overall = calculateOverallValidation(result.validationResults);
+    console.log('🎉 AGENT BUILD COMPLETED SUCCESSFULLY!');
+    console.log(`⏱️ Total Duration: ${result.executionMetrics.totalDuration}ms`);
 
-    // Calculate execution metrics
-    result.executionMetrics.totalDuration = Date.now() - startTime;
-    result.executionMetrics.qualityScore = calculateQualityScore(result);
-
-    console.log('✅ Agent generation completed successfully');
-    console.log(`📊 Final metrics: Duration=${result.executionMetrics.totalDuration}ms, Quality=${result.executionMetrics.qualityScore}%`);
+    // Save final state
+    if (config.dataStream && config.documentId && config.session) {
+      await persistStepResult(config, 'final', result.agent);
+    }
 
     return result;
 
   } catch (error) {
-    console.error('❌ Agent generation failed:', error);
-    result.errors.push(`Orchestration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    result.executionMetrics.totalDuration = Date.now() - startTime;
+    const duration = Date.now() - startTime;
+    console.error(`❌ AGENT BUILD FAILED after ${duration}ms:`, error);
+    
+    result.success = false;
+    result.errors.push(error instanceof Error ? error.message : 'Unknown error');
+    result.executionMetrics.totalDuration = duration;
+
     return result;
   }
 }
@@ -359,13 +420,13 @@ async function executeStepWithRetry<T>(
 function getStepResultSummary(stepName: string, stepResult: any): string {
   switch (stepName) {
     case 'step0':
-      return `Analyzed requirements: ${stepResult.userRequestAnalysis?.primaryIntent || 'Unknown intent'}`;
+      return `Analyzed requirements: ${stepResult.agentName || 'Unknown agent'} for ${stepResult.domain || 'unknown domain'}`;
     case 'step1':
       return `Database: ${stepResult.models?.length || 0} models, ${stepResult.enums?.length || 0} enums`;
     case 'step2':
       return `Actions: ${stepResult.actions?.length || 0} actions, ${stepResult.implementationComplexity} complexity`;
     case 'step3':
-      return `Schedules: ${stepResult.schedules?.length || 0} schedules, ${stepResult.automationCoverage?.coveragePercentage || 0}% coverage`;
+      return `Schedules: ${stepResult.schedules?.length || 0} schedules, ${stepResult.implementationComplexity} complexity`;
     default:
       return `${stepName} completed`;
   }
@@ -463,403 +524,33 @@ function assembleCompleteAgent(
   step3: Step3Output
 ): AgentData {
   const now = new Date().toISOString();
-  
-  // Integrate example records into models
-  const modelsWithRecords = step1.models.map(model => {
-    const modelExampleRecords = step1.exampleRecords?.[model.name] || [];
-    
-    // Convert example records to ModelRecord format
-    const modelRecords = modelExampleRecords.map((recordData, index) => ({
-      id: recordData.id || `${model.name.toLowerCase()}_record_${index + 1}`,
-      modelId: model.id,
-      data: recordData,
-      createdAt: now,
-      updatedAt: now
-    }));
-    
-    return {
-      ...model,
-      records: modelRecords
-    };
-  });
 
   const newAgentData: AgentData = {
-    id: config.existingAgent?.id || generateId(),
+    id: config.existingAgent?.id || crypto.randomUUID(),
     name: step0.agentName || 'Generated Agent',
     description: step0.agentDescription || 'AI-generated agent description',
     domain: step0.domain || 'general',
-    models: modelsWithRecords,
-    enums: step1.enums || [],
+    models: step1.models,
+    enums: step1.enums, // No longer part of Step1Output
     actions: step2.actions,
     schedules: step3.schedules,
-    prismaSchema: step1.prismaSchema || '',
+    prismaSchema: step1.prismaSchema, // Not needed for UI
     createdAt: config.existingAgent?.createdAt || now,
     metadata: {
       createdAt: config.existingAgent?.metadata?.createdAt || now,
       updatedAt: now,
-      version: generateId(),
+      version: crypto.randomUUID(),
       lastModifiedBy: 'ai-agent-builder',
       tags: [
-        step0.complexity,
+        step0.operation || 'create',
         step0.domain || 'general',
-        step0.primaryIntent || 'automation',
-        ...(step0.keywords || []).slice(0, 3)
+        step0.agentName || 'agent'
       ],
-      status: 'generated',
-      
-      // Store database generation phase info  
-      databaseGenerationPhase: {
-        models: step1.models,
-        enums: step1.enums || [],
-        generationApproach: 'ai-generated',
-        validationResults: step1.validationResults
-      },
-      
-      // Store action generation phase info
-      actionGenerationPhase: {
-        actions: step2.actions,
-        generationApproach: 'ai-generated',
-        validationResults: step2.validationResults
-      },
-      
-      // Store schedule generation phase info
-      scheduleGenerationPhase: {
-        schedules: step3.schedules,
-        generationApproach: 'ai-generated', 
-        validationResults: step3.validationResults
-      },
-      
-      mergingPhase: {
-        approach: 'model-scoped-enums',
-        preservationStrategy: 'comprehensive-validation',
-        conflictResolution: 'quality-based',
-        finalCounts: {
-          models: step1.models.length,
-          actions: step2.actions.length,
-          schedules: step3.schedules.length,
-          enums: step1.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)
-        }
-      }
+      status: 'generated'
     }
   };
 
-  // ENHANCED VALIDATION: Compare existing + new with final results
-  let finalAgent = config.existingAgent 
-    ? performDeepMerge(config.existingAgent, newAgentData)
-    : newAgentData;
-
-  // Apply comprehensive validation and auto-fix
-  if (config.existingAgent) {
-    console.log('🔍 STARTING COMPREHENSIVE MERGE VALIDATION...');
-    
-    // Validate and fix models
-    finalAgent = validateAndFixMergedItems(
-      config.existingAgent,
-      newAgentData,
-      finalAgent,
-      'models'
-    );
-    
-    // Validate and fix actions
-    finalAgent = validateAndFixMergedItems(
-      config.existingAgent,
-      newAgentData,
-      finalAgent,
-      'actions'
-    );
-    
-    // Validate and fix schedules
-    finalAgent = validateAndFixMergedItems(
-      config.existingAgent,
-      newAgentData,
-      finalAgent,
-      'schedules'
-    );
-    
-    // Validate and fix model fields
-    finalAgent = validateAndFixModelFields(
-      config.existingAgent,
-      newAgentData,
-      finalAgent
-    );
-    
-    // Validate and fix model enums
-    finalAgent = validateAndFixModelEnums(
-      config.existingAgent,
-      newAgentData,
-      finalAgent
-    );
-    
-    console.log('✅ COMPREHENSIVE MERGE VALIDATION COMPLETED');
-  }
-
-  // Enhanced logging for debugging
-  console.log(`🔧 Agent Assembly Complete:
-- ${config.existingAgent ? 'MERGED' : 'NEW'} Agent Created
-- Models: ${finalAgent.models.length} (${config.existingAgent ? `was ${config.existingAgent.models?.length || 0}` : 'new'})
-- Total Model Enums: ${finalAgent.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)}
-- Actions: ${finalAgent.actions.length} (${config.existingAgent ? `was ${config.existingAgent.actions?.length || 0}` : 'new'})
-- Schedules: ${finalAgent.schedules.length} (${config.existingAgent ? `was ${config.existingAgent.schedules?.length || 0}` : 'new'})
-- Example Records: ${Object.keys(step1.exampleRecords || {}).length} model types
-- Total Records: ${finalAgent.models.reduce((sum, model) => sum + (model.records?.length || 0), 0)}`);
-
-  // ENHANCED DEBUGGING: Log detailed model information
-  console.log('🔍 DETAILED MODEL ANALYSIS:');
-  finalAgent.models.forEach((model, index) => {
-    console.log(`  ${index + 1}. Model "${model.name}"`);
-    console.log(`     - ID: ${model.id}`);
-    console.log(`     - Fields: ${model.fields?.length || 0}`);
-    console.log(`     - Enums: ${model.enums?.length || 0}`);
-    console.log(`     - Records: ${model.records?.length || 0}`);
-    console.log(`     - Field Names: [${(model.fields || []).map(f => f.name).join(', ')}]`);
-    if (model.enums && model.enums.length > 0) {
-      console.log(`     - Enum Names: [${model.enums.map(e => e.name).join(', ')}]`);
-    }
-  });
-
-  // Check for duplicate model names
-  const modelNames = finalAgent.models.map(m => m.name);
-  const uniqueModelNames = new Set(modelNames);
-  if (modelNames.length !== uniqueModelNames.size) {
-    console.warn('⚠️ WARNING: Duplicate model names detected!');
-    const duplicates = modelNames.filter((name, index) => modelNames.indexOf(name) !== index);
-    console.warn('🔍 Duplicate names:', [...new Set(duplicates)]);
-  }
-
-  // Log the change summary if this was an update
-  if (config.existingAgent) {
-    const existingModelCount = config.existingAgent.models?.length || 0;
-    const existingActionCount = config.existingAgent.actions?.length || 0;
-    const existingScheduleCount = config.existingAgent.schedules?.length || 0;
-    const existingEnumCount = (config.existingAgent.models || []).reduce((sum, model) => sum + (model.enums?.length || 0), 0);
-    
-    const finalModelCount = finalAgent.models.length;
-    const finalActionCount = finalAgent.actions.length;
-    const finalScheduleCount = finalAgent.schedules.length;
-    const finalEnumCount = finalAgent.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0);
-    
-    console.log(`📈 Change Summary:
-- Models: ${existingModelCount} → ${finalModelCount} (${finalModelCount > existingModelCount ? '+' : ''}${finalModelCount - existingModelCount})
-- Actions: ${existingActionCount} → ${finalActionCount} (${finalActionCount > existingActionCount ? '+' : ''}${finalActionCount - existingActionCount})
-- Schedules: ${existingScheduleCount} → ${finalScheduleCount} (${finalScheduleCount > existingScheduleCount ? '+' : ''}${finalScheduleCount - existingScheduleCount})
-- Enums: ${existingEnumCount} → ${finalEnumCount} (${finalEnumCount > existingEnumCount ? '+' : ''}${finalEnumCount - existingEnumCount})`);
-  }
-
-  return finalAgent;
-}
-
-/**
- * Validate and fix merged items (models, actions, schedules)
- */
-function validateAndFixMergedItems(
-  existingAgent: AgentData,
-  newAgentData: AgentData,
-  finalAgent: AgentData,
-  itemType: 'models' | 'actions' | 'schedules'
-): AgentData {
-  const existingItems = existingAgent[itemType] || [];
-  const newItems = newAgentData[itemType] || [];
-  const finalItems = finalAgent[itemType] || [];
-  
-  console.log(`🔍 VALIDATING ${itemType.toUpperCase()}:`);
-  console.log(`  - Existing: ${existingItems.length}`);
-  console.log(`  - New: ${newItems.length}`);
-  console.log(`  - Final: ${finalItems.length}`);
-  
-  // Create sets of names for comparison
-  const existingNames = new Set(existingItems.map((item: any) => item.name));
-  const newNames = new Set(newItems.map((item: any) => item.name));
-  const finalNames = new Set(finalItems.map((item: any) => item.name));
-  const expectedNames = new Set([...existingNames, ...newNames]);
-  
-  console.log(`  - Existing names: [${Array.from(existingNames).join(', ')}]`);
-  console.log(`  - New names: [${Array.from(newNames).join(', ')}]`);
-  console.log(`  - Final names: [${Array.from(finalNames).join(', ')}]`);
-  console.log(`  - Expected names: [${Array.from(expectedNames).join(', ')}]`);
-  
-  // Check for missing items
-  const missingNames = Array.from(expectedNames).filter(name => !finalNames.has(name));
-  
-  // Calculate expected counts - be more lenient
-  const duplicateCount = countDuplicates(existingItems, newItems, 'name');
-  const expectedMinCount = Math.max(existingItems.length, newItems.length); // More lenient minimum
-  const expectedMaxCount = existingItems.length + newItems.length; // If no duplicates
-  const finalCount = finalItems.length;
-  
-  console.log(`  - Duplicate count: ${duplicateCount}`);
-  console.log(`  - Expected minimum count: ${expectedMinCount}`);
-  console.log(`  - Expected maximum count: ${expectedMaxCount}`);
-  console.log(`  - Final count: ${finalCount}`);
-  
-  // Only reprocess if we have critical missing items, not just count mismatches
-  const hasCriticalMissingItems = missingNames.length > 0 && newItems.length > 0;
-  const hasSignificantCountMismatch = finalCount < Math.min(existingItems.length, newItems.length);
-  const needsReprocessing = hasCriticalMissingItems || hasSignificantCountMismatch;
-  
-  if (needsReprocessing) {
-    console.warn(`⚠️ VALIDATION ISSUES DETECTED FOR ${itemType.toUpperCase()}:`);
-    if (hasCriticalMissingItems) {
-      console.warn(`  - MISSING ITEMS: [${missingNames.join(', ')}]`);
-    }
-    if (hasSignificantCountMismatch) {
-      console.warn(`  - SIGNIFICANT COUNT MISMATCH: Expected at least ${Math.min(existingItems.length, newItems.length)}, got ${finalCount}`);
-    }
-    
-    console.log(`🔄 ATTEMPTING RECOVERY FOR ${itemType.toUpperCase()}...`);
-    
-    // Simple recovery: add missing items without complex re-merging
-    const recoveredItems = [...finalItems];
-    let recoveredCount = 0;
-    
-    missingNames.forEach(missingName => {
-      // Try to find the missing item in new items first, then existing
-      let missingItem = newItems.find((item: any) => item.name === missingName);
-      if (!missingItem) {
-        missingItem = existingItems.find((item: any) => item.name === missingName);
-      }
-      
-      if (missingItem) {
-        console.log(`🔧 RECOVERING: Adding ${missingName}`);
-        recoveredItems.push(missingItem);
-        recoveredCount++;
-      }
-    });
-    
-    if (recoveredCount > 0) {
-      finalAgent = {
-        ...finalAgent,
-        [itemType]: recoveredItems
-      };
-      console.log(`✅ RECOVERY SUCCESSFUL: Added ${recoveredCount} missing items for ${itemType.toUpperCase()}`);
-    } else {
-      console.log(`⚠️ RECOVERY PARTIAL: Could not recover missing items for ${itemType.toUpperCase()}`);
-    }
-  } else {
-    console.log(`✅ VALIDATION PASSED FOR ${itemType.toUpperCase()}`);
-  }
-  
-  return finalAgent;
-}
-
-/**
- * Validate and fix model fields
- */
-function validateAndFixModelFields(
-  existingAgent: AgentData,
-  newAgentData: AgentData,
-  finalAgent: AgentData
-): AgentData {
-  console.log('🔍 VALIDATING MODEL FIELDS:');
-  
-  const updatedModels = finalAgent.models.map(finalModel => {
-    const existingModel = existingAgent.models?.find(m => m.name === finalModel.name);
-    const newModel = newAgentData.models.find(m => m.name === finalModel.name);
-    
-    if (!existingModel && !newModel) {
-      return finalModel; // This shouldn't happen, but just in case
-    }
-    
-    const existingFields = existingModel?.fields || [];
-    const newFields = newModel?.fields || [];
-    const finalFields = finalModel.fields || [];
-    
-    console.log(`  📋 Model "${finalModel.name}":`);
-    console.log(`    - Existing fields: ${existingFields.length}`);
-    console.log(`    - New fields: ${newFields.length}`);
-    console.log(`    - Final fields: ${finalFields.length}`);
-    
-    // Only check for critically missing fields (new fields that are completely absent)
-    const newFieldNames = new Set(newFields.map(f => f.name));
-    const finalFieldNames = new Set(finalFields.map(f => f.name));
-    const criticallyMissingFields = newFields.filter(f => !finalFieldNames.has(f.name));
-    
-    if (criticallyMissingFields.length > 0 && newFields.length > 0) {
-      console.log(`    ⚠️ RECOVERING ${criticallyMissingFields.length} MISSING FIELDS: [${criticallyMissingFields.map(f => f.name).join(', ')}]`);
-      
-      return {
-        ...finalModel,
-        fields: [...finalFields, ...criticallyMissingFields]
-      };
-    } else {
-      console.log(`    ✅ FIELD VALIDATION PASSED`);
-    }
-    
-    return finalModel;
-  });
-  
-  return {
-    ...finalAgent,
-    models: updatedModels
-  };
-}
-
-/**
- * Validate and fix model enums
- */
-function validateAndFixModelEnums(
-  existingAgent: AgentData,
-  newAgentData: AgentData,
-  finalAgent: AgentData
-): AgentData {
-  console.log('🔍 VALIDATING MODEL ENUMS:');
-  
-  const updatedModels = finalAgent.models.map(finalModel => {
-    const existingModel = existingAgent.models?.find(m => m.name === finalModel.name);
-    const newModel = newAgentData.models.find(m => m.name === finalModel.name);
-    
-    if (!existingModel && !newModel) {
-      return finalModel;
-    }
-    
-    const existingEnums = existingModel?.enums || [];
-    const newEnums = newModel?.enums || [];
-    const finalEnums = finalModel.enums || [];
-    
-    console.log(`  🏷️ Model "${finalModel.name}" enums:`);
-    console.log(`    - Existing enums: ${existingEnums.length}`);
-    console.log(`    - New enums: ${newEnums.length}`);
-    console.log(`    - Final enums: ${finalEnums.length}`);
-    
-    // Only check for critically missing enums (new enums that are completely absent)
-    const newEnumNames = new Set(newEnums.map(e => e.name));
-    const finalEnumNames = new Set(finalEnums.map(e => e.name));
-    const criticallyMissingEnums = newEnums.filter(e => !finalEnumNames.has(e.name));
-    
-    if (criticallyMissingEnums.length > 0 && newEnums.length > 0) {
-      console.log(`    ⚠️ RECOVERING ${criticallyMissingEnums.length} MISSING ENUMS: [${criticallyMissingEnums.map(e => e.name).join(', ')}]`);
-      
-      return {
-        ...finalModel,
-        enums: [...finalEnums, ...criticallyMissingEnums]
-      };
-    } else {
-      console.log(`    ✅ ENUM VALIDATION PASSED`);
-    }
-    
-    return finalModel;
-  });
-  
-  return {
-    ...finalAgent,
-    models: updatedModels
-  };
-}
-
-/**
- * Count duplicate items between two arrays based on a property
- */
-function countDuplicates(arr1: any[], arr2: any[], property: string): number {
-  const names1 = new Set(arr1.map(item => item[property]));
-  const names2 = new Set(arr2.map(item => item[property]));
-  
-  let duplicateCount = 0;
-  names1.forEach(name => {
-    if (names2.has(name)) {
-      duplicateCount++;
-    }
-  });
-  
-  return duplicateCount;
+  return newAgentData;
 }
 
 /**
@@ -873,57 +564,30 @@ function calculateOverallValidation(validationResults: OrchestratorResult['valid
     validationResults.step3
   ];
   
-  // Very lenient validation - require at least 30% of validations to pass
-  // This ensures we don't reject agents that have good core functionality
+  // Simple validation - require at least 50% of steps to pass
   const passedCount = results.filter(Boolean).length;
-  const requiredPasses = Math.ceil(results.length * 0.3); // 30% threshold (2 out of 4)
+  const requiredPasses = Math.ceil(results.length * 0.5);
   
-  console.log(` Overall validation: ${passedCount}/${results.length} passed (need ${requiredPasses})`);
+  console.log(`📊 Overall validation: ${passedCount}/${results.length} passed (need ${requiredPasses})`);
   
-  // If we have at least some passes, consider it successful
-  // This prevents edge cases where minor validation failures block completion
-  const isValid = passedCount >= requiredPasses;
-  
-  if (!isValid) {
-    console.warn(`⚠️ Overall validation failed: Only ${passedCount}/${results.length} steps passed (needed ${requiredPasses})`);
-    console.warn(`⚠️ Overall validation failed: Only ${passedCount}/${results.length} steps passed (needed ${requiredPasses})`);
-  }
-
-  return isValid;
+  return passedCount >= requiredPasses;
 }
 
 /**
  * Calculate overall quality score
  */
 function calculateQualityScore(result: OrchestratorResult): number {
-  const weights = {
-    validation: 40,
-    completeness: 30,
-    consistency: 20,
-    performance: 10
-  };
-  
-  // Validation score
-  const validationCount = Object.values(result.validationResults).filter(Boolean).length;
-  const validationScore = (validationCount / 4) * weights.validation;
-  
-  // Completeness score
+  // Simple quality score based on completeness
   const hasModels = (result.stepResults.step1?.models.length || 0) > 0;
   const hasActions = (result.stepResults.step2?.actions.length || 0) > 0;
   const hasSchedules = (result.stepResults.step3?.schedules.length || 0) > 0;
-  const completenessScore = ((hasModels ? 1 : 0) + (hasActions ? 1 : 0) + (hasSchedules ? 1 : 0)) / 3 * weights.completeness;
   
-  // Consistency score (based on database compatibility)
-  const databaseCompatible = result.stepResults.step2?.validationResults.databaseCompatibility || false;
-  const actionCompatible = result.stepResults.step3?.validationResults.actionCompatibility || false;
-  const consistencyScore = ((databaseCompatible ? 1 : 0) + (actionCompatible ? 1 : 0)) / 2 * weights.consistency;
+  let score = 0;
+  if (hasModels) score += 40;
+  if (hasActions) score += 30;
+  if (hasSchedules) score += 30;
   
-  // Performance score (based on execution time and retries)
-  const executionTime = result.executionMetrics.totalDuration;
-  const retryPenalty = result.executionMetrics.retryCount * 5;
-  const performanceScore = Math.max(0, weights.performance - (executionTime > 30000 ? 5 : 0) - retryPenalty);
-  
-  return Math.round(validationScore + completenessScore + consistencyScore + performanceScore);
+  return score;
 }
 
 /**

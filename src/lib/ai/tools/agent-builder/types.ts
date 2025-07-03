@@ -45,41 +45,59 @@ export interface AgentSchedule {
   name: string;
   emoji?: string;
   description: string;
-  type: 'Mutation' | 'Query';
+  type: 'mutation' | 'query';
   role: 'admin' | 'member';
   interval: {
     pattern: string;
     timezone?: string;
     active?: boolean;
+    value?: number;
   };
-  dataSource: {
-    type: 'custom' | 'database';
+  dataSource?: {
+    type: 'database' | 'custom';
     customFunction?: {
       code: string;
-      envVars?: EnvVar[];
+      envVars: Array<{
+        name: string;
+        description: string;
+        required: boolean;
+        sensitive: boolean;
+      }>;
     };
     database?: {
-      models: DatabaseModel[];
+      models: Array<{
+        id: string;
+        name: string;
+        fields: Array<{
+          id: string;
+          name: string;
+        }>;
+      }>;
     };
   };
-  execute: {
+  execute?: {
     type: 'code' | 'prompt';
     code?: {
       script: string;
-      envVars?: EnvVar[];
+      envVars: Array<{
+        name: string;
+        description: string;
+        required: boolean;
+        sensitive: boolean;
+      }>;
     };
     prompt?: {
-      template: string;
+      content: string;
       model?: string;
       temperature?: number;
       maxTokens?: number;
     };
   };
-  results: {
-    actionType: 'Mutation' | 'Query';
+  results?: {
+    actionType: 'mutation' | 'query';
     model: string;
     identifierIds?: string[];
-    fields?: Record<string, any>;
+    fields: Record<string, any>;
     fieldsToUpdate?: Record<string, any>;
   };
 }
@@ -89,58 +107,74 @@ export interface AgentAction {
   name: string;
   emoji?: string;
   description: string;
-  type: 'Mutation' | 'Query';
+  type: 'mutation' | 'query';
   role: 'admin' | 'member';
-  dataSource: {
-    type: 'custom' | 'database';
+  dataSource?: {
+    type: 'database' | 'custom';
     customFunction?: {
       code: string;
-      envVars?: EnvVar[];
+      envVars: Array<{
+        name: string;
+        description: string;
+        required: boolean;
+        sensitive: boolean;
+      }>;
     };
     database?: {
-      models: DatabaseModel[];
+      models: Array<{
+        id: string;
+        name: string;
+        fields: Array<{
+          id: string;
+          name: string;
+        }>;
+      }>;
     };
   };
-  execute: {
+  execute?: {
     type: 'code' | 'prompt';
     code?: {
       script: string;
-      envVars?: EnvVar[];
+      envVars: Array<{
+        name: string;
+        description: string;
+        required: boolean;
+        sensitive: boolean;
+      }>;
     };
     prompt?: {
-      template: string;
+      content: string;
       model?: string;
       temperature?: number;
       maxTokens?: number;
     };
   };
-  results: {
-    actionType: 'Mutation' | 'Query';
+  results?: {
+    actionType: 'mutation' | 'query';
     model: string;
     identifierIds?: string[];
-    fields?: Record<string, any>;
+    fields: Record<string, any>;
     fieldsToUpdate?: Record<string, any>;
   };
-  // UI Components for running the action
   uiComponents?: {
-    stepForms: Array<{
+    stepForms?: Array<{
       stepNumber: number;
       title: string;
       description: string;
-      reactCode: string; // React component code as string
-      propsInterface: Record<string, any>; // TypeScript interface for props
-      validationLogic: string; // Client-side validation
+      reactCode: string;
+      propsInterface: Record<string, string>;
+      validationLogic: string;
       dataRequirements: Array<{
         modelName: string;
         fields: string[];
         purpose: string;
-      }>; // Database data needed for this step
+      }>;
     }>;
-    resultView: {
+    resultView?: {
       title: string;
       description: string;
-      reactCode: string; // React component code for displaying results
-      propsInterface: Record<string, any>;
+      reactCode: string;
+      propsInterface: Record<string, string>;
     };
   };
 }
@@ -288,7 +322,7 @@ export interface PromptUnderstanding {
     changeId: string;
     description: string;
     type: 'create' | 'update' | 'delete';
-    targetType: 'models' | 'actions' | 'fields' | 'system' | 'integrations';
+    targetType: 'models' | 'actions' | 'schedules' | 'fields' | 'system' | 'integrations';
     priority: 'critical' | 'high' | 'medium' | 'low';
     dependencies: string[];
     estimatedImpact: 'minimal' | 'moderate' | 'significant' | 'major';
@@ -305,7 +339,7 @@ export interface PromptUnderstanding {
 
 export interface ChangeAnalysis {
   userIntent: 'add' | 'modify' | 'delete' | 'replace';
-  targetType: 'models' | 'enums' | 'actions' | 'fields' | 'system';
+  targetType: 'models' | 'enums' | 'actions' | 'schedules' | 'fields' | 'system' | 'integrations';
   preserveExisting: boolean;
   specificTargets: string[];
   expectedResult: {

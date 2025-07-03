@@ -67,7 +67,7 @@ export const unifiedActionsSchema = z.object({
     name: z.string().describe('Name of the action'),
     emoji: z.string().optional().describe('Single emoji that visually represents this action (e.g., ✉️ for email, 📊 for reports, 🔄 for sync)'),
     description: z.string().describe('Detailed description of what this action does and its business purpose'),
-    type: z.enum(['Create', 'Update']).describe('Action type - Create for new records, Update for existing'),
+    type: z.enum(['query', 'mutation']).describe('Action type - query for reading data, mutation for writing data'),
     role: z.enum(['admin', 'member']).describe('Role required to execute this action'),
     dataSource: z.object({
       type: z.enum(['custom', 'database']).describe('Data source type'),
@@ -105,7 +105,7 @@ export const unifiedActionsSchema = z.object({
       }).describe('Code execution configuration - all actions use code execution'),
     }).describe('How the action is executed'),
     results: z.object({
-      actionType: z.enum(['Create', 'Update']).describe('Type of action result'),
+      actionType: z.enum(['query', 'mutation']).describe('Type of action result'),
       model: z.string().describe('Target model for the results'),
       identifierIds: z.array(z.string()).optional().describe('Fields that identify existing records for updates'),
       fields: z.record(z.any()).optional().describe('Fields to set for Create actions'),
@@ -120,8 +120,57 @@ export const prismaActionsSchema = z.object({
     name: z.string().describe('Name of the action'),
     emoji: z.string().optional().describe('Single emoji that visually represents this action (e.g., ✉️ for email, 📊 for reports, 🔄 for sync)'),
     description: z.string().describe('Detailed description of what this action does and its business purpose'),
-    type: z.enum(['Query', 'Mutation']).describe('Action type - Query for reading data, Mutation for writing data'),
-    role: z.enum(['admin', 'member']).describe('Role required to execute this action')
+    type: z.enum(['query', 'mutation']).describe('Action type - query for reading data, mutation for writing data'),
+    role: z.enum(['admin', 'member']).describe('Role required to execute this action'),
+    dataSource: z.object({
+      type: z.enum(['custom', 'database']).describe('Data source type'),
+      customFunction: z.object({
+        code: z.string().describe('JavaScript code for custom data fetching'),
+        envVars: z.array(z.object({
+          name: z.string(),
+          description: z.string(),
+          required: z.boolean(),
+          sensitive: z.boolean()
+        })).optional().describe('Environment variables needed for the custom function')
+      }).nullable().optional().describe('Custom function configuration if type is custom'),
+      database: z.object({
+        models: z.array(z.object({
+          id: z.string(),
+          name: z.string(),
+          fields: z.array(z.object({
+            id: z.string(),
+            name: z.string()
+          })),
+          where: z.record(z.any()).optional(),
+          limit: z.number().optional()
+        }))
+      }).nullable().optional().describe('Database models configuration if type is database')
+    }).describe('Configuration for how data is sourced'),
+    execute: z.object({
+      type: z.enum(['code', 'prompt']).describe('Execution type - code or AI prompt'),
+      code: z.object({
+        script: z.string().describe('JavaScript code to execute'),
+        envVars: z.array(z.object({
+          name: z.string(),
+          description: z.string(),
+          required: z.boolean(),
+          sensitive: z.boolean()
+        })).optional().describe('Environment variables needed for the script')
+      }).optional().describe('Code execution configuration if type is code'),
+      prompt: z.object({
+        template: z.string().describe('AI prompt template'),
+        model: z.string().optional().describe('AI model to use'),
+        temperature: z.number().optional().describe('Temperature for AI generation'),
+        maxTokens: z.number().optional().describe('Maximum tokens for AI response')
+      }).nullable().optional().describe('AI prompt configuration if type is prompt')
+    }).optional().describe('Configuration for how the schedule is executed'),
+    results: z.object({
+      actionType: z.enum(['query', 'mutation']).describe('Type of action result'),
+      model: z.string().describe('Target model for the results'),
+      identifierIds: z.array(z.string()).optional().describe('Fields that identify existing records for updates'),
+      fields: z.record(z.any()).optional().describe('Fields to set for Create actions'),
+      fieldsToUpdate: z.record(z.any()).optional().describe('Fields to update for Update actions')
+    }).optional().describe('Configuration for how results are processed')
   }))
 });
 
@@ -227,7 +276,7 @@ export const promptUnderstandingSchema = z.object({
     requiredActions: z.array(z.object({
       name: z.string(),
       purpose: z.string(),
-      type: z.enum(['Create', 'Update']),
+      type: z.enum(['query', 'mutation']),
       priority: z.enum(['critical', 'high', 'medium', 'low']),
       inputRequirements: z.array(z.string()),
       outputExpectations: z.array(z.string())
@@ -296,7 +345,7 @@ export const unifiedSchedulesSchema = z.object({
     name: z.string().describe('Name of the schedule'),
     emoji: z.string().optional().describe('Single emoji that visually represents this schedule (e.g., ⏰ for daily tasks, 📊 for reports, 🔄 for sync)'),
     description: z.string().describe('Detailed description of what this schedule does and its business purpose'),
-    type: z.enum(['Create', 'Update']).describe('Schedule type - Create for new records, Update for existing'),
+    type: z.enum(['query', 'mutation']).describe('Schedule type - query for reading data, mutation for writing data'),
     role: z.enum(['admin', 'member']).describe('Role required to execute this schedule'),
     interval: z.object({
       pattern: z.string().describe('Cron pattern or human-readable schedule (e.g., "daily", "weekly", "0 9 * * *")'),
@@ -346,7 +395,7 @@ export const unifiedSchedulesSchema = z.object({
       }).nullable().optional().describe('AI prompt configuration if type is prompt')
     }).optional().describe('Configuration for how the schedule is executed'),
     results: z.object({
-      actionType: z.enum(['Create', 'Update']).describe('Type of action result'),
+      actionType: z.enum(['query', 'mutation']).describe('Type of action result'),
       model: z.string().describe('Target model for the results'),
       identifierIds: z.array(z.string()).optional().describe('Fields that identify existing records for updates'),
       fields: z.record(z.any()).optional().describe('Fields to set for Create actions'),

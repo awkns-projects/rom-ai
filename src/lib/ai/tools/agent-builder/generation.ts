@@ -102,7 +102,7 @@ interface ActionStep {
 interface EnhancedActionAnalysis {
   actionName: string;
   description: string;
-  type: 'Query' | 'Mutation';
+  type: 'query' | 'mutation';
   role: 'admin' | 'member';
   steps: ActionStep[];
   inputVariables: Array<{
@@ -240,7 +240,10 @@ export async function generateChangeAnalysis(
           - Dependencies between changes
           - Risk analysis and mitigation strategies
           
-          All fields in the schema are required.`
+          CRITICAL FIELD REQUIREMENTS:
+          - Only the "id" field should be required
+          - All other fields should be optional unless specifically needed for business logic
+          - This provides flexibility in data entry and prevents validation errors`
         },
         {
           role: 'user',
@@ -600,7 +603,7 @@ Each enum should have:
           type: field.type || 'String',
           isId: field.isId || false,
           unique: field.unique || false,
-          required: field.required || false,
+          required: field.name === 'id' ? true : (field.required || false),
           list: field.list || false,
           kind: field.kind || 'scalar',
           relationField: field.relationField || false,
@@ -663,12 +666,18 @@ Each enum should have:
   };
 }
 
+// Fix function signatures to use consistent database result interface
+interface DatabaseResult {
+  models: AgentModel[];
+  prismaSchema?: string;
+}
+
 /**
  * Step 4: Generate actions
  */
 export async function generateActions(
   promptUnderstanding: PromptUnderstanding,
-  databaseResult: { models: AgentModel[] },
+  databaseResult: DatabaseResult,
   existingAgent?: AgentData,
   changeAnalysis?: ChangeAnalysis,
   agentOverview?: any,
@@ -872,8 +881,8 @@ Generate exactly ${expectedActionCount} actions that solve real business problem
     // Generate enhanced action with steps
     const enhancedAction = await generateEnhancedActionWithSteps(
       action.description || action.name,
-      action.type === 'Query' ? 'Query' : 'Mutation',
-      databaseResult.prismaSchema,
+      action.type === 'query' ? 'query' : 'mutation',
+      databaseResult.prismaSchema || '',
       Array.isArray(businessRulesContext) ? businessRulesContext.join(', ') : businessRulesContext
     );
 
@@ -959,18 +968,27 @@ Generate exactly ${expectedActionCount} actions that solve real business problem
  * Step 4: Generate actions
  */
 export async function generatePrismaActions(
-  promptUnderstanding: PromptUnderstanding,
-  databaseResult: { models: AgentModel[], enums: AgentEnum[], prismaSchema: string },
+  step0Analysis: any, 
   existingAgent?: AgentData,
 ): Promise<{ actions: AgentAction[] }> {
-  console.log('🚀 Starting Prisma action generation with enhanced AI analysis');
+  console.log('🎯 Starting Prisma actions generation...');
 
-  const model = await getAgentBuilderModel();
+  if (!step0Analysis) {
+    throw new Error('step0Analysis is required for action generation');
+  }
   
   const isIncrementalUpdate = !!existingAgent && existingAgent.actions && existingAgent.actions.length > 0;
-  const expectedActionCount = promptUnderstanding.workflowAutomationNeeds.requiredActions.length;
-  const businessRulesContext = promptUnderstanding.featureImagination.businessRules.join(', ') || '';
-  const userExperienceContext = promptUnderstanding.featureImagination.userExperience.join(', ') || '';
+  
+  // Extract action requirements from Step 0 analysis
+  const actionRequirements = step0Analysis.actions || [];
+  const expectedActionCount = actionRequirements.length;
+  
+  // DEBUG: Log what we're extracting
+  
+  // Extract business context from Phase A analysis
+  const phaseA = step0Analysis.phaseAAnalysis;
+  const businessRulesContext = phaseA?.featureRequirements?.businessRules?.join(', ') || '';
+  const userExperienceContext = phaseA?.featureRequirements?.userExperience?.join(', ') || '';
 
   // Build existing actions context
   let existingActionsContext = '';
@@ -978,73 +996,53 @@ export async function generatePrismaActions(
     existingActionsContext = `EXISTING ACTIONS (${existingAgent.actions.length} total):
 ${existingAgent.actions.map(action => `- ${action.name} (${action.type}): ${action.description}`).join('\n')}
 
+DO NOT recreate these existing actions. Only create NEW actions as specified in the requirements.
 `;
   }
 
-  let systemPrompt = `You are an expert AI assistant that generates complete business actions using Prisma ORM and structured output via generateObject.
+  const model = await getAgentBuilderModel();
+  
+  // Build action specifications from Step 0 analysis
+  const actionSpecifications = actionRequirements.map((action: any) => `
+**${action.name}** (${action.operation === 'create' ? 'NEW ACTION' : 'UPDATE EXISTING'}):
+- Purpose: ${action.purpose}
+- Type: ${action.type} (${action.type === 'query' ? 'reads data' : 'writes/modifies data'})
+${action.updateDescription ? `- Update: ${action.updateDescription}` : ''}
+${action.operation === 'update' ? '- This action exists but needs modifications' : '- This is a completely new action'}
+`).join('');
 
-CORE PRINCIPLES:
-1. Use Prisma ORM for all database operations - leverage the full schema provided
-2. Generate stable, structured input/output using the generateObject function
-3. Create production-ready code with proper error handling and validation
-4. Focus on complete business workflows, not just CRUD operations
-5. Ensure type safety and data integrity throughout
+  // DEBUG: Log the action specifications
+  console.log('🔍 DEBUG: Action specifications built:', actionSpecifications);
+  
+  // If no actions identified, provide fallback guidance
+  const fallbackGuidance = expectedActionCount === 0 ? `
+FALLBACK GUIDANCE - No specific actions identified in Step 0:
+Based on the business context and domain, generate 2-3 essential actions that would be typical for this type of system:
+- At least 1 query action (for reading/searching data)
+- At least 1 mutation action (for creating/updating data)
+- Consider the business domain and what users would typically need to do
+` : '';
 
-PRISMA SCHEMA CONTEXT:
+  const systemPrompt = `You are an expert at generating Prisma-based actions for business applications.
+
+BUSINESS CONTEXT:
+Domain: ${step0Analysis.domain}
+Agent: ${step0Analysis.agentName}
+Main Goal: ${phaseA?.userRequestAnalysis?.mainGoal || 'Generate actions for business requirements'}
+
+${expectedActionCount > 0 ? `ACTION REQUIREMENTS FROM STEP 0 ANALYSIS:
+${actionSpecifications}` : fallbackGuidance}
+
+AVAILABLE DATABASE SCHEMA:
 The following Prisma schema defines your data models and relationships:
 \`\`\`prisma
-${databaseResult.prismaSchema}
+${existingAgent?.prismaSchema || 'No existing schema available'}
 \`\`\`
 
-Use this schema to:
-- Understand model relationships and constraints
-- Generate appropriate Prisma queries and mutations
-- Ensure data consistency across operations
-- Leverage Prisma's type safety features
-
-`;
-
-  if (isIncrementalUpdate) {
-    systemPrompt += `This is an INCREMENTAL UPDATE to an existing system. Your job is to ANALYZE what new actions are NEEDED to fulfill the user's request, then create them using Prisma ORM.
-
-INTELLIGENT INCREMENTAL UPDATE APPROACH:
-1. ANALYZE the user's request to understand what functionality they want
-2. COMPARE against existing actions to identify gaps  
-3. DETERMINE what new actions are NEEDED (not just mentioned) to fulfill the request
-4. CREATE the missing actions using Prisma ORM operations
-5. ENSURE new actions work with existing models and actions
-
-EXAMPLE SCENARIOS:
-- If user says "I need to manage animals" and no animal actions exist → CREATE animal management actions using Prisma
-- If user says "add reporting features" and no report actions exist → CREATE reporting actions with Prisma aggregations
-- If user says "I want user notifications" and no notification actions exist → CREATE notification actions using Prisma relations
-- If user says "track inventory" and no inventory actions exist → CREATE inventory tracking with Prisma transactions
-
-CRITICAL ANALYSIS QUESTIONS:
-- What functionality does the user want to accomplish?
-- What Prisma operations are REQUIRED to support this functionality?
-- What actions are missing from the existing system?
-- What database workflows need to be supported?
-
-`;
-  } else {
-    systemPrompt += `Design actions that implement complete business processes using Prisma ORM.
-
-FOCUS ON:
-- Complete business workflows that solve real problems
-- Proper use of Prisma relations and transactions
-- Data validation and error handling
-- Type-safe operations throughout
-
-`;
-  }
-
-  systemPrompt += `BUSINESS REQUIREMENTS:
-${JSON.stringify(promptUnderstanding.workflowAutomationNeeds, null, 2)}
-
-AVAILABLE Prisma Schema:
-${databaseResult.prismaSchema}
 ${existingActionsContext}
+
+BUSINESS REQUIREMENTS:
+${JSON.stringify(step0Analysis, null, 2)}
 
 Business Rules: ${Array.isArray(businessRulesContext) ? businessRulesContext.join(', ') : businessRulesContext}
 
@@ -1052,191 +1050,96 @@ User Experience: ${Array.isArray(userExperienceContext) ? userExperienceContext.
 
 GENERATION REQUIREMENTS:
 ${isIncrementalUpdate ? `
-1. Create ONLY ${expectedActionCount} NEW actions that are specifically requested by the user
+1. Create ONLY ${expectedActionCount > 0 ? expectedActionCount : '2-3'} NEW actions that are specifically requested by the user
 2. Do NOT recreate existing actions
 3. Focus on the delta/difference in the user's request
 4. Each new action should solve a specific new business need
-5. Use appropriate data models from the available models (including new ones)
+5. Use operation tracking: 'create' for new actions, 'update' for modifying existing ones
 6. Consider relationships to existing actions without duplicating them
 ` : `
-1. Create ${expectedActionCount} high-quality actions that implement the business requirements
+1. Create ${expectedActionCount > 0 ? expectedActionCount : '2-3'} high-quality actions that implement the business requirements
 2. Each action should have a clear business purpose and practical implementation
 3. Use appropriate data models from the available models
 4. Include proper error handling and validation
-5. Set appropriate user roles (admin/member) based on action sensitivity
-`}6. ALL envVars fields must be arrays (use empty array [] if no env vars needed)
-7. Provide meaningful names, descriptions, and emojis for each action
-8. Code should be production-ready with proper error handling
+5. Focus on practical business value
+6. Use operation tracking: all actions should be 'create' since this is a new system
+`}
 
-ACTION STRUCTURE REQUIREMENTS:
-- id: unique identifier
-- name: clear, descriptive name
-- emoji: single relevant emoji
-- description: detailed business purpose
-- type: 'Query' or 'Mutation'
-- role: 'admin' or 'member'
+CRITICAL INSTRUCTIONS:
+- Generate actions that match the Step 0 analysis specifications exactly
+- Use the 'type' field to distinguish between queries (read data) and mutations (write/modify data)
+- Include proper role-based access control (admin vs member)
+- Each action should have practical business value
+- Use the existing Prisma schema for data operations
+- Include proper error handling and validation
+- MUST generate at least ${expectedActionCount > 0 ? expectedActionCount : '2'} actions
 
+Generate ${expectedActionCount > 0 ? `exactly ${expectedActionCount}` : 'at least 2-3'} actions that solve real business problems.`;
 
-Generate exactly ${expectedActionCount} actions that solve real business problems.`;
+  // DEBUG: Log the system prompt
+  console.log('🔍 DEBUG: System prompt being sent to AI:', systemPrompt);
 
   // Generate with manual post-processing to fix envVars
-  let rawResult;
+  let rawResult: any;
   try {
     rawResult = await generateObject({
       model,
       schema: prismaActionsSchema,
       messages: [
         {
-          role: 'system' as const,
+          role: 'system',
           content: systemPrompt
         }
       ],
-      temperature: 0.1
+      temperature: 0.4,
+      maxTokens: 6000
     });
-  } catch (error: any) {
-    // If validation fails due to null envVars, try to fix the raw data and re-validate
-    if (error?.cause?.issues?.some((issue: any) => 
-      issue.path?.includes('envVars') && issue.expected === 'array' && issue.received === 'null'
-    )) {
-      console.log('🔧 Detected null envVars, attempting to fix...');
-      
-      // Get the raw value before validation failed
-      const rawData = error.value;
-      if (rawData?.actions && Array.isArray(rawData.actions)) {
-        // Fix envVars fields
-        rawData.actions = rawData.actions.map((action: any) => {
-          const fixedAction = { ...action };
-          
-          // Fix dataSource.customFunction.envVars
-          if (fixedAction.dataSource?.customFunction) {
-            if (fixedAction.dataSource.customFunction.envVars === null || 
-                fixedAction.dataSource.customFunction.envVars === undefined) {
-              fixedAction.dataSource.customFunction.envVars = [];
-            }
-          }
-          
-          // Fix execute.code.envVars
-          if (fixedAction.execute?.code) {
-            if (fixedAction.execute.code.envVars === null || 
-                fixedAction.execute.code.envVars === undefined) {
-              fixedAction.execute.code.envVars = [];
-            }
-          }
-          
-          return fixedAction;
-        });
-        
-        // Try to validate the fixed data with the schema
-        try {
-          const validatedData = unifiedActionsSchema.parse(rawData);
-          rawResult = { object: validatedData };
-          console.log('✅ Successfully fixed envVars validation');
-        } catch (revalidationError) {
-          console.error('❌ Failed to fix envVars, throwing original error');
-          throw error;
-        }
-      } else {
-        throw error;
-      }
-    } else {
-      throw error;
-    }
+  } catch (error) {
+    console.error('❌ Action generation failed:', error);
+    throw new Error(`Action generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
-  
-  const result = rawResult;
 
-  console.log('✅ Actions generation complete');
-  
-  // Fix actions to ensure they have all required fields and proper envVars arrays
-  const fixedActions = await Promise.all((result.object.actions || []).map(async (action: any, index: number) => {
-    // Check if this action already exists in the existing agent
-    const existingAction = existingAgent?.actions?.find(a => a.name === action.name);
-    const actionId = existingAction?.id || action.id || `action_${action.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}_${index}`;
-    
-    // Generate enhanced action with steps
-    const enhancedAction = await generateEnhancedActionWithSteps(
-      action.description || action.name,
-      action.type === 'Query' ? 'Query' : 'Mutation',
-      databaseResult.prismaSchema,
-      Array.isArray(businessRulesContext) ? businessRulesContext.join(', ') : businessRulesContext
-    );
+  // DEBUG: Log the raw result
+  console.log('🔍 DEBUG: Raw result from AI:', JSON.stringify(rawResult, null, 2));
 
-    return {
+  if (!rawResult?.object?.actions) {
+    console.error('❌ No actions generated');
+    throw new Error('No actions were generated');
+  }
+
+  console.log(`✅ Generated ${rawResult.object.actions.length} actions`);
+
+  // Validate and fix the actions
+  const fixedActions = rawResult.object.actions.map((action: any) => ({
       ...action,
-      id: actionId,
-      emoji: action.emoji || '⚡',
-      type: enhancedAction.type,
-      role: enhancedAction.role,
-      dataSource: {
-        type: 'custom',
-        customFunction: {
-          code: enhancedAction.assembledCode,
-          envVars: enhancedAction.envVars || []
-        },
-        database: {
-          models: enhancedAction.impactedModels.map(im => ({
-            id: im.modelName.toLowerCase(),
-            name: im.modelName,
-            fields: (databaseResult.models || [])
-              .find(m => m.name === im.modelName)?.fields?.slice(0, 5)
-              .map(field => ({
-                id: field.id,
-                name: field.name
-              })) || []
-          }))
-        }
-      },
-      execute: {
-        type: 'code' as const,
-        code: {
-          script: enhancedAction.assembledCode,
-          envVars: enhancedAction.envVars || []
-        }
-      },
-      results: {
-        actionType: enhancedAction.type,
-        model: enhancedAction.impactedModels[0]?.modelName || ((databaseResult.models || [])[0]?.name || 'DefaultModel'),
-        identifierIds: action.results?.identifierIds || undefined,
-        fields: enhancedAction.outputVariables.reduce((acc: any, v: any) => {
-          acc[v.name] = v.type;
-          return acc;
-        }, {}),
-        fieldsToUpdate: enhancedAction.impactedModels
-          .filter(im => im.operations.includes('update'))
-          .reduce((acc: any, im: any) => {
-            const model = (databaseResult.models || []).find(m => m.name === im.modelName);
-            if (model) {
-              acc[im.modelName] = model.fields.slice(0, 3).reduce((fieldAcc: any, field: any) => {
-                fieldAcc[field.name] = field.type;
-                return fieldAcc;
-              }, {});
-            }
-            return acc;
-          }, {})
-      }
-    };
+    id: action.id || `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    name: action.name || 'Unnamed Action',
+    description: action.description || action.name || 'No description provided',
+    type: action.type || 'query',
+    role: action.role || 'member',
+
   }));
 
-  // If this is an incremental update, we need to merge with existing actions
-  if (isIncrementalUpdate) {
-    console.log(`🔄 Incremental update: Generated ${fixedActions.length} new actions`);
+  // Handle incremental updates by merging with existing actions
+  if (isIncrementalUpdate && existingAgent?.actions) {
     console.log(`📊 Existing agent has ${(existingAgent.actions || []).length} actions`);
     
-    // Use intelligent merging instead of simple concatenation
+    // Merge intelligently with existing actions
     const mergedActions = mergeActionsIntelligently(existingAgent.actions || [], fixedActions);
     
-    console.log(`📊 Final result: ${mergedActions.length} total actions`);
+    console.log(`✅ Merged actions: ${mergedActions.length} total (${fixedActions.length} new)`);
     
     return {
       actions: mergedActions
     };
   }
 
+  console.log(`✅ Generated ${fixedActions.length} new actions`);
+
   return {
     actions: fixedActions
   };
 }
-
 
 /**
  * ENHANCED ACTION GENERATION INTEGRATION
@@ -1244,7 +1147,7 @@ Generate exactly ${expectedActionCount} actions that solve real business problem
  */
 export async function generateActionsWithEnhancedAnalysis(
   promptUnderstanding: PromptUnderstanding,
-  databaseResult: { models: AgentModel[] },
+  databaseResult: { models: AgentModel[], prismaSchema?: string },
   useEnhancedGeneration = false,
   existingAgent?: AgentData,
   businessContext?: string
@@ -1270,7 +1173,9 @@ export async function generateActionsWithEnhancedAnalysis(
   const enhancedResults = await generateBatchEnhancedActions(
     actionRequests,
     promptUnderstanding,
-    databaseResult,
+    { 
+      prismaSchema: databaseResult.prismaSchema || generateBasicPrismaSchema(databaseResult.models)
+    },
     existingAgent,
     businessContext
   );
@@ -1287,187 +1192,236 @@ export async function generateActionsWithEnhancedAnalysis(
 /**
  * Step 5: Generate schedules
  */
-export async function generateSchedules(
-  promptUnderstanding: PromptUnderstanding,
-  databaseResult: any, // Changed parameter name to match actual usage
-  actions: any,
+export async function generateSchedules({
+  step0Analysis,
+  existingAgent
+}: {
+  step0Analysis: any,
   existingAgent?: AgentData,
-  changeAnalysis?: ChangeAnalysis
-): Promise<{ schedules: AgentSchedule[] }> {
+}): Promise<{ schedules: AgentSchedule[] }> {
   console.log('🕒 Starting schedules generation with real AI...');
   
-  // Determine if this is an incremental update
-  const isIncrementalUpdate = existingAgent && (existingAgent.schedules || []).length > 0;
+  if (!step0Analysis) {
+    throw new Error('step0Analysis is required for schedule generation');
+  }
   
   const model = await getAgentBuilderModel();
-
-  // Build the system prompt with focus on incremental updates
-  let systemPrompt = `You are a scheduling automation expert. `;
+  const isIncrementalUpdate = existingAgent && (existingAgent.schedules || []).length > 0;
   
-  if (isIncrementalUpdate) {
-    systemPrompt += `This is an INCREMENTAL UPDATE to an existing system. Your job is to ONLY create NEW schedules that are specifically requested by the user, NOT to regenerate existing ones.
+  // Extract schedule requirements from Step 0 analysis
+  const scheduleRequirements = step0Analysis.schedules || [];
+  const expectedScheduleCount = scheduleRequirements.length;
+  
+  // Extract business context from Phase A analysis
+  const phaseA = step0Analysis.phaseAAnalysis;
+  const businessContext = phaseA?.userRequestAnalysis?.businessContext || step0Analysis.domain;
+  const automationNeeds = phaseA?.semanticRequirements?.automatedSchedules || [];
+  
+  // Build existing schedules context
+  let existingSchedulesContext = '';
+  if (existingAgent && existingAgent.schedules && existingAgent.schedules.length > 0) {
+    existingSchedulesContext = `EXISTING SCHEDULES (${existingAgent.schedules.length} total):
+${existingAgent.schedules.map((schedule: any) => `- ${schedule.name}: ${schedule.description || 'No description'}`).join('\n')}
 
-CRITICAL INCREMENTAL UPDATE RULES:
-1. ONLY generate NEW schedules that are explicitly mentioned in the user request
-2. DO NOT regenerate or modify existing schedules unless specifically asked
-3. Focus on what's NEW or DIFFERENT in the user's request
-4. If user asks to "add daily animal feeding schedule", create ONLY new animal-related schedules
-5. Return ONLY the new schedules, not the existing ones
-6. Create maximum 2 new schedules for incremental updates
-
-EXISTING SCHEDULES (DO NOT REGENERATE THESE):
-${(existingAgent.schedules || []).map((schedule: any) => `- ${schedule.name}: ${schedule.description || 'No description'}`).join('\n')}
-
-`;
-  } else {
-    systemPrompt += `Design schedules that automate business processes.
-
+DO NOT recreate these existing schedules. Only create NEW schedules as specified in the requirements.
 `;
   }
 
-  systemPrompt += `BUSINESS REQUIREMENTS:
-${JSON.stringify(promptUnderstanding.workflowAutomationNeeds, null, 2)}
+  // Build schedule specifications from Step 0 analysis
+  const scheduleSpecifications = scheduleRequirements.map((schedule: any) => `
+**${schedule.name}** (${schedule.operation === 'create' ? 'NEW SCHEDULE' : 'UPDATE EXISTING'}):
+- Purpose: ${schedule.purpose}
+- Type: ${schedule.type} (${schedule.type === 'query' ? 'reads data' : 'writes/modifies data'})
+- Frequency: ${schedule.frequency}
+${schedule.updateDescription ? `- Update: ${schedule.updateDescription}` : ''}
+${schedule.operation === 'update' ? '- This schedule exists but needs modifications' : '- This is a completely new schedule'}
+`).join('');
+
+  let systemPrompt = `You are an expert at generating automated schedules for business applications.
+
+BUSINESS CONTEXT:
+Domain: ${step0Analysis.domain}
+Agent: ${step0Analysis.agentName}
+Main Goal: ${phaseA?.userRequestAnalysis?.mainGoal || 'Generate schedules for business automation'}
+Business Context: ${businessContext}
+
+SCHEDULE REQUIREMENTS FROM STEP 0 ANALYSIS:
+${scheduleSpecifications}
+
+AUTOMATION NEEDS FROM SEMANTIC ANALYSIS:
+${automationNeeds.map((need: any) => `
+- **${need.name}** (${need.frequency}):
+  - Purpose: ${need.purpose}
+  - Business Value: ${need.businessValue}
+  - Required Data: ${need.requiredData.join(', ')}
+`).join('')}
+
+BUSINESS REQUIREMENTS:
+${JSON.stringify(step0Analysis, null, 2)}
 
 AVAILABLE ACTIONS:
-${Array.isArray(actions) ? actions.map((action: any) => `- ${action.name}: ${action.description}`).join('\n') : 'No actions available'}
+${(step0Analysis.actions || []).map((action: any) => `- ${action.name}: ${action.purpose} (${action.type})`).join('\n') || 'No actions available'}
 
 AVAILABLE DATA MODELS:
-${(databaseResult?.models || []).map((model: any) => `- ${model.name}`).join('\n') || 'No models available'}
+${(step0Analysis.models || []).map((model: any) => `- ${model.name}: ${model.purpose}`).join('\n') || 'No models available'}
+
+AVAILABLE DATABASE SCHEMA:
+${existingAgent?.prismaSchema ? `
+\`\`\`prisma
+${existingAgent.prismaSchema}
+\`\`\`
+` : 'No database schema available'}
+
+${existingSchedulesContext}
 
 ${isIncrementalUpdate ? `
 FOR INCREMENTAL UPDATES:
-- ONLY create schedules that are NEW and explicitly requested
-- Do NOT recreate existing schedules
-- Focus on the delta/difference in the user's request
-- Consider relationships to existing schedules without duplicating them
-- Return minimal set of new schedules only
-
+1. Create ONLY ${expectedScheduleCount} NEW schedules that are specifically requested
+2. Do NOT recreate existing schedules
+3. Focus on the delta/difference in the user's request
+4. Each new schedule should solve a specific new business need
+5. Use operation tracking: 'create' for new schedules, 'update' for modifying existing ones
+6. Consider relationships to existing schedules without duplicating them
 ` : `
-Design schedules that:
-1. Automate recurring business processes
-2. Trigger at appropriate intervals
-3. Use available actions effectively
-4. Provide business value through automation
+FOR NEW SYSTEM:
+1. Create ${expectedScheduleCount} high-quality schedules that implement the business requirements
+2. Each schedule should have a clear business purpose and practical implementation
+3. Use appropriate data models and actions from the available resources
+4. Include proper error handling and validation
+5. Focus on practical business value and automation
+6. Use operation tracking: all schedules should be 'create' since this is a new system
+`}
 
-`}Each schedule should:
-- Have a clear purpose and timing
-- Use appropriate intervals (cron patterns)
-- Execute meaningful actions
-- Have proper role-based access`;
+CRITICAL INSTRUCTIONS:
+- Generate schedules that match the Step 0 analysis specifications exactly
+- Use the 'type' field to distinguish between queries (read data) and mutations (write/modify data)
+- Use the 'frequency' field for proper scheduling (hourly, daily, weekly, monthly)
+- Include proper role-based access control (admin vs member)
+- Each schedule should have practical business value
+- Use the existing Prisma schema and actions for data operations
+- Include proper error handling and validation
 
+Generate exactly ${expectedScheduleCount} schedules that solve real business automation needs.`;
+
+  try {
   const result = await generateObject({
     model,
     schema: unifiedSchedulesSchema,
     messages: [
       {
-        role: 'system' as const,
+          role: 'system',
         content: systemPrompt
       }
     ],
-    temperature: 0.3,
-  });
+      temperature: 0.4,
+      maxTokens: 6000
+    });
 
-  console.log('✅ Schedules generation complete');
-  
-  // Fix schedules to ensure they have all required fields
-  const fixedSchedules = (result.object.schedules || []).map((schedule: any, index: number) => {
-    // Check if this schedule already exists in the existing agent
-    const existingSchedule = existingAgent?.schedules?.find(s => s.name === schedule.name);
-    const scheduleId = existingSchedule?.id || schedule.id || `schedule_${schedule.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}_${index}`;
-    
-    return {
+    if (!result?.object?.schedules) {
+      console.error('❌ No schedules generated');
+      throw new Error('No schedules were generated');
+    }
+
+    console.log(`✅ Generated ${result.object.schedules.length} schedules`);
+
+    // Validate and fix the schedules
+    const fixedSchedules = result.object.schedules.map((schedule: any, index: number) => ({
       ...schedule,
-      id: scheduleId,
-      emoji: schedule.emoji || '🕒',
-      type: schedule.type || 'Create',
+      id: schedule.id || `schedule_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: schedule.name || 'Unnamed Schedule',
+      description: schedule.description || schedule.name || 'No description provided',
+      type: schedule.type || 'query',
       role: schedule.role || 'admin',
-      interval: {
-        pattern: schedule.interval?.pattern || '0 0 * * *',
-        timezone: schedule.interval?.timezone || 'UTC',
-        active: schedule.interval?.active !== undefined ? schedule.interval.active : false
+      interval: schedule.interval || {
+        pattern: schedule.frequency || 'daily',
+        value: 1
       },
-      dataSource: {
-        type: schedule.dataSource?.type || 'database',
-        customFunction: schedule.dataSource?.customFunction ? {
-          code: schedule.dataSource.customFunction.code,
-          envVars: Array.isArray(schedule.dataSource.customFunction.envVars) ? schedule.dataSource.customFunction.envVars : []
-        } : undefined,
-        database: schedule.dataSource?.type === 'custom' 
-          ? (schedule.dataSource?.database || null)
-          : (schedule.dataSource?.database || {
-              models: (databaseResult?.models || []).slice(0, 1).map((model: any) => ({
-                id: model.id,
-                name: model.name,
-                fields: model.fields?.slice(0, 3).map((field: any) => ({
-                  id: field.id,
-                  name: field.name
-                })) || []
-              })) || []
-            })
-      },
-      execute: {
-        code: {
-          script: schedule.execute?.code?.script || `
-// Schedule: ${schedule.name}
-// Parameters: database, envs
-try {
-  // Validate input
-  if (!input) throw new Error('Input is required');
-  
-  // Check permissions
-  if (member.role !== '${schedule.role || 'admin'}' && '${schedule.role || 'admin'}' === 'admin') {
-    throw new Error('Admin access required');
-  }
-  
-  // Execute schedule logic
-  const result = {
-    message: '${schedule.name} executed successfully',
-    data: input
-  };
-  
-  return {
-    output: result,
-    data: [{
-      modelId: '${(databaseResult?.models || [])[0]?.name || 'DefaultModel'}',
-      createdRecords: [],
-      updatedRecords: [],
-      deletedRecords: []
-    }]
-  };
-} catch (error) {
-  throw new Error('Schedule failed: ' + error.message);
-}`,
-          envVars: Array.isArray(schedule.execute?.code?.envVars) ? schedule.execute.code.envVars : []
-        }
-      },
-      results: {
-        actionType: schedule.results?.actionType || schedule.type || 'Create',
-        model: schedule.results?.model || ((databaseResult?.models || [])[0]?.name || 'DefaultModel'),
-        identifierIds: schedule.results?.identifierIds || undefined,
-        fields: schedule.results?.fields || {},
-        fieldsToUpdate: schedule.results?.fieldsToUpdate || undefined
-      }
-    };
-  });
+      // dataSource: schedule.dataSource || {
+      //   type: 'custom',
+      //   customFunction: {
+      //     code: schedule.functionBody || `
+      //       // Generated schedule: ${schedule.name}
+      //       // TODO: Implement schedule logic
+      //       console.log('Schedule executed:', input);
+      //       return { success: true, message: 'Schedule completed' };
+      //     `,
+      //     envVars: []
+      //   },
+      //   database: schedule.dataSource?.database || {
+      //     models: (step0Analysis.models || []).slice(0, 1).map((model: any) => ({
+      //       id: model.name.toLowerCase(),
+      //       name: model.name,
+      //       fields: model.fields?.slice(0, 3).map((field: any) => ({
+      //         id: field.name,
+      //         name: field.name
+      //       })) || []
+      //     }))
+      //   }
+      // },
+      // execute: schedule.execute || {
+      //   type: 'code' as const,
+      //   code: {
+      //     script: schedule.functionBody || `
+      //       // Generated schedule: ${schedule.name}
+      //       // Frequency: ${schedule.frequency || 'daily'}
+      //       // Purpose: ${schedule.purpose || 'Automated task'}
+            
+      //       async function executeSchedule(database, input, member) {
+      //         try {
+      //           console.log('Executing schedule:', '${schedule.name}');
+                
+      //           // TODO: Implement schedule logic based on requirements
+      //           const result = { 
+      //             success: true, 
+      //             message: 'Schedule executed successfully',
+      //             executedAt: new Date().toISOString()
+      //           };
+                
+      //           return result;
+      //         } catch (error) {
+      //           console.error('Schedule execution failed:', error);
+      //           throw error;
+      //         }
+      //       }
+            
+      //       return executeSchedule(database, input, member);
+      //     `,
+      //     envVars: []
+      //   }
+      // },
+      // results: schedule.results || {
+      //   actionType: schedule.type || 'Query',
+      //   model: ((step0Analysis.models || [])[0]?.name || 'DefaultModel'),
+      //   identifierIds: undefined,
+      //   fields: {},
+      //   fieldsToUpdate: undefined
+      // }
+    }));
 
-  // If this is an incremental update, we need to merge with existing schedules
-  if (isIncrementalUpdate) {
-    console.log(`🔄 Incremental update: Generated ${fixedSchedules.length} new schedules`);
+    // Handle incremental updates by merging with existing schedules
+    if (isIncrementalUpdate && existingAgent?.schedules) {
     console.log(`📊 Existing agent has ${(existingAgent.schedules || []).length} schedules`);
     
-    // Use intelligent merging instead of simple concatenation
+      // Merge intelligently with existing schedules
     const mergedSchedules = mergeSchedulesIntelligently(existingAgent.schedules || [], fixedSchedules);
     
-    console.log(`📊 Final result: ${mergedSchedules.length} total schedules`);
+      console.log(`✅ Merged schedules: ${mergedSchedules.length} total (${fixedSchedules.length} new)`);
     
     return {
       schedules: mergedSchedules
     };
   }
 
+    console.log(`✅ Generated ${fixedSchedules.length} new schedules`);
+
   return {
     schedules: fixedSchedules
   };
+    
+  } catch (error) {
+    console.error('❌ Schedule generation failed:', error);
+    throw new Error(`Schedule generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 /**
@@ -2725,13 +2679,18 @@ export async function generateCompleteEnhancedAction(
   codeGeneration: z.infer<typeof enhancedActionCodeSchema>,
   actionConfig: AgentAction
 }> {
-  console.log('🚀 Starting complete enhanced action generation process...');
+  console.log('🚀 Starting complete enhanced action generation...');
+  
+  // Create a simple compatible database result structure
+  const compatibleDatabaseResult = {
+    models: existingAgent?.models || []
+  };
   
   // Step 1: Generate imagination (define use case conceptually)
   const imagination = await generateEnhancedActionImagination(
     actionRequest,
     promptUnderstanding,
-    databaseResult,
+    compatibleDatabaseResult,
     existingAgent,
     businessContext
   );
@@ -2741,7 +2700,7 @@ export async function generateCompleteEnhancedAction(
     actionRequest,
     imagination,
     promptUnderstanding,
-    databaseResult,
+    compatibleDatabaseResult,
     existingAgent,
     businessContext
   );
@@ -2749,7 +2708,7 @@ export async function generateCompleteEnhancedAction(
   // Step 3: Generate complete code (write working code)
   const codeGeneration = await generateEnhancedActionCode(
     analysis,
-    databaseResult,
+    compatibleDatabaseResult,
     existingAgent
   );
 
@@ -2759,7 +2718,7 @@ export async function generateCompleteEnhancedAction(
     name: imagination.title,
     emoji: '⚡', // Default, can be customized
     description: imagination.description,
-    type: analysis.analysis.databaseOperations.tablesToUpdate.some(t => t.operation === 'create') ? 'Mutation' : 'Query',
+    type: analysis.analysis.databaseOperations.tablesToUpdate.some(t => t.operation === 'create') ? 'mutation' : 'query',
     role: imagination.userRole,
     dataSource: {
       type: 'custom',
@@ -2791,8 +2750,8 @@ export async function generateCompleteEnhancedAction(
       }
     },
     results: {
-      actionType: analysis.analysis.databaseOperations.tablesToUpdate.some(t => t.operation === 'create') ? 'Mutation' : 'Query',
-      model: analysis.analysis.databaseOperations.tablesToUpdate[0]?.modelName || 'DefaultModel',
+      actionType: analysis.analysis.databaseOperations.tablesToUpdate.some(t => t.operation === 'create') ? 'mutation' : 'query',
+      model: analysis.analysis.databaseOperations.tablesToUpdate[0]?.modelName || existingAgent?.models?.[0]?.name || 'DefaultModel',
       fields: {},
       fieldsToUpdate: {}
     },
@@ -3331,7 +3290,7 @@ export {
 export async function generatePseudoSteps(
   name: string,
   description: string,
-  type: 'Create' | 'Update',
+  type: 'create' | 'update',
   availableModels: AgentModel[],
   entityType: 'action' | 'schedule',
   businessContext?: string
@@ -3400,7 +3359,7 @@ ${availableModels.map(model => `
 **IMPORTANT**: When you see field names like "leadId", "customerId", "orderId", etc., the type should be "${availableModels.map(m => m.name).find(name => name.toLowerCase() === 'lead') ? 'LeadId' : 'ModelNameId'}", NOT "String"!
 
 For ${type} operations:
-${type === 'Create' ? '- Focus on data validation, creation, and confirmation steps' : '- Focus on finding existing records, validation, updating, and confirmation steps'}
+${type === 'create' ? '- Focus on data validation, creation, and confirmation steps' : '- Focus on finding existing records, validation, updating, and confirmation steps'}
 
 Generate 3-7 logical steps that would accomplish this ${entityType}'s purpose. Be specific about database model relationships and connections.
 
@@ -3602,139 +3561,65 @@ Follow these patterns exactly to ensure proper relationship detection!`;
   return convertedSteps;
 }
 
-/**
- * Generate processing time estimate for schedules
- */
-export async function generateProcessingTimeEstimate(
-  scheduleName: string,
-  description: string,
-  pseudoSteps: PseudoCodeStep[],
-  interval: string,
-  businessContext?: string
-): Promise<{
-  estimatedDuration: string;
-  complexity: 'low' | 'medium' | 'high';
-  resourceUsage: 'light' | 'moderate' | 'heavy';
-  reasoning: string;
-}> {
-  console.log(`⏱️ Generating processing time estimate for schedule: ${scheduleName}`);
-  
-  const model = await getAgentBuilderModel();
 
-  const systemPrompt = `You are a performance analysis expert estimating processing time for automated schedules.
-
-SCHEDULE DETAILS:
-- Name: ${scheduleName}
-- Description: ${description}
-- Interval: ${interval}
-- Number of Steps: ${pseudoSteps.length}
-
-PSEUDO STEPS ANALYSIS:
-${pseudoSteps.map((step, index) => `
-Step ${index + 1}: ${step.type} - ${step.description}
-- Inputs: ${step.inputFields.length} fields
-- Outputs: ${step.outputFields.length} fields
-`).join('')}
-
-${businessContext ? `BUSINESS CONTEXT: ${businessContext}` : ''}
-
-Analyze the complexity and estimate realistic processing time considering:
-
-1. **Database Operations**: Number and complexity of database queries/writes
-2. **Data Volume**: Potential amount of data being processed
-3. **Business Logic**: Complexity of validations and calculations
-4. **Network/External Calls**: Any external API calls or file operations
-5. **Scheduling Frequency**: How often this runs affects resource planning
-
-Provide realistic estimates that help users understand:
-- How long each execution might take
-- Resource impact on the system
-- Whether the schedule frequency is appropriate`;
-
-  const estimateSchema = z.object({
-    estimatedDuration: z.string().describe('Human-readable duration estimate (e.g., "2-5 seconds", "30-60 seconds", "2-3 minutes")'),
-    complexity: z.enum(['low', 'medium', 'high']).describe('Overall complexity level'),
-    resourceUsage: z.enum(['light', 'moderate', 'heavy']).describe('Expected system resource usage'),
-    reasoning: z.string().describe('Detailed explanation of the estimate and factors considered')
-  });
-
-  const result = await generateObject({
-    model,
-    schema: estimateSchema,
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt
-      }
-    ],
-    temperature: 0.3,
-  });
-
-  console.log(`✅ Generated processing time estimate: ${result.object.estimatedDuration}`);
-  return result.object;
-}
 
 // Define a Prisma-specific schema for generation
 const prismaSchemaGenerationSchema = z.object({
   schema: z.string().describe('Complete Prisma schema as a single string')
 });
 
-export async function generatePrismaSchema(
-  promptUnderstanding: PromptUnderstanding,
-  existingAgent?: AgentData,
-  changeAnalysis?: ChangeAnalysis,
-  agentOverview?: any,
-  conversationContext?: string,
-  command?: string
-): Promise<{ schema: string }> {
+export async function generatePrismaSchema({
+  step0Analysis,
+}: {
+  step0Analysis?: Step0Output,
+}): Promise<string> {
   console.log('🗄️ Starting Prisma schema generation with official Prisma logic...');
-  console.log('📋 Input analysis:', {
-    hasExistingAgent: !!existingAgent,
-    existingModels: existingAgent?.models?.length || 0,
-    isIncremental: !!(existingAgent?.models?.length)
-  });
 
-  // Extract existing Prisma schema if available (using type assertion since prismaSchema is not in AgentData type)
-  const existingSchema = (existingAgent as any)?.prismaSchema || '';
-  const existingSchemaContext = existingSchema ? `
-EXISTING PRISMA SCHEMA:
-\`\`\`prisma
-${existingSchema}
-\`\`\`
-
-If this is an incremental update, extend or modify the existing schema appropriately.
-` : '';
-
-  const actionRequirements = promptUnderstanding.workflowAutomationNeeds?.requiredActions || [];
-  const oneTimeActions = promptUnderstanding.workflowAutomationNeeds?.oneTimeActions || [];
-  const recurringSchedules = promptUnderstanding.workflowAutomationNeeds?.recurringSchedules || [];
-  
-  let businessContext = '';
-  if (actionRequirements.length > 0 || oneTimeActions.length > 0 || recurringSchedules.length > 0) {
-    businessContext = `
-BUSINESS WORKFLOW REQUIREMENTS:
-- Required Actions: ${actionRequirements.map(a => a.name).join(', ')}
-- One-Time Actions: ${oneTimeActions.map(a => a.name).join(', ')}
-- Recurring Schedules: ${recurringSchedules.map(s => s.name).join(', ')}
-
-Design the schema to support these workflows with appropriate fields for status tracking, audit trails, and user permissions.
-`;
+  if (!step0Analysis) {
+    throw new Error('step0Analysis is required for Prisma schema generation');
   }
 
   const model = await getAgentBuilderModel();
-  const isIncrementalUpdate = existingAgent && (existingAgent.models || []).length > 0;
+  
+  // Extract business context from Step 0 analysis
+  const phaseA = step0Analysis.phaseAAnalysis;
+  const mainGoal = phaseA?.userRequestAnalysis.mainGoal || `Generate database schema for ${step0Analysis.agentName}`;
+  const businessContext = phaseA?.userRequestAnalysis.businessContext || step0Analysis.domain;
+  const modelNames = step0Analysis.models.map(m => m.name).join(', ');
+  
+  // Build action and schedule context
+  const actionContext = step0Analysis.actions.length > 0 ? `
+REQUIRED ACTIONS:
+${step0Analysis.actions.map(a => `- ${a.name}: ${a.purpose} (${a.type})`).join('\n')}
+` : '';
 
-  const systemPrompt = `You are a Prisma schema expert. Generate a complete, valid Prisma schema based on the business requirements.
+  const scheduleContext = step0Analysis.schedules.length > 0 ? `
+AUTOMATED SCHEDULES:
+${step0Analysis.schedules.map(s => `- ${s.name}: ${s.purpose} (${s.frequency})`).join('\n')}
+` : '';
 
-BUSINESS REQUIREMENTS:
-${promptUnderstanding.userRequestAnalysis.mainGoal}
+  const systemPrompt = `You are a Prisma schema expert. Generate a complete, valid Prisma schema based on the comprehensive business analysis.
 
-Business Context: ${promptUnderstanding.userRequestAnalysis.businessContext}
-Required Models: ${promptUnderstanding.dataModelingNeeds.requiredModels.map(m => m.name).join(', ')}
+BUSINESS ANALYSIS SUMMARY:
+Main Goal: ${mainGoal}
+Business Context: ${businessContext}
+Domain: ${step0Analysis.domain}
+Required Models: ${modelNames}
 
-${existingSchemaContext}
+DETAILED MODEL SPECIFICATIONS:
+${step0Analysis.models.map(model => `
+**${model.name}** (${model.operation === 'create' ? 'NEW MODEL' : 'UPDATE EXISTING'}):
+Purpose: ${model.purpose}
+${model.updateDescription ? `Update: ${model.updateDescription}` : ''}
+Fields:
+${model.fields.map(field => `  - ${field.name}: ${field.type} (${field.required ? 'required' : 'optional'}) ${field.operation === 'update' ? `[UPDATE: ${field.updateDescription}]` : ''}`).join('\n')}
+${model.enums ? `Enums:
+${model.enums.map(enumDef => `  - ${enumDef.name}: ${enumDef.values.join(', ')} ${enumDef.operation === 'update' ? `[UPDATE: ${enumDef.updateDescription}]` : ''}`).join('\n')}` : ''}
+`).join('')}
 
-${businessContext}
+${actionContext}
+
+${scheduleContext}
 
 PRISMA SCHEMA GENERATION GUIDELINES:
 
@@ -3781,33 +3666,40 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    \`\`\`
    model User {
      id       String   @id @default(cuid())
-     email    String   @unique
+     email    String?  @unique
      posts    Post[]
    }
 
    model Post {
      id       String @id @default(cuid())
-     title    String
-     authorId String
-     author   User   @relation(fields: [authorId], references: [id])
+     title    String?
+     authorId String?
+     author   User?   @relation(fields: [authorId], references: [id])
    }
    \`\`\`
 
-6. **Common Patterns:**
+6. **CRITICAL FIELD REQUIREMENTS:**
+   - ONLY id fields should be required (no ? suffix)
+   - ALL other fields should be optional (add ? suffix)
+   - This provides flexibility in data entry and prevents validation errors
+   - Example: String? (optional), Int? (optional), Boolean? (optional)
+   - Only the primary key id field should NOT have the ? suffix
+
+7. **Common Patterns:**
    - Always include @default(cuid()) for String IDs
-   - Include createdAt DateTime @default(now())
-   - Include updatedAt DateTime @updatedAt for audit trails
+   - Include createdAt DateTime? @default(now()) (note the ? for optional)
+   - Include updatedAt DateTime? @updatedAt for audit trails (note the ? for optional)
    - Use enums for predefined values
    - Include status fields for workflow tracking
 
-7. **Best Practices:**
+8. **Best Practices:**
    - Use meaningful field names
    - Include proper indexes with @@index
    - Add constraints where needed
    - Consider soft deletes with deletedAt fields
    - Include user references for permissions
 
-8. **Enum Definitions:**
+9. **Enum Definitions:**
    Define enums before models that use them:
    \`\`\`
    enum UserRole {
@@ -3817,14 +3709,7 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    }
    \`\`\`
 
-${isIncrementalUpdate ? `
-This is an INCREMENTAL UPDATE. Extend the existing schema with new models/fields as needed.
-Do not duplicate existing models unless modifying them.
-` : `
-This is a NEW SCHEMA. Create a complete schema from scratch.
-`}
-
-Generate a complete, production-ready Prisma schema that supports the business requirements.
+Generate a complete, production-ready Prisma schema that supports the business requirements from the Step 0 analysis.
 The schema should be practical, well-structured, and follow Prisma best practices.
 
 Return ONLY the complete Prisma schema as a single string, starting with the generator and datasource blocks.`;
@@ -3843,28 +3728,197 @@ Return ONLY the complete Prisma schema as a single string, starting with the gen
 
   console.log('✅ Prisma schema generation complete');
 
-  return {
-    schema: result.object.schema
-  };
+  return result.object.schema
 }
 
 
 import { ConvertSchemaToObject } from './schema/json';
 import { mergeSchema } from './schema/mergeSchema';
+import type { Step0Output } from './steps/step0-comprehensive-analysis';
 
-export async function generatePrismaDatabase(
-  promptUnderstanding: PromptUnderstanding,
-  existingAgent?: AgentData
-) {
-  const aiSchema = await generatePrismaSchema(promptUnderstanding, existingAgent);
-  const convertedSchema = new ConvertSchemaToObject(aiSchema.schema).run();
-  const mergedSchema = mergeSchema(convertedSchema, '');
+export async function generatePrismaDatabase({
+  existingAgent,
+  step0Analysis
+}: {
+  existingAgent?: AgentData,
+  step0Analysis?: Step0Output
+}) {
+  // Get the existing Prisma schema if available
+  const existingSchema = (existingAgent as any)?.prismaSchema || '';
+  const hasExistingSchema = existingSchema.length > 0 || (existingAgent?.models?.length || 0) > 0;
+  
+  console.log('🏗️ Prisma Database Generation Strategy:');
+  if (hasExistingSchema) {
+    const existingModels = existingAgent?.models || [];
+    console.log(`📋 Using existing Prisma schema as foundation (${existingModels.length} existing models)`);
+  }
+
+  if (step0Analysis) {
+    console.log(`📊 Step 0 Operation Guidance:
+- Domain: ${step0Analysis.domain}
+- Operation Type: ${step0Analysis.operation}
+- Models Analysis: ${step0Analysis.models?.length || 0} models identified
+- New Models Needed: ${step0Analysis.models?.filter((m: any) => m.operation === 'create').length || 0}
+- Existing Models to Update: ${step0Analysis.models?.filter((m: any) => m.operation === 'update').length || 0}`);
+  }
+
+  // Use AI to intelligently merge schemas when existing schema is present
+  const finalSchema = hasExistingSchema && step0Analysis ? 
+    await generateIntelligentMergedSchema({existingSchema, step0Analysis}) :
+    (await generatePrismaSchema({ step0Analysis}));
+
+  console.log(`✅ Database Generation Complete:
+- Schema Strategy: ${hasExistingSchema ? 'AI-Intelligent Merging' : 'Complete Generation'}
+- Final Models: ${existingAgent?.models?.length || 0}
+- Operation Type: ${step0Analysis?.operation || 'create'}`);
+
+  // Convert the final schema to AgentModel objects and enhance with proper field metadata
+  const basicSchemaObject = new ConvertSchemaToObject(finalSchema).run();
 
   return {
-    schemaObject: mergedSchema,
-    schemaString: aiSchema.schema
+    models: mergeSchema(basicSchemaObject,'').models,
+    enums: mergeSchema(basicSchemaObject,'').enums,
+    prismaSchema: finalSchema
   };
 }
+
+/**
+ * Use AI to intelligently merge existing Prisma schema with Step 0 analysis
+ * This replaces code-level merging with AI-based intelligent schema evolution
+ */
+async function generateIntelligentMergedSchema({
+  existingSchema,
+  step0Analysis,
+}: {
+  existingSchema: string,
+  step0Analysis: Step0Output,
+}): Promise<string> {
+  console.log('🤖 Using AI to intelligently merge existing schema with Step 0 analysis...');
+  
+  const model = await getAgentBuilderModel();
+  
+  // Extract models from Step 0 analysis with operation information
+  const step0Models = step0Analysis.models || [];
+  const modelsToCreate = step0Models.filter((m: any) => m.operation === 'create');
+  const modelsToUpdate = step0Models.filter((m: any) => m.operation === 'update');
+  
+  console.log(`📊 Step 0 Model Operations:
+- Models to Create: ${modelsToCreate.length}
+- Models to Update: ${modelsToUpdate.length}
+- Total Models in Analysis: ${step0Models.length}`);
+  
+  const systemPrompt = `You are a Prisma schema expert. You need to intelligently merge an existing Prisma schema with new requirements from Step 0 analysis.
+
+EXISTING PRISMA SCHEMA:
+\`\`\`prisma
+${existingSchema}
+\`\`\`
+
+STEP 0 ANALYSIS - MODELS TO PROCESS:
+
+NEW MODELS TO CREATE (${modelsToCreate.length}):
+${modelsToCreate.map((m: any) => `- ${m.name}: ${m.purpose}
+  Fields: ${m.fields.map((f: any) => `${f.name} (${f.type}${f.required ? '' : '?'})`).join(', ')}
+  ${m.enums?.length ? `Enums: ${m.enums.map((e: any) => `${e.name}: [${e.values.join(', ')}]`).join(', ')}` : ''}`).join('\n')}
+
+EXISTING MODELS TO UPDATE (${modelsToUpdate.length}):
+${modelsToUpdate.map((m: any) => `- ${m.name}: ${m.purpose}
+  Fields: ${m.fields.map((f: any) => `${f.name} (${f.type}${f.required ? '' : '?'})`).join(', ')}
+  ${m.enums?.length ? `Enums: ${m.enums.map((e: any) => `${e.name}: [${e.values.join(', ')}]`).join(', ')}` : ''}`).join('\n')}
+
+BUSINESS CONTEXT:
+- Domain: ${step0Analysis.domain}
+- Agent: ${step0Analysis.agentName}
+- Operation: ${step0Analysis.operation}
+
+INTELLIGENT MERGING INSTRUCTIONS:
+
+1. **PRESERVE EXISTING DATA STRUCTURE:**
+   - Keep all existing models that are not being updated
+   - Preserve all existing fields and relationships
+   - Maintain data integrity and backwards compatibility
+
+2. **ADD NEW MODELS (CREATE OPERATIONS):**
+   - Create new models as specified in Step 0 analysis for models with operation='create'
+   - Follow Prisma naming conventions (PascalCase, singular)
+   - Add proper relationships to existing models where appropriate
+
+3. **UPDATE EXISTING MODELS (UPDATE OPERATIONS):**
+   - Add new fields to existing models as specified for models with operation='update'
+   - Do NOT remove existing fields (maintain backwards compatibility)
+   - Update field types only if it's a safe conversion
+   - Add new enums and relationships as needed
+
+4. **FIELD REQUIREMENTS:**
+   - ONLY id fields should be required (no ? suffix)
+   - ALL other fields should be optional (add ? suffix)
+   - This ensures flexibility and prevents validation errors
+
+5. **RELATIONSHIP INTELLIGENCE:**
+   - Automatically detect and create appropriate relationships between models
+   - Use proper Prisma relation syntax with @relation decorators
+   - Ensure referential integrity
+
+6. **ENUM HANDLING:**
+   - Add new enums as needed
+   - Update existing enums by adding new values (don't remove existing ones)
+   - Place enum definitions before the models that use them
+
+SCHEMA STRUCTURE:
+Always include the standard generator and datasource blocks:
+\`\`\`
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+\`\`\`
+
+Generate the complete merged Prisma schema that:
+- Preserves all existing functionality
+- Adds the new models (operation='create') from Step 0 analysis
+- Updates existing models (operation='update') with new fields from Step 0 analysis
+- Maintains data integrity and relationships
+- Follows Prisma best practices
+
+Return ONLY the complete merged Prisma schema as a single string.`;
+
+  const result = await generateObject({
+    model,
+    schema: prismaSchemaGenerationSchema,
+    messages: [
+      {
+        role: 'system' as const,
+        content: systemPrompt
+      }
+    ],
+    temperature: 0.2, // Lower temperature for more consistent schema merging
+  });
+
+  console.log('✅ AI schema merging complete with operation-aware processing');
+  
+  return result.object.schema;
+}
+
+
+// Helper function to extract models from a Prisma schema
+// function extractModelsFromSchema(schema: string): Array<{name: string, definition: string}> {
+//   const models: Array<{name: string, definition: string}> = [];
+//   const modelRegex = /model\s+(\w+)\s*{[^}]*}/g;
+//   let match;
+  
+//   while ((match = modelRegex.exec(schema)) !== null) {
+//     models.push({
+//       name: match[1],
+//       definition: match[0]
+//     });
+//   }
+  
+//   return models;
+// }
 
 // Schema for step analysis
 const stepAnalysisSchema = z.object({
@@ -3914,7 +3968,7 @@ const stepAnalysisSchema = z.object({
 const completeActionAnalysisSchema = z.object({
   actionName: z.string(),
   description: z.string(),
-  type: z.enum(['Query', 'Mutation']),
+  type: z.enum(['query', 'mutation']),
   role: z.enum(['admin', 'member']),
   inputVariables: z.array(z.object({
     name: z.string(),
@@ -3946,7 +4000,7 @@ const completeActionAnalysisSchema = z.object({
 // Function to analyze action and generate steps
 async function analyzeActionSteps(
   actionDescription: string,
-  actionType: 'Query' | 'Mutation',
+  actionType: 'query' | 'mutation',
   prismaSchema: string,
   businessContext?: string
 ): Promise<ActionStep[]> {
@@ -4223,7 +4277,7 @@ Generate complete, production-ready function code with proper Prisma integration
 // Function to analyze complete action
 async function analyzeCompleteAction(
   actionDescription: string,
-  actionType: 'Query' | 'Mutation',
+  actionType: 'query' | 'mutation',
   steps: ActionStep[],
   prismaSchema: string
 ): Promise<EnhancedActionAnalysis> {
@@ -4305,6 +4359,7 @@ Use generateObject() structure for consistent, type-safe analysis output.`;
 
   return {
     ...result.object,
+    type: result.object.type.toLowerCase() as 'query' | 'mutation',
     steps,
     assembledCode
   };
@@ -4383,7 +4438,7 @@ return await executeAction(database, input, member, ai, envVars);`;
 // Enhanced action generation function
 async function generateEnhancedActionWithSteps(
   actionDescription: string,
-  actionType: 'Query' | 'Mutation',
+  actionType: 'query' | 'mutation',
   prismaSchema: string,
   businessContext?: string
 ): Promise<EnhancedActionAnalysis> {
@@ -4394,4 +4449,16 @@ async function generateEnhancedActionWithSteps(
   const completeAnalysis = await analyzeCompleteAction(actionDescription, actionType, steps, prismaSchema);
   
   return completeAnalysis;
+}
+
+// Helper function to generate basic Prisma schema from models
+function generateBasicPrismaSchema(models: AgentModel[]): string {
+  return models.map(model => {
+    const fields = model.fields.map(field => {
+      const required = field.required ? '' : '?';
+      return `  ${field.name} ${field.type}${required}`;
+    }).join('\n');
+    
+    return `model ${model.name} {\n${fields}\n}`;
+  }).join('\n\n');
 }

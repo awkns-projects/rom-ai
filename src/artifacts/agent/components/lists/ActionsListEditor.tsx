@@ -452,7 +452,7 @@ export const ActionsListEditor = memo(({
                   <div className="flex-1 min-w-0">
                     <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{action.name || 'Unnamed Action'}</h4>
                     <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
-                      {action.role} • {action.execute.type} • {action.results.actionType}
+                      {action.role} • {action.execute?.type || 'Not configured'} • {action.results?.actionType || 'Not configured'}
                     </p>
                     {action.description && (
                       <p className="text-green-300/80 text-xs sm:text-sm font-mono leading-relaxed">
@@ -463,10 +463,10 @@ export const ActionsListEditor = memo(({
                     )}
                     <div className="mt-2 flex flex-wrap gap-1">
                       <span className="px-2 py-1 text-xs font-mono bg-blue-500/20 text-blue-300 rounded border border-blue-500/30">
-                        Target: {action.results.model || 'Not set'}
+                        Target: {action.results?.model || 'Not set'}
                       </span>
                       <span className="px-2 py-1 text-xs font-mono bg-blue-500/20 text-blue-300 rounded border border-blue-500/30">
-                        Source: {action.dataSource.type}
+                        Source: {action.dataSource?.type || 'Not configured'}
                       </span>
                       {/* Readiness indicator */}
                       <span className={`px-2 py-1 text-xs font-mono rounded border ${
