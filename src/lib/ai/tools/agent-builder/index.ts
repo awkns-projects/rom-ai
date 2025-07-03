@@ -819,6 +819,9 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created with 
         // Stream the final user-friendly content
         streamWithPersistence(dataStream, 'text-delta', userFriendlyMessage, documentId, session);
         
+        // Send finish signal to notify UI that process is complete
+        dataStream.writeData({ type: 'finish', content: '' });
+        
         console.log('✅ Agent generation completed successfully');
         console.log(`📊 Quality Score: ${result.executionMetrics.qualityScore}/100`);
         console.log(`⏱️ Total Duration: ${result.executionMetrics.totalDuration}ms`);
@@ -910,6 +913,9 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created, thou
           // streamWithPersistence(dataStream, 'agent-data', finalContent, documentId, session);
           streamWithPersistence(dataStream, 'text-delta', userFriendlyMessage, documentId, session);
           
+          // Send finish signal to notify UI that process is complete
+          dataStream.writeData({ type: 'finish', content: '' });
+          
           return {
             id: documentId,
             title: result.agent.name || 'AI Agent System',
@@ -940,6 +946,9 @@ The agent "${result.agent.name || 'AI Agent System'}" was created but may need a
 
 💡 **Next Steps:** Please refine your request or try again with more specific requirements.`
           });
+          
+          // Send finish signal to notify UI that process is complete
+          dataStream.writeData({ type: 'finish', content: '' });
           
           return {
             id: documentId,
@@ -984,6 +993,9 @@ The agent generation process encountered issues and could not create a usable ag
 
 💡 **Next Steps:** Please try again with a more specific request or check the system logs.`
         });
+        
+        // Send finish signal to notify UI that process is complete
+        dataStream.writeData({ type: 'finish', content: '' });
         
         return {
           id: documentId,
@@ -1039,6 +1051,9 @@ The agent generation process encountered issues and could not create a usable ag
       dataStream.writeData({ type: 'agent-step', content: catchErrorStepData });
       
       const errorMessage = generateErrorMessage(error, 'Enhanced Agent Building');
+      
+      // Send finish signal to notify UI that process is complete (even with error)
+      dataStream.writeData({ type: 'finish', content: '' });
       
       // await saveDocumentWithContent(documentId, canResume ? 'Incomplete Agent System' : 'Error Agent System', JSON.stringify({
       //   error: error instanceof Error ? error.message : 'Unknown error',

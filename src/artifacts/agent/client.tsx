@@ -637,24 +637,93 @@ const AgentBuilderContent = memo(({
   setMessages?: UseChatHelpers['setMessages'];
 }) => {
   // ALL HOOKS MUST BE DECLARED AT THE TOP LEVEL BEFORE ANY CONDITIONAL LOGIC
-  const { artifact } = useArtifact();
+  const [agentData, setAgentData] = useAgentData(content);
+  const { artifact, setArtifact } = useArtifact();
   const router = useRouter();
   const params = useParams();
   
-  // Initialize metadata with defaults if null - this must be consistent
-  const safeMetadata: AgentArtifactMetadata = useMemo(() => metadata || {
-    selectedTab: 'onboard',
-    editingModel: null,
-    editingAction: null,
-    editingSchedule: null,
-    viewingModelData: null,
-    editingRecord: null,
-    dataManagement: null,
-    showExplanationModal: null
-  }, [metadata]);
+  // Safe metadata with defaults to prevent crashes
+  const safeMetadata: AgentArtifactMetadata = useMemo(() => ({
+    selectedTab: metadata?.selectedTab || 'onboard',
+    editingModel: metadata?.editingModel || null,
+    editingAction: metadata?.editingAction || null,
+    editingSchedule: metadata?.editingSchedule || null,
+    viewingModelData: metadata?.viewingModelData || null,
+    editingRecord: metadata?.editingRecord || null,
+    currentStep: metadata?.currentStep,
+    stepProgress: metadata?.stepProgress || {},
+    stepMessages: metadata?.stepMessages || {},
+    dataManagement: metadata?.dataManagement || null,
+    showExplanationModal: metadata?.showExplanationModal || null
+  }), [metadata]);
+
+  // Add completion detection for page refreshes
+  useEffect(() => {
+    // Only run completion detection if:
+    // 1. We have content and the artifact is currently streaming
+    // 2. We don't have any current step progress (indicating this is a page refresh, not active generation)
+    // 3. The stepProgress is empty or indicates completion
+    if (content && artifact?.status === 'streaming') {
+      const hasActiveStepProgress = safeMetadata.stepProgress && 
+        Object.values(safeMetadata.stepProgress).some(status => status === 'processing');
+      
+      // If we have active step progress, don't run completion detection
+      // This prevents premature completion during secondary edits
+      if (hasActiveStepProgress) {
+        console.log('⚠️ Skipping completion detection - active step progress detected:', safeMetadata.stepProgress);
+        return;
+      }
+      
+      try {
+        const parsedAgent = JSON.parse(content);
+        
+        // Check if this looks like a completed agent
+        const hasModels = parsedAgent.models && Array.isArray(parsedAgent.models) && parsedAgent.models.length > 0;
+        const hasActions = parsedAgent.actions && Array.isArray(parsedAgent.actions) && parsedAgent.actions.length > 0;
+        const hasSchedules = parsedAgent.schedules && Array.isArray(parsedAgent.schedules) && parsedAgent.schedules.length > 0;
+        const hasName = parsedAgent.name && typeof parsedAgent.name === 'string' && parsedAgent.name.trim().length > 0 && parsedAgent.name !== 'New Agent';
+        
+        // Check if step progress indicates completion
+        const stepProgress = safeMetadata.stepProgress;
+        const hasCompleteStep = (stepProgress?.complete as string) === 'complete' || 
+                               (stepProgress?.['complete'] as string) === 'complete';
+        
+        // Check if all major steps are complete
+        const majorSteps = ['analysis', 'models', 'actions', 'schedules'];
+        const allMajorStepsComplete = stepProgress && majorSteps.every(step => 
+          (stepProgress[step as keyof typeof stepProgress] as string) === 'complete'
+        );
+
+        console.log('🔍 Completion detection on page refresh:', {
+          hasModels,
+          hasActions, 
+          hasSchedules,
+          hasName,
+          hasCompleteStep,
+          allMajorStepsComplete,
+          stepProgress,
+          currentStatus: artifact.status,
+          hasActiveStepProgress
+        });
+
+        // If agent looks complete OR step progress indicates completion, set to idle
+        if ((hasName && (hasModels || hasActions || hasSchedules)) || hasCompleteStep || allMajorStepsComplete) {
+          console.log('✅ Detected completed agent on page refresh - setting status to idle');
+          setArtifact((draftArtifact) => ({
+            ...draftArtifact,
+            status: 'idle',
+            isVisible: true,
+          }));
+        } else {
+          console.log('⚠️ Agent appears incomplete on page refresh - keeping streaming status');
+        }
+      } catch (error) {
+        console.log('⚠️ Failed to parse agent content for completion detection:', error);
+      }
+    }
+  }, [content, artifact?.status, safeMetadata.stepProgress, setArtifact]);
 
   // All state hooks
-  const [agentData, setAgentData] = useAgentData(content);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showDeploymentModal, setShowDeploymentModal] = useState(false);
@@ -1816,22 +1885,20 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
     });
   },
   
-  onStreamPart: ({ streamPart, setMetadata, setArtifact }) => {
+  onStreamPart: ({ streamPart, setArtifact, setMetadata }) => {
     if (streamPart.type === 'agent-data') {
       const agentData = typeof streamPart.content === 'string' 
-        ? JSON.parse(streamPart.content) 
-        : streamPart.content;
+        ? streamPart.content 
+        : JSON.stringify(streamPart.content);
       
-      setArtifact((draftArtifact) => {
-        return {
-          ...draftArtifact,
-          content: JSON.stringify(agentData, null, 2),
-          isVisible: true,
-          status: 'streaming',
-        };
-      });
+      setArtifact((draftArtifact) => ({
+        ...draftArtifact,
+        content: agentData,
+        isVisible: true,
+        status: 'streaming',
+      }));
     }
-    
+
     if (streamPart.type === 'agent-step') {
       const stepData = typeof streamPart.content === 'string' 
         ? JSON.parse(streamPart.content) 
