@@ -777,7 +777,7 @@ const AgentBuilderContent = memo(({
     setIsSaving(true);
     try {
       const agentContent = JSON.stringify(agentData, null, 2);
-      onSaveContent(agentContent, false);
+      onSaveContent(agentContent, true);
       
       setHasUnsavedChanges(false);
       console.log('✅ Agent data saved through standard document mechanism');
