@@ -45,7 +45,7 @@ export interface AgentSchedule {
   name: string;
   emoji?: string;
   description: string;
-  type: 'Create' | 'Update';
+  type: 'Mutation' | 'Query';
   role: 'admin' | 'member';
   interval: {
     pattern: string;
@@ -76,7 +76,7 @@ export interface AgentSchedule {
     };
   };
   results: {
-    actionType: 'Create' | 'Update';
+    actionType: 'Mutation' | 'Query';
     model: string;
     identifierIds?: string[];
     fields?: Record<string, any>;
@@ -89,7 +89,7 @@ export interface AgentAction {
   name: string;
   emoji?: string;
   description: string;
-  type: 'Create' | 'Update';
+  type: 'Mutation' | 'Query';
   role: 'admin' | 'member';
   dataSource: {
     type: 'custom' | 'database';
@@ -115,7 +115,7 @@ export interface AgentAction {
     };
   };
   results: {
-    actionType: 'Create' | 'Update';
+    actionType: 'Mutation' | 'Query';
     model: string;
     identifierIds?: string[];
     fields?: Record<string, any>;
@@ -179,10 +179,12 @@ export interface AgentData {
   description: string;
   domain: string;
   models: AgentModel[];
+  enums: AgentEnum[];
   actions: AgentAction[];
   schedules: AgentSchedule[];
   createdAt: string;
   metadata: AgentMetadata;
+  prismaSchema: string;
 }
 
 export interface PromptUnderstanding {

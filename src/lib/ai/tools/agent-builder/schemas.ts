@@ -114,6 +114,17 @@ export const unifiedActionsSchema = z.object({
   }))
 });
 
+export const prismaActionsSchema = z.object({
+  actions: z.array(z.object({
+    id: z.string().describe('Unique identifier for the action'),
+    name: z.string().describe('Name of the action'),
+    emoji: z.string().optional().describe('Single emoji that visually represents this action (e.g., ✉️ for email, 📊 for reports, 🔄 for sync)'),
+    description: z.string().describe('Detailed description of what this action does and its business purpose'),
+    type: z.enum(['Query', 'Mutation']).describe('Action type - Query for reading data, Mutation for writing data'),
+    role: z.enum(['admin', 'member']).describe('Role required to execute this action')
+  }))
+});
+
 // Change analysis schema for better AI guidance
 export const changeAnalysisSchema = z.object({
   userIntent: z.enum(['add', 'modify', 'delete', 'replace']),

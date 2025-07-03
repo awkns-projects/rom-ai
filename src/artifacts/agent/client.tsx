@@ -198,21 +198,16 @@ interface AgentData {
 }
 
 interface AgentArtifactMetadata {
-  selectedTab: 'onboard' | 'models' | 'actions' | 'schedules';
+  selectedTab: 'onboard' | 'models' | 'actions' | 'schedules' | 'chat';
   editingModel: string | null;
   editingAction: string | null;
   editingSchedule: string | null;
-  viewingModelData: string | null; // For viewing/editing model records
-  editingRecord: string | null; // For editing specific record
+  viewingModelData: string | null;
+  editingRecord: string | null;
   currentStep?: string;
   stepProgress?: {
-    'prompt-understanding'?: 'processing' | 'complete';
-    'granular-analysis'?: 'processing' | 'complete';
-    analysis?: 'processing' | 'complete';
-    'change-analysis'?: 'processing' | 'complete';
-    overview?: 'processing' | 'complete';
+    'analysis'?: 'processing' | 'complete';
     models?: 'processing' | 'complete';
-    examples?: 'processing' | 'complete';
     actions?: 'processing' | 'complete';
     schedules?: 'processing' | 'complete';
     complete?: 'processing' | 'complete';
@@ -319,16 +314,9 @@ const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Reco
         return agentData.schedules && agentData.schedules.length > 0 ? 'complete' : 'pending';
       case 'models':
         return agentData.models && agentData.models.length > 0 ? 'complete' : 'pending';
-      case 'examples': {
-        // Check if any model has example records
-        const hasExamples = agentData.models?.some((model: AgentModel) => 
-          model.exampleRecords && model.exampleRecords.length > 0
-        );
-        return hasExamples ? 'complete' : 'pending';
-      }
       case 'actions':
         return agentData.actions && agentData.actions.length > 0 ? 'complete' : 'pending';
-      case 'overview':
+      case 'analysis':
         return agentData.name && agentData.description && agentData.domain ? 'complete' : 'pending';
       case 'complete':
         return 'pending'; // This should be set explicitly
@@ -909,8 +897,7 @@ const AgentBuilderContent = memo(({
                     <span className="text-xs font-mono text-green-200">
                       {(() => {
                         const steps = [
-                          { id: 'prompt-understanding', label: 'Analysis' },
-                          { id: 'overview', label: 'Overview' },
+                          { id: 'analysis', label: 'Analysis' },
                           { id: 'models', label: 'Models' },
                           { id: 'actions', label: 'Actions' },
                           { id: 'schedules', label: 'Schedules' },
@@ -965,8 +952,7 @@ const AgentBuilderContent = memo(({
                  <div className="flex justify-center text-xs font-mono">
                   {(() => {
                     const steps = [
-                      { id: 'prompt-understanding', label: 'Analysis' },
-                      { id: 'overview', label: 'Overview' },
+                      { id: 'analysis', label: 'Analysis' },
                       { id: 'models', label: 'Models' },
                       { id: 'actions', label: 'Actions' },
                       { id: 'schedules', label: 'Schedules' },
@@ -977,12 +963,10 @@ const AgentBuilderContent = memo(({
                     const getEnhancedStepStatus = (stepId: string) => {
                       // Map orchestrator step IDs to UI step IDs
                       const stepIdMapping: Record<string, string> = {
-                        'step0': 'prompt-understanding',
-                        'step1': 'analysis',
-                        'step2': 'overview',
-                        'step3': 'models',
-                        'step4': 'actions',
-                        'step5': 'schedules',
+                        'step0': 'analysis',
+                        'step1': 'models',
+                        'step2': 'actions',
+                        'step3': 'schedules',
                         'complete': 'complete'
                       };
                       
@@ -1855,12 +1839,10 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
       
       // Map orchestrator step IDs to UI step IDs for consistency
       const stepIdMapping: Record<string, string> = {
-        'step0': 'prompt-understanding',
-        'step1': 'analysis', 
-        'step2': 'overview',
-        'step3': 'models',
-        'step4': 'actions',
-        'step5': 'schedules',
+        'step0': 'analysis',
+        'step1': 'models',
+        'step2': 'actions',
+        'step3': 'schedules',
         'complete': 'complete'
       };
       

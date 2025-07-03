@@ -57,7 +57,7 @@ import {
 } from './document';
 
 // Import the hybrid agent builder
-import { HybridAgentBuilder } from './hybrid-implementation';
+// import { HybridAgentBuilder } from './hybrid-implementation';
 
 // Re-export types for backward compatibility
 export type {
@@ -89,7 +89,7 @@ export {
   createFunctionExecutionExample,
   createEnhancedActionExample,
   // Export the hybrid agent builder class
-  HybridAgentBuilder
+  // HybridAgentBuilder
 };
 
 // Re-export enhanced schemas for external usage

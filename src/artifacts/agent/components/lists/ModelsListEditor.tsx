@@ -15,10 +15,11 @@ interface AgentArtifactMetadata {
   editingRecord: string | null;
   currentStep?: string;
   stepProgress?: {
-    'prompt-understanding'?: 'processing' | 'complete';
-    'granular-analysis'?: 'processing' | 'complete';
-    analysis?: 'processing' | 'complete';
-    'change-analysis'?: 'processing' | 'complete';
+    'analysis'?: 'processing' | 'complete';
+    models?: 'processing' | 'complete';
+    actions?: 'processing' | 'complete';
+    schedules?: 'processing' | 'complete';
+    complete?: 'processing' | 'complete';
   };
   dataManagement?: {
     viewingModelId: string;

@@ -1,28 +1,26 @@
 import { generateSchedules } from '../generation';
-import type { AgentSchedule, AgentData } from '../types';
-import type { Step0Output } from './step0-prompt-understanding';
-import type { Step1Output } from './step1-decision-making';
-import type { Step3Output } from './step3-database-generation';
-import type { Step4Output } from './step4-action-generation';
+import type { AgentData, AgentSchedule } from '../types';
+import type { Step0Output } from './step0-comprehensive-analysis';
+import type { Step1Output } from './step1-database-generation';
+import type { Step2Output } from './step2-action-generation';
 
 /**
- * STEP 5: Intelligent Schedule Generation
+ * STEP 3: Schedule Generation & Automation
  * 
- * Generate automated schedules that work seamlessly with the database and actions.
- * Enhanced with hybrid approach for schedule coordination and validation.
+ * Generate schedules, cron jobs, and automation workflows based on actions and requirements.
+ * This step creates the temporal and automated aspects of the agent system.
  */
 
-export interface Step5Input {
+export interface Step3Input {
   promptUnderstanding: Step0Output;
-  decision: Step1Output;
-  technicalAnalysis?: any; // Optional for backward compatibility
-  databaseGeneration: Step3Output;
-  actionGeneration: Step4Output;
+  databaseGeneration: Step1Output;
+  actionGeneration: Step2Output;
   existingAgent?: AgentData;
-  changeAnalysis?: any;
+  conversationContext?: string;
+  command?: string;
 }
 
-export interface Step5Output {
+export interface Step3Output {
   schedules: AgentSchedule[];
   // Enhanced fields from hybrid approach
   scheduleCoordination: {
@@ -55,25 +53,23 @@ export interface Step5Output {
 }
 
 /**
- * Enhanced schedule generation with hybrid approach logic
- * Preserves original generateSchedules functionality while adding comprehensive validation
+ * Execute Step 3: Schedule Generation and Automation
  */
-export async function executeStep5ScheduleGeneration(
-  input: Step5Input
-): Promise<Step5Output> {
-  console.log('⏰ STEP 5: Starting enhanced schedule generation...');
+export async function executeStep3ScheduleGeneration(
+  input: Step3Input
+): Promise<Step3Output> {
+  console.log('⏰ STEP 3: Starting schedule generation and automation...');
   
-  const { promptUnderstanding, decision, databaseGeneration, actionGeneration, existingAgent, changeAnalysis } = input;
+  const { promptUnderstanding, databaseGeneration, actionGeneration, existingAgent, conversationContext, command } = input;
   
   try {
     // Use original generateSchedules function with enhanced context
-    console.log('📅 Generating schedules with database and action awareness...');
+    console.log('📅 Generating schedules with action-aware design...');
     const schedulesResult = await generateSchedules(
       promptUnderstanding,
-      databaseGeneration, // Pass database schema
+      databaseGeneration.models,
       actionGeneration.actions, // Pass actions for coordination
-      existingAgent,
-      changeAnalysis
+      existingAgent
     );
 
     // Enhanced validation and coordination analysis
@@ -102,7 +98,7 @@ export async function executeStep5ScheduleGeneration(
       promptUnderstanding
     );
 
-    const result: Step5Output = {
+    const result: Step3Output = {
       schedules: schedulesResult.schedules,
       scheduleCoordination,
       validationResults,
@@ -110,7 +106,7 @@ export async function executeStep5ScheduleGeneration(
       qualityMetrics
     };
 
-    console.log('✅ STEP 5: Schedule generation completed successfully');
+    console.log('✅ STEP 3: Schedule generation completed successfully');
     console.log(`⏰ Schedule Summary:
 - Total Schedules: ${result.schedules.length}
 - Automation Coverage: ${result.automationCoverage.coveragePercentage}%
@@ -121,8 +117,8 @@ export async function executeStep5ScheduleGeneration(
     return result;
     
   } catch (error) {
-    console.error('❌ STEP 5: Schedule generation failed:', error);
-    throw new Error(`Step 5 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('❌ STEP 3: Schedule generation failed:', error);
+    throw new Error(`Step 3 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -131,8 +127,8 @@ export async function executeStep5ScheduleGeneration(
  */
 async function validateScheduleGeneration(
   schedules: AgentSchedule[],
-  databaseGeneration: Step3Output,
-  actionGeneration: Step4Output,
+  databaseGeneration: Step1Output,
+  actionGeneration: Step2Output,
   promptUnderstanding: Step0Output
 ) {
   console.log('🔍 Validating schedule generation comprehensively...');
@@ -442,8 +438,8 @@ function calculateAutomationCoverage(
  */
 function calculateScheduleQualityMetrics(
   schedules: AgentSchedule[],
-  databaseGeneration: Step3Output,
-  actionGeneration: Step4Output,
+  databaseGeneration: Step1Output,
+  actionGeneration: Step2Output,
   promptUnderstanding: Step0Output
 ) {
   // Schedule reliability: How well-configured and robust the schedules are
@@ -493,9 +489,9 @@ function calculateScheduleQualityMetrics(
 }
 
 /**
- * Validate Step 5 output for completeness and quality
+ * Validate Step 3 output for completeness and quality
  */
-export function validateStep5Output(output: Step5Output): boolean {
+export function validateStep3Output(output: Step3Output): boolean {
   try {
     if (!output.schedules.length) {
       console.warn('⚠️ No schedules generated');
@@ -533,11 +529,11 @@ export function validateStep5Output(output: Step5Output): boolean {
       return false;
     }
     
-    console.log('✅ Step 5 output validation passed');
+    console.log('✅ Step 3 output validation passed');
     return true;
     
   } catch (error) {
-    console.error('❌ Step 5 output validation failed:', error);
+    console.error('❌ Step 3 output validation failed:', error);
     return false;
   }
 }
@@ -545,7 +541,7 @@ export function validateStep5Output(output: Step5Output): boolean {
 /**
  * Extract schedule insights for downstream steps
  */
-export function extractScheduleInsights(output: Step5Output) {
+export function extractScheduleInsights(output: Step3Output) {
   return {
     scheduleCount: output.schedules.length,
     automationCoverage: output.automationCoverage.coveragePercentage,

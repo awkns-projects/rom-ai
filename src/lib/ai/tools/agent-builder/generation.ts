@@ -9,7 +9,8 @@ import type {
   ChangeAnalysis, 
   AgentModel, 
   AgentAction, 
-  AgentSchedule
+  AgentSchedule,
+  AgentEnum
 } from './types';
 import { 
   promptUnderstandingSchema,
@@ -18,6 +19,7 @@ import {
   enhancedActionCodeSchema,
   unifiedDatabaseSchema,
   unifiedActionsSchema,
+  prismaActionsSchema,
   unifiedSchedulesSchema,
   decisionSchema,
   granularChangeAnalysisSchema,
@@ -52,6 +54,82 @@ interface PseudoCodeStep {
     list: boolean;
     description: string;
     relationModel?: string;
+  }>;
+}
+
+interface ActionStep {
+  id: string;
+  stepNumber: number;
+  description: string;
+  type: 'database' | 'external_api' | 'ai_analysis';
+  operation: 'create' | 'createMany' | 'findUnique' | 'findFirst' | 'findMany' | 'count' | 'aggregate' | 'groupBy' | 'update' | 'updateMany' | 'delete' | 'deleteMany' | 'upsert' | 'api_read' | 'api_write' | 'ai_analyze';
+  modelName?: string;
+  apiEndpoint?: string;
+  envVars?: Array<{
+    name: string;
+    description: string;
+    required: boolean;
+    sensitive: boolean;
+  }>;
+  inputFields: Array<{
+    id: string;
+    name: string;
+    type: string;
+    kind: 'scalar' | 'object' | 'enum';
+    required: boolean;
+    list: boolean;
+    description: string;
+    relationModel?: string;
+    fromPreviousStep?: {
+      stepId: string;
+      outputFieldName: string;
+    };
+  }>;
+  outputFields: Array<{
+    id: string;
+    name: string;
+    type: string;
+    kind: 'scalar' | 'object' | 'enum';
+    required: boolean;
+    list: boolean;
+    description: string;
+    relationModel?: string;
+  }>;
+  functionCode: string;
+  dependsOnSteps: string[];
+}
+
+interface EnhancedActionAnalysis {
+  actionName: string;
+  description: string;
+  type: 'Query' | 'Mutation';
+  role: 'admin' | 'member';
+  steps: ActionStep[];
+  inputVariables: Array<{
+    name: string;
+    type: string;
+    kind: 'scalar' | 'object' | 'enum';
+    required: boolean;
+    description: string;
+    relationModel?: string;
+  }>;
+  outputVariables: Array<{
+    name: string;
+    type: string;
+    kind: 'scalar' | 'object' | 'enum';
+    description: string;
+    relationModel?: string;
+  }>;
+  impactedModels: Array<{
+    modelName: string;
+    operations: Array<'create' | 'read' | 'update' | 'delete'>;
+  }>;
+  assembledCode: string;
+  envVars: Array<{
+    name: string;
+    description: string;
+    required: boolean;
+    sensitive: boolean;
   }>;
 }
 
@@ -446,7 +524,7 @@ Design models that:
 
 Each enum should have:
 - A clear purpose
-- All necessary values used by models AND actions
+- All necessary values used by models OR actions OR schedules
 - Proper field definitions
 - Values that actions will need to set or filter by`;
 
@@ -599,19 +677,18 @@ export async function generateActions(
 ): Promise<{ actions: AgentAction[] }> {
   console.log('⚡ Starting actions generation with real AI...');
   
-  const businessRulesContext = promptUnderstanding.featureImagination.businessRules || 'Standard business rules apply';
-  const userExperienceContext = promptUnderstanding.featureImagination.userExperience || 'General users and administrators';
+  const isIncrementalUpdate = !!existingAgent && existingAgent.actions && existingAgent.actions.length > 0;
+  let expectedActionCount = promptUnderstanding.workflowAutomationNeeds.requiredActions.length;
+  const businessRulesContext = promptUnderstanding.featureImagination.businessRules.join(', ') || '';
+  const userExperienceContext = promptUnderstanding.featureImagination.userExperience.join(', ') || '';
   
   const existingActionsContext = existingAgent ? `
 EXISTING ACTIONS (DO NOT REGENERATE THESE):
 ${(existingAgent.actions || []).map((action: any) => `- ${action.name}: ${action.description || 'No description'}`).join('\n')}
 ` : '';
 
-  // Determine if this is an incremental update
-  const isIncrementalUpdate = existingAgent && (existingAgent.actions || []).length > 0;
-  
   // For incremental updates, focus on new actions only
-  const expectedActionCount = isIncrementalUpdate 
+   expectedActionCount = isIncrementalUpdate 
     ? Math.max(1, Math.min(3, promptUnderstanding.workflowAutomationNeeds.requiredActions.length || 1))
     : Math.max(1, Math.min(5, promptUnderstanding.workflowAutomationNeeds.requiredActions.length || 2));
   
@@ -787,81 +864,74 @@ Generate exactly ${expectedActionCount} actions that solve real business problem
   console.log('✅ Actions generation complete');
   
   // Fix actions to ensure they have all required fields and proper envVars arrays
-  const fixedActions = (result.object.actions || []).map((action: any, index: number) => {
+  const fixedActions = await Promise.all((result.object.actions || []).map(async (action: any, index: number) => {
     // Check if this action already exists in the existing agent
     const existingAction = existingAgent?.actions?.find(a => a.name === action.name);
     const actionId = existingAction?.id || action.id || `action_${action.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}_${index}`;
     
+    // Generate enhanced action with steps
+    const enhancedAction = await generateEnhancedActionWithSteps(
+      action.description || action.name,
+      action.type === 'Query' ? 'Query' : 'Mutation',
+      databaseResult.prismaSchema,
+      Array.isArray(businessRulesContext) ? businessRulesContext.join(', ') : businessRulesContext
+    );
+
     return {
       ...action,
       id: actionId,
       emoji: action.emoji || '⚡',
-      type: action.type || 'Create',
-      role: action.role || 'member',
+      type: enhancedAction.type,
+      role: enhancedAction.role,
       dataSource: {
-        type: action.dataSource?.type || 'database',
-        customFunction: action.dataSource?.customFunction ? {
-          code: action.dataSource.customFunction.code,
-          // Ensure envVars is always an array
-          envVars: Array.isArray(action.dataSource.customFunction.envVars) ? action.dataSource.customFunction.envVars : []
-        } : undefined,
-        database: action.dataSource?.type === 'custom' 
-          ? (action.dataSource?.database || undefined)
-          : (action.dataSource?.database || {
-              models: (databaseResult.models || []).slice(0, 1).map(model => ({
-                id: model.id,
-                name: model.name,
-                fields: (model.fields || []).slice(0, 3).map(field => ({
-                  id: field.id,
-                  name: field.name
-                }))
-              }))
-            })
+        type: 'custom',
+        customFunction: {
+          code: enhancedAction.assembledCode,
+          envVars: enhancedAction.envVars || []
+        },
+        database: {
+          models: enhancedAction.impactedModels.map(im => ({
+            id: im.modelName.toLowerCase(),
+            name: im.modelName,
+            fields: (databaseResult.models || [])
+              .find(m => m.name === im.modelName)?.fields?.slice(0, 5)
+              .map(field => ({
+                id: field.id,
+                name: field.name
+              })) || []
+          }))
+        }
       },
       execute: {
+        type: 'code' as const,
         code: {
-          script: action.execute?.code?.script || `
-// Action: ${action.name}
-// Parameters: database, input, member
-try {
-  // Validate input
-  if (!input) throw new Error('Input is required');
-  
-  // Check permissions
-  if (member.role !== '${action.role || 'member'}' && '${action.role || 'member'}' === 'admin') {
-    throw new Error('Admin access required');
-  }
-  
-  // Execute action logic
-  const result = {
-    message: '${action.name} executed successfully',
-    data: input
-  };
-  
-  return {
-    output: result,
-    data: [{
-      modelId: '${(databaseResult.models || [])[0]?.name || 'DefaultModel'}',
-      createdRecords: [],
-      updatedRecords: [],
-      deletedRecords: []
-    }]
-  };
-} catch (error) {
-  throw new Error('Action failed: ' + error.message);
-}`,
-          envVars: Array.isArray(action.execute?.code?.envVars) ? action.execute.code.envVars : []
+          script: enhancedAction.assembledCode,
+          envVars: enhancedAction.envVars || []
         }
       },
       results: {
-        actionType: action.results?.actionType || action.type || 'Create',
-        model: action.results?.model || ((databaseResult.models || [])[0]?.name || 'DefaultModel'),
+        actionType: enhancedAction.type,
+        model: enhancedAction.impactedModels[0]?.modelName || ((databaseResult.models || [])[0]?.name || 'DefaultModel'),
         identifierIds: action.results?.identifierIds || undefined,
-        fields: action.results?.fields || {},
-        fieldsToUpdate: action.results?.fieldsToUpdate || undefined
+        fields: enhancedAction.outputVariables.reduce((acc: any, v: any) => {
+          acc[v.name] = v.type;
+          return acc;
+        }, {}),
+        fieldsToUpdate: enhancedAction.impactedModels
+          .filter(im => im.operations.includes('update'))
+          .reduce((acc: any, im: any) => {
+            const model = (databaseResult.models || []).find(m => m.name === im.modelName);
+            if (model) {
+              acc[im.modelName] = model.fields.slice(0, 3).reduce((fieldAcc: any, field: any) => {
+                fieldAcc[field.name] = field.type;
+                return fieldAcc;
+              }, {});
+            }
+            return acc;
+          }, {})
       }
     };
-  });
+  }));
 
   // If this is an incremental update, we need to merge with existing actions
   if (isIncrementalUpdate) {
@@ -882,6 +952,291 @@ try {
     actions: fixedActions
   };
 }
+
+
+
+/**
+ * Step 4: Generate actions
+ */
+export async function generatePrismaActions(
+  promptUnderstanding: PromptUnderstanding,
+  databaseResult: { models: AgentModel[], enums: AgentEnum[], prismaSchema: string },
+  existingAgent?: AgentData,
+): Promise<{ actions: AgentAction[] }> {
+  console.log('🚀 Starting Prisma action generation with enhanced AI analysis');
+
+  const model = await getAgentBuilderModel();
+  
+  const isIncrementalUpdate = !!existingAgent && existingAgent.actions && existingAgent.actions.length > 0;
+  const expectedActionCount = promptUnderstanding.workflowAutomationNeeds.requiredActions.length;
+  const businessRulesContext = promptUnderstanding.featureImagination.businessRules.join(', ') || '';
+  const userExperienceContext = promptUnderstanding.featureImagination.userExperience.join(', ') || '';
+
+  // Build existing actions context
+  let existingActionsContext = '';
+  if (existingAgent && existingAgent.actions && existingAgent.actions.length > 0) {
+    existingActionsContext = `EXISTING ACTIONS (${existingAgent.actions.length} total):
+${existingAgent.actions.map(action => `- ${action.name} (${action.type}): ${action.description}`).join('\n')}
+
+`;
+  }
+
+  let systemPrompt = `You are an expert AI assistant that generates complete business actions using Prisma ORM and structured output via generateObject.
+
+CORE PRINCIPLES:
+1. Use Prisma ORM for all database operations - leverage the full schema provided
+2. Generate stable, structured input/output using the generateObject function
+3. Create production-ready code with proper error handling and validation
+4. Focus on complete business workflows, not just CRUD operations
+5. Ensure type safety and data integrity throughout
+
+PRISMA SCHEMA CONTEXT:
+The following Prisma schema defines your data models and relationships:
+\`\`\`prisma
+${databaseResult.prismaSchema}
+\`\`\`
+
+Use this schema to:
+- Understand model relationships and constraints
+- Generate appropriate Prisma queries and mutations
+- Ensure data consistency across operations
+- Leverage Prisma's type safety features
+
+`;
+
+  if (isIncrementalUpdate) {
+    systemPrompt += `This is an INCREMENTAL UPDATE to an existing system. Your job is to ANALYZE what new actions are NEEDED to fulfill the user's request, then create them using Prisma ORM.
+
+INTELLIGENT INCREMENTAL UPDATE APPROACH:
+1. ANALYZE the user's request to understand what functionality they want
+2. COMPARE against existing actions to identify gaps  
+3. DETERMINE what new actions are NEEDED (not just mentioned) to fulfill the request
+4. CREATE the missing actions using Prisma ORM operations
+5. ENSURE new actions work with existing models and actions
+
+EXAMPLE SCENARIOS:
+- If user says "I need to manage animals" and no animal actions exist → CREATE animal management actions using Prisma
+- If user says "add reporting features" and no report actions exist → CREATE reporting actions with Prisma aggregations
+- If user says "I want user notifications" and no notification actions exist → CREATE notification actions using Prisma relations
+- If user says "track inventory" and no inventory actions exist → CREATE inventory tracking with Prisma transactions
+
+CRITICAL ANALYSIS QUESTIONS:
+- What functionality does the user want to accomplish?
+- What Prisma operations are REQUIRED to support this functionality?
+- What actions are missing from the existing system?
+- What database workflows need to be supported?
+
+`;
+  } else {
+    systemPrompt += `Design actions that implement complete business processes using Prisma ORM.
+
+FOCUS ON:
+- Complete business workflows that solve real problems
+- Proper use of Prisma relations and transactions
+- Data validation and error handling
+- Type-safe operations throughout
+
+`;
+  }
+
+  systemPrompt += `BUSINESS REQUIREMENTS:
+${JSON.stringify(promptUnderstanding.workflowAutomationNeeds, null, 2)}
+
+AVAILABLE Prisma Schema:
+${databaseResult.prismaSchema}
+${existingActionsContext}
+
+Business Rules: ${Array.isArray(businessRulesContext) ? businessRulesContext.join(', ') : businessRulesContext}
+
+User Experience: ${Array.isArray(userExperienceContext) ? userExperienceContext.join(', ') : userExperienceContext}
+
+GENERATION REQUIREMENTS:
+${isIncrementalUpdate ? `
+1. Create ONLY ${expectedActionCount} NEW actions that are specifically requested by the user
+2. Do NOT recreate existing actions
+3. Focus on the delta/difference in the user's request
+4. Each new action should solve a specific new business need
+5. Use appropriate data models from the available models (including new ones)
+6. Consider relationships to existing actions without duplicating them
+` : `
+1. Create ${expectedActionCount} high-quality actions that implement the business requirements
+2. Each action should have a clear business purpose and practical implementation
+3. Use appropriate data models from the available models
+4. Include proper error handling and validation
+5. Set appropriate user roles (admin/member) based on action sensitivity
+`}6. ALL envVars fields must be arrays (use empty array [] if no env vars needed)
+7. Provide meaningful names, descriptions, and emojis for each action
+8. Code should be production-ready with proper error handling
+
+ACTION STRUCTURE REQUIREMENTS:
+- id: unique identifier
+- name: clear, descriptive name
+- emoji: single relevant emoji
+- description: detailed business purpose
+- type: 'Query' or 'Mutation'
+- role: 'admin' or 'member'
+
+
+Generate exactly ${expectedActionCount} actions that solve real business problems.`;
+
+  // Generate with manual post-processing to fix envVars
+  let rawResult;
+  try {
+    rawResult = await generateObject({
+      model,
+      schema: prismaActionsSchema,
+      messages: [
+        {
+          role: 'system' as const,
+          content: systemPrompt
+        }
+      ],
+      temperature: 0.1
+    });
+  } catch (error: any) {
+    // If validation fails due to null envVars, try to fix the raw data and re-validate
+    if (error?.cause?.issues?.some((issue: any) => 
+      issue.path?.includes('envVars') && issue.expected === 'array' && issue.received === 'null'
+    )) {
+      console.log('🔧 Detected null envVars, attempting to fix...');
+      
+      // Get the raw value before validation failed
+      const rawData = error.value;
+      if (rawData?.actions && Array.isArray(rawData.actions)) {
+        // Fix envVars fields
+        rawData.actions = rawData.actions.map((action: any) => {
+          const fixedAction = { ...action };
+          
+          // Fix dataSource.customFunction.envVars
+          if (fixedAction.dataSource?.customFunction) {
+            if (fixedAction.dataSource.customFunction.envVars === null || 
+                fixedAction.dataSource.customFunction.envVars === undefined) {
+              fixedAction.dataSource.customFunction.envVars = [];
+            }
+          }
+          
+          // Fix execute.code.envVars
+          if (fixedAction.execute?.code) {
+            if (fixedAction.execute.code.envVars === null || 
+                fixedAction.execute.code.envVars === undefined) {
+              fixedAction.execute.code.envVars = [];
+            }
+          }
+          
+          return fixedAction;
+        });
+        
+        // Try to validate the fixed data with the schema
+        try {
+          const validatedData = unifiedActionsSchema.parse(rawData);
+          rawResult = { object: validatedData };
+          console.log('✅ Successfully fixed envVars validation');
+        } catch (revalidationError) {
+          console.error('❌ Failed to fix envVars, throwing original error');
+          throw error;
+        }
+      } else {
+        throw error;
+      }
+    } else {
+      throw error;
+    }
+  }
+  
+  const result = rawResult;
+
+  console.log('✅ Actions generation complete');
+  
+  // Fix actions to ensure they have all required fields and proper envVars arrays
+  const fixedActions = await Promise.all((result.object.actions || []).map(async (action: any, index: number) => {
+    // Check if this action already exists in the existing agent
+    const existingAction = existingAgent?.actions?.find(a => a.name === action.name);
+    const actionId = existingAction?.id || action.id || `action_${action.name.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}_${index}`;
+    
+    // Generate enhanced action with steps
+    const enhancedAction = await generateEnhancedActionWithSteps(
+      action.description || action.name,
+      action.type === 'Query' ? 'Query' : 'Mutation',
+      databaseResult.prismaSchema,
+      Array.isArray(businessRulesContext) ? businessRulesContext.join(', ') : businessRulesContext
+    );
+
+    return {
+      ...action,
+      id: actionId,
+      emoji: action.emoji || '⚡',
+      type: enhancedAction.type,
+      role: enhancedAction.role,
+      dataSource: {
+        type: 'custom',
+        customFunction: {
+          code: enhancedAction.assembledCode,
+          envVars: enhancedAction.envVars || []
+        },
+        database: {
+          models: enhancedAction.impactedModels.map(im => ({
+            id: im.modelName.toLowerCase(),
+            name: im.modelName,
+            fields: (databaseResult.models || [])
+              .find(m => m.name === im.modelName)?.fields?.slice(0, 5)
+              .map(field => ({
+                id: field.id,
+                name: field.name
+              })) || []
+          }))
+        }
+      },
+      execute: {
+        type: 'code' as const,
+        code: {
+          script: enhancedAction.assembledCode,
+          envVars: enhancedAction.envVars || []
+        }
+      },
+      results: {
+        actionType: enhancedAction.type,
+        model: enhancedAction.impactedModels[0]?.modelName || ((databaseResult.models || [])[0]?.name || 'DefaultModel'),
+        identifierIds: action.results?.identifierIds || undefined,
+        fields: enhancedAction.outputVariables.reduce((acc: any, v: any) => {
+          acc[v.name] = v.type;
+          return acc;
+        }, {}),
+        fieldsToUpdate: enhancedAction.impactedModels
+          .filter(im => im.operations.includes('update'))
+          .reduce((acc: any, im: any) => {
+            const model = (databaseResult.models || []).find(m => m.name === im.modelName);
+            if (model) {
+              acc[im.modelName] = model.fields.slice(0, 3).reduce((fieldAcc: any, field: any) => {
+                fieldAcc[field.name] = field.type;
+                return fieldAcc;
+              }, {});
+            }
+            return acc;
+          }, {})
+      }
+    };
+  }));
+
+  // If this is an incremental update, we need to merge with existing actions
+  if (isIncrementalUpdate) {
+    console.log(`🔄 Incremental update: Generated ${fixedActions.length} new actions`);
+    console.log(`📊 Existing agent has ${(existingAgent.actions || []).length} actions`);
+    
+    // Use intelligent merging instead of simple concatenation
+    const mergedActions = mergeActionsIntelligently(existingAgent.actions || [], fixedActions);
+    
+    console.log(`📊 Final result: ${mergedActions.length} total actions`);
+    
+    return {
+      actions: mergedActions
+    };
+  }
+
+  return {
+    actions: fixedActions
+  };
+}
+
 
 /**
  * ENHANCED ACTION GENERATION INTEGRATION
@@ -2361,7 +2716,7 @@ Generate using this exact structure with all object fields properly filled.`
 export async function generateCompleteEnhancedAction(
   actionRequest: string,
   promptUnderstanding: PromptUnderstanding,
-  databaseResult: { models: AgentModel[] },
+  databaseResult: { prismaSchema: string },
   existingAgent?: AgentData,
   businessContext?: string
 ): Promise<{
@@ -2404,7 +2759,7 @@ export async function generateCompleteEnhancedAction(
     name: imagination.title,
     emoji: '⚡', // Default, can be customized
     description: imagination.description,
-    type: analysis.analysis.databaseOperations.tablesToUpdate.some(t => t.operation === 'create') ? 'Create' : 'Update',
+    type: analysis.analysis.databaseOperations.tablesToUpdate.some(t => t.operation === 'create') ? 'Mutation' : 'Query',
     role: imagination.userRole,
     dataSource: {
       type: 'custom',
@@ -2436,7 +2791,7 @@ export async function generateCompleteEnhancedAction(
       }
     },
     results: {
-      actionType: analysis.analysis.databaseOperations.tablesToUpdate.some(t => t.operation === 'create') ? 'Create' : 'Update',
+      actionType: analysis.analysis.databaseOperations.tablesToUpdate.some(t => t.operation === 'create') ? 'Mutation' : 'Query',
       model: analysis.analysis.databaseOperations.tablesToUpdate[0]?.modelName || 'DefaultModel',
       fields: {},
       fieldsToUpdate: {}
@@ -2488,7 +2843,7 @@ export async function generateCompleteEnhancedAction(
 export async function generateBatchEnhancedActions(
   actionRequests: string[],
   promptUnderstanding: PromptUnderstanding,
-  databaseResult: { models: AgentModel[] },
+  databaseResult: { prismaSchema: string },
   existingAgent?: AgentData,
   businessContext?: string
 ): Promise<Array<{
@@ -2801,34 +3156,28 @@ async function generateBlogPostAction() {
   };
   
   const databaseResult = {
-    models: [
-      {
-        name: "User",
-        fields: [
-          { name: "id", type: "String", relationField: false },
-          { name: "name", type: "String", relationField: false },
-          { name: "email", type: "String", relationField: false }
-        ]
-      },
-      {
-        name: "Category", 
-        fields: [
-          { name: "id", type: "String", relationField: false },
-          { name: "name", type: "String", relationField: false }
-        ]
-      },
-      {
-        name: "BlogPost",
-        fields: [
-          { name: "id", type: "String", relationField: false },
-          { name: "title", type: "String", relationField: false },
-          { name: "content", type: "String", relationField: false },
-          { name: "authorId", type: "String", relationField: false },
-          { name: "categoryIds", type: "String", relationField: false, list: true }
-        ]
+    prismaSchema: \`
+      model User {
+        id String @id
+        name String
+        email String
       }
-    ],
-    enums: []
+
+      model Category {
+        id String @id
+        name String
+      }
+
+      model BlogPost {
+        id String @id
+        title String
+        content String
+        authorId String
+        categoryIds String[]
+        createdAt DateTime
+        createdBy String
+      }
+    \`
   };
   
   // Generate the enhanced action
@@ -3323,4 +3672,726 @@ Provide realistic estimates that help users understand:
 
   console.log(`✅ Generated processing time estimate: ${result.object.estimatedDuration}`);
   return result.object;
+}
+
+// Define a Prisma-specific schema for generation
+const prismaSchemaGenerationSchema = z.object({
+  schema: z.string().describe('Complete Prisma schema as a single string')
+});
+
+export async function generatePrismaSchema(
+  promptUnderstanding: PromptUnderstanding,
+  existingAgent?: AgentData,
+  changeAnalysis?: ChangeAnalysis,
+  agentOverview?: any,
+  conversationContext?: string,
+  command?: string
+): Promise<{ schema: string }> {
+  console.log('🗄️ Starting Prisma schema generation with official Prisma logic...');
+  console.log('📋 Input analysis:', {
+    hasExistingAgent: !!existingAgent,
+    existingModels: existingAgent?.models?.length || 0,
+    isIncremental: !!(existingAgent?.models?.length)
+  });
+
+  // Extract existing Prisma schema if available (using type assertion since prismaSchema is not in AgentData type)
+  const existingSchema = (existingAgent as any)?.prismaSchema || '';
+  const existingSchemaContext = existingSchema ? `
+EXISTING PRISMA SCHEMA:
+\`\`\`prisma
+${existingSchema}
+\`\`\`
+
+If this is an incremental update, extend or modify the existing schema appropriately.
+` : '';
+
+  const actionRequirements = promptUnderstanding.workflowAutomationNeeds?.requiredActions || [];
+  const oneTimeActions = promptUnderstanding.workflowAutomationNeeds?.oneTimeActions || [];
+  const recurringSchedules = promptUnderstanding.workflowAutomationNeeds?.recurringSchedules || [];
+  
+  let businessContext = '';
+  if (actionRequirements.length > 0 || oneTimeActions.length > 0 || recurringSchedules.length > 0) {
+    businessContext = `
+BUSINESS WORKFLOW REQUIREMENTS:
+- Required Actions: ${actionRequirements.map(a => a.name).join(', ')}
+- One-Time Actions: ${oneTimeActions.map(a => a.name).join(', ')}
+- Recurring Schedules: ${recurringSchedules.map(s => s.name).join(', ')}
+
+Design the schema to support these workflows with appropriate fields for status tracking, audit trails, and user permissions.
+`;
+  }
+
+  const model = await getAgentBuilderModel();
+  const isIncrementalUpdate = existingAgent && (existingAgent.models || []).length > 0;
+
+  const systemPrompt = `You are a Prisma schema expert. Generate a complete, valid Prisma schema based on the business requirements.
+
+BUSINESS REQUIREMENTS:
+${promptUnderstanding.userRequestAnalysis.mainGoal}
+
+Business Context: ${promptUnderstanding.userRequestAnalysis.businessContext}
+Required Models: ${promptUnderstanding.dataModelingNeeds.requiredModels.map(m => m.name).join(', ')}
+
+${existingSchemaContext}
+
+${businessContext}
+
+PRISMA SCHEMA GENERATION GUIDELINES:
+
+1. **Generator and Datasource Configuration:**
+   Always start with:
+   \`\`\`
+   generator client {
+     provider = "prisma-client-js"
+   }
+
+   datasource db {
+     provider = "postgresql"
+     url      = env("DATABASE_URL")
+   }
+   \`\`\`
+
+2. **Model Naming:**
+   - Use PascalCase for model names (User, Product, Order)
+   - Models should be singular, not plural
+   - Use descriptive, business-meaningful names
+
+3. **Field Types:**
+   - String: for text fields
+   - Int: for integers
+   - Float: for decimal numbers
+   - Boolean: for true/false values
+   - DateTime: for timestamps
+   - Json: for flexible JSON data
+   - Bytes: for binary data
+
+4. **Field Attributes:**
+   - @id: marks the primary key
+   - @unique: ensures field uniqueness
+   - @default(): sets default values
+   - @updatedAt: auto-updates on record changes
+   - @map(): maps to different database column name
+
+5. **Relations:**
+   - One-to-One: use single field reference
+   - One-to-Many: use array on "many" side
+   - Many-to-Many: use explicit join table or implicit relations
+   
+   Example:
+   \`\`\`
+   model User {
+     id       String   @id @default(cuid())
+     email    String   @unique
+     posts    Post[]
+   }
+
+   model Post {
+     id       String @id @default(cuid())
+     title    String
+     authorId String
+     author   User   @relation(fields: [authorId], references: [id])
+   }
+   \`\`\`
+
+6. **Common Patterns:**
+   - Always include @default(cuid()) for String IDs
+   - Include createdAt DateTime @default(now())
+   - Include updatedAt DateTime @updatedAt for audit trails
+   - Use enums for predefined values
+   - Include status fields for workflow tracking
+
+7. **Best Practices:**
+   - Use meaningful field names
+   - Include proper indexes with @@index
+   - Add constraints where needed
+   - Consider soft deletes with deletedAt fields
+   - Include user references for permissions
+
+8. **Enum Definitions:**
+   Define enums before models that use them:
+   \`\`\`
+   enum UserRole {
+     ADMIN
+     MEMBER
+     GUEST
+   }
+   \`\`\`
+
+${isIncrementalUpdate ? `
+This is an INCREMENTAL UPDATE. Extend the existing schema with new models/fields as needed.
+Do not duplicate existing models unless modifying them.
+` : `
+This is a NEW SCHEMA. Create a complete schema from scratch.
+`}
+
+Generate a complete, production-ready Prisma schema that supports the business requirements.
+The schema should be practical, well-structured, and follow Prisma best practices.
+
+Return ONLY the complete Prisma schema as a single string, starting with the generator and datasource blocks.`;
+
+  const result = await generateObject({
+    model,
+    schema: prismaSchemaGenerationSchema,
+    messages: [
+      {
+        role: 'system' as const,
+        content: systemPrompt
+      }
+    ],
+    temperature: 0.3,
+  });
+
+  console.log('✅ Prisma schema generation complete');
+
+  return {
+    schema: result.object.schema
+  };
+}
+
+
+import { ConvertSchemaToObject } from './schema/json';
+import { mergeSchema } from './schema/mergeSchema';
+
+export async function generatePrismaDatabase(
+  promptUnderstanding: PromptUnderstanding,
+  existingAgent?: AgentData
+) {
+  const aiSchema = await generatePrismaSchema(promptUnderstanding, existingAgent);
+  const convertedSchema = new ConvertSchemaToObject(aiSchema.schema).run();
+  const mergedSchema = mergeSchema(convertedSchema, '');
+
+  return {
+    schemaObject: mergedSchema,
+    schemaString: aiSchema.schema
+  };
+}
+
+// Schema for step analysis
+const stepAnalysisSchema = z.object({
+  steps: z.array(z.object({
+    id: z.string(),
+    stepNumber: z.number(),
+    description: z.string(),
+    type: z.enum(['database', 'external_api', 'ai_analysis']),
+    operation: z.enum(['create', 'createMany', 'findUnique', 'findFirst', 'findMany', 'count', 'aggregate', 'groupBy', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert', 'api_read', 'api_write', 'ai_analyze']),
+    modelName: z.string().optional(),
+    apiEndpoint: z.string().optional(),
+    envVars: z.array(z.object({
+      name: z.string(),
+      description: z.string(),
+      required: z.boolean(),
+      sensitive: z.boolean()
+    })).optional().default([]),
+    inputFields: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      type: z.string(),
+      kind: z.enum(['scalar', 'object', 'enum']),
+      required: z.boolean(),
+      list: z.boolean(),
+      description: z.string(),
+      relationModel: z.string().optional(),
+      fromPreviousStep: z.object({
+        stepId: z.string(),
+        outputFieldName: z.string()
+      }).optional()
+    })),
+    outputFields: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      type: z.string(),
+      kind: z.enum(['scalar', 'object', 'enum']),
+      required: z.boolean(),
+      list: z.boolean(),
+      description: z.string(),
+      relationModel: z.string().optional()
+    })),
+    dependsOnSteps: z.array(z.string()).default([])
+  }))
+});
+
+// Schema for complete action analysis
+const completeActionAnalysisSchema = z.object({
+  actionName: z.string(),
+  description: z.string(),
+  type: z.enum(['Query', 'Mutation']),
+  role: z.enum(['admin', 'member']),
+  inputVariables: z.array(z.object({
+    name: z.string(),
+    type: z.string(),
+    kind: z.enum(['scalar', 'object', 'enum']),
+    required: z.boolean(),
+    description: z.string(),
+    relationModel: z.string().optional()
+  })),
+  outputVariables: z.array(z.object({
+    name: z.string(),
+    type: z.string(),
+    kind: z.enum(['scalar', 'object', 'enum']),
+    description: z.string(),
+    relationModel: z.string().optional()
+  })),
+  impactedModels: z.array(z.object({
+    modelName: z.string(),
+    operations: z.array(z.enum(['create', 'read', 'update', 'delete']))
+  })),
+  envVars: z.array(z.object({
+    name: z.string(),
+    description: z.string(),
+    required: z.boolean(),
+    sensitive: z.boolean()
+  })).default([])
+});
+
+// Function to analyze action and generate steps
+async function analyzeActionSteps(
+  actionDescription: string,
+  actionType: 'Query' | 'Mutation',
+  prismaSchema: string,
+  businessContext?: string
+): Promise<ActionStep[]> {
+  const model = await getAgentBuilderModel();
+  
+  const systemPrompt = `You are an expert system analyst specializing in Prisma-based applications. Analyze the given action description and break it down into detailed execution steps.
+
+IMPORTANT: 
+- We are using Prisma ORM for ALL database operations
+- All AI generation functions MUST use generateObject() for stable, structured input/output
+- Follow Prisma conventions and best practices
+
+PRISMA SCHEMA:
+${prismaSchema}
+
+STEP TYPES AND OPERATIONS:
+
+1. DATABASE OPERATIONS (Prisma-based):
+   - create: Create single record using Prisma
+   - createMany: Create multiple records using Prisma
+   - findUnique: Find single record by unique field using Prisma
+   - findFirst: Find first matching record using Prisma
+   - findMany: Find multiple records with filtering using Prisma
+   - count: Count records using Prisma
+   - aggregate: Perform aggregations using Prisma
+   - groupBy: Group records using Prisma
+   - update: Update single record using Prisma
+   - updateMany: Update multiple records using Prisma
+   - delete: Delete single record using Prisma
+   - deleteMany: Delete multiple records using Prisma
+   - upsert: Create or update record using Prisma
+
+2. EXTERNAL API OPERATIONS:
+   - api_read: GET requests to external services (use fetch with proper error handling)
+   - api_write: POST/PUT/DELETE requests to external services (use fetch with proper error handling)
+
+3. AI ANALYSIS OPERATIONS:
+   - ai_analyze: Use AI with generateObject() for structured analysis, classification, or decision making
+
+PRISMA OPERATION GUIDELINES:
+- Always use proper Prisma syntax and conventions
+- Include proper where clauses, select statements, and relations
+- Handle Prisma-specific errors (P2002, P2025, etc.)
+- Use transactions for multi-step database operations
+- Follow Prisma best practices for performance and security
+
+STRUCTURED OUTPUT REQUIREMENTS:
+- All AI operations must use generateObject() with proper Zod schemas
+- Define clear input/output types for each step
+- Ensure type safety throughout the pipeline
+- Use consistent field naming conventions
+
+STEP ANALYSIS REQUIREMENTS:
+1. Each step must have a clear, specific description
+2. Define precise input and output fields with proper types
+3. Specify dependencies between steps (when one step needs output from another)
+4. Include environment variables for external API calls
+5. Consider data flow between steps
+6. Use Prisma-compatible field types and relations
+
+ACTION TO ANALYZE:
+Description: ${actionDescription}
+Type: ${actionType}
+Business Context: ${businessContext || 'General business operations'}
+
+Break this down into 1-5 logical steps that accomplish the action goal using Prisma operations.`;
+
+  const result = await generateObject({
+    model,
+    schema: stepAnalysisSchema,
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      },
+      {
+        role: 'user',
+        content: `Analyze this action: "${actionDescription}" and create detailed execution steps.`
+      }
+    ],
+    temperature: 0.1
+  });
+
+  // Generate function code for each step
+  const stepsWithCode = await Promise.all(result.object.steps.map(async (step, index) => {
+    const functionCode = await generateStepFunctionCode(step, prismaSchema, index);
+    return {
+      ...step,
+      functionCode
+    };
+  }));
+
+  return stepsWithCode;
+}
+
+// Function to generate function code for a step
+async function generateStepFunctionCode(
+  step: any,
+  prismaSchema: string,
+  stepIndex: number
+): Promise<string> {
+  const model = await getAgentBuilderModel();
+  
+  const systemPrompt = `Generate executable JavaScript function code for this step using Prisma ORM.
+
+IMPORTANT:
+- Use Prisma ORM for ALL database operations
+- Follow Prisma best practices and conventions
+- Use generateObject() for any AI operations requiring structured output
+- Handle Prisma-specific errors properly
+
+STEP DETAILS:
+${JSON.stringify(step, null, 2)}
+
+PRISMA SCHEMA:
+${prismaSchema}
+
+FUNCTION REQUIREMENTS:
+1. Function should be named "executeStep${stepIndex + 1}"
+2. Parameters: (database, input, envVars, previousStepOutputs, ai)
+3. Return format: { success: boolean, data: any, error?: string }
+4. Handle errors gracefully with proper Prisma error handling
+5. Use proper Prisma operations based on step.operation
+6. For external APIs, use fetch() with envVars and proper error handling
+7. For AI analysis, use generateObject() with proper Zod schemas
+
+PRISMA DATABASE OPERATIONS:
+- Use the 'database' parameter as the Prisma client instance
+- Examples:
+
+  * await database.post.findMany({ 
+      where: { published: true }, 
+      include: { author: true, categories: true },
+      orderBy: { createdAt: 'desc' }
+    })
+  * await database.user.findUnique({ 
+      where: { email: userEmail },
+      select: { id: true, name: true, posts: { take: 5 } }
+    })
+  * await database.$transaction([
+      database.user.update({ where: { id: userId }, data: { credits: { increment: 10 } } }),
+      database.transaction.create({ data: { userId, amount: 10, type: 'CREDIT' } })
+    ])
+
+PRISMA ERROR HANDLING:
+- Handle common Prisma errors (P2002: Unique constraint, P2025: Record not found, etc.)
+- Provide meaningful error messages
+- Use try-catch blocks for all database operations
+
+AI OPERATIONS WITH STRUCTURED OUTPUT:
+- Use generateObject() with proper Zod schemas for AI analysis
+- Examples:
+
+  * // Sentiment Analysis
+    const sentimentResult = await generateObject({
+      model: ai,
+      schema: z.object({
+        sentiment: z.enum(['positive', 'negative', 'neutral']),
+        confidence: z.number().min(0).max(1),
+        summary: z.string(),
+        keywords: z.array(z.string()),
+        emotionalTone: z.string()
+      }),
+      messages: [
+        { role: 'system', content: 'Analyze the sentiment and emotional tone of the given text.' },
+        { role: 'user', content: \`Analyze this text: \${input.text}\` }
+      ],
+      temperature: 0.1
+    });
+
+  * // Content Categorization
+    const categoryResult = await generateObject({
+      model: ai,
+      schema: z.object({
+        category: z.string(),
+        subcategory: z.string().optional(),
+        priority: z.enum(['low', 'medium', 'high']),
+        tags: z.array(z.string()),
+        actionItems: z.array(z.object({
+          task: z.string(),
+          urgency: z.enum(['low', 'medium', 'high']),
+          estimatedTime: z.string()
+        })),
+        relatedTopics: z.array(z.string())
+      }),
+      messages: [
+        { role: 'system', content: 'Categorize content and extract actionable items with detailed analysis.' },
+        { role: 'user', content: \`Categorize and analyze: \${input.content}\` }
+      ],
+      temperature: 0.2
+    });
+
+  * // Smart Recommendations
+    const recommendationResult = await generateObject({
+      model: ai,
+      schema: z.object({
+        recommendation: z.string(),
+        reasoning: z.string(),
+        confidence: z.number().min(0).max(1),
+        alternatives: z.array(z.object({
+          option: z.string(),
+          pros: z.array(z.string()),
+          cons: z.array(z.string()),
+          suitability: z.number().min(0).max(1)
+        })),
+        nextSteps: z.array(z.object({
+          step: z.string(),
+          priority: z.enum(['low', 'medium', 'high']),
+          timeframe: z.string()
+        })),
+        riskFactors: z.array(z.string())
+      }),
+      messages: [
+        { role: 'system', content: 'Provide comprehensive recommendations based on user data and context.' },
+        { role: 'user', content: \`User data: \${JSON.stringify(input.userData)}\\nContext: \${input.context}\\nGoal: \${input.goal}\` }
+      ],
+      temperature: 0.3
+    });
+
+  * // Data Analysis & Insights
+    const analysisResult = await generateObject({
+      model: ai,
+      schema: z.object({
+        insights: z.array(z.object({
+          insight: z.string(),
+          significance: z.enum(['low', 'medium', 'high']),
+          supporting_data: z.array(z.string())
+        })),
+        trends: z.array(z.object({
+          trend: z.string(),
+          direction: z.enum(['increasing', 'decreasing', 'stable']),
+          confidence: z.number().min(0).max(1)
+        })),
+        anomalies: z.array(z.string()),
+        predictions: z.array(z.object({
+          prediction: z.string(),
+          timeframe: z.string(),
+          probability: z.number().min(0).max(1)
+        })),
+        recommendations: z.array(z.string())
+      }),
+      messages: [
+        { role: 'system', content: 'Analyze data patterns, identify trends, and provide actionable insights.' },
+        { role: 'user', content: \`Analyze this data: \${JSON.stringify(input.data)}\\nFocus areas: \${input.focusAreas?.join(', ')}\` }
+      ],
+      temperature: 0.1
+    });
+
+- Always validate AI outputs before using them
+
+Generate complete, production-ready function code with proper Prisma integration.`;
+
+  const result = await generateObject({
+    model,
+    schema: z.object({
+      functionCode: z.string().describe('Complete JavaScript function code')
+    }),
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      },
+      {
+        role: 'user',
+        content: `Generate function code for step: ${step.description}`
+      }
+    ],
+    temperature: 0.1
+  });
+
+  return result.object.functionCode;
+}
+
+// Function to analyze complete action
+async function analyzeCompleteAction(
+  actionDescription: string,
+  actionType: 'Query' | 'Mutation',
+  steps: ActionStep[],
+  prismaSchema: string
+): Promise<EnhancedActionAnalysis> {
+  const model = await getAgentBuilderModel();
+  
+  const systemPrompt = `Analyze the complete action and its steps to determine input/output variables and impacted models.
+
+IMPORTANT:
+- This analysis is for a Prisma-based application
+- All database operations use Prisma ORM
+- We use generateObject() for structured AI outputs
+- Follow Prisma conventions for model names, fields, and relations
+
+ACTION: ${actionDescription}
+TYPE: ${actionType}
+
+STEPS:
+${steps.map((step, i) => `Step ${i + 1}: ${step.description} (${step.operation})`).join('\n')}
+
+PRISMA SCHEMA:
+${prismaSchema}
+
+ANALYSIS REQUIREMENTS:
+1. Input variables: What the action needs from the user
+   - Can be any regular scalar types: string, number, boolean, Date
+   - Can be Prisma object IDs for relationships (e.g., userId, postId, categoryId)
+   - Can be arrays of scalars or IDs (e.g., string[], number[], userIds[])
+   - Can be JSON objects for complex data structures
+   - Should match practical user input needs, not just Prisma field types
+2. Output variables: What the action will return
+   - Can be any regular scalar types: string, number, boolean, Date
+   - Can be Prisma objects or partial objects (e.g., User, Post, { id, name })
+   - Can be arrays of objects or scalars (e.g., User[], string[], number[])
+   - Can be computed values, aggregations, or transformed data
+   - Should represent the actual useful output for the user
+3. Impacted models: Which Prisma models will be affected and how (create/read/update/delete)
+4. Environment variables: What external API keys/configs are needed
+5. User role: Appropriate role (admin for sensitive operations, member for general use)
+6. Prisma relations: Consider model relationships and include statements
+7. Type flexibility: Use practical types that work with JavaScript/TypeScript and Prisma
+
+INPUT/OUTPUT TYPE EXAMPLES:
+- Scalar inputs: { name: "string", age: "number", isActive: "boolean" }
+- ID inputs: { userId: "string", postIds: "string[]", categoryId: "number" }
+- Object inputs: { userProfile: "object", filters: "object" }
+- Mixed outputs: { user: "User", posts: "Post[]", totalCount: "number", success: "boolean" }
+- Computed outputs: { averageRating: "number", topCategories: "string[]", summary: "object" }
+
+PRACTICAL CONSIDERATIONS:
+- Focus on what users actually need to input and receive
+- Don't restrict to exact Prisma field definitions
+- Allow flexible object structures for complex operations
+- Support both individual values and arrays as needed
+- Consider real-world data flow and user experience
+
+PRISMA-SPECIFIC CONSIDERATIONS:
+- Model names should match Prisma schema exactly
+- Field types should be compatible with Prisma types
+- Consider required fields, optional fields, and default values
+- Account for Prisma relations (one-to-one, one-to-many, many-to-many)
+- Include proper select/include statements for related data
+
+Use generateObject() structure for consistent, type-safe analysis output.`;
+
+  const result = await generateObject({
+    model,
+    schema: completeActionAnalysisSchema,
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      }
+    ],
+    temperature: 0.1
+  });
+
+  // Assemble the complete code
+  const assembledCode = assembleStepsIntoCode(steps, result.object);
+
+  return {
+    ...result.object,
+    steps,
+    assembledCode
+  };
+}
+
+// Function to assemble steps into complete action code
+function assembleStepsIntoCode(steps: ActionStep[], actionAnalysis: any): string {
+  const stepFunctions = steps.map(step => step.functionCode).join('\n\n');
+  
+  const mainExecutionCode = `
+// Action: ${actionAnalysis.actionName}
+// Generated steps execution
+${stepFunctions}
+
+// Main execution function
+async function executeAction(database, input, member, ai, envVars = {}) {
+  try {
+    // Validate input parameters
+    ${actionAnalysis.inputVariables.filter((v: any) => v.required).map((v: any) => 
+      `if (!input.${v.name}) throw new Error('Required parameter ${v.name} is missing');`
+    ).join('\n    ')}
+    
+    // Check permissions
+    if (member.role !== '${actionAnalysis.role}' && '${actionAnalysis.role}' === 'admin') {
+      throw new Error('Admin access required');
+    }
+    
+    let previousStepOutputs = {};
+    let finalResult = null;
+    const impactedData = [];
+    
+    ${steps.map((step, index) => `
+    // Execute Step ${index + 1}: ${step.description}
+    console.log('Executing step ${index + 1}: ${step.description}');
+    const step${index + 1}Result = await executeStep${index + 1}(database, input, envVars, previousStepOutputs);
+    if (!step${index + 1}Result.success) {
+      throw new Error('Step ${index + 1} failed: ' + step${index + 1}Result.error);
+    }
+    previousStepOutputs.step${index + 1} = step${index + 1}Result.data;
+    ${step.type === 'database' ? `
+    // Track database changes
+    if (step${index + 1}Result.data && ['create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany'].includes('${step.operation}')) {
+      impactedData.push({
+        modelId: '${step.modelName}',
+        operation: '${step.operation}',
+        data: step${index + 1}Result.data
+      });
+    }` : ''}
+    `).join('\n')}
+    
+    // Determine final result
+    const lastStepResult = previousStepOutputs.step${steps.length};
+    finalResult = {
+      ${actionAnalysis.outputVariables.map((v: any) => 
+        `${v.name}: lastStepResult?.${v.name} || lastStepResult`
+      ).join(',\n      ')}
+    };
+    
+    return {
+      output: finalResult,
+      data: impactedData
+    };
+    
+  } catch (error) {
+    console.error('Action execution failed:', error);
+    throw new Error('Action failed: ' + error.message);
+  }
+}
+
+// Execute the action
+return await executeAction(database, input, member, ai, envVars);`;
+
+  return mainExecutionCode;
+}
+
+// Enhanced action generation function
+async function generateEnhancedActionWithSteps(
+  actionDescription: string,
+  actionType: 'Query' | 'Mutation',
+  prismaSchema: string,
+  businessContext?: string
+): Promise<EnhancedActionAnalysis> {
+  // Step 1: Analyze and generate steps
+  const steps = await analyzeActionSteps(actionDescription, actionType, prismaSchema, businessContext);
+  
+  // Step 2: Analyze complete action
+  const completeAnalysis = await analyzeCompleteAction(actionDescription, actionType, steps, prismaSchema);
+  
+  return completeAnalysis;
 }

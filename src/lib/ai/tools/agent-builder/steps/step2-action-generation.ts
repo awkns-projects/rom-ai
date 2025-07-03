@@ -1,29 +1,25 @@
-import { generateActions } from '../generation';
+import { generateActions, generatePrismaActions } from '../generation';
 import type { AgentAction, AgentData } from '../types';
-import type { Step0Output } from './step0-prompt-understanding';
-import type { Step1Output } from './step1-decision-making';
+import type { Step0Output } from './step0-comprehensive-analysis';
+import type { Step1Output } from './step1-database-generation';
 import type { Step3Output } from './step3-database-generation';
 
 /**
- * STEP 4: Comprehensive Action Generation
+ * STEP 2: Action Generation & API Design
  * 
- * Generate intelligent actions that work seamlessly with the database schema.
- * Enhanced with hybrid approach for action coordination and validation.
+ * Generate actions, endpoints, and API specifications based on database models and analysis.
+ * This step creates the functional capabilities for the agent system.
  */
 
-export interface Step4Input {
+export interface Step2Input {
   promptUnderstanding: Step0Output;
-  decision: Step1Output;
-  technicalAnalysis?: any; // Optional for backward compatibility
-  databaseGeneration: Step3Output;
+  databaseGeneration: Step1Output;
   existingAgent?: AgentData;
-  changeAnalysis?: any;
-  agentOverview?: any;
   conversationContext?: string;
   command?: string;
 }
 
-export interface Step4Output {
+export interface Step2Output {
   actions: AgentAction[];
   // Enhanced fields from hybrid approach
   actionCoordination: {
@@ -52,27 +48,26 @@ export interface Step4Output {
 }
 
 /**
- * Enhanced action generation with hybrid approach logic
- * Preserves original generateActions functionality while adding comprehensive validation
+ * Execute Step 2: Action Generation and API Design
  */
-export async function executeStep4ActionGeneration(
-  input: Step4Input
-): Promise<Step4Output> {
-  console.log('⚡ STEP 4: Starting enhanced action generation...');
+export async function executeStep2ActionGeneration(
+  input: Step2Input
+): Promise<Step2Output> {
+  console.log('⚡ STEP 2: Starting action generation and API design...');
   
-  const { promptUnderstanding, decision, databaseGeneration, existingAgent, changeAnalysis, agentOverview, conversationContext, command } = input;
+  const { promptUnderstanding, databaseGeneration, existingAgent, conversationContext, command } = input;
   
   try {
     // Use original generateActions function with enhanced context
     console.log('🎯 Generating actions with database-aware design...');
-    const actionsResult = await generateActions(
+    const actionsResult = await generatePrismaActions(
       promptUnderstanding,
       databaseGeneration, // Pass the full databaseGeneration object which has models and enums
       existingAgent,
-      changeAnalysis,
-      agentOverview,
-      conversationContext,
-      command
+      // changeAnalysis,
+      // agentOverview,
+      // conversationContext,
+      // command
     );
 
     // Enhanced validation and coordination analysis
@@ -91,7 +86,7 @@ export async function executeStep4ActionGeneration(
     // Calculate quality metrics
     const qualityMetrics = calculateQualityMetrics(actionsResult.actions, databaseGeneration, promptUnderstanding);
 
-    const result: Step4Output = {
+    const result: Step2Output = {
       actions: actionsResult.actions,
       actionCoordination,
       validationResults,
@@ -100,7 +95,7 @@ export async function executeStep4ActionGeneration(
       qualityMetrics
     };
 
-    console.log('✅ STEP 4: Action generation completed successfully');
+    console.log('✅ STEP 2: Action generation completed successfully');
     console.log(`⚡ Action Summary:
 - Total Actions: ${result.actions.length}
 - Implementation Complexity: ${result.implementationComplexity}
@@ -111,8 +106,8 @@ export async function executeStep4ActionGeneration(
     return result;
     
   } catch (error) {
-    console.error('❌ STEP 4: Action generation failed:', error);
-    throw new Error(`Step 4 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('❌ STEP 2: Action generation failed:', error);
+    throw new Error(`Step 2 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -121,7 +116,7 @@ export async function executeStep4ActionGeneration(
  */
 async function validateActionGeneration(
   actions: AgentAction[],
-  databaseGeneration: Step3Output,
+  databaseGeneration: Step1Output,
   promptUnderstanding: Step0Output
 ) {
   console.log('🔍 Validating action generation comprehensively...');
@@ -348,7 +343,7 @@ function analyzeActionCoordination(actions: AgentAction[], promptUnderstanding: 
 /**
  * Assess implementation complexity
  */
-function assessImplementationComplexity(actions: AgentAction[], databaseGeneration: Step3Output): 'low' | 'medium' | 'high' {
+function assessImplementationComplexity(actions: AgentAction[], databaseGeneration: Step1Output): 'low' | 'medium' | 'high' {
   let complexityScore = 0;
   
   // Database complexity factor
@@ -416,7 +411,7 @@ function analyzeResourceRequirements(actions: AgentAction[]) {
  */
 function calculateQualityMetrics(
   actions: AgentAction[],
-  databaseGeneration: Step3Output,
+  databaseGeneration: Step1Output,
   promptUnderstanding: Step0Output
 ) {
   // Action coverage: How well actions cover the required functionality
@@ -454,9 +449,9 @@ function calculateQualityMetrics(
 }
 
 /**
- * Validate Step 4 output for completeness and quality
+ * Validate Step 2 output for completeness and quality
  */
-export function validateStep4Output(output: Step4Output): boolean {
+export function validateStep2Output(output: Step2Output): boolean {
   try {
     if (!output.actions.length) {
       console.warn('⚠️ No actions generated');
@@ -488,11 +483,11 @@ export function validateStep4Output(output: Step4Output): boolean {
       return false;
     }
     
-    console.log('✅ Step 4 output validation passed');
+    console.log('✅ Step 2 output validation passed');
     return true;
     
   } catch (error) {
-    console.error('❌ Step 4 output validation failed:', error);
+    console.error('❌ Step 2 output validation failed:', error);
     return false;
   }
 }
@@ -500,7 +495,7 @@ export function validateStep4Output(output: Step4Output): boolean {
 /**
  * Extract action insights for downstream steps
  */
-export function extractActionInsights(output: Step4Output) {
+export function extractActionInsights(output: Step2Output) {
   return {
     actionCount: output.actions.length,
     implementationComplexity: output.implementationComplexity,

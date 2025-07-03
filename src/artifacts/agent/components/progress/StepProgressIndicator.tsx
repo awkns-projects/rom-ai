@@ -6,11 +6,7 @@ interface StepProgressIndicatorProps {
   agentData: any;
   stepMessages?: Record<string, string>;
   stepProgress?: {
-    'prompt-understanding'?: 'processing' | 'complete';
-    'granular-analysis'?: 'processing' | 'complete';
-    analysis?: 'processing' | 'complete';
-    'change-analysis'?: 'processing' | 'complete';
-    overview?: 'processing' | 'complete';
+    'analysis'?: 'processing' | 'complete';
     models?: 'processing' | 'complete';
     actions?: 'processing' | 'complete';
     schedules?: 'processing' | 'complete';
@@ -27,44 +23,28 @@ export const StepProgressIndicator = ({
 }: StepProgressIndicatorProps) => {
   // Map orchestrator step IDs to UI step IDs
   const stepIdMapping: Record<string, string> = {
-    'step0': 'prompt-understanding',
-    'step1': 'analysis',
-    'step2': 'overview',
-    'step3': 'models',
-    'step4': 'actions',
-    'step5': 'schedules',
+    'step0': 'analysis',
+    'step1': 'models',
+    'step2': 'actions',
+    'step3': 'schedules',
     'complete': 'complete'
   };
 
   // Reverse mapping for getting orchestrator step from UI step
   const reverseStepMapping: Record<string, string> = {
-    'prompt-understanding': 'step0',
-    'analysis': 'step1',
-    'overview': 'step2',
-    'models': 'step3',
-    'actions': 'step4',
-    'schedules': 'step5',
+    'analysis': 'step0',
+    'models': 'step1',
+    'actions': 'step2',
+    'schedules': 'step3',
     'complete': 'complete'
   };
 
   const steps = [
     { 
-      id: 'prompt-understanding', 
-      title: 'Understanding Requirements', 
-      description: 'Analyzing your business requirements and goals',
-      icon: '🎯' 
-    },
-    { 
       id: 'analysis', 
       title: 'Analysis', 
-      description: 'Breaking down the requirements into actionable components',
-      icon: '🔍' 
-    },
-    { 
-      id: 'overview', 
-      title: 'Overview', 
-      description: 'Creating a high-level system architecture',
-      icon: '📋' 
+      description: 'Understanding requirements, strategic planning, and system architecture',
+      icon: '🧠' 
     },
     { 
       id: 'models', 

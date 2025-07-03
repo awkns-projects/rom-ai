@@ -50,12 +50,10 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
   }, [documents]);
   
   const steps = [
-    { id: 'step0', label: 'Understanding Requirements' },
-    { id: 'step1', label: 'AI Analysis & Decision Making' },
-    { id: 'step2', label: 'System Architecture' },
-    { id: 'step3', label: 'Database Models Creation' },
-    { id: 'step4', label: 'Automated Actions Setup' },
-    { id: 'step5', label: 'Scheduling & Timing' },
+    { id: 'step0', label: 'Comprehensive Analysis' },
+    { id: 'step1', label: 'Data Models' },
+    { id: 'step2', label: 'Automated Actions' },
+    { id: 'step3', label: 'Scheduling & Timing' },
     { id: 'complete', label: 'Complete' }
   ];
 
@@ -135,7 +133,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
     console.log(`🔍 Getting step status for: ${stepId}`);
     
     // Define step order for position-based status determination
-    const stepOrder = ['step0', 'step1', 'step2', 'step3', 'step4', 'step5', 'complete'];
+    const stepOrder = ['step0', 'step1', 'step2', 'step3', 'complete'];
     
     // Check for step data in message parts (for streaming state)
     if (message?.parts) {
@@ -304,7 +302,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
 
   // Check if all steps are complete and update artifact status
   const allStepsComplete = useMemo(() => {
-    const stepOrder = ['step0', 'step1', 'step2', 'step3', 'step4', 'step5'];
+    const stepOrder = ['step0', 'step1', 'step2', 'step3'];
     
     const isComplete = stepOrder.every(step => {
       return (metadata?.stepProgress && metadata.stepProgress[step] === 'complete') ||

@@ -1,30 +1,27 @@
-import { generateDatabase, generateExampleRecords } from '../generation';
-import type { AgentData, AgentModel, } from '../types';
-import type { Step0Output } from './step0-prompt-understanding';
-import type { Step1Output } from './step1-decision-making';
+import { generateDatabase, generateExampleRecords, generatePrismaDatabase } from '../generation';
+import type { AgentData, AgentEnum, AgentModel, } from '../types';
+import type { Step0Output } from './step0-comprehensive-analysis';
+import { z } from 'zod';
 
 /**
- * STEP 3: Unified Database Schema Generation
+ * STEP 1: Database Generation & Model Design
  * 
- * Generate models and enums with complete field specifications and relationships.
- * Enhanced with hybrid approach for action-aware design and comprehensive validation.
+ * Generate database models, schemas, and example data based on comprehensive analysis.
+ * This step creates the data foundation for the agent system.
  */
 
-export interface Step3Input {
+export interface Step1Input {
   promptUnderstanding: Step0Output;
-  decision: Step1Output;
-  technicalAnalysis?: any; // Optional for backward compatibility
   existingAgent?: AgentData;
-  changeAnalysis?: any;
-  agentOverview?: any;
   conversationContext?: string;
   command?: string;
 }
 
-export interface Step3Output {
+export interface Step1Output {
+  prismaSchema: string;
   models: AgentModel[];
+  enums: AgentEnum[];
   exampleRecords: Record<string, any[]>;
-  // Enhanced fields from hybrid approach
   designRationale: string;
   actionAwarenessScore: number;
   relationshipComplexity: 'simple' | 'moderate' | 'complex';
@@ -34,49 +31,55 @@ export interface Step3Output {
     relationshipValidation: boolean;
     actionCompatibility: boolean;
     overallScore: number;
+    details: {
+      fieldIssues: string[];
+      relationshipIssues: string[];
+      actionCompatibilityIssues: string[];
+    };
   };
 }
 
 /**
- * Enhanced database generation with hybrid approach logic
- * Preserves original generateDatabase functionality while adding comprehensive validation
+ * Execute Step 1: Database Generation and Model Design
  */
-export async function executeStep3DatabaseGeneration(
-  input: Step3Input
-): Promise<Step3Output> {
-  console.log('🗄️ STEP 3: Starting enhanced database schema generation...');
+export async function executeStep1DatabaseGeneration(
+  input: Step1Input
+): Promise<Step1Output> {
+  console.log('🗃️ STEP 1: Starting database generation and model design...');
   
-  const { promptUnderstanding, decision, existingAgent, changeAnalysis, agentOverview, conversationContext, command } = input;
+  const { promptUnderstanding, existingAgent, conversationContext, command } = input;
   
   try {
     // Use original generateDatabase function with enhanced context
     console.log('📊 Generating database schema with action-aware design...');
-    const databaseResult = await generateDatabase(
+    const databaseResult = await generatePrismaDatabase(
       promptUnderstanding,
       existingAgent,
-      changeAnalysis,
-      agentOverview,
-      conversationContext,
-      command
+      // conversationContext,
+      // command
     );
 
     // Enhanced validation and analysis from hybrid approach
     console.log('🔍 Performing comprehensive database validation...');
-    const validationResults = await validateDatabaseDesign(databaseResult, promptUnderstanding);
+    const schemaObject = databaseResult.schemaObject;
+    const schemaString = databaseResult.schemaString;
+    const validationResults = await validateDatabaseDesign(schemaObject, promptUnderstanding);
     
     // Generate example records with business context
     console.log('📝 Generating realistic example records...');
     const exampleRecords = await generateExampleRecords(
-      databaseResult.models,
+      schemaObject.models,
       existingAgent?.models || [],
       promptUnderstanding.userRequestAnalysis.businessContext
     );
 
     // Analyze design quality and action awareness
-    const designAnalysis = analyzeDatabaseDesign(databaseResult, promptUnderstanding);
+    const designAnalysis = analyzeDatabaseDesign(schemaObject, promptUnderstanding);
 
-    const result: Step3Output = {
-      models: databaseResult.models,
+    const result: Step1Output = {
+      prismaSchema: schemaString,
+      models: schemaObject.models,
+      enums: schemaObject.enums,
       exampleRecords,
       designRationale: designAnalysis.rationale,
       actionAwarenessScore: designAnalysis.actionAwarenessScore,
@@ -85,7 +88,7 @@ export async function executeStep3DatabaseGeneration(
       validationResults
     };
 
-    console.log('✅ STEP 3: Database generation completed successfully');
+    console.log('✅ STEP 1: Database generation completed successfully');
     console.log(`📊 Database Summary:
 - Models: ${result.models.length}
 - Model Enums: ${result.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)}
@@ -96,8 +99,8 @@ export async function executeStep3DatabaseGeneration(
     return result;
     
   } catch (error) {
-    console.error('❌ STEP 3: Database generation failed:', error);
-    throw new Error(`Step 3 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('❌ STEP 1: Database generation failed:', error);
+    throw new Error(`Step 1 failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -350,9 +353,9 @@ function analyzeDatabaseDesign(
 }
 
 /**
- * Validate Step 3 output for completeness and quality
+ * Validate Step 1 output for completeness and quality
  */
-export function validateStep3Output(output: Step3Output): boolean {
+export function validateStep1Output(output: Step1Output): boolean {
   try {
     if (!output.models.length) {
       console.warn('⚠️ No models generated');
@@ -379,11 +382,11 @@ export function validateStep3Output(output: Step3Output): boolean {
       return false;
     }
     
-    console.log('✅ Step 3 output validation passed');
+    console.log('✅ Step 1 output validation passed');
     return true;
     
   } catch (error) {
-    console.error('❌ Step 3 output validation failed:', error);
+    console.error('❌ Step 1 output validation failed:', error);
     return false;
   }
 }
@@ -391,7 +394,7 @@ export function validateStep3Output(output: Step3Output): boolean {
 /**
  * Extract database insights for downstream steps
  */
-export function extractDatabaseInsights(output: Step3Output) {
+export function extractDatabaseInsights(output: Step1Output) {
   return {
     modelCount: output.models.length,
     enumCount: output.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0),

@@ -1,18 +1,15 @@
 import type { AgentData } from '../types';
-import { executeStep0PromptUnderstanding, validateStep0Output, extractStep0Insights, type Step0Output } from './step0-prompt-understanding';
-import { executeStep1Decision, validateStep1Output, extractExecutionStrategy, type Step1Output } from './step1-decision-making';
-import { executeStep2TechnicalAnalysis, validateStep2Output, extractTechnicalInsights, type Step2Output } from './step2-technical-analysis';
-import { executeStep3DatabaseGeneration, validateStep3Output, extractDatabaseInsights, type Step3Output } from './step3-database-generation';
-import { executeStep4ActionGeneration, validateStep4Output, extractActionInsights, type Step4Output } from './step4-action-generation';
-import { executeStep5ScheduleGeneration, validateStep5Output, extractScheduleInsights, type Step5Output } from './step5-schedule-generation';
+import { executeStep0ComprehensiveAnalysis, validateStep0Output, extractStep0Insights, type Step0Output } from './step0-comprehensive-analysis';
+import { executeStep1DatabaseGeneration, validateStep1Output, extractDatabaseInsights, type Step1Output } from './step1-database-generation';
+import { executeStep2ActionGeneration, validateStep2Output, extractActionInsights, type Step2Output } from './step2-action-generation';
+import { executeStep3ScheduleGeneration, validateStep3Output, extractScheduleInsights, type Step3Output } from './step3-schedule-generation';
 import { performDeepMerge } from '../merging';
 
 /**
  * AGENT BUILDER ORCHESTRATOR
  * 
- * Enhanced step-by-step agent generation with hybrid approach integration.
- * Preserves all original functionality while adding comprehensive validation,
- * coordination, and quality assurance.
+ * Enhanced step-by-step agent generation with unified comprehensive analysis.
+ * Steps 0, 1, and 2 have been combined into a single comprehensive analysis step.
  */
 
 export interface OrchestratorConfig {
@@ -43,13 +40,9 @@ export interface OrchestratorResult {
     step1?: Step1Output;
     step2?: Step2Output;
     step3?: Step3Output;
-    step4?: Step4Output;
-    step5?: Step5Output;
   };
   insights: {
-    prompt?: ReturnType<typeof extractStep0Insights>;
-    execution?: ReturnType<typeof extractExecutionStrategy>;
-    technical?: ReturnType<typeof extractTechnicalInsights>;
+    comprehensive?: ReturnType<typeof extractStep0Insights>;
     database?: ReturnType<typeof extractDatabaseInsights>;
     actions?: ReturnType<typeof extractActionInsights>;
     schedules?: ReturnType<typeof extractScheduleInsights>;
@@ -59,8 +52,6 @@ export interface OrchestratorResult {
     step1: boolean;
     step2: boolean;
     step3: boolean;
-    step4: boolean;
-    step5: boolean;
     overall: boolean;
   };
   executionMetrics: {
@@ -89,8 +80,6 @@ export async function executeAgentGeneration(
       step1: false,
       step2: false,
       step3: false,
-      step4: false,
-      step5: false,
       overall: false
     },
     executionMetrics: {
@@ -108,19 +97,22 @@ export async function executeAgentGeneration(
   console.log(`🔧 Configuration: Validation=${config.enableValidation !== false}, Insights=${config.enableInsights !== false}`);
 
   try {
-    // STEP 0: Prompt Understanding and Analysis
+    // STEP 0: Comprehensive Analysis (combines original steps 0, 1, and 2)
     const step0Result = await executeStepWithRetry(
       'step0',
-      () => executeStep0PromptUnderstanding({
+      () => executeStep0ComprehensiveAnalysis({
         userRequest: config.userRequest,
-        existingAgent: config.existingAgent
+        existingAgent: config.existingAgent,
+        conversationContext: config.conversationContext,
+        command: config.command,
+        currentOperation: config.existingAgent ? 'update' : 'create'
       }),
       config,
       result
     );
 
     if (!step0Result) {
-      result.errors.push('Step 0 (Prompt Understanding) failed');
+      result.errors.push('Step 0 (Comprehensive Analysis) failed');
       return result;
     }
 
@@ -137,25 +129,24 @@ export async function executeAgentGeneration(
 
     // Extract insights
     if (config.enableInsights !== false) {
-      result.insights.prompt = extractStep0Insights(step0Result);
+      result.insights.comprehensive = extractStep0Insights(step0Result);
     }
 
-    // STEP 1: Decision Making and Strategy
+    // STEP 1: Database Generation (models)
     const step1Result = await executeStepWithRetry(
       'step1',
-      () => executeStep1Decision({
+      () => executeStep1DatabaseGeneration({
         promptUnderstanding: step0Result,
         existingAgent: config.existingAgent,
-        conversationContext: config.conversationContext || '',
-        command: config.command || config.userRequest,
-        currentOperation: config.existingAgent ? 'update' : 'create'
+        conversationContext: config.conversationContext,
+        command: config.command
       }),
       config,
       result
     );
 
     if (!step1Result) {
-      result.errors.push('Step 1 (Decision Making) failed');
+      result.errors.push('Step 1 (Database Generation) failed');
       return result;
     }
 
@@ -172,15 +163,15 @@ export async function executeAgentGeneration(
 
     // Extract insights
     if (config.enableInsights !== false) {
-      result.insights.execution = extractExecutionStrategy(step1Result);
+      result.insights.database = extractDatabaseInsights(step1Result);
     }
 
-    // STEP 2: Technical Analysis and System Design
+    // STEP 2: Action Generation
     const step2Result = await executeStepWithRetry(
       'step2',
-      () => executeStep2TechnicalAnalysis({
+      () => executeStep2ActionGeneration({
         promptUnderstanding: step0Result,
-        decision: step1Result,
+        databaseGeneration: step1Result,
         existingAgent: config.existingAgent,
         conversationContext: config.conversationContext,
         command: config.command
@@ -190,7 +181,7 @@ export async function executeAgentGeneration(
     );
 
     if (!step2Result) {
-      result.errors.push('Step 2 (Technical Analysis) failed');
+      result.errors.push('Step 2 (Action Generation) failed');
       return result;
     }
 
@@ -207,19 +198,17 @@ export async function executeAgentGeneration(
 
     // Extract insights
     if (config.enableInsights !== false) {
-      result.insights.technical = extractTechnicalInsights(step2Result);
+      result.insights.actions = extractActionInsights(step2Result);
     }
 
-    // STEP 3: Database Generation
+    // STEP 3: Schedule Generation
     const step3Result = await executeStepWithRetry(
       'step3',
-      () => executeStep3DatabaseGeneration({
+      () => executeStep3ScheduleGeneration({
         promptUnderstanding: step0Result,
-        decision: step1Result,
-        technicalAnalysis: step2Result,
+        databaseGeneration: step1Result,
+        actionGeneration: step2Result,
         existingAgent: config.existingAgent,
-        changeAnalysis: config.changeAnalysis,
-        agentOverview: config.agentOverview,
         conversationContext: config.conversationContext,
         command: config.command
       }),
@@ -228,7 +217,7 @@ export async function executeAgentGeneration(
     );
 
     if (!step3Result) {
-      result.errors.push('Step 3 (Database Generation) failed');
+      result.errors.push('Step 3 (Schedule Generation) failed');
       return result;
     }
 
@@ -245,163 +234,36 @@ export async function executeAgentGeneration(
 
     // Extract insights
     if (config.enableInsights !== false) {
-      result.insights.database = extractDatabaseInsights(step3Result);
+      result.insights.schedules = extractScheduleInsights(step3Result);
     }
 
-    // STEP 4: Action Generation
-    const step4Result = await executeStepWithRetry(
-      'step4',
-      () => executeStep4ActionGeneration({
-        promptUnderstanding: step0Result,
-        decision: step1Result,
-        technicalAnalysis: step2Result,
-        databaseGeneration: step3Result,
-        existingAgent: config.existingAgent,
-        changeAnalysis: config.changeAnalysis,
-        agentOverview: config.agentOverview,
-        conversationContext: config.conversationContext,
-        command: config.command
-      }),
-      config,
-      result
-    );
-
-    if (!step4Result) {
-      result.errors.push('Step 4 (Action Generation) failed');
-      return result;
-    }
-
-    result.stepResults.step4 = step4Result;
-
-    // Validate Step 4
-    if (config.enableValidation !== false) {
-      result.validationResults.step4 = validateStep4Output(step4Result);
-      if (!result.validationResults.step4 && config.stopOnValidationFailure !== false) {
-        result.errors.push('Step 4 validation failed');
-        return result;
-      }
-    }
-
-    // Extract insights
-    if (config.enableInsights !== false) {
-      result.insights.actions = extractActionInsights(step4Result);
-    }
-
-    // STEP 5: Schedule Generation
-    const step5Result = await executeStepWithRetry(
-      'step5',
-      () => executeStep5ScheduleGeneration({
-        promptUnderstanding: step0Result,
-        decision: step1Result,
-        technicalAnalysis: step2Result,
-        databaseGeneration: step3Result,
-        actionGeneration: step4Result,
-        existingAgent: config.existingAgent,
-        changeAnalysis: config.changeAnalysis
-      }),
-      config,
-      result
-    );
-
-    if (!step5Result) {
-      result.errors.push('Step 5 (Schedule Generation) failed');
-      return result;
-    }
-
-    result.stepResults.step5 = step5Result;
-
-    // Validate Step 5
-    if (config.enableValidation !== false) {
-      result.validationResults.step5 = validateStep5Output(step5Result);
-      if (!result.validationResults.step5 && config.stopOnValidationFailure !== false) {
-        result.errors.push('Step 5 validation failed');
-        return result;
-      }
-    }
-
-    // Extract insights
-    if (config.enableInsights !== false) {
-      result.insights.schedules = extractScheduleInsights(step5Result);
-    }
-
-    // FINAL ASSEMBLY: Create the complete agent
-    result.agent = assembleCompleteAgent(
+    // FINAL ASSEMBLY: Merge all components into final agent
+    const finalAgent = assembleCompleteAgent(
       config,
       step0Result,
       step1Result,
       step2Result,
-      step3Result,
-      step4Result,
-      step5Result
+      step3Result
     );
 
-    // Calculate overall validation and quality metrics
+    result.agent = finalAgent;
+    result.success = true;
+
+    // Calculate overall validation
     result.validationResults.overall = calculateOverallValidation(result.validationResults);
-    result.executionMetrics.qualityScore = calculateQualityScore(result);
+
+    // Calculate execution metrics
     result.executionMetrics.totalDuration = Date.now() - startTime;
+    result.executionMetrics.qualityScore = calculateQualityScore(result);
 
-    result.success = result.validationResults.overall && result.agent !== undefined;
-
-    // SAVE FINAL ASSEMBLED AGENT - Ensure persistence before returning
-    if (result.agent && config.dataStream && config.documentId && config.session) {
-      try {
-        console.log('💾 Orchestrator saving final assembled agent...');
-        
-        // Import the save function
-        const { saveOrUpdateDocument } = await import('../../../../db/queries');
-        
-        const finalAgentContent = JSON.stringify(result.agent, null, 2);
-        const finalMetadata = {
-          orchestratorResult: {
-            success: result.success,
-            qualityScore: result.executionMetrics.qualityScore,
-            totalDuration: result.executionMetrics.totalDuration,
-            validationResults: result.validationResults,
-            stepResults: Object.keys(result.stepResults),
-            errors: result.errors,
-            warnings: result.warnings
-          },
-          lastUpdateTimestamp: new Date().toISOString(),
-          savedByOrchestrator: true,
-          assemblyCompleted: true
-        };
-
-        await saveOrUpdateDocument({
-          id: config.documentId,
-          title: result.agent.name || 'Generated Agent',
-          content: finalAgentContent,
-          kind: 'agent',
-          userId: config.session.user?.id || 'unknown',
-          metadata: finalMetadata
-        });
-
-        console.log('✅ Orchestrator successfully saved final assembled agent');
-      } catch (saveError) {
-        console.error('❌ Orchestrator failed to save final agent:', saveError);
-        result.warnings.push(`Failed to save final agent: ${saveError instanceof Error ? saveError.message : 'Unknown error'}`);
-        // Don't fail the entire process for save errors
-      }
-    }
-
-    // Send final completion step to UI
-    sendStepUpdate(config, 'complete', 'complete', 
-      `Orchestration completed ${result.success ? 'successfully' : 'with issues'}`);
-
-    console.log('✅ Enhanced Agent Builder Orchestration completed successfully!');
-    console.log(`📊 Final Summary:
-- Overall Success: ${result.success ? '✅' : '❌'}
-- Quality Score: ${result.executionMetrics.qualityScore}/100
-- Total Duration: ${result.executionMetrics.totalDuration}ms
-- Models Generated: ${result.stepResults.step3?.models.length || 0}
-- Actions Generated: ${result.stepResults.step4?.actions.length || 0}
-- Schedules Generated: ${result.stepResults.step5?.schedules.length || 0}
-- Validation Results: ${Object.values(result.validationResults).filter(Boolean).length}/7 passed`);
+    console.log('✅ Agent generation completed successfully');
+    console.log(`📊 Final metrics: Duration=${result.executionMetrics.totalDuration}ms, Quality=${result.executionMetrics.qualityScore}%`);
 
     return result;
 
   } catch (error) {
-    console.error('❌ Orchestration failed with error:', error);
-    result.errors.push(`Orchestration error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('❌ Agent generation failed:', error);
+    result.errors.push(`Orchestration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     result.executionMetrics.totalDuration = Date.now() - startTime;
     return result;
   }
@@ -499,14 +361,10 @@ function getStepResultSummary(stepName: string, stepResult: any): string {
     case 'step0':
       return `Analyzed requirements: ${stepResult.userRequestAnalysis?.primaryIntent || 'Unknown intent'}`;
     case 'step1':
-      return `Strategy: ${stepResult.operation} (${stepResult.priority}) - Confidence: ${stepResult.confidence}%`;
-    case 'step2':
-      return `Architecture: ${stepResult.complexity} complexity, ${stepResult.systemArchitecture?.components?.length || 0} components`;
-    case 'step3':
       return `Database: ${stepResult.models?.length || 0} models, ${stepResult.enums?.length || 0} enums`;
-    case 'step4':
+    case 'step2':
       return `Actions: ${stepResult.actions?.length || 0} actions, ${stepResult.implementationComplexity} complexity`;
-    case 'step5':
+    case 'step3':
       return `Schedules: ${stepResult.schedules?.length || 0} schedules, ${stepResult.automationCoverage?.coveragePercentage || 0}% coverage`;
     default:
       return `${stepName} completed`;
@@ -602,15 +460,13 @@ function assembleCompleteAgent(
   step0: Step0Output,
   step1: Step1Output,
   step2: Step2Output,
-  step3: Step3Output,
-  step4: Step4Output,
-  step5: Step5Output
+  step3: Step3Output
 ): AgentData {
   const now = new Date().toISOString();
   
   // Integrate example records into models
-  const modelsWithRecords = step3.models.map(model => {
-    const modelExampleRecords = step3.exampleRecords?.[model.name] || [];
+  const modelsWithRecords = step1.models.map(model => {
+    const modelExampleRecords = step1.exampleRecords?.[model.name] || [];
     
     // Convert example records to ModelRecord format
     const modelRecords = modelExampleRecords.map((recordData, index) => ({
@@ -627,45 +483,61 @@ function assembleCompleteAgent(
     };
   });
 
-  // Create the new agent data from step results
   const newAgentData: AgentData = {
     id: config.existingAgent?.id || generateId(),
-    name: step0.userRequestAnalysis.businessContext || 'Generated Agent',
-    description: step0.userRequestAnalysis.mainGoal || 'AI-generated agent',
-    domain: step0.userRequestAnalysis.businessContext || 'general',
+    name: step0.agentName || 'Generated Agent',
+    description: step0.agentDescription || 'AI-generated agent description',
+    domain: step0.domain || 'general',
     models: modelsWithRecords,
-    actions: step4.actions,
-    schedules: step5.schedules,
-    createdAt: now,
+    enums: step1.enums || [],
+    actions: step2.actions,
+    schedules: step3.schedules,
+    prismaSchema: step1.prismaSchema || '',
+    createdAt: config.existingAgent?.createdAt || now,
     metadata: {
       createdAt: config.existingAgent?.metadata?.createdAt || now,
       updatedAt: now,
-      version: '2.0.0-model-scoped-enums',
-      lastModifiedBy: 'Enhanced Agent Builder',
+      version: generateId(),
+      lastModifiedBy: 'ai-agent-builder',
       tags: [
-        step0.userRequestAnalysis.complexity,
-        step0.userRequestAnalysis.businessContext,
-        step2.complexity,
-        `${step3.models.length}-models`,
-        `${step4.actions.length}-actions`,
-        `${step5.schedules.length}-schedules`
+        step0.complexity,
+        step0.domain || 'general',
+        step0.primaryIntent || 'automation',
+        ...(step0.keywords || []).slice(0, 3)
       ],
       status: 'generated',
-      promptUnderstanding: step0,
-      aiDecision: step1,
-      lastUpdateReason: config.userRequest,
-      lastUpdateTimestamp: now,
-      comprehensiveAnalysisUsed: true,
-      operationType: config.existingAgent ? 'update' : 'create',
+      
+      // Store database generation phase info  
+      databaseGenerationPhase: {
+        models: step1.models,
+        enums: step1.enums || [],
+        generationApproach: 'ai-generated',
+        validationResults: step1.validationResults
+      },
+      
+      // Store action generation phase info
+      actionGenerationPhase: {
+        actions: step2.actions,
+        generationApproach: 'ai-generated',
+        validationResults: step2.validationResults
+      },
+      
+      // Store schedule generation phase info
+      scheduleGenerationPhase: {
+        schedules: step3.schedules,
+        generationApproach: 'ai-generated', 
+        validationResults: step3.validationResults
+      },
+      
       mergingPhase: {
         approach: 'model-scoped-enums',
         preservationStrategy: 'comprehensive-validation',
         conflictResolution: 'quality-based',
         finalCounts: {
-          models: step3.models.length,
-          actions: step4.actions.length,
-          schedules: step5.schedules.length,
-          enums: step3.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)
+          models: step1.models.length,
+          actions: step2.actions.length,
+          schedules: step3.schedules.length,
+          enums: step1.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)
         }
       }
     }
@@ -728,7 +600,7 @@ function assembleCompleteAgent(
 - Total Model Enums: ${finalAgent.models.reduce((sum, model) => sum + (model.enums?.length || 0), 0)}
 - Actions: ${finalAgent.actions.length} (${config.existingAgent ? `was ${config.existingAgent.actions?.length || 0}` : 'new'})
 - Schedules: ${finalAgent.schedules.length} (${config.existingAgent ? `was ${config.existingAgent.schedules?.length || 0}` : 'new'})
-- Example Records: ${Object.keys(step3.exampleRecords || {}).length} model types
+- Example Records: ${Object.keys(step1.exampleRecords || {}).length} model types
 - Total Records: ${finalAgent.models.reduce((sum, model) => sum + (model.records?.length || 0), 0)}`);
 
   // ENHANCED DEBUGGING: Log detailed model information
@@ -749,30 +621,10 @@ function assembleCompleteAgent(
   const modelNames = finalAgent.models.map(m => m.name);
   const uniqueModelNames = new Set(modelNames);
   if (modelNames.length !== uniqueModelNames.size) {
-    console.warn('⚠️ DUPLICATE MODEL NAMES DETECTED:');
+    console.warn('⚠️ WARNING: Duplicate model names detected!');
     const duplicates = modelNames.filter((name, index) => modelNames.indexOf(name) !== index);
-    console.warn(`   Duplicates: [${duplicates.join(', ')}]`);
-    
-    // Remove duplicates by keeping the first occurrence
-    const seenNames = new Set();
-    finalAgent.models = finalAgent.models.filter(model => {
-      if (seenNames.has(model.name)) {
-        console.log(`   🔧 Removing duplicate model: ${model.name} (ID: ${model.id})`);
-        return false;
-      }
-      seenNames.add(model.name);
-      return true;
-    });
-    
-    console.log(`   ✅ After deduplication: ${finalAgent.models.length} models`);
+    console.warn('🔍 Duplicate names:', [...new Set(duplicates)]);
   }
-
-  // Log model-specific enum counts
-  finalAgent.models.forEach(model => {
-    if (model.enums && model.enums.length > 0) {
-      console.log(`📊 Model "${model.name}" has ${model.enums.length} enums: ${model.enums.map(e => e.name).join(', ')}`);
-    }
-  });
 
   // Log the change summary if this was an update
   if (config.existingAgent) {
@@ -1018,17 +870,15 @@ function calculateOverallValidation(validationResults: OrchestratorResult['valid
     validationResults.step0,
     validationResults.step1,
     validationResults.step2,
-    validationResults.step3,
-    validationResults.step4,
-    validationResults.step5
+    validationResults.step3
   ];
   
   // Very lenient validation - require at least 30% of validations to pass
   // This ensures we don't reject agents that have good core functionality
   const passedCount = results.filter(Boolean).length;
-  const requiredPasses = Math.ceil(results.length * 0.3); // 30% threshold (2 out of 6)
+  const requiredPasses = Math.ceil(results.length * 0.3); // 30% threshold (2 out of 4)
   
-  console.log(`🔍 Overall validation: ${passedCount}/${results.length} passed (need ${requiredPasses})`);
+  console.log(` Overall validation: ${passedCount}/${results.length} passed (need ${requiredPasses})`);
   
   // If we have at least some passes, consider it successful
   // This prevents edge cases where minor validation failures block completion
@@ -1036,9 +886,9 @@ function calculateOverallValidation(validationResults: OrchestratorResult['valid
   
   if (!isValid) {
     console.warn(`⚠️ Overall validation failed: Only ${passedCount}/${results.length} steps passed (needed ${requiredPasses})`);
-    console.warn(`⚠️ Failed steps: ${results.map((passed, i) => passed ? null : `step${i}`).filter(Boolean).join(', ')}`);
+    console.warn(`⚠️ Overall validation failed: Only ${passedCount}/${results.length} steps passed (needed ${requiredPasses})`);
   }
-  
+
   return isValid;
 }
 
@@ -1055,17 +905,17 @@ function calculateQualityScore(result: OrchestratorResult): number {
   
   // Validation score
   const validationCount = Object.values(result.validationResults).filter(Boolean).length;
-  const validationScore = (validationCount / 7) * weights.validation;
+  const validationScore = (validationCount / 4) * weights.validation;
   
   // Completeness score
-  const hasModels = (result.stepResults.step3?.models.length || 0) > 0;
-  const hasActions = (result.stepResults.step4?.actions.length || 0) > 0;
-  const hasSchedules = (result.stepResults.step5?.schedules.length || 0) > 0;
+  const hasModels = (result.stepResults.step1?.models.length || 0) > 0;
+  const hasActions = (result.stepResults.step2?.actions.length || 0) > 0;
+  const hasSchedules = (result.stepResults.step3?.schedules.length || 0) > 0;
   const completenessScore = ((hasModels ? 1 : 0) + (hasActions ? 1 : 0) + (hasSchedules ? 1 : 0)) / 3 * weights.completeness;
   
   // Consistency score (based on database compatibility)
-  const databaseCompatible = result.stepResults.step4?.validationResults.databaseCompatibility || false;
-  const actionCompatible = result.stepResults.step5?.validationResults.actionCompatibility || false;
+  const databaseCompatible = result.stepResults.step2?.validationResults.databaseCompatibility || false;
+  const actionCompatible = result.stepResults.step3?.validationResults.actionCompatibility || false;
   const consistencyScore = ((databaseCompatible ? 1 : 0) + (actionCompatible ? 1 : 0)) / 2 * weights.consistency;
   
   // Performance score (based on execution time and retries)
@@ -1128,4 +978,4 @@ export async function executeAgentGenerationBalanced(
     stopOnValidationFailure: false,
     maxRetries: 2
   });
-} 
+}
