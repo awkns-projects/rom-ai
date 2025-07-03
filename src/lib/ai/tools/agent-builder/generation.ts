@@ -1010,9 +1010,6 @@ DO NOT recreate these existing actions. Only create NEW actions as specified in 
 ${action.updateDescription ? `- Update: ${action.updateDescription}` : ''}
 ${action.operation === 'update' ? '- This action exists but needs modifications' : '- This is a completely new action'}
 `).join('');
-
-  // DEBUG: Log the action specifications
-  console.log('🔍 DEBUG: Action specifications built:', actionSpecifications);
   
   // If no actions identified, provide fallback guidance
   const fallbackGuidance = expectedActionCount === 0 ? `
@@ -1076,8 +1073,6 @@ CRITICAL INSTRUCTIONS:
 
 Generate ${expectedActionCount > 0 ? `exactly ${expectedActionCount}` : 'at least 2-3'} actions that solve real business problems.`;
 
-  // DEBUG: Log the system prompt
-  console.log('🔍 DEBUG: System prompt being sent to AI:', systemPrompt);
 
   // Generate with manual post-processing to fix envVars
   let rawResult: any;
@@ -1098,9 +1093,6 @@ Generate ${expectedActionCount > 0 ? `exactly ${expectedActionCount}` : 'at leas
     console.error('❌ Action generation failed:', error);
     throw new Error(`Action generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
-
-  // DEBUG: Log the raw result
-  console.log('🔍 DEBUG: Raw result from AI:', JSON.stringify(rawResult, null, 2));
 
   if (!rawResult?.object?.actions) {
     console.error('❌ No actions generated');
@@ -3767,13 +3759,17 @@ export async function generatePrismaDatabase({
     await generateIntelligentMergedSchema({existingSchema, step0Analysis}) :
     (await generatePrismaSchema({ step0Analysis}));
 
-  console.log(`✅ Database Generation Complete:
-- Schema Strategy: ${hasExistingSchema ? 'AI-Intelligent Merging' : 'Complete Generation'}
-- Final Models: ${existingAgent?.models?.length || 0}
-- Operation Type: ${step0Analysis?.operation || 'create'}`);
-
   // Convert the final schema to AgentModel objects and enhance with proper field metadata
   const basicSchemaObject = new ConvertSchemaToObject(finalSchema).run();
+
+
+  console.log(`✅ Database Generation Complete:
+    - Schema Strategy: ${hasExistingSchema ? 'AI-Intelligent Merging' : 'Complete Generation'}
+    - Final Models: ${basicSchemaObject?.models?.length || 0}
+    - Final Enums: ${basicSchemaObject?.enums?.length || 0}
+    - Operation Type: ${step0Analysis?.operation || 'create'}`);
+    
+    console.log('🔍 Final Schema:', finalSchema);
 
   return {
     models: mergeSchema(basicSchemaObject,'').models,

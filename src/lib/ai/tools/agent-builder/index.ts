@@ -261,18 +261,90 @@ function isValidJSON(str: string): boolean {
   }
 }
 
+// Debounced step progress saving to reduce database load
+const stepProgressTimers = new Map<string, NodeJS.Timeout>();
+const pendingStepUpdates = new Map<string, any>();
+
+function debouncedStepProgressSave(
+  documentId: string, 
+  stepData: any, 
+  session: Session | null | undefined,
+  delay: number = 2000 // 2 second delay
+) {
+  if (!session?.user?.id) return;
+  
+  // Clear existing timer for this document
+  const existingTimer = stepProgressTimers.get(documentId);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+  
+  // Store the latest step data
+  pendingStepUpdates.set(documentId, stepData);
+  
+  // Set new timer to save after delay
+  const timer = setTimeout(async () => {
+    const latestStepData = pendingStepUpdates.get(documentId);
+    if (latestStepData) {
+      try {
+        await saveStepProgressOnly(documentId, latestStepData, session);
+        console.log(`💾 Debounced step progress saved for ${documentId}`);
+      } catch (error) {
+        console.error('❌ Failed to save debounced step progress:', error);
+      }
+      pendingStepUpdates.delete(documentId);
+    }
+    stepProgressTimers.delete(documentId);
+  }, delay);
+  
+  stepProgressTimers.set(documentId, timer);
+}
+
+// Lightweight function to save only step progress metadata
+async function saveStepProgressOnly(documentId: string, stepData: any, session: Session | null | undefined) {
+  if (!session?.user?.id) return;
+  
+  try {
+    const existingDoc = await getDocumentById({ id: documentId }).catch(() => null);
+    if (existingDoc) {
+      const currentMetadata = (existingDoc.metadata as any) || {};
+      
+      await saveOrUpdateDocument({
+        id: documentId,
+        title: existingDoc.title,
+        content: existingDoc.content || '{}',
+        kind: existingDoc.kind,
+        userId: session.user.id,
+        metadata: {
+          ...currentMetadata,
+          currentStep: stepData.step,
+          stepProgress: {
+            ...currentMetadata.stepProgress,
+            [stepData.step]: stepData.status
+          },
+          lastStepUpdate: new Date().toISOString()
+          // No streamHistory to keep metadata smaller
+        }
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error saving step progress:', error);
+  }
+}
+
 // Enhanced streaming with state persistence
 function streamWithPersistence(dataStream: any, type: string, content: any, documentId: string, session: Session | null | undefined) {
   // Always stream to UI
   dataStream.writeData({ type, content });
   
-  // For critical state changes, also persist to database immediately
-  if (['agent-step', 'agent-data'].includes(type)) {
+  // ONLY persist final agent data - not step progress to avoid database overload
+  if (type === 'agent-data') {
     // Don't await to avoid blocking the stream, but ensure it saves
     saveStreamState(documentId, type, content, session).catch(error => {
       console.error('❌ Failed to persist stream state:', error);
     });
   }
+  // Note: Removed 'agent-step' from persistence to prevent excessive database writes
 }
 
 // Function to save streaming state for recovery
@@ -611,7 +683,7 @@ The tool maintains state throughout the generation process and can resume from a
           stepMetadata.stepMessages[stepId] = message || `Step ${stepId} ${status}`;
           stepMetadata.lastUpdateTimestamp = new Date().toISOString();
           
-          // Send agent-step stream update
+          // Send agent-step stream update (UI only - no immediate DB save)
           const stepData = {
             step: stepId,
             status: status,
@@ -619,7 +691,11 @@ The tool maintains state throughout the generation process and can resume from a
           };
           
           console.log(`🔄 Sending agent-step update:`, stepData);
-          streamWithPersistence(dataStream, 'agent-step', stepData, documentId, session);
+          // Stream to UI but use debounced DB saves to reduce load
+          dataStream.writeData({ type: 'agent-step', content: stepData });
+          
+          // Use debounced saving for step progress (batches updates)
+          debouncedStepProgressSave(documentId, stepData, session);
         }
       };
 
@@ -653,17 +729,12 @@ The tool maintains state throughout the generation process and can resume from a
               step: stepMetadata.currentStep
             };
             
-            streamWithPersistence(dataStream, 'agent-step', JSON.stringify({
+            const errorStepData = {
               step: 'error',
               status: 'error',
               message: `Agent generation failed after ${maxRetries} attempts: ${errorMessage}`
-            }), documentId, session);
-            
-            // Save error details
-            await saveDocumentWithContent(documentId, 'Agent Generation Error', JSON.stringify(errorDetails, null, 2), session, undefined, {
-              ...stepMetadata,
-              error: errorDetails
-            });
+            };
+            dataStream.writeData({ type: 'agent-step', content: errorStepData });
             
             throw error;
           } else {
@@ -673,11 +744,12 @@ The tool maintains state throughout the generation process and can resume from a
             await new Promise(resolve => setTimeout(resolve, waitTime));
             
             // Update step metadata for retry
-            streamWithPersistence(dataStream, 'agent-step', {
+            const retryStepData = {
               step: stepMetadata.currentStep,
               status: 'processing',
               message: `Retrying agent generation (attempt ${retryCount + 1}/${maxRetries + 1})...`
-            }, documentId, session);
+            };
+            dataStream.writeData({ type: 'agent-step', content: retryStepData });
           }
         }
       }
@@ -698,11 +770,20 @@ The tool maintains state throughout the generation process and can resume from a
         stepMetadata.status = 'complete';
         
         console.log('🔄 Sending final completion step...');
-        streamWithPersistence(dataStream, 'agent-step', {
+        // Final step - force immediate save instead of waiting for debounce
+        const message = result.success 
+          ? 'Agent system generated successfully!'
+          : `Agent system generated with ${result.agent.models?.length || 0} models, ${result.agent.actions?.length || 0} actions, ${result.agent.schedules?.length || 0} schedules`;
+        
+        const finalStepData = {
           step: 'complete',
           status: 'complete',
-          message: 'Agent system generated successfully!'
-        }, documentId, session);
+          message
+        };
+        dataStream.writeData({ type: 'agent-step', content: finalStepData });
+        
+        // Force immediate save of final step progress (bypass debounce)
+        await saveStepProgressOnly(documentId, finalStepData, session);
 
         // Save final agent data with updated timestamp
         const finalContent = JSON.stringify(result.agent, null, 2);
@@ -790,25 +871,15 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created with 
             ? 'Agent system generated successfully!'
             : `Agent system generated with ${result.agent.models?.length || 0} models, ${result.agent.actions?.length || 0} actions, ${result.agent.schedules?.length || 0} schedules`;
           
-          streamWithPersistence(dataStream, 'agent-step', {
+          const finalStepData = {
             step: 'complete',
             status: 'complete',
             message
-          }, documentId, session);
-
-          // Save final agent data with updated timestamp
-          const finalContent = JSON.stringify(result.agent, null, 2);
-          await saveDocumentWithContent(documentId, result.agent.name || 'AI Agent System', finalContent, session, undefined, {
-            ...stepMetadata,
-            qualityScore,
-            executionTime: result.executionMetrics?.totalDuration || 0,
-            validationResults: result.validationResults,
-            warnings: result.warnings || [],
-            errors: result.errors || [],
-            partialSuccess: !result.success,
-            lastUpdateTimestamp: new Date().toISOString(), // Ensure fresh timestamp
-            completedAt: new Date().toISOString()
-          });
+          };
+          dataStream.writeData({ type: 'agent-step', content: finalStepData });
+          
+          // Force immediate save of final step progress (bypass debounce)
+          await saveStepProgressOnly(documentId, finalStepData, session);
 
           // Create user-friendly completion message for partial success
           const userFriendlyMessage = result.success 
@@ -836,7 +907,7 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created, thou
 💡 **Status:** The core functionality is ready to use. You can refine or extend the system as needed.`;
 
           // Stream the final agent data
-          streamWithPersistence(dataStream, 'agent-data', finalContent, documentId, session);
+          // streamWithPersistence(dataStream, 'agent-data', finalContent, documentId, session);
           streamWithPersistence(dataStream, 'text-delta', userFriendlyMessage, documentId, session);
           
           return {
@@ -853,32 +924,22 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created, thou
           stepMetadata.stepProgress.complete = 'complete';
           stepMetadata.status = 'complete';
           
-          streamWithPersistence(dataStream, 'agent-step', {
+          const minimalStepData = {
             step: 'complete',
             status: 'complete',
             message: 'Agent generation completed with minimal data'
-          }, documentId, session);
+          };
+          dataStream.writeData({ type: 'agent-step', content: minimalStepData });
 
-          // Save whatever we have
-          const finalContent = JSON.stringify(result.agent, null, 2);
-          await saveDocumentWithContent(documentId, result.agent.name || 'AI Agent System', finalContent, session, undefined, {
-            ...stepMetadata,
-            qualityScore: 0,
-            executionTime: result.executionMetrics?.totalDuration || 0,
-            validationResults: result.validationResults,
-            warnings: result.warnings || [],
-            errors: result.errors || [],
-            minimalSuccess: true,
-            lastUpdateTimestamp: new Date().toISOString(),
-            completedAt: new Date().toISOString()
-          });
-
-          streamWithPersistence(dataStream, 'agent-data', finalContent, documentId, session);
-          streamWithPersistence(dataStream, 'text-delta', `⚠️ **Agent System Created with Minimal Data**
+          // streamWithPersistence(dataStream, 'agent-data', finalContent, documentId, session);
+          dataStream.writeData({ 
+            type: 'text-delta', 
+            content: `⚠️ **Agent System Created with Minimal Data**
 
 The agent "${result.agent.name || 'AI Agent System'}" was created but may need additional configuration.
 
-💡 **Next Steps:** Please refine your request or try again with more specific requirements.`, documentId, session);
+💡 **Next Steps:** Please refine your request or try again with more specific requirements.`
+          });
           
           return {
             id: documentId,
@@ -905,33 +966,24 @@ The agent "${result.agent.name || 'AI Agent System'}" was created but may need a
         stepMetadata.stepProgress.complete = 'complete';
         stepMetadata.status = 'complete';
         
-        streamWithPersistence(dataStream, 'agent-step', {
+        const failureStepData = {
           step: 'complete',
           status: 'complete',
           message: 'Agent generation process completed'
-        }, documentId, session);
+        };
+        dataStream.writeData({ type: 'agent-step', content: failureStepData });
 
-        // Save failure state
-        await saveDocumentWithContent(documentId, 'Agent Generation Failed', '{}', session, undefined, {
-          ...stepMetadata,
-          qualityScore: 0,
-          executionTime: result.executionMetrics?.totalDuration || 0,
-          validationResults: result.validationResults,
-          warnings: result.warnings || [],
-          errors: result.errors || [],
-          failed: true,
-          lastUpdateTimestamp: new Date().toISOString(),
-          completedAt: new Date().toISOString()
-        });
-
-        streamWithPersistence(dataStream, 'agent-data', '{}', documentId, session);
-        streamWithPersistence(dataStream, 'text-delta', `❌ **Agent Generation Failed**
+        // streamWithPersistence(dataStream, 'agent-data', '{}', documentId, session);
+        dataStream.writeData({ 
+          type: 'text-delta', 
+          content: `❌ **Agent Generation Failed**
 
 The agent generation process encountered issues and could not create a usable agent.
 
 **Errors:** ${result.errors?.join(', ') || 'Unknown error'}
 
-💡 **Next Steps:** Please try again with a more specific request or check the system logs.`, documentId, session);
+💡 **Next Steps:** Please try again with a more specific request or check the system logs.`
+        });
         
         return {
           id: documentId,
@@ -977,26 +1029,27 @@ The agent generation process encountered issues and could not create a usable ag
       stepMetadata.stepMessages[errorStep] = error instanceof Error ? error.message : 'Unknown error occurred';
       stepMetadata.status = canResume ? 'timeout' : 'error';
       
-      streamWithPersistence(dataStream, 'agent-step', JSON.stringify({ 
+      const catchErrorStepData = { 
         step: errorStep, 
         status: 'failed', 
         message: canResume ? 'Generation incomplete - can be resumed' : 'System error occurred',
         canResume,
         documentId: documentId
-      }), documentId, session);
+      };
+      dataStream.writeData({ type: 'agent-step', content: catchErrorStepData });
       
       const errorMessage = generateErrorMessage(error, 'Enhanced Agent Building');
       
-      await saveDocumentWithContent(documentId, canResume ? 'Incomplete Agent System' : 'Error Agent System', JSON.stringify({
-        error: error instanceof Error ? error.message : 'Unknown error',
-        timestamp: new Date().toISOString(),
-        canResume,
-        partialData
-      }, null, 2), session, undefined, {
-        ...stepMetadata,
-        canResume,
-        partialData
-      });
+      // await saveDocumentWithContent(documentId, canResume ? 'Incomplete Agent System' : 'Error Agent System', JSON.stringify({
+      //   error: error instanceof Error ? error.message : 'Unknown error',
+      //   timestamp: new Date().toISOString(),
+      //   canResume,
+      //   partialData
+      // }, null, 2), session, undefined, {
+      //   ...stepMetadata,
+      //   canResume,
+      //   partialData
+      // });
       
       return {
         id: documentId,

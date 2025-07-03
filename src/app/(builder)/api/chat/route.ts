@@ -251,7 +251,7 @@ async function fetchAndValidateAgentDocument(documentId: string, session: Sessio
         // Check for agent data structure (arrays can be empty, so check for presence, not truthiness)
         if (Array.isArray(parsed.models) && Array.isArray(parsed.actions) && typeof parsed.name === 'string') {
           console.log('✅ Valid agent document content found with proper structure');
-          console.log(`📊 Agent data: ${parsed.models.length} models, ${parsed.actions.length} actions`);
+          console.log(`📊 Agent data: ${parsed.models.length} models, ${parsed.actions.length} actions, ${parsed.schedules.length} schedules`);
           
           // Migrate actions to have IDs if they don't have them
           if (parsed.actions && Array.isArray(parsed.actions)) {

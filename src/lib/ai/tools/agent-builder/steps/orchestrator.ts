@@ -156,28 +156,6 @@ export async function executeAgentGeneration(
       throw new Error('Step 1 (Database Generation) failed');
     }
 
-    config.existingAgent = {
-      ...config.existingAgent,
-      id: config.existingAgent?.id || crypto.randomUUID(),
-      name: config.existingAgent?.name || step0Result.agentName,
-      description: config.existingAgent?.description || step0Result.agentDescription,
-      domain: config.existingAgent?.domain || step0Result.domain,
-      models: step1Result.models,
-      enums: step1Result.enums,
-      prismaSchema: step1Result.prismaSchema,
-      actions: config.existingAgent?.actions || [],
-      schedules: config.existingAgent?.schedules || [],
-      createdAt: config.existingAgent?.createdAt || new Date().toISOString(),
-      metadata: config.existingAgent?.metadata || {
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        version: crypto.randomUUID(),
-        lastModifiedBy: 'ai-agent-builder',
-        tags: [],
-        status: 'generating'
-      }
-    }
-
     result.stepResults.step1 = step1Result;
     result.executionMetrics.stepDurations.step1 = Date.now() - step1StartTime;
 
@@ -215,28 +193,6 @@ export async function executeAgentGeneration(
 
     if (!step2Result) {
       throw new Error('Step 2 (Action Generation) failed');
-    }
-
-    config.existingAgent = {
-      ...config.existingAgent,
-      id: config.existingAgent?.id || crypto.randomUUID(),
-      name: config.existingAgent?.name || step0Result.agentName,
-      description: config.existingAgent?.description || step0Result.agentDescription,
-      domain: config.existingAgent?.domain || step0Result.domain,
-      models: config.existingAgent?.models || [],
-      enums: config.existingAgent?.enums || [],
-      prismaSchema: config.existingAgent?.prismaSchema || '',
-      actions: step2Result.actions,
-      schedules: config.existingAgent?.schedules || [],
-      createdAt: config.existingAgent?.createdAt || new Date().toISOString(),
-      metadata: config.existingAgent?.metadata || {
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        version: crypto.randomUUID(),
-        lastModifiedBy: 'ai-agent-builder',
-        tags: [],
-        status: 'generating'
-      }
     }
 
     result.stepResults.step2 = step2Result;
@@ -344,14 +300,17 @@ function sendStepUpdate(
     config.onStepProgress(stepId, status, message);
   }
 
-  // Also persist step state directly if dataStream is available
-  if (config.dataStream && config.documentId) {
-    streamWithPersistence(config.dataStream, 'agent-step', {
-      step: stepId,
-      status,
-      message,
-      timestamp: new Date().toISOString()
-    }, config.documentId, config.session);
+  // Also send directly to UI via dataStream (no database persistence for steps)
+  if (config.dataStream) {
+    config.dataStream.writeData({ 
+      type: 'agent-step', 
+      content: {
+        step: stepId,
+        status,
+        message,
+        timestamp: new Date().toISOString()
+      }
+    });
   }
 }
 
@@ -385,9 +344,10 @@ async function executeStepWithRetry<T>(
       sendStepUpdate(config, stepName, 'complete', resultSummary);
       
       // Persist step result to document if dataStream is available
-      if (config.dataStream && config.documentId) {
-        await persistStepResult(config, stepName, stepResult);
-      }
+      // NOTE: Removed step result persistence to reduce database load
+      // if (config.dataStream && config.documentId) {
+      //   await persistStepResult(config, stepName, stepResult);
+      // }
       
       console.log(`✅ ${stepName} completed successfully in ${stepDuration}ms`);
       return stepResult;
@@ -458,13 +418,14 @@ function streamWithPersistence(dataStream: any, type: string, content: any, docu
   // Always stream to UI
   dataStream.writeData({ type, content });
   
-  // For critical state changes, also persist to database immediately
-  if (['agent-step', 'step-result', 'agent-data'].includes(type)) {
+  // ONLY persist final agent data - not step progress to avoid database overload
+  if (type === 'agent-data') {
     // Don't await to avoid blocking the stream, but ensure it saves
     saveStreamState(documentId, type, content, session).catch((error: any) => {
       console.error('❌ Failed to persist stream state:', error);
     });
   }
+  // Note: Removed 'step-result' and 'agent-step' from persistence to prevent excessive database writes
 }
 
 // Helper function to save streaming state for recovery (simplified version from index.ts)

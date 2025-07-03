@@ -299,25 +299,36 @@ function PureArtifact({
     [artifact, mutate],
   );
 
-  const debouncedHandleContentChange = useDebounceCallback(
-    handleContentChange,
-    2000,
-  );
+  // const debouncedHandleContentChange = useDebounceCallback(
+  //   handleContentChange,
+  //   2000,
+  // );
 
-  const saveContent = useCallback(
-    (updatedContent: string, debounce: boolean) => {
+  // const saveContent = useCallback(
+  //   (updatedContent: string, debounce: boolean) => {
+  //     if (document && updatedContent !== document.content) {
+  //       setIsContentDirty(true);
+
+  //       if (debounce) {
+  //         debouncedHandleContentChange(updatedContent);
+  //       } else {
+  //         handleContentChange(updatedContent);
+  //       }
+  //     }
+  //   },
+  //   [document, debouncedHandleContentChange, handleContentChange],
+  // );
+
+
+
+
+  const saveContent =
+    (updatedContent: string) => {
       if (document && updatedContent !== document.content) {
         setIsContentDirty(true);
-
-        if (debounce) {
-          debouncedHandleContentChange(updatedContent);
-        } else {
-          handleContentChange(updatedContent);
-        }
+        handleContentChange(updatedContent);
       }
-    },
-    [document, debouncedHandleContentChange, handleContentChange],
-  );
+    }
 
   function getDocumentContentById(index: number) {
     if (!documents) return '';
