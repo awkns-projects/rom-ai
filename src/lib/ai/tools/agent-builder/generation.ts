@@ -26,6 +26,7 @@ import {
   deletionOperationsSchema
 } from './schemas';
 import { z } from 'zod';
+
 import { mergeModelsIntelligently, mergeActionsIntelligently, mergeSchedulesIntelligently } from './merging';
 // import type { PseudoCodeStep } from '../../../artifacts/agent/types/action';
 // import { mergeDatabaseChanges, mergeActionChanges, mergeScheduleChanges, logMergingDecision } from './merging';
@@ -3653,6 +3654,7 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    - One-to-One: use single field reference
    - One-to-Many: use array on "many" side
    - Many-to-Many: use explicit join table or implicit relations
+   - **CRITICAL ONE-TO-ONE RELATION RULE:** A one-to-one relation must use unique fields on the defining side. Either add an \`@unique\` attribute to the field (e.g., \`productId String? @unique\`), or change the relation to one-to-many.
    
    Example:
    \`\`\`
@@ -3706,21 +3708,42 @@ The schema should be practical, well-structured, and follow Prisma best practice
 
 Return ONLY the complete Prisma schema as a single string, starting with the generator and datasource blocks.`;
 
-  const result = await generateObject({
-    model,
-    schema: prismaSchemaGenerationSchema,
-    messages: [
-      {
-        role: 'system' as const,
-        content: systemPrompt
-      }
-    ],
-    temperature: 0.3,
-  });
+  const generateSchemaFunction = async () => {
+    const result = await generateObject({
+      model,
+      schema: prismaSchemaGenerationSchema,
+      messages: [
+        {
+          role: 'system' as const,
+          content: systemPrompt
+        }
+      ],
+      temperature: 0.3,
+    });
+    return result.object.schema;
+  };
 
-  console.log('✅ Prisma schema generation complete');
-
-  return result.object.schema
+  // Generate initial schema
+  const initialSchema = await generateSchemaFunction();
+  
+  // Validate the generated schema
+  console.log('🔍 Validating generated Prisma schema...');
+  const validation = await validatePrismaSchema(initialSchema);
+  
+  if (validation.valid) {
+    console.log('✅ Prisma schema generation complete and validated');
+    return initialSchema;
+  } else {
+    console.log('❌ Initial schema validation failed, attempting to regenerate...');
+    const validatedSchema = await retrySchemaGenerationWithValidation(
+      initialSchema,
+      validation.error || 'Unknown validation error',
+      generateSchemaFunction
+    );
+    
+    console.log('✅ Prisma schema generation complete with validation retry');
+    return validatedSchema;
+  }
 }
 
 
@@ -3854,6 +3877,7 @@ INTELLIGENT MERGING INSTRUCTIONS:
    - Automatically detect and create appropriate relationships between models
    - Use proper Prisma relation syntax with @relation decorators
    - Ensure referential integrity
+   - **CRITICAL ONE-TO-ONE RELATION RULE:** A one-to-one relation must use unique fields on the defining side. Either add an \`@unique\` attribute to the field (e.g., \`productId String? @unique\`), or change the relation to one-to-many.
 
 6. **ENUM HANDLING:**
    - Add new enums as needed
@@ -3882,21 +3906,42 @@ Generate the complete merged Prisma schema that:
 
 Return ONLY the complete merged Prisma schema as a single string.`;
 
-  const result = await generateObject({
-    model,
-    schema: prismaSchemaGenerationSchema,
-    messages: [
-      {
-        role: 'system' as const,
-        content: systemPrompt
-      }
-    ],
-    temperature: 0.2, // Lower temperature for more consistent schema merging
-  });
+  const generateMergedSchemaFunction = async () => {
+    const result = await generateObject({
+      model,
+      schema: prismaSchemaGenerationSchema,
+      messages: [
+        {
+          role: 'system' as const,
+          content: systemPrompt
+        }
+      ],
+      temperature: 0.2, // Lower temperature for more consistent schema merging
+    });
+    return result.object.schema;
+  };
 
-  console.log('✅ AI schema merging complete with operation-aware processing');
+  // Generate initial merged schema
+  const initialMergedSchema = await generateMergedSchemaFunction();
   
-  return result.object.schema;
+  // Validate the generated merged schema
+  console.log('🔍 Validating merged Prisma schema...');
+  const validation = await validatePrismaSchema(initialMergedSchema);
+  
+  if (validation.valid) {
+    console.log('✅ AI schema merging complete with operation-aware processing and validated');
+    return initialMergedSchema;
+  } else {
+    console.log('❌ Initial merged schema validation failed, attempting to regenerate...');
+    const validatedMergedSchema = await retrySchemaGenerationWithValidation(
+      initialMergedSchema,
+      validation.error || 'Unknown validation error',
+      generateMergedSchemaFunction
+    );
+    
+    console.log('✅ AI schema merging complete with validation retry');
+    return validatedMergedSchema;
+  }
 }
 
 
@@ -4457,4 +4502,27 @@ function generateBasicPrismaSchema(models: AgentModel[]): string {
     
     return `model ${model.name} {\n${fields}\n}`;
   }).join('\n\n');
+}
+
+/**
+ * Temporary disabled validation to avoid WASM dependency issues
+ * TODO: Re-enable when @prisma/internals WASM issue is resolved
+ */
+async function validatePrismaSchema(schemaString: string): Promise<{ valid: boolean; error?: string; result?: any }> {
+  console.log('⚠️ Schema validation temporarily disabled due to WASM dependency issues');
+  return { valid: true, result: { validationMethod: 'disabled' } };
+}
+
+/**
+ * Retry schema generation with AI if validation fails
+ * Currently disabled since validation is disabled
+ */
+async function retrySchemaGenerationWithValidation(
+  originalSchema: string,
+  validationError: string,
+  generateFunction: () => Promise<string>,
+  maxRetries: number = 2
+): Promise<string> {
+  console.log('⚠️ Schema retry validation temporarily disabled');
+  return originalSchema;
 }

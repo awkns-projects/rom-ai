@@ -2,6 +2,8 @@ import * as React from 'react';
 import { memo, useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { MobileAppDemoWrapper, MobileAppDemo, themes } from './MobileAppDemo';
+// Import the avatar creator component
+import AvatarCreator from '../../../avatar-creator/avatar-creator';
 
 interface OnboardContentProps {
   onTabChange?: (tab: 'models' | 'actions' | 'schedules' | 'chat') => void;
@@ -70,6 +72,8 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
   const hasModels = models.length > 0;
   const [showDemo, setShowDemo] = useState(hasModels);
   const [currentSlide, setCurrentSlide] = useState(0);
+  // Add state for avatar tab - changed default to true
+  const [showAvatar, setShowAvatar] = useState(true);
 
   // Get the current theme from agent data or default to green
   const currentAgentTheme = agentData?.theme || 'green';
@@ -386,13 +390,30 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
               <h2 className={`text-xl sm:text-2xl font-bold ${currentTheme.light} font-mono`}>Getting Started</h2>
             </div>
             
-            {/* Compact View Switch */}
+            {/* Enhanced View Switch with Avatar tab */}
             <div className="flex justify-center sm:justify-end">
               <div className={`inline-flex ${currentTheme.bg} border ${currentTheme.border} rounded-lg p-0.5 shadow-sm`}>
                 <button
-                  onClick={() => setShowDemo(false)}
+                  onClick={() => {
+                    setShowDemo(false);
+                    setShowAvatar(true);
+                  }}
                   className={`px-3 py-1.5 text-xs font-mono rounded-md transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap ${
-                    !showDemo
+                    showAvatar
+                      ? `${currentTheme.bgActive} ${currentTheme.light} shadow-sm`
+                      : `${currentTheme.accent} hover:${currentTheme.light}`
+                  }`}
+                >
+                  <span>👤</span>
+                  <span>Avatar</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDemo(false);
+                    setShowAvatar(false);
+                  }}
+                  className={`px-3 py-1.5 text-xs font-mono rounded-md transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap ${
+                    !showDemo && !showAvatar
                       ? `${currentTheme.bgActive} ${currentTheme.light} shadow-sm`
                       : `${currentTheme.accent} hover:${currentTheme.light}`
                   }`}
@@ -401,9 +422,12 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
                   <span>Tutorial</span>
                 </button>
                 <button
-                  onClick={() => setShowDemo(true)}
+                  onClick={() => {
+                    setShowDemo(true);
+                    setShowAvatar(false);
+                  }}
                   className={`px-3 py-1.5 text-xs font-mono rounded-md transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap ${
-                    showDemo
+                    showDemo && !showAvatar
                       ? `${currentTheme.bgActive} ${currentTheme.light} shadow-sm`
                       : `${currentTheme.accent} hover:${currentTheme.light}`
                   }`}
@@ -416,7 +440,7 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
           </div>
           
           {/* Tutorial Navigation - Compact single row */}
-          {!showDemo && (
+          {!showDemo && !showAvatar && (
             <div className="flex items-center justify-center sm:justify-between gap-4">
               <div className="flex items-center gap-3">
                 {/* Compact slide indicators */}
@@ -459,7 +483,24 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
       </div>
 
       {/* Content */}
-      {showDemo ? (
+      {showAvatar ? (
+        <div className="space-y-6">
+          <div className="text-center space-y-4">
+            <h3 className={`text-xl font-bold ${currentTheme.light} font-mono`}>
+              Create Your Avatar
+            </h3>
+            <p className={`${currentTheme.dim} font-mono text-sm max-w-2xl mx-auto leading-relaxed`}>
+              Design a personalized avatar for your AI agent. Choose from ROM unicorns or upload your own custom image.
+            </p>
+          </div>
+          
+          <div className="flex justify-center">
+            <div className="w-full max-w-4xl">
+              <AvatarCreator />
+            </div>
+          </div>
+        </div>
+      ) : showDemo ? (
         <div className="space-y-6">
           <div className="text-center space-y-4">
             <h3 className={`text-xl font-bold ${currentTheme.light} font-mono`}>

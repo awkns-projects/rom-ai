@@ -3,13 +3,14 @@ import { executeStep0ComprehensiveAnalysis, validateStep0Output, extractStep0Ins
 import { executeStep1DatabaseGeneration, validateStep1Output, extractModelInsights, type Step1Output } from './step1-database-generation';
 import { executeStep2ActionGeneration, validateStep2Output, extractActionInsights, type Step2Output } from './step2-action-generation';
 import { executeStep3ScheduleGeneration, validateStep3Output, extractScheduleInsights, type Step3Output } from './step3-schedule-generation';
+import { executeStep4VercelDeployment, validateStep4Output, extractStep4Insights, testVercelConnection, persistDeploymentMetadata, getDeploymentMetadata, updateExistingDeployment, checkDeploymentUpdateNeeded, type Step4Output, type Step4Input } from './step4-vercel-deployment';
 import { performDeepMerge } from '../merging';
 
 /**
  * AGENT BUILDER ORCHESTRATOR
  * 
- * Enhanced step-by-step agent generation with unified comprehensive analysis.
- * Steps 0, 1, and 2 have been combined into a single comprehensive analysis step.
+ * Enhanced step-by-step agent generation with unified comprehensive analysis and deployment.
+ * Steps: Analysis, Database, Actions, Schedules, Deployment
  */
 
 export interface OrchestratorConfig {
@@ -24,6 +25,15 @@ export interface OrchestratorConfig {
   enableInsights?: boolean;
   stopOnValidationFailure?: boolean;
   maxRetries?: number;
+  // Deployment options
+  enableDeployment?: boolean;
+  deploymentConfig?: {
+    projectName?: string;
+    description?: string;
+    environmentVariables?: Record<string, string>;
+    region?: 'aws-us-east-1' | 'aws-us-west-2' | 'aws-eu-west-1' | 'aws-ap-southeast-1' | 'aws-us-east-2' | 'aws-eu-central-1'; // Updated to use Neon's AWS-prefixed format
+    vercelTeam?: string;
+  };
   // Step progress callback
   onStepProgress?: (stepId: string, status: 'processing' | 'complete', message?: string) => void;
   // Data persistence for state recovery
@@ -40,18 +50,21 @@ export interface OrchestratorResult {
     step1?: Step1Output;
     step2?: Step2Output;
     step3?: Step3Output;
+    step4?: Step4Output;
   };
   insights: {
     comprehensive?: ReturnType<typeof extractStep0Insights>;
     database?: ReturnType<typeof extractModelInsights>;
     actions?: ReturnType<typeof extractActionInsights>;
     schedules?: ReturnType<typeof extractScheduleInsights>;
+    deployment?: ReturnType<typeof extractStep4Insights>;
   };
   validationResults: {
     step0: boolean;
     step1: boolean;
     step2: boolean;
     step3: boolean;
+    step4: boolean;
     overall: boolean;
   };
   executionMetrics: {
@@ -84,6 +97,7 @@ export async function executeAgentGeneration(
       step1: false,
       step2: false,
       step3: false,
+      step4: false,
       overall: false
     },
     executionMetrics: {
@@ -253,9 +267,142 @@ export async function executeAgentGeneration(
 
     sendStepUpdate(config, 'step3', 'complete', `Schedules generated: ${step3Result.schedules.length} schedules`);
 
+    // STEP 4: Deployment
+    if (config.enableDeployment) {
+      sendStepUpdate(config, 'step4', 'processing', 'Rendering and deploying agent...');
+      const step4StartTime = Date.now();
+
+      // Prepare Step4Input from config
+      const deploymentConfig = {
+        ...config.deploymentConfig,
+        projectName: config.deploymentConfig?.projectName || step0Result.agentName || 'Generated Agent'
+      };
+      if (!deploymentConfig?.projectName) {
+        console.warn('⚠️ Skipping deployment - Project name not provided');
+        sendStepUpdate(config, 'step4', 'complete', 'Deployment skipped - missing project name');
+      } else {
+        // Check for existing deployment metadata
+        let existingDeployment: any = null;
+        if (config.documentId) {
+          existingDeployment = await getDeploymentMetadata(config.documentId);
+        }
+
+        let step4Result: Step4Output;
+
+        if (existingDeployment?.projectId && config.existingAgent) { // Changed from serviceId to projectId
+          // Check if deployment update is needed
+          const updateCheck = checkDeploymentUpdateNeeded(
+            config.existingAgent,
+            { models: step1Result.models, actions: step2Result.actions, schedules: step3Result.schedules },
+            existingDeployment
+          );
+
+          if (updateCheck.needsUpdate) {
+            console.log(`🔄 Updating existing deployment: ${updateCheck.reasons.join(', ')}`);
+            sendStepUpdate(config, 'step4', 'processing', `Updating deployment: ${updateCheck.reasons.join(', ')}`);
+
+            // Update existing deployment
+            const updateResult = await executeStepWithRetry(
+              'step4',
+              () => updateExistingDeployment({
+                step1Output: step1Result,
+                step2Output: step2Result,
+                step3Output: step3Result,
+                vercelProjectId: existingDeployment.projectId, // Changed from serviceId to projectId
+                projectName: deploymentConfig.projectName || step0Result.agentName || 'Generated Agent',
+                description: deploymentConfig.description || step0Result.agentDescription,
+                environmentVariables: deploymentConfig.environmentVariables || {},
+                executeMigrations: updateCheck.requiresMigration
+              }),
+              config,
+              result
+            );
+
+            if (!updateResult) {
+              throw new Error('Step 4 (Deployment Update) failed');
+            }
+            step4Result = updateResult;
+          } else {
+            console.log('✅ No deployment update needed');
+            sendStepUpdate(config, 'step4', 'complete', 'No deployment update needed');
+            
+            // Return existing deployment info
+            step4Result = {
+              deploymentId: existingDeployment.deploymentId || 'existing',
+              projectId: existingDeployment.projectId, // Changed from serviceId to projectId
+              deploymentUrl: existingDeployment.deploymentUrl || '',
+              status: 'ready' as const,
+              environmentVariables: existingDeployment.environmentVariables || {},
+              prismaSchema: step1Result.prismaSchema,
+              deploymentNotes: ['No changes detected', 'Using existing deployment'],
+              apiEndpoints: existingDeployment.apiEndpoints || [],
+              cronJobs: existingDeployment.cronJobs || [],
+              databaseUrl: existingDeployment.databaseUrl || '',
+              neonProjectId: existingDeployment.neonProjectId || '',
+              vercelProjectId: existingDeployment.vercelProjectId || existingDeployment.projectId // Changed from serviceId to projectId
+            };
+          }
+        } else {
+          // Create new deployment
+          console.log('🚀 Creating new deployment');
+          sendStepUpdate(config, 'step4', 'processing', 'Creating new deployment...');
+
+          const step4Input: Step4Input = {
+            step1Output: step1Result,
+            step2Output: step2Result,
+            step3Output: step3Result,
+            projectName: deploymentConfig.projectName || step0Result.agentName || 'Generated Agent',
+            description: deploymentConfig.description || step0Result.agentDescription,
+            environmentVariables: deploymentConfig.environmentVariables || {},
+            region: deploymentConfig.region,
+            vercelTeam: deploymentConfig.vercelTeam
+          };
+
+          const newDeployResult = await executeStepWithRetry(
+            'step4',
+            () => executeStep4VercelDeployment(step4Input),
+            config,
+            result
+          );
+
+          if (!newDeployResult) {
+            throw new Error('Step 4 (New Deployment) failed');
+          }
+          step4Result = newDeployResult;
+        }
+
+        if (!step4Result) {
+          throw new Error('Step 4 (Deployment) failed');
+        }
+
+        result.stepResults.step4 = step4Result;
+        result.executionMetrics.stepDurations.step4 = Date.now() - step4StartTime;
+
+        // Validate Step 4
+        if (config.enableValidation !== false) {
+          result.validationResults.step4 = validateStep4Output(step4Result);
+          if (!result.validationResults.step4 && config.stopOnValidationFailure) {
+            throw new Error('Step 4 validation failed');
+          }
+        }
+
+        // Extract insights
+        if (config.enableInsights !== false) {
+          result.insights.deployment = extractStep4Insights(step4Result);
+        }
+
+        sendStepUpdate(config, 'step4', 'complete', `Deployment completed: ${step4Result.deploymentUrl || 'No URL available'}`);
+
+        // Persist deployment metadata
+        if (config.dataStream && config.documentId && config.session) {
+          await persistDeploymentMetadata(config.documentId, step4Result, config.session);
+        }
+      }
+    }
+
     // FINAL ASSEMBLY
     console.log('🔧 FINAL ASSEMBLY: Combining all components...');
-    result.agent = assembleCompleteAgent(config, step0Result, step1Result, step2Result, step3Result);
+    result.agent = assembleCompleteAgent(config, step0Result, step1Result, step2Result, step3Result, result.stepResults.step4);
 
     // Calculate overall validation and quality
     result.validationResults.overall = calculateOverallValidation(result.validationResults);
@@ -387,6 +534,8 @@ function getStepResultSummary(stepName: string, stepResult: any): string {
       return `Actions: ${stepResult.actions?.length || 0} actions, ${stepResult.implementationComplexity} complexity`;
     case 'step3':
       return `Schedules: ${stepResult.schedules?.length || 0} schedules, ${stepResult.implementationComplexity} complexity`;
+    case 'step4':
+      return `Deployment: ${stepResult.deploymentUrl || 'No URL available'}`;
     default:
       return `${stepName} completed`;
   }
@@ -482,7 +631,8 @@ function assembleCompleteAgent(
   step0: Step0Output,
   step1: Step1Output,
   step2: Step2Output,
-  step3: Step3Output
+  step3: Step3Output,
+  step4?: Step4Output
 ): AgentData {
   const now = new Date().toISOString();
 
@@ -522,7 +672,8 @@ function calculateOverallValidation(validationResults: OrchestratorResult['valid
     validationResults.step0,
     validationResults.step1,
     validationResults.step2,
-    validationResults.step3
+    validationResults.step3,
+    validationResults.step4
   ];
   
   // Simple validation - require at least 50% of steps to pass
@@ -603,4 +754,41 @@ export async function executeAgentGenerationBalanced(
     stopOnValidationFailure: false,
     maxRetries: 2
   });
+}
+
+/**
+ * Test Vercel API connection for deployment readiness
+ */
+export async function testVercelDeploymentReadiness(): Promise<{ success: boolean; message: string; details?: any }> {
+  console.log('🔍 Testing Vercel deployment readiness...');
+  
+  try {
+    const connectionTest = await testVercelConnection();
+    
+    if (connectionTest.success) {
+      console.log('✅ Vercel deployment is ready!');
+      return {
+        success: true,
+        message: 'Vercel deployment is ready! API key is valid and connection successful.',
+        details: connectionTest.details
+      };
+    } else {
+      console.log('❌ Vercel deployment is not ready:', connectionTest.message);
+      return {
+        success: false,
+        message: `Vercel deployment not ready: ${connectionTest.message}`,
+        details: connectionTest.details
+      };
+    }
+    
+  } catch (error) {
+    console.error('❌ Error testing Vercel deployment readiness:', error);
+    return {
+      success: false,
+      message: `Error testing Vercel deployment: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      details: {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    };
+  }
 }

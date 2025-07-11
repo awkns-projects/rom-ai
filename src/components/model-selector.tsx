@@ -1,6 +1,6 @@
 'use client';
 
-import { startTransition, useMemo, useOptimistic, useState, useEffect } from 'react';
+import { startTransition, useMemo, useOptimistic, useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 
 import { saveChatModelAsCookie, saveProviderAsCookie } from '@/app/(builder)/actions';
 import { Button } from '@/components/ui/button';
@@ -27,16 +27,21 @@ interface ApiKeyStatus {
   hasXaiKey: boolean;
 }
 
-export function ModelSelector({
+export interface ModelSelectorRef {
+  openDropdown: () => void;
+}
+
+export const ModelSelector = forwardRef<ModelSelectorRef, {
+  session: Session;
+  selectedModelId: string;
+  selectedProviderId?: 'xai' | 'openai';
+} & React.ComponentProps<typeof Button>>(({
   session,
   selectedModelId,
   selectedProviderId = 'openai',
   className,
-}: {
-  session: Session;
-  selectedModelId: string;
-  selectedProviderId?: 'xai' | 'openai';
-} & React.ComponentProps<typeof Button>) {
+  ...props
+}, ref) => {
   const [open, setOpen] = useState(false);
   const [optimisticModelId, setOptimisticModelId] = useOptimistic(selectedModelId);
   const [optimisticProviderId, setOptimisticProviderId] = useOptimistic(selectedProviderId);
@@ -48,6 +53,11 @@ export function ModelSelector({
   const [showXaiKey, setShowXaiKey] = useState(false);
   const [openaiKey, setOpenaiKey] = useState('');
   const [xaiKey, setXaiKey] = useState('');
+
+  // Expose methods to parent component
+  useImperativeHandle(ref, () => ({
+    openDropdown: () => setOpen(true),
+  }));
 
   const userType = session.user.type;
   const { availableChatModelIds } = entitlementsByUserType[userType];
@@ -445,4 +455,4 @@ export function ModelSelector({
       </DropdownMenuContent>
     </DropdownMenu>
   );
-}
+});

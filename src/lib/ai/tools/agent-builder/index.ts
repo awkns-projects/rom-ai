@@ -40,24 +40,9 @@ import {
 } from './merging';
 
 import {
-  generateEnhancedActionAnalysis,
-  generateEnhancedActionCode,
-  generateCompleteEnhancedAction,
-  generateBatchEnhancedActions,
-  generateActionsWithEnhancedAnalysis,
-  executeGeneratedAction,
-  validateGeneratedFunctionBody,
-  createFunctionExecutionExample,
-  createEnhancedActionExample
-} from './generation';
-
-import {
   createAgentData,
   generateErrorMessage,
 } from './document';
-
-// Import the hybrid agent builder
-// import { HybridAgentBuilder } from './hybrid-implementation';
 
 // Re-export types for backward compatibility
 export type {
@@ -78,18 +63,6 @@ export {
   generateNewId,
   analyzeConversationContext,
   createAgentData,
-  // Enhanced action generation functions
-  generateEnhancedActionAnalysis,
-  generateEnhancedActionCode,
-  generateCompleteEnhancedAction,
-  generateBatchEnhancedActions,
-  generateActionsWithEnhancedAnalysis,
-  executeGeneratedAction,
-  validateGeneratedFunctionBody,
-  createFunctionExecutionExample,
-  createEnhancedActionExample,
-  // Export the hybrid agent builder class
-  // HybridAgentBuilder
 };
 
 // Re-export enhanced schemas for external usage
@@ -668,6 +641,7 @@ The tool maintains state throughout the generation process and can resume from a
         command: resumeInfo.shouldResume ? `Continue building: ${command}` : command,
         enableValidation: true,
         enableInsights: true,
+        enableDeployment: true,
         stopOnValidationFailure: false,
         maxRetries: 3,
         // Add persistence parameters

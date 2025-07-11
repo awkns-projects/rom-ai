@@ -10,6 +10,7 @@ interface StepProgressIndicatorProps {
     models?: 'processing' | 'complete';
     actions?: 'processing' | 'complete';
     schedules?: 'processing' | 'complete';
+    deployment?: 'processing' | 'complete';
     complete?: 'processing' | 'complete';
   };
 }
@@ -27,6 +28,7 @@ export const StepProgressIndicator = ({
     'step1': 'models',
     'step2': 'actions',
     'step3': 'schedules',
+    'step4': 'deployment',
     'complete': 'complete'
   };
 
@@ -36,6 +38,7 @@ export const StepProgressIndicator = ({
     'models': 'step1',
     'actions': 'step2',
     'schedules': 'step3',
+    'deployment': 'step4',
     'complete': 'complete'
   };
 
@@ -65,9 +68,15 @@ export const StepProgressIndicator = ({
       icon: '⏰' 
     },
     { 
+      id: 'deployment', 
+      title: 'Deployment', 
+      description: 'Deploy to Render with YAML configuration',
+      icon: '🚀' 
+    },
+    { 
       id: 'complete', 
       title: 'Complete', 
-      description: 'Your agent is ready to deploy',
+      description: 'Your agent is ready to use',
       icon: '✅' 
     }
   ];

@@ -7,4 +7,3 @@ export * from './editors/ScheduleEditor';
 export * from './lists/ModelsListEditor';
 export * from './lists/ActionsListEditor';
 export * from './lists/SchedulesListEditor';
-export * from './AgentBuilderContent'; 

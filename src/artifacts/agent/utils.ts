@@ -28,34 +28,31 @@ export function generateNewId(type: string, existingEntities: any[]): string {
 export const getStepStatus = (stepId: string, currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>) => {
   // Map orchestrator step IDs to UI step IDs
   const stepIdMapping: Record<string, string> = {
-    'step0': 'prompt-understanding',
-    'step1': 'analysis',
-    'step2': 'overview',
-    'step3': 'models',
-    'step4': 'actions',
-    'step5': 'schedules',
+    'step0': 'analysis',
+    'step1': 'models',
+    'step2': 'actions',
+    'step3': 'schedules',
+    'step4': 'deployment',
     'complete': 'complete',
     'error': 'complete'
   };
 
   // Reverse mapping for getting orchestrator step from UI step
   const reverseStepMapping: Record<string, string> = {
-    'prompt-understanding': 'step0',
-    'analysis': 'step1',
-    'overview': 'step2',
-    'models': 'step3',
-    'actions': 'step4',
-    'schedules': 'step5',
+    'analysis': 'step0',
+    'models': 'step1',
+    'actions': 'step2',
+    'schedules': 'step3',
+    'deployment': 'step4',
     'complete': 'complete'
   };
 
   const steps = [
-    { id: 'prompt-understanding', name: 'Understanding Requirements' },
     { id: 'analysis', name: 'Analysis' },
-    { id: 'overview', name: 'Overview' },
     { id: 'models', name: 'Data Models' },
     { id: 'actions', name: 'Automated Actions' },
     { id: 'schedules', name: 'Schedules' },
+    { id: 'deployment', name: 'Deployment' },
     { id: 'complete', name: 'Complete' }
   ];
 
@@ -107,6 +104,7 @@ export const calculateProgressPercentage = (currentStep?: string, stepProgress?:
     { id: 'models', name: 'Data Models' },
     { id: 'actions', name: 'Automated Actions' },
     { id: 'schedules', name: 'Schedules' },
+    { id: 'deployment', name: 'Deployment' },
     { id: 'complete', name: 'Complete' }
   ];
   

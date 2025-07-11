@@ -12,7 +12,7 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
    * NOTE: Using grok-3 model
    */
   guest: {
-    maxMessagesPerDay: 10,
+    maxMessagesPerDay: 1,
     availableChatModelIds: [
       // OpenAI models (fully compatible with all features)
       'gpt-4o-mini',
@@ -27,7 +27,7 @@ export const entitlementsByUserType: Record<UserType, Entitlements> = {
    * NOTE: Using grok-3 model
    */
   regular: {
-    maxMessagesPerDay: 100,
+    maxMessagesPerDay: 20,
     availableChatModelIds: [
       // OpenAI models (fully compatible with all features)
       'gpt-4o',

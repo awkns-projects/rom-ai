@@ -1,8 +1,9 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import { useWindowSize } from 'usehooks-ts';
+import { forwardRef } from 'react';
 
-import { ModelSelector } from '@/components/model-selector';
+import { ModelSelector, type ModelSelectorRef } from '@/components/model-selector';
 import { SidebarToggle } from '@/components/sidebar-toggle';
 import { Button } from '@/components/ui/button';
 import { PlusIcon, } from './icons';
@@ -13,21 +14,21 @@ import { type VisibilityType, VisibilitySelector } from './visibility-selector';
 import type { Session } from 'next-auth';
 import Link from 'next/link';
 
-function PureChatHeader({
-  chatId,
-  selectedModelId,
-  selectedProviderId = 'openai',
-  selectedVisibilityType,
-  isReadonly,
-  session,
-}: {
+const PureChatHeader = forwardRef<ModelSelectorRef, {
   chatId: string;
   selectedModelId: string;
   selectedProviderId?: 'xai' | 'openai';
   selectedVisibilityType: VisibilityType;
   isReadonly: boolean;
   session: Session;
-}) {
+}>(({
+  chatId,
+  selectedModelId,
+  selectedProviderId = 'openai',
+  selectedVisibilityType,
+  isReadonly,
+  session,
+}, ref) => {
   const router = useRouter();
   const { open } = useSidebar();
 
@@ -58,6 +59,7 @@ function PureChatHeader({
 
       {!isReadonly && (
         <ModelSelector
+          ref={ref}
           session={session}
           selectedModelId={selectedModelId}
           selectedProviderId={selectedProviderId}
@@ -86,7 +88,9 @@ function PureChatHeader({
       </Button> 
     </header>
   );
-}
+});
+
+PureChatHeader.displayName = 'PureChatHeader';
 
 export const ChatHeader = memo(PureChatHeader, (prevProps, nextProps) => {
   return prevProps.selectedModelId === nextProps.selectedModelId && 

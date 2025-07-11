@@ -210,6 +210,7 @@ interface AgentArtifactMetadata {
     models?: 'processing' | 'complete';
     actions?: 'processing' | 'complete';
     schedules?: 'processing' | 'complete';
+    deployment?: 'processing' | 'complete';
     complete?: 'processing' | 'complete';
   };
   stepMessages?: Record<string, string>;
@@ -970,6 +971,7 @@ const AgentBuilderContent = memo(({
                           { id: 'models', label: 'Models' },
                           { id: 'actions', label: 'Actions' },
                           { id: 'schedules', label: 'Schedules' },
+                          { id: 'deployment', label: 'Deployment' },
                           { id: 'complete', label: 'Complete' }
                         ];
                         
@@ -1025,6 +1027,7 @@ const AgentBuilderContent = memo(({
                       { id: 'models', label: 'Models' },
                       { id: 'actions', label: 'Actions' },
                       { id: 'schedules', label: 'Schedules' },
+                      { id: 'deployment', label: 'Deployment' },
                       { id: 'complete', label: 'Complete' }
                     ];
                     
@@ -1036,6 +1039,7 @@ const AgentBuilderContent = memo(({
                         'step1': 'models',
                         'step2': 'actions',
                         'step3': 'schedules',
+                        'step4': 'deployment',
                         'complete': 'complete'
                       };
                       
@@ -1910,6 +1914,7 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
         'step1': 'models',
         'step2': 'actions',
         'step3': 'schedules',
+        'step4': 'deployment',
         'complete': 'complete'
       };
       

@@ -36,29 +36,29 @@ import type { BufferAttribute } from 'three';
 const features = [
   {
     icon: Bot,
-    title: 'Smart AI Apps',
-    description: 'Build AI apps that remember conversations, learn from your customers, and get smarter over time - like having a super-smart assistant',
+    title: 'Intelligent Companions',
+    description: 'Assemble digital companions that learn, remember, and evolve - like building magical creatures from code blocks that grow smarter with every interaction',
     gradient: 'from-green-500/20 via-green-600/10 to-green-700/20',
     border: 'border-green-500/30'
   },
   {
     icon: Database,
-    title: 'Customer Memory',
-    description: 'Your AI remembers every customer interaction, preferences, and history automatically - perfect memory that never forgets',
+    title: 'Perfect Memory',
+    description: 'Your companions never forget - they remember every conversation, task, and preference to serve you better each time',
     gradient: 'from-blue-500/20 via-blue-600/10 to-blue-700/20',
     border: 'border-blue-500/30'
   },
   {
     icon: Clock,
-    title: 'Auto Scheduling',
-    description: 'Set your AI to work on schedules - daily reports, weekly follow-ups, monthly analysis. Your digital assistant that never sleeps',
+    title: 'Always Active',
+    description: 'Your pocket companions work 24/7 in the digital world - completing missions, sending updates, and handling tasks while you sleep',
     gradient: 'from-purple-500/20 via-purple-600/10 to-purple-700/20',
     border: 'border-purple-500/30'
   },
   {
     icon: Zap,
-    title: 'Data Sync',
-    description: 'Connect to any website, database, or app to keep your AI updated with fresh information - complete data awareness',
+    title: 'World Connected',
+    description: 'Companions can connect to any website, app, or data source to stay informed and take action across the entire internet',
     gradient: 'from-orange-500/20 via-orange-600/10 to-orange-700/20',
     border: 'border-orange-500/30'
   }
@@ -66,42 +66,42 @@ const features = [
 
 const useCases = [
   {
-    emoji: '🗂️',
-    title: 'Smart CMS',
-    description: 'AI that writes, updates, and organizes your website content automatically - like having a content manager that works 24/7'
+    emoji: '🎯',
+    title: 'MEV Bot Companion',
+    description: 'Your trading partner that monitors opportunities across chains, executes strategies, and maximizes your yield - like having a degen alpha scout'
   },
   {
-    emoji: '📋',
-    title: 'Customer CRM',
-    description: 'Track customers, send follow-ups, and never miss a sale opportunity - your complete business intelligence system'
+    emoji: '📧',
+    title: 'Email Marketing Companion',
+    description: 'Your growth partner that writes campaigns, segments audiences, and nurtures leads automatically - never miss a conversion opportunity'
   },
   {
-    emoji: '🤖',
-    title: 'Personal Assistant',
-    description: 'AI that handles emails, schedules meetings, and manages your daily tasks - your intelligent business assistant'
+    emoji: '🔗',
+    title: 'DAO Operations Companion',
+    description: 'Your governance assistant that tracks proposals, monitors treasury, and handles community tasks - never miss another vote or opportunity'
+  },
+  {
+    emoji: '🛒',
+    title: 'E-commerce Companion',
+    description: 'Your sales assistant that manages inventory, handles customer service, and optimizes pricing - your 24/7 business partner'
   },
   {
     emoji: '📊',
-    title: 'Business Dashboard',
-    description: 'Get daily reports on sales, customers, and business performance with professional-level analytics'
+    title: 'Analytics Companion',
+    description: 'Your data detective that monitors metrics, spots trends, and delivers insights with beautiful reports'
   },
   {
-    emoji: '💬',
-    title: 'Customer Support Bot',
-    description: 'Answer customer questions 24/7 with context from past conversations - always ready, always helpful'
-  },
-  {
-    emoji: '📈',
-    title: 'Sales Tracker',
-    description: 'Monitor leads, send reminders, and track deals from start to finish with enterprise-level efficiency'
+    emoji: '🎨',
+    title: 'NFT Drop Companion',
+    description: 'Your mint strategist that monitors launches, analyzes rarity, and executes perfect timing - never miss alpha again'
   }
 ];
 
 const stats = [
-  { value: '100+', label: 'AI Agents Created', icon: Bot },
-  { value: '24/7', label: 'Automated Operations', icon: Clock },
-  { value: '∞', label: 'Scaling Potential', icon: Target },
-  { value: '95%', label: 'Success Rate', icon: CheckCircle }
+  { value: '100+', label: 'Companions Assembled', icon: Bot },
+  { value: '24/7', label: 'Always Working', icon: Clock },
+  { value: '∞', label: 'Evolution Potential', icon: Target },
+  { value: '95%', label: 'Mission Success', icon: CheckCircle }
 ];
 
 const navLinks = [
@@ -312,14 +312,14 @@ function TypewriterEffect() {
   const [isDeleting, setIsDeleting] = useState(false);
   
   const phrases = [
-    'Sync with Shopify to send abandoned cart emails with 15% discount codes via Gmail API',
-    'Connect to Stripe and send personalized follow-up emails through Mailchimp when payments complete',
-    'Integrate with Google Sheets to track inventory and send Slack alerts when stock is low',
-    'Build a customer support bot that syncs with Zendesk and remembers conversations in HubSpot CRM',
-    'Connect LinkedIn Sales Navigator with Gmail to automatically qualify and score leads',
-    'Sync with WooCommerce and create competitor price tracking dashboard using web scraping APIs',
-    'Integrate Instagram Business API to auto-post products when Shopify inventory updates',
-    'Connect Calendly with Salesforce to automatically schedule follow-up calls with warm leads'
+    'Assemble a support companion that remembers every customer conversation and responds 24/7',
+    'Build a MEV bot companion that monitors opportunities across chains and maximizes your yield',
+    'Create a sales companion that tracks leads, sends follow-ups, and never forgets a prospect',
+    'Deploy a DAO companion that tracks proposals, monitors treasury, and handles governance tasks',
+    'Summon a marketing companion that posts content, engages followers, and grows your audience',
+    'Evolve an NFT companion that monitors launches, analyzes rarity, and executes perfect timing',
+    'Train a scheduling companion that manages calendars, books meetings, and handles cancellations',
+    'Raise a DeFi companion that tracks yields, rebalances portfolios, and spots arbitrage opportunities'
   ];
 
   useEffect(() => {
@@ -358,31 +358,31 @@ function FloatingSuccessStories() {
   const stories = [
     { 
       icon: '🛒', 
-      name: 'E-commerce Auto-Pilot', 
+      name: 'Shopping Companion', 
       gradient: 'from-blue-500 to-cyan-400',
       revenue: '$2,847/mo',
-      description: 'Saved 20 hours/week on inventory and customer emails'
+      description: 'Saves 20 hours/week managing inventory and customer emails'
     },
     { 
       icon: '🎯', 
-      name: 'Lead Scoring System', 
+      name: 'Lead Hunter Companion', 
       gradient: 'from-purple-500 to-pink-400',
       revenue: '$5,123/mo', 
-      description: 'Doubled conversion rate by auto-qualifying leads'
+      description: 'Doubled conversion rate by nurturing leads automatically'
     },
     { 
       icon: '📧', 
-      name: 'Newsletter Automation', 
+      name: 'Content Companion', 
       gradient: 'from-orange-500 to-red-400',
       revenue: '$1,956/mo',
-      description: 'Grew email list 300% with automated sequences'
+      description: 'Grew email list 300% with personalized content sequences'
     },
     { 
       icon: '📊', 
-      name: 'Customer CRM Dashboard', 
+      name: 'Analytics Companion', 
       gradient: 'from-green-500 to-teal-400',
       revenue: '$3,234/mo',
-      description: 'Never loses track of customer conversations'
+      description: 'Never misses important metrics or customer insights'
     }
   ];
 
@@ -460,10 +460,10 @@ function DemoModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
         <div className="space-y-8">
           <div className="text-center">
             <h3 className="text-2xl md:text-3xl font-bold text-green-100 mb-4 font-mono">
-              How Rom Cards Works
+              How Companion Evolution Works
             </h3>
             <p className="text-green-300/80 font-mono text-base md:text-lg">
-              From idea to smart AI app in minutes
+              From idea to digital companion in minutes
             </p>
           </div>
 
@@ -472,31 +472,31 @@ function DemoModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
             {[
               { 
                 emoji: '💭', 
-                title: 'Tell Us What You Need',
-                text: 'Just describe your business need in plain English. Like "I need a CRM that remembers my customers"',
+                title: 'Describe Your Vision',
+                text: 'Tell us what kind of companion you need in plain English. Like "I need a customer support companion"',
                 gradient: 'from-green-500/20 to-cyan-500/20',
-                example: '"I need an AI that calls my leads and schedules meetings"'
+                example: '"I want a companion that handles my email and schedules meetings"'
               },
               { 
-                emoji: '🧠', 
-                title: 'AI Builds Your App',
-                text: 'Our AI creates your custom app with memory, scheduling, and all the features you need.',
+                emoji: '🥚', 
+                title: 'Companion Assembles',
+                text: 'Our AI creates your digital companion with memory, skills, and personality based on your description.',
                 gradient: 'from-cyan-500/20 to-blue-500/20',
-                example: 'Customer database, auto-scheduling, email integration...'
+                example: 'Memory core, communication skills, task automation...'
               },
               { 
-                emoji: '🔗', 
-                title: 'Connect Your Data',
-                text: 'Your AI app syncs with your existing tools and stays updated with fresh information.',
+                emoji: '🌐', 
+                title: 'Connects to World',
+                text: 'Your companion links to your tools and data sources, staying informed and ready to take action.',
                 gradient: 'from-blue-500/20 to-green-500/20',
-                example: 'Gmail, Google Sheets, your website, social media...'
+                example: 'Email, calendar, databases, websites, social media...'
               },
               { 
-                emoji: '🚀', 
-                title: 'Launch & Earn',
-                text: 'Your AI app starts working immediately. Use it for your business or sell access to others!',
+                emoji: '⚡', 
+                title: 'Starts Working',
+                text: 'Your companion begins its mission immediately. Use it yourself or let others adopt their own copy!',
                 gradient: 'from-green-500/20 to-emerald-500/20',
-                example: 'Live app URL, customer management, automated workflows...'
+                example: 'Live companion, automated workflows, growing intelligence...'
               }
             ].map((step, index) => (
               <div key={index} className={`p-6 rounded-2xl bg-gradient-to-r ${step.gradient} border border-green-500/20 backdrop-blur-sm hover:border-green-500/40 transition-all duration-300 group`}>
@@ -515,30 +515,30 @@ function DemoModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
           {/* Live Demo Section */}
           <div className="bg-black/50 rounded-2xl p-6 border border-green-500/30">
             <h4 className="text-green-100 font-mono font-bold text-xl mb-4 text-center">
-              See It In Action
+              Watch a Companion Assemble
             </h4>
             <div className="bg-black/70 rounded-xl p-4 font-mono text-sm border border-green-500/20">
               <div className="flex items-center gap-2 mb-4">
                 <div className="w-3 h-3 bg-red-500 rounded-full"></div>
                 <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
                 <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span className="text-green-300/70 ml-2">rom-cards-terminal</span>
+                <span className="text-green-300/70 ml-2">companion-assembler</span>
               </div>
               <div className="space-y-2">
-                <div className="text-cyan-400">$ rom-cards build</div>
-                <div className="text-green-300/80">💭 What would you like to build?</div>
+                <div className="text-cyan-400">$ rom-cards assemble</div>
+                <div className="text-green-300/80">🥚 What companion do you want to create?</div>
                 <div className="text-green-400 animate-pulse">
-                  &gt; "Send abandoned cart emails with 15% discount codes to customers who haven't purchased in 24 hours"
+                  &gt; "A support companion that remembers customer conversations and handles tickets"
                 </div>
-                <div className="text-yellow-400">🧠 Understanding your needs...</div>
-                <div className="text-blue-400">💾 Setting up customer cart tracking...</div>
-                <div className="text-cyan-400">📧 Creating email automation system...</div>
-                <div className="text-purple-400">🎯 Configuring discount code generation...</div>
-                <div className="text-orange-400">⏰ Setting up 24-hour trigger scheduling...</div>
-                <div className="text-green-400">✅ Your cart recovery system is ready!</div>
-                <div className="text-cyan-400">🌐 Live at: https://www.rom.cards/apps/cart-recovery</div>
-                <div className="text-green-300">📊 Database: Customer cart tracking</div>
-                <div className="text-yellow-300">💰 Ready to recover abandoned sales!</div>
+                <div className="text-yellow-400">🧠 Understanding your companion's purpose...</div>
+                <div className="text-blue-400">💾 Creating memory core and personality...</div>
+                <div className="text-cyan-400">🔗 Connecting to support systems...</div>
+                <div className="text-purple-400">🎯 Teaching conversation skills...</div>
+                <div className="text-orange-400">⚡ Companion is assembling...</div>
+                <div className="text-green-400">✅ Your support companion is born!</div>
+                <div className="text-cyan-400">🌐 Living at: https://www.rom.cards/companions/support-hero</div>
+                <div className="text-green-300">🧠 Memory: Customer conversation history</div>
+                <div className="text-yellow-300">🎯 Mission: Deliver exceptional customer support!</div>
               </div>
             </div>
           </div>
@@ -546,7 +546,7 @@ function DemoModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
           {/* CTA Section */}
           <div className="text-center space-y-4">
             <p className="text-green-300/70 font-mono text-sm">
-              Ready to turn your ideas into reality?
+              Ready to assemble your first companion?
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link href="/register">
@@ -555,7 +555,7 @@ function DemoModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }
                   className="bg-gradient-to-r from-green-600 to-cyan-600 hover:from-green-700 hover:to-cyan-700 text-black border border-green-500/30 shadow-2xl shadow-green-500/25 hover:shadow-green-500/40 px-8 py-3 font-mono text-base group transform hover:scale-105 transition-all duration-300 rounded-xl"
                 >
                   <Sparkles className="w-5 h-5 mr-2 group-hover:animate-bounce text-black" />
-                  Start Building Now
+                  Assemble My Companion
                   <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform text-black" />
                 </Button>
               </Link>
@@ -595,7 +595,7 @@ function EnhancedHeroSection() {
             {/* Status Badge with Gradient */}
             <div className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500/20 to-cyan-500/20 backdrop-blur-sm border border-white/20 rounded-full px-6 py-3 shadow-lg">
               <div className="w-3 h-3 bg-gradient-to-r from-green-400 to-cyan-400 rounded-full animate-pulse shadow-lg"></div>
-              <span className="text-white font-mono text-sm font-medium">Vibe Code Your AI Agent Apps</span>
+              <span className="text-white font-mono text-sm font-medium">🐾 Assemble Your Digital Companion</span>
             </div>
             
             {/* Main Headline with Colorful Gradient */}
@@ -606,12 +606,12 @@ function EnhancedHeroSection() {
               
               <p className="text-xl md:text-2xl lg:text-3xl text-white max-w-4xl leading-relaxed">
                 Build your own
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 font-semibold"> AI Agent Apps </span>
-                using only prompts
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 font-semibold"> Digital Companion </span>
+                using only plain English
               </p>
               
               <p className="text-base md:text-lg lg:text-xl text-white/70 max-w-3xl leading-relaxed">
-                Just describe what you want in plain English. Our AI builds professional-level smart apps that remember customers, work on schedules, and sync with your tools - all from simple prompts! ✨
+                Your pocket agent lives in the cloud, remembers everything, and completes real tasks for you — just by typing what you want! ✨
               </p>
             </div>
 
@@ -622,13 +622,13 @@ function EnhancedHeroSection() {
                   <div className="w-4 h-4 bg-gradient-to-r from-red-400 to-red-500 rounded-full shadow-lg"></div>
                   <div className="w-4 h-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full shadow-lg"></div>
                   <div className="w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full shadow-lg"></div>
-                  <span className="text-white/80 ml-3 font-mono text-sm">AI Agent Builder</span>
+                  <span className="text-white/80 ml-3 font-mono text-sm">Digital Companion Assembler</span>
                 </div>
                 <div className="text-left space-y-4">
-                  <div className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 font-mono text-sm opacity-75">💭 What do you want to build?</div>
+                  <div className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 font-mono text-sm opacity-75">💭 What companion do you want to assemble?</div>
                   <TypewriterEffect />
                   <div className="text-white/60 font-mono text-sm mt-4">
-                    → AI is building this for you right now... 🤖✨
+                    → Your companion is evolving... 🐾✨
                   </div>
                 </div>
               </div>
@@ -639,7 +639,7 @@ function EnhancedHeroSection() {
               <Link href="/register" className="flex-1">
                 <Button className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 shadow-2xl shadow-purple-500/25 hover:shadow-purple-500/40 px-6 py-4 font-mono text-base group transform hover:scale-105 transition-all duration-300 rounded-xl h-14 flex items-center justify-center">
                   <Sparkles className="w-5 h-5 mr-3 group-hover:animate-bounce flex-shrink-0" />
-                  <span className="flex-1 text-center">Build My First App</span>
+                  <span className="flex-1 text-center">Assemble My Companion</span>
                   <ArrowRight className="w-5 h-5 ml-3 group-hover:translate-x-1 transition-transform flex-shrink-0" />
                 </Button>
               </Link>
@@ -650,7 +650,7 @@ function EnhancedHeroSection() {
                 className="flex-1 w-full border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white hover:border-white/50 backdrop-blur-sm px-6 py-4 font-mono text-base group rounded-xl h-14 flex items-center justify-center"
               >
                 <Play className="w-5 h-5 mr-3 flex-shrink-0" />
-                <span className="flex-1 text-center">Show Me How</span>
+                <span className="flex-1 text-center">See Evolution</span>
               </Button>
             </div>
           </div>
@@ -665,7 +665,7 @@ function EnhancedHeroSection() {
                     Success Stories
                   </h3>
                   <p className="text-white/60 font-mono text-sm">
-                    Real people earning with AI agents
+                    Real people earning with companions
                   </p>
                 </div>
                 <FloatingSuccessStories />
@@ -678,7 +678,7 @@ function EnhancedHeroSection() {
                     Success Stories
                   </h3>
                   <p className="text-white/60 font-mono text-sm">
-                    Real people earning with AI agents
+                    Real people earning with companions
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -855,12 +855,12 @@ function AnimatedCodeBlock() {
   const [isHovered, setIsHovered] = useState(false);
   
   const codeLines = [
-    { text: '> "Build me a customer support system"', color: 'text-cyan-400' },
-    { text: '  ✓ Creating database models...', color: 'text-green-400' },
-    { text: '  ✓ Generating API endpoints...', color: 'text-blue-400' },
-    { text: '  ✓ Building UI components...', color: 'text-purple-400' },
-    { text: '  ✓ Setting up automation...', color: 'text-orange-400' },
-    { text: '🚀 Agent deployed successfully!', color: 'text-pink-400' }
+    { text: '> "Assemble me a customer support companion"', color: 'text-cyan-400' },
+    { text: '  ✓ Creating memory core...', color: 'text-green-400' },
+    { text: '  ✓ Teaching conversation skills...', color: 'text-blue-400' },
+    { text: '  ✓ Connecting to support channels...', color: 'text-purple-400' },
+    { text: '  ✓ Companion personality forming...', color: 'text-orange-400' },
+    { text: '🐾 Companion assembled successfully!', color: 'text-pink-400' }
   ];
 
   useEffect(() => {
@@ -880,7 +880,7 @@ function AnimatedCodeBlock() {
         <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
         <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
         <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-        <span className="text-green-300 ml-2">agent-builder.terminal</span>
+        <span className="text-green-300 ml-2">companion-assembler.terminal</span>
       </div>
       <div className="space-y-2">
         {codeLines.map((line, index) => (
@@ -937,7 +937,7 @@ function LiveMetrics() {
     { 
       icon: Activity, 
       value: metrics.agents, 
-      label: 'Active Agents', 
+      label: 'Active Companions', 
       isAnimating: animatingMetric === 0,
       gradient: 'from-green-500/20 to-cyan-500/20',
       border: 'border-green-500/20',
@@ -1120,7 +1120,7 @@ function RevenueFlowAnimation() {
 function AgentLicensingExamples() {
   const examples = [
     {
-      name: 'E-commerce Bot',
+      name: 'Shopping Companion',
       creator: '@sarah_dev',
       price: '$49/month',
       users: '1,247',
@@ -1132,7 +1132,7 @@ function AgentLicensingExamples() {
       growth: '+23%'
     },
     {
-      name: 'Lead Generator',
+      name: 'Lead Hunter Companion',
       creator: '@mike_ai',
       price: '$29/month',
       users: '892',
@@ -1144,12 +1144,12 @@ function AgentLicensingExamples() {
       growth: '+18%'
     },
     {
-      name: 'Content Creator',
+      name: 'Creative Companion',
       creator: '@alex_code',
       price: '$39/month',
       users: '634',
       revenue: '$24,726',
-      icon: '✍️',
+      icon: '✨',
       gradient: 'from-purple-500/10 via-pink-500/5 to-purple-700/10',
       border: 'border-purple-500/20',
       hoverBorder: 'hover:border-purple-500/40',
@@ -1172,7 +1172,7 @@ function AgentLicensingExamples() {
           </div>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="font-mono text-sm text-green-300">Price:</span>
+              <span className="font-mono text-sm text-green-300">Adoption Fee:</span>
               <span className="font-mono text-sm text-green-100 font-bold">{example.price}</span>
             </div>
             <div className="flex justify-between">
@@ -1201,10 +1201,10 @@ function EnhancedStatsSection() {
   const [hoveredStat, setHoveredStat] = useState<number | null>(null);
   
   const statsData = [
-    { value: '100+', label: 'AI Agents Created', icon: Bot, color: 'text-green-400', gradient: 'from-green-500/20 to-cyan-500/20', border: 'border-green-500/20' },
-    { value: '24/7', label: 'Automated Operations', icon: Clock, color: 'text-cyan-400', gradient: 'from-cyan-500/20 to-blue-500/20', border: 'border-cyan-500/20' },
-    { value: '∞', label: 'Scaling Potential', icon: Target, color: 'text-purple-400', gradient: 'from-purple-500/20 to-pink-500/20', border: 'border-purple-500/20' },
-    { value: '95%', label: 'Success Rate', icon: CheckCircle, color: 'text-orange-400', gradient: 'from-orange-500/20 to-red-500/20', border: 'border-orange-500/20' }
+    { value: '100+', label: 'Companions Assembled', icon: Bot, color: 'text-green-400', gradient: 'from-green-500/20 to-cyan-500/20', border: 'border-green-500/20' },
+    { value: '24/7', label: 'Always Working', icon: Clock, color: 'text-cyan-400', gradient: 'from-cyan-500/20 to-blue-500/20', border: 'border-cyan-500/20' },
+    { value: '∞', label: 'Evolution Potential', icon: Target, color: 'text-purple-400', gradient: 'from-purple-500/20 to-pink-500/20', border: 'border-purple-500/20' },
+    { value: '95%', label: 'Mission Success', icon: CheckCircle, color: 'text-orange-400', gradient: 'from-orange-500/20 to-red-500/20', border: 'border-orange-500/20' }
   ];
 
   return (
@@ -1239,11 +1239,11 @@ function AgentBuildingProcess() {
   const [isHovered, setIsHovered] = useState(false);
   
   const steps = [
-    { icon: Terminal, label: 'Natural Language Input', color: 'text-green-400', gradient: 'from-green-500/20 to-cyan-500/20' },
+    { icon: Terminal, label: 'Describe Vision', color: 'text-green-400', gradient: 'from-green-500/20 to-cyan-500/20' },
     { icon: Brain, label: 'AI Analysis', color: 'text-cyan-400', gradient: 'from-cyan-500/20 to-blue-500/20' },
-    { icon: Database, label: 'Schema Generation', color: 'text-blue-400', gradient: 'from-blue-500/20 to-purple-500/20' },
-    { icon: Code, label: 'Code Generation', color: 'text-purple-400', gradient: 'from-purple-500/20 to-pink-500/20' },
-    { icon: Zap, label: 'Deployment', color: 'text-pink-400', gradient: 'from-pink-500/20 to-orange-500/20' }
+    { icon: Database, label: 'Memory Creation', color: 'text-blue-400', gradient: 'from-blue-500/20 to-purple-500/20' },
+    { icon: Code, label: 'Companion Birth', color: 'text-purple-400', gradient: 'from-purple-500/20 to-pink-500/20' },
+    { icon: Zap, label: 'Mission Start', color: 'text-pink-400', gradient: 'from-pink-500/20 to-orange-500/20' }
   ];
 
   useEffect(() => {
@@ -1410,7 +1410,7 @@ function Header() {
               </Link>
               <Link href="/register">
                 <Button size="sm" className="bg-gradient-to-r from-green-600 to-green-700 text-black hover:from-green-700 hover:to-green-800 border border-green-500/30 shadow-lg shadow-green-500/20 font-mono">
-                  Build Agent
+                  Build Companion
                 </Button>
               </Link>
             </div>
@@ -1455,7 +1455,7 @@ function Header() {
                 </Link>
                 <Link href="/register" onClick={() => setIsMobileMenuOpen(false)}>
                   <Button className="w-full bg-gradient-to-r from-green-600 to-green-700 text-black hover:from-green-700 hover:to-green-800 border border-green-500/30 shadow-lg shadow-green-500/20 font-mono py-3">
-                    Build Agent
+                    Build Companion
                   </Button>
                 </Link>
               </div>
@@ -1804,10 +1804,10 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto relative z-10">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Watch AI Build Your AI Agent App
+              Watch AI Assemble Your Digital Companion
             </h2>
             <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
-              See how simple descriptions become working AI apps with memory and smart features - like a professional development team
+              See how simple descriptions become living digital companions with memory and intelligence - like a magical evolution process
             </p>
           </div>
 
@@ -1817,7 +1817,7 @@ export default function HomePage() {
               <AnimatedCodeBlock />
               <div className="text-center">
                 <p className="text-green-300/70 font-mono text-sm">
-                  Real-time agent building in action
+                  Real-time companion building in action
                 </p>
               </div>
             </div>
@@ -1826,7 +1826,7 @@ export default function HomePage() {
             <div className="space-y-8">
               <div className="bg-gradient-to-br from-green-500/10 via-green-600/5 to-green-700/10 border border-green-500/20 rounded-2xl p-8 backdrop-blur-sm">
                 <h3 className="text-2xl font-bold text-green-100 mb-6 font-mono text-center">
-                  Agent Building Process
+                  Companion Evolution Process
                 </h3>
                 <AgentBuildingProcess />
               </div>
@@ -1841,10 +1841,10 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              This Is What Your AI App Looks Like
+              This Is Your Companion's Interface
             </h2>
             <p className="text-xl text-green-300/80 max-w-4xl mx-auto font-mono">
-              A real cart recovery system built from the prompt above - mobile-first design with intuitive tabs
+              A real shopping companion built from the prompt above - your personal digital assistant with an intuitive interface
             </p>
           </div>
 
@@ -1860,10 +1860,10 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Build AI Apps That Actually Help Your Business
+              Assemble Companions That Actually Help Your Life
             </h2>
             <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
-              From simple requests to powerful AI apps with memory, scheduling, and data connections - your intelligent business assistant awaits
+              From simple prompts to powerful digital companions with memory, personality, and real-world skills - your magical business partner awaits
             </p>
           </div>
 
@@ -1880,10 +1880,10 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Turn Ideas Into Revenue Streams
+              Choose Your Companion Type
             </h2>
             <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
-              Real businesses built with simple prompts - professional-level automation for everyone
+              Real digital companions assembled from simple prompts - each one evolving to serve a specific purpose in your life
             </p>
           </div>
 
@@ -1900,10 +1900,10 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              License Your Agents & Earn Passive Income
+              Share Your Companions & Earn Revenue
             </h2>
             <p className="text-xl text-green-300/80 max-w-4xl mx-auto font-mono">
-              Build once, earn forever. Turn your AI agents into recurring revenue streams by licensing them to thousands of users worldwide.
+              Assemble once, earn forever. Let others adopt copies of your digital companions and create recurring income streams from your creations.
             </p>
           </div>
 
@@ -1912,7 +1912,7 @@ export default function HomePage() {
             <div className="space-y-8">
               <div className="bg-gradient-to-br from-green-500/10 via-green-600/5 to-green-700/10 border border-green-500/20 rounded-2xl p-8 backdrop-blur-sm">
                 <h3 className="text-2xl font-bold text-green-100 mb-6 font-mono">
-                  How Agent Licensing Works
+                  How Companion Licensing Works
                 </h3>
                 <div className="space-y-6">
                   <div className="flex items-start gap-4">
@@ -1920,9 +1920,9 @@ export default function HomePage() {
                       <span className="text-green-400 font-mono font-bold text-sm">1</span>
                     </div>
                     <div>
-                      <h4 className="font-mono font-bold text-green-100 mb-2">Build Your Agent</h4>
+                      <h4 className="font-mono font-bold text-green-100 mb-2">Build Your Companion</h4>
                       <p className="text-green-300/70 font-mono text-sm leading-relaxed">
-                        Create any automation agent using natural language. From customer service bots to data analyzers.
+                        Create any automation companion using natural language. From customer service bots to data analyzers.
                       </p>
                     </div>
                   </div>
@@ -1933,7 +1933,7 @@ export default function HomePage() {
                     <div>
                       <h4 className="font-mono font-bold text-green-100 mb-2">List in Marketplace</h4>
                       <p className="text-green-300/70 font-mono text-sm leading-relaxed">
-                        Publish your agent to our marketplace with your own pricing and licensing terms.
+                        Publish your companion to our marketplace with your own pricing and licensing terms.
                       </p>
                     </div>
                   </div>
@@ -1969,13 +1969,13 @@ export default function HomePage() {
 
               {/* Licensing Benefits */}
               <div className="bg-gradient-to-br from-blue-500/10 via-purple-600/5 to-green-700/10 border border-green-500/20 rounded-2xl p-8 backdrop-blur-sm">
-                <h4 className="font-mono font-bold text-green-100 mb-6">Why License Your Agents?</h4>
+                <h4 className="font-mono font-bold text-green-100 mb-6">Why License Your Companions?</h4>
                 <div className="space-y-4">
                   {[
-                    { icon: DollarSign, text: 'Earn 70% of all revenue from your agents' },
+                    { icon: DollarSign, text: 'Earn 70% of all revenue from your companions' },
                     { icon: Target, text: 'Reach thousands of potential customers globally' },
                     { icon: Clock, text: 'Generate passive income 24/7 without maintenance' },
-                    { icon: TrendingUp, text: 'Build a portfolio of income-generating AI assets' }
+                    { icon: TrendingUp, text: 'Build a portfolio of income-generating AI companions' }
                   ].map((benefit, index) => (
                     <div key={index} className="flex items-center gap-3">
                       <benefit.icon className="w-5 h-5 text-green-400 flex-shrink-0" />
@@ -1990,7 +1990,7 @@ export default function HomePage() {
                 <Link href="/register">
                   <Button className="bg-gradient-to-r from-blue-600 to-purple-700 text-white hover:from-blue-700 hover:to-purple-800 border border-blue-500/30 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 px-8 py-3 font-mono text-lg group">
                     <Sparkles className="w-5 h-5 mr-2 group-hover:animate-spin" />
-                    Start Licensing Agents
+                    Start Licensing Companions
                     <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 </Link>
@@ -2005,10 +2005,10 @@ export default function HomePage() {
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Proven Results
+              Proven Companion Success
             </h2>
             <p className="text-xl text-green-300/80 max-w-2xl mx-auto font-mono">
-              Join the growing community of successful automation builders
+              Join the growing community of successful companion creators
             </p>
           </div>
           <EnhancedStatsSection />
@@ -2029,23 +2029,23 @@ export default function HomePage() {
                 </div>
               </div>
               <h2 className="text-4xl font-bold text-green-100 mb-6 font-mono">
-                Ready to Build Your AI Business Empire?
+                Ready to Assemble Your First Companion?
               </h2>
               <p className="text-xl text-green-300/80 mb-8 font-mono max-w-2xl mx-auto">
-                Join thousands of entrepreneurs using intelligent AI agents to automate their businesses and create passive income streams.
+                Join thousands of creators who've assembled digital companions to automate their lives and build magical businesses.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Link href="/register">
                   <Button className="bg-gradient-to-r from-green-600 to-green-700 text-black hover:from-green-700 hover:to-green-800 border border-green-500/30 shadow-lg shadow-green-500/20 hover:shadow-green-500/40 hover:shadow-xl transform hover:-translate-y-0.5 px-8 py-3 font-mono text-lg group">
                     <Play className="w-5 h-5 mr-2 group-hover:animate-bounce" />
-                    Get Started
+                    Assemble Companion
                     {/* <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" /> */}
                   </Button>
                 </Link>
                 <Link href="#">
                   <Button variant="outline" className="border-green-500/30 bg-black/50 text-green-300 hover:bg-green-500/10 hover:text-green-200 hover:border-green-500/50 backdrop-blur-sm px-8 py-3 font-mono text-lg group">
                     <Sparkles className="w-5 h-5 mr-2 group-hover:animate-spin" />
-                    View Examples
+                    See Examples
                   </Button>
                 </Link>
               </div>
@@ -2063,7 +2063,7 @@ export default function HomePage() {
             </div>
           </div>
           <p className="text-green-300/60 font-mono text-sm">
-            © 2024 Rom Cards. Building the future of automated business systems.
+            © 2024 Rom Cards. Assembling the future of digital companions.
           </p>
         </div>
       </footer>

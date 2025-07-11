@@ -2,7 +2,7 @@
 
 import type { Attachment, UIMessage } from 'ai';
 import { useChat } from '@ai-sdk/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { ChatHeader } from '@/components/chat-header';
 import type { Vote } from '@/lib/db/schema';
@@ -20,6 +20,8 @@ import { useSearchParams } from 'next/navigation';
 import { useChatVisibility } from '@/hooks/use-chat-visibility';
 import { useAutoResume } from '@/hooks/use-auto-resume';
 import { ChatSDKError } from '@/lib/errors';
+import { RateLimitModal } from './rate-limit-modal';
+import type { ModelSelectorRef } from './model-selector';
 
 export function Chat({
   id,
@@ -41,6 +43,8 @@ export function Chat({
   autoResume: boolean;
 }) {
   const { mutate } = useSWRConfig();
+  const modelSelectorRef = useRef<ModelSelectorRef>(null);
+  const [showRateLimitModal, setShowRateLimitModal] = useState(false);
 
   const { visibilityType } = useChatVisibility({
     chatId: id,
@@ -111,10 +115,15 @@ export function Chat({
     },
     onError: (error) => {
       if (error instanceof ChatSDKError) {
-        toast({
-          type: 'error',
-          description: error.message,
-        });
+        // Check if this is a rate limit error
+        if (error.type === 'rate_limit' && error.surface === 'chat') {
+          setShowRateLimitModal(true);
+        } else {
+          toast({
+            type: 'error',
+            description: error.message,
+          });
+        }
       }
     },
   });
@@ -152,10 +161,16 @@ export function Chat({
     setMessages,
   });
 
+  const handleAddApiKey = () => {
+    // Open the model selector dropdown which contains the API key management
+    modelSelectorRef.current?.openDropdown();
+  };
+
   return (
     <>
       <div className="flex flex-col min-w-0 h-dvh bg-background">
         <ChatHeader
+          ref={modelSelectorRef}
           chatId={id}
           selectedModelId={currentChatModel}
           selectedProviderId={currentProvider}
@@ -211,6 +226,12 @@ export function Chat({
         votes={votes}
         isReadonly={isReadonly}
         selectedVisibilityType={visibilityType}
+      />
+
+      <RateLimitModal
+        isOpen={showRateLimitModal}
+        onClose={() => setShowRateLimitModal(false)}
+        onAddApiKey={handleAddApiKey}
       />
     </>
   );
