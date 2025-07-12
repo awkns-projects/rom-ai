@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { memo, useState, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { MobileAppDemoWrapper, MobileAppDemo, themes } from './MobileAppDemo';
+import { MobileAppDemo, themes } from './MobileAppDemo';
 // Import the avatar creator component
 import AvatarCreator from '../../../avatar-creator/avatar-creator';
 
@@ -69,12 +69,9 @@ const DemoWithTab = memo(({ agentData, currentTheme, viewMode, targetTab, onData
 });
 
 export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThemeChange, onDataChange, documentId }: OnboardContentProps) => {
-  // Determine initial view based on models length
-  const hasModels = models.length > 0;
-  const [showDemo, setShowDemo] = useState(hasModels);
   const [currentSlide, setCurrentSlide] = useState(0);
-  // Add state for avatar tab - changed default to true
-  const [showAvatar, setShowAvatar] = useState(true);
+  // Add state for onboard tab - changed default to true
+  const [showOnboard, setShowOnboard] = useState(true);
 
   // Get the current theme from agent data or default to green
   const currentAgentTheme = agentData?.theme || 'green';
@@ -366,12 +363,6 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
   }, []);
 
   const handleTabNavigation = useCallback((tabId: 'models' | 'actions' | 'schedules' | 'chat') => {
-    // Special handling for chat - switch to demo app
-    if (tabId === 'chat') {
-      setShowDemo(true);
-      return;
-    }
-    
     if (onTabChange) {
       onTabChange(tabId);
     }
@@ -391,30 +382,28 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
               <h2 className={`text-xl sm:text-2xl font-bold ${currentTheme.light} font-mono`}>Getting Started</h2>
             </div>
             
-            {/* Enhanced View Switch with Avatar tab */}
+            {/* Enhanced View Switch with Onboard tab */}
             <div className="flex justify-center sm:justify-end">
               <div className={`inline-flex ${currentTheme.bg} border ${currentTheme.border} rounded-lg p-0.5 shadow-sm`}>
                 <button
                   onClick={() => {
-                    setShowDemo(false);
-                    setShowAvatar(true);
+                    setShowOnboard(true);
                   }}
                   className={`px-3 py-1.5 text-xs font-mono rounded-md transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap ${
-                    showAvatar
+                    showOnboard
                       ? `${currentTheme.bgActive} ${currentTheme.light} shadow-sm`
                       : `${currentTheme.accent} hover:${currentTheme.light}`
                   }`}
                 >
                   <span>👤</span>
-                  <span>Avatar</span>
+                  <span>Onboard</span>
                 </button>
                 <button
                   onClick={() => {
-                    setShowDemo(false);
-                    setShowAvatar(false);
+                    setShowOnboard(false);
                   }}
                   className={`px-3 py-1.5 text-xs font-mono rounded-md transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap ${
-                    !showDemo && !showAvatar
+                    !showOnboard
                       ? `${currentTheme.bgActive} ${currentTheme.light} shadow-sm`
                       : `${currentTheme.accent} hover:${currentTheme.light}`
                   }`}
@@ -422,26 +411,12 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
                   <span>📚</span>
                   <span>Tutorial</span>
                 </button>
-                <button
-                  onClick={() => {
-                    setShowDemo(true);
-                    setShowAvatar(false);
-                  }}
-                  className={`px-3 py-1.5 text-xs font-mono rounded-md transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap ${
-                    showDemo && !showAvatar
-                      ? `${currentTheme.bgActive} ${currentTheme.light} shadow-sm`
-                      : `${currentTheme.accent} hover:${currentTheme.light}`
-                  }`}
-                >
-                  <span>🚀</span>
-                  <span>Demo</span>
-                </button>
               </div>
             </div>
           </div>
           
           {/* Tutorial Navigation - Compact single row */}
-          {!showDemo && !showAvatar && (
+          {!showOnboard && (
             <div className="flex items-center justify-center sm:justify-between gap-4">
               <div className="flex items-center gap-3">
                 {/* Compact slide indicators */}
@@ -484,7 +459,7 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
       </div>
 
       {/* Content */}
-      {showAvatar ? (
+      {showOnboard ? (
         <div className="space-y-6">
           <div className="text-center space-y-4">
             <h3 className={`text-xl font-bold ${currentTheme.light} font-mono`}>
@@ -498,34 +473,6 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
           <div className="flex justify-center">
             <div className="w-full max-w-4xl">
               <AvatarCreator documentId={documentId} />
-            </div>
-          </div>
-        </div>
-      ) : showDemo ? (
-        <div className="space-y-6">
-          <div className="text-center space-y-4">
-            <h3 className={`text-xl font-bold ${currentTheme.light} font-mono`}>
-              Your AI App Demo
-            </h3>
-            <p className={`${currentTheme.dim} font-mono text-sm max-w-2xl mx-auto leading-relaxed`}>
-              This is what your agent builds - a fully functional cart recovery system with real-time data, 
-              automated workflows, and intelligent AI assistance. Built from simple prompts like "help me recover abandoned shopping carts".
-            </p>
-          </div>
-          
-          <div className="flex justify-center">
-            <MobileAppDemoWrapper agentData={agentData} onThemeChange={onThemeChange} onDataChange={onDataChange} />
-          </div>
-          
-          <div className="text-center space-y-4 pt-4">
-            <p className={`${currentTheme.dim} font-mono text-xs`}>
-              ✨ This demo shows what's possible when you describe your business needs to our AI
-            </p>
-            <div className="flex flex-wrap justify-center gap-2 text-xs font-mono">
-              <span className={`px-2 py-1 rounded ${currentTheme.bg} ${currentTheme.accent}`}>📊 Real-time Dashboard</span>
-              <span className={`px-2 py-1 rounded ${currentTheme.bg} ${currentTheme.accent}`}>🤖 AI Assistant</span>
-              <span className={`px-2 py-1 rounded ${currentTheme.bg} ${currentTheme.accent}`}>⏰ Smart Scheduling</span>
-              <span className={`px-2 py-1 rounded ${currentTheme.bg} ${currentTheme.accent}`}>📧 Email Automation</span>
             </div>
           </div>
         </div>

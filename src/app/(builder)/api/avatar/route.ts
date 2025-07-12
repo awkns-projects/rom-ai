@@ -120,21 +120,30 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
+    console.log('Avatar creation request body:', JSON.stringify(body, null, 2));
+    
     const validatedData = createAvatarSchema.parse(body);
+    console.log('Validated avatar data:', JSON.stringify(validatedData, null, 2));
 
     const newAvatar = await createAvatar({
       userId: session.user.id,
       ...validatedData,
     });
 
+    console.log('Avatar created successfully:', JSON.stringify(newAvatar, null, 2));
     return Response.json(newAvatar, { status: 201 });
   } catch (error) {
+    console.error('Avatar creation error:', error);
+    
     if (error instanceof z.ZodError) {
+      console.error('Validation error details:', JSON.stringify(error.errors, null, 2));
       return new ChatSDKError('bad_request:api').toResponse();
     }
     if (error instanceof ChatSDKError) {
+      console.error('ChatSDKError:', error.message);
       return error.toResponse();
     }
+    console.error('Unexpected error:', error);
     return new ChatSDKError('bad_request:api').toResponse();
   }
 }

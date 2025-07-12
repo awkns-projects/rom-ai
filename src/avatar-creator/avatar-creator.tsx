@@ -16,6 +16,8 @@ import MatrixBox from "./matrix-box"
 import { CompositeUnicorn } from "@/components/composite-unicorn"
 import { AvatarList } from "@/components/avatar-list"
 import { useAvatars, type Avatar } from "@/hooks/use-avatar"
+import { OnboardContent } from "@/artifacts/agent/components/OnboardContent"
+import { MobileAppDemoWrapper } from "@/artifacts/agent/components/MobileAppDemo"
 
 type AvatarType = "rom-unicorn" | "custom"
 type RomUnicornType = "default" | "random"
@@ -253,7 +255,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
     setAvatarData((prev) => ({ ...prev, characterNames }))
   }
 
-  const nextStep = () => setStep((prev) => Math.min(prev + 1, 3))
+  const nextStep = () => setStep((prev) => Math.min(prev + 1, 4))
   const prevStep = () => setStep((prev) => Math.max(prev - 1, 1))
 
   const handleGenerateRandomUnicorn = () => {
@@ -312,20 +314,27 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
     
     try {
       // Automatically save to database immediately after generation
-      const newAvatar = await createAvatarInDB({
+      const avatarPayload: any = {
         name: updatedAvatarData.name,
-        personality: updatedAvatarData.personality,
-        characterNames: updatedAvatarData.characterNames,
         type: updatedAvatarData.type,
         romUnicornType: updatedAvatarData.romUnicornType,
-        customType: updatedAvatarData.customType,
-        uploadedImage: updatedAvatarData.uploadedImage,
-        selectedStyle: updatedAvatarData.selectedStyle,
-        connectedWallet: updatedAvatarData.connectedWallet,
-        selectedNFT: updatedAvatarData.selectedNFT,
         unicornParts: updatedAvatarData.unicornParts,
         isActive: false,
-      })
+      };
+      
+      // Only include optional fields if they have values
+      if (documentId) avatarPayload.documentId = documentId;
+      if (updatedAvatarData.personality) avatarPayload.personality = updatedAvatarData.personality;
+      if (updatedAvatarData.characterNames) avatarPayload.characterNames = updatedAvatarData.characterNames;
+      if (updatedAvatarData.customType) avatarPayload.customType = updatedAvatarData.customType;
+      if (updatedAvatarData.uploadedImage) avatarPayload.uploadedImage = updatedAvatarData.uploadedImage;
+      if (updatedAvatarData.selectedStyle) avatarPayload.selectedStyle = updatedAvatarData.selectedStyle;
+      if (updatedAvatarData.connectedWallet) avatarPayload.connectedWallet = updatedAvatarData.connectedWallet;
+      if (updatedAvatarData.selectedNFT) avatarPayload.selectedNFT = updatedAvatarData.selectedNFT;
+      
+      console.log("Avatar payload being sent:", JSON.stringify(avatarPayload, null, 2));
+      
+      const newAvatar = await createAvatarInDB(avatarPayload)
       
       // Auto-select the newly created avatar
       if (newAvatar) {
@@ -335,11 +344,13 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
       console.log("Avatar automatically saved after lootbox generation:", newAvatar)
     } catch (error) {
       console.error("Failed to auto-save avatar:", error)
+      // Show error to user
+      alert("Failed to save avatar. Please try again.")
     } finally {
       setIsSaving(false)
       isProcessingRef.current = false
     }
-  }, [avatarData, createAvatarInDB, setActiveAvatar])
+  }, [avatarData, createAvatarInDB, setActiveAvatar, documentId])
 
   const handleSelectAvatar = async (avatar: Avatar) => {
     try {
@@ -373,14 +384,10 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
     }
   }
 
-  const handleRegenerateAvatar = async (avatar: Avatar) => {
-    // Load the avatar data and regenerate
-    handleSelectAvatar(avatar)
-    await regenerateAvatar()
-  }
 
-  // Updated step titles - removed generate & review step
-  const stepTitles = ["Generate Avatar", "Name Your Avatar", "Connect Store"]
+
+  // Updated step titles
+  const stepTitles = ["Avatar", "Personality", "Connection", "App"]
 
   const getSelectedStyle = () => {
     return artStyles.find((style) => style.id === avatarData.selectedStyle)
@@ -477,25 +484,27 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
         {/* Progress Steps */}
         <div className="mb-6 sm:mb-8">
           <div className="flex items-center">
-            {[1, 2, 3].map((i) => (
+            {[1, 2, 3, 4].map((i) => (
               <div key={i} className="flex items-center flex-1">
                 <div className="flex items-center">
-                  <div
-                    className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-xs sm:text-sm font-medium transition-all duration-200 ${
-                      i <= step ? "bg-green-500 text-white" : "bg-gray-800 text-gray-400"
+                  <button
+                    onClick={() => setStep(i)}
+                    className={`w-6 h-6 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-xs sm:text-sm font-medium transition-all duration-200 cursor-pointer hover:scale-105 ${
+                      i <= step ? "bg-green-500 text-white hover:bg-green-600" : "bg-gray-800 text-gray-400 hover:bg-gray-700"
                     }`}
                   >
                     {i <= step ? "✓" : i}
-                  </div>
-                  <span
-                    className={`ml-2 sm:ml-3 text-xs sm:text-sm transition-colors duration-200 ${
+                  </button>
+                  <button
+                    onClick={() => setStep(i)}
+                    className={`ml-2 sm:ml-3 text-xs sm:text-sm transition-colors duration-200 cursor-pointer hover:underline ${
                       i <= step ? "text-green-400" : "text-gray-500"
                     } hidden sm:inline`}
                   >
                     {stepTitles[i - 1]}
-                  </span>
+                  </button>
                 </div>
-                {i < 3 && (
+                {i < 4 && (
                   <div className="flex-1 mx-2 sm:mx-4">
                     <div className={`h-px transition-all duration-300 ${i < step ? "bg-green-500" : "bg-gray-800"}`} />
                   </div>
@@ -517,7 +526,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                   {step === 1 && "🎲"}
                   {step === 2 && "⚙️"}
                   {step === 3 && "🔐"}
- 
+                  {step === 4 && "🚀"}
                 </span>
               </div>
               Create New Avatar - {stepTitles[step - 1]}
@@ -549,15 +558,26 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                       </h4>
                       <AvatarList 
                         onSelectAvatar={handleSelectAvatar}
-                        onRegenerateAvatar={handleRegenerateAvatar}
-                        showActions={true}
+                        documentId={documentId}
                       />
                     </div>
                     
                     {/* Create New Button */}
                     <div className="text-center">
                       <Button
-                        onClick={() => setShowCreateNew(true)}
+                        onClick={() => {
+                          setShowCreateNew(true)
+                          // Reset to blank state for new avatar creation
+                          setAvatarData({
+                            isAuthenticated: avatarData.isAuthenticated,
+                            accessToken: avatarData.accessToken,
+                            shopifyStore: avatarData.shopifyStore,
+                            name: "",
+                            type: "rom-unicorn",
+                            romUnicornType: "default",
+                            customType: "upload",
+                          })
+                        }}
                         variant="outline"
                         className="bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30 transition-all duration-150 h-10 sm:h-auto"
                       >
@@ -578,7 +598,19 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                       <h4 className="text-lg font-medium text-gray-300 mb-2">No Avatars Yet</h4>
                       <p className="text-sm text-gray-400 mb-4">Create your first avatar to get started!</p>
                       <Button
-                        onClick={() => setShowCreateNew(true)}
+                        onClick={() => {
+                          setShowCreateNew(true)
+                          // Reset to blank state for new avatar creation
+                          setAvatarData({
+                            isAuthenticated: avatarData.isAuthenticated,
+                            accessToken: avatarData.accessToken,
+                            shopifyStore: avatarData.shopifyStore,
+                            name: "",
+                            type: "rom-unicorn",
+                            romUnicornType: "default",
+                            customType: "upload",
+                          })
+                        }}
                         className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 h-10 sm:h-auto"
                       >
                         <span className="mr-2">✨</span>
@@ -992,32 +1024,174 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
               </div>
             )}
 
+            {/* Step 4: Preview Demo */}
+            {step === 4 && (
+              <div className="space-y-4 sm:space-y-6">
+                <div className="text-center mb-4 sm:mb-6">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <span className="text-purple-400 text-lg sm:text-xl">🚀</span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-medium text-purple-400 mb-2">Your AI App Demo</h3>
+                  <p className="text-sm sm:text-base text-gray-400">
+                    This is what your agent builds - a fully functional cart recovery system with real-time data, 
+                    automated workflows, and intelligent AI assistance. Built from simple prompts like "help me recover abandoned shopping carts".
+                  </p>
+                </div>
 
+                <div className="space-y-4 sm:space-y-6">
+                  {/* Mobile App Demo */}
+                  <div className="flex justify-center">
+                    <MobileAppDemoWrapper 
+                      agentData={({
+                        id: 'avatar-demo',
+                        name: avatarData.name || "My AI Agent",
+                        description: avatarData.personality || "A helpful AI assistant",
+                        domain: "E-commerce",
+                        theme: "green",
+                        createdAt: new Date().toISOString(),
+                        models: [
+                          {
+                            id: 'customer-model',
+                            name: 'Customer',
+                            emoji: '👤',
+                            hasPublishedField: true,
+                            idField: 'id',
+                            displayFields: ['name', 'email'],
+                            fields: [
+                              { id: '1', name: 'id', type: 'String', isId: true, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'ID', sort: true, order: 1 },
+                              { id: '2', name: 'email', type: 'String', isId: false, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'Email', sort: true, order: 2 },
+                              { id: '3', name: 'name', type: 'String', isId: false, unique: false, list: false, required: true, kind: 'scalar', relationField: false, title: 'Name', sort: true, order: 3 },
+                              { id: '4', name: 'status', type: 'String', isId: false, unique: false, list: false, required: false, kind: 'enum', relationField: false, title: 'Status', sort: true, order: 4 }
+                            ],
+                            enums: [],
+                            records: [
+                              { id: '1', modelId: 'customer-model', data: { id: '1', email: 'john@example.com', name: 'John Doe', status: 'active' }, createdAt: '2024-01-15T10:00:00Z', updatedAt: '2024-01-15T10:00:00Z' },
+                              { id: '2', modelId: 'customer-model', data: { id: '2', email: 'jane@example.com', name: 'Jane Smith', status: 'pending' }, createdAt: '2024-01-16T10:00:00Z', updatedAt: '2024-01-16T10:00:00Z' },
+                              { id: '3', modelId: 'customer-model', data: { id: '3', email: 'bob@example.com', name: 'Bob Wilson', status: 'active' }, createdAt: '2024-01-17T10:00:00Z', updatedAt: '2024-01-17T10:00:00Z' }
+                            ]
+                          },
+                          {
+                            id: 'cart-model',
+                            name: 'Shopping Cart',
+                            emoji: '🛒',
+                            hasPublishedField: false,
+                            idField: 'id',
+                            displayFields: ['customer_email', 'total'],
+                            fields: [
+                              { id: '1', name: 'id', type: 'String', isId: true, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'ID', sort: true, order: 1 },
+                              { id: '2', name: 'customer_email', type: 'String', isId: false, unique: false, list: false, required: true, kind: 'scalar', relationField: false, title: 'Customer', sort: true, order: 2 },
+                              { id: '3', name: 'total', type: 'Float', isId: false, unique: false, list: false, required: false, kind: 'scalar', relationField: false, title: 'Total', sort: true, order: 3 },
+                              { id: '4', name: 'abandoned_at', type: 'DateTime', isId: false, unique: false, list: false, required: false, kind: 'scalar', relationField: false, title: 'Abandoned At', sort: true, order: 4 }
+                            ],
+                            enums: [],
+                            records: [
+                              { id: '1', modelId: 'cart-model', data: { id: '1', customer_email: 'john@example.com', total: 299.99, abandoned_at: '2024-01-18T10:00:00Z' }, createdAt: '2024-01-18T10:00:00Z', updatedAt: '2024-01-18T10:00:00Z' },
+                              { id: '2', modelId: 'cart-model', data: { id: '2', customer_email: 'jane@example.com', total: 149.50, abandoned_at: '2024-01-19T10:00:00Z' }, createdAt: '2024-01-19T10:00:00Z', updatedAt: '2024-01-19T10:00:00Z' }
+                            ]
+                          }
+                        ],
+                        actions: [
+                          {
+                            id: 'send-email-action',
+                            name: 'Send Recovery Email',
+                            description: 'Send automated cart recovery email to customers',
+                            results: { actionType: 'Create', model: 'Email' }
+                          },
+                          {
+                            id: 'update-customer-action',
+                            name: 'Update Customer Status',
+                            description: 'Automatically update customer engagement status',
+                            results: { actionType: 'Update', model: 'Customer' }
+                          },
+                          {
+                            id: 'slack-notification-action',
+                            name: 'Slack Notification',
+                            description: 'Send alerts to team when high-value carts are abandoned',
+                            results: { actionType: 'Create', model: 'Notification' }
+                          }
+                        ],
+                        schedules: [
+                          {
+                            id: 'daily-email-schedule',
+                            name: 'Daily Email Campaign',
+                            description: 'Send cart recovery emails every day at 10 AM',
+                            interval: { pattern: '0 10 * * *', active: true },
+                            nextRun: '2024-01-21T10:00:00Z',
+                            lastRun: '2024-01-20T10:00:00Z',
+                            status: 'Active'
+                          },
+                          {
+                            id: 'weekly-report-schedule',
+                            name: 'Weekly Analytics Report',
+                            description: 'Generate and send weekly performance reports',
+                            interval: { pattern: '0 9 * * 1', active: true },
+                            nextRun: '2024-01-22T09:00:00Z',
+                            lastRun: '2024-01-15T09:00:00Z',
+                            status: 'Active'
+                          },
+                          {
+                            id: 'hourly-check-schedule',
+                            name: 'Abandoned Cart Check',
+                            description: 'Check for new abandoned carts every hour',
+                            interval: { pattern: '0 * * * *', active: false },
+                            nextRun: null,
+                            lastRun: '2024-01-20T11:00:00Z',
+                            status: 'Paused'
+                          }
+                        ]
+                      } as any)}
+                      onThemeChange={(theme) => {
+                        // Handle theme changes if needed
+                        console.log("Theme changed to:", theme);
+                      }}
+                      onDataChange={(agentData) => {
+                        // Handle data changes if needed
+                        console.log("Agent data changed:", agentData);
+                      }}
+                    />
+                  </div>
+
+                  {/* Demo Description */}
+                  <div className="text-center space-y-4 pt-4">
+                    <p className="text-xs text-gray-400">
+                      ✨ This demo shows what's possible when you describe your business needs to our AI
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-2 text-xs">
+                      <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30">📊 Real-time Dashboard</span>
+                      <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30">🤖 AI Assistant</span>
+                      <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30">⏰ Smart Scheduling</span>
+                      <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded border border-green-500/30">📧 Email Automation</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Navigation Buttons */}
-            {step < 3 && (
-              <div className="flex justify-between mt-4 pt-4 sm:pt-6 border-t border-gray-800">
-                <Button
-                  onClick={prevStep}
-                  disabled={step === 1}
-                  variant="outline"
-                  className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 disabled:opacity-50 transition-all duration-150 h-10 sm:h-auto"
-                >
-                  Previous
-                </Button>
+            <div className="flex justify-between mt-4 pt-4 sm:pt-6 border-t border-gray-800">
+              <Button
+                onClick={prevStep}
+                disabled={step === 1}
+                variant="outline"
+                className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 disabled:opacity-50 transition-all duration-150 h-10 sm:h-auto"
+              >
+                Previous
+              </Button>
 
+              {step < 4 && (
                 <Button
                   onClick={nextStep}
                   disabled={
                     (step === 1 && !avatarData.unicornParts) ||
-                    (step === 2 && !avatarData.name)
+                    (step === 2 && !avatarData.name) ||
+                    (step === 3 && !avatarData.isAuthenticated)
                   }
                   className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 disabled:opacity-50 h-10 sm:h-auto"
                 >
                   Next
                 </Button>
-              </div>
-            )}
+              )}
+            </div>
           </CardContent>
         </Card>
         </div>
