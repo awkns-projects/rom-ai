@@ -1,6 +1,8 @@
 import * as React from 'react';
 import { memo, useState, useCallback } from 'react';
 import type { AgentData, AgentModel, AgentAction, AgentSchedule } from '../types';
+import { CompositeUnicorn } from '@/components/composite-unicorn';
+import Image from 'next/image';
 
 interface MobileAppDemoProps {
   agentData?: AgentData;
@@ -287,7 +289,7 @@ export const MobileAppDemoWrapper = memo(({ agentData, onThemeChange, onDataChan
 
 // Main mobile app demo component
 const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mobile', onDataChange }: MobileAppDemoProps) => {
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState<number | null>(null); // null means home page
   const [isMenuOpen, setIsMenuOpen] = useState(false); // State for hamburger menu
   const [selectedModel, setSelectedModel] = useState<any>(null); // State for selected model
   const [modelViewMode, setModelViewMode] = useState<'view' | 'edit'>('view'); // State for model view/edit mode
@@ -346,6 +348,47 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
     setNewRecordData({});
     setEditRecordData({});
   }, []);
+
+  // Avatar rendering function
+  const renderAvatar = (size = 32) => {
+    const avatar = agentData?.avatar;
+    const containerClass = size === 80 ? 'w-20 h-20' : size === 32 ? 'w-8 h-8' : 'w-10 h-10';
+    const iconSize = size === 80 ? 'text-3xl' : 'text-lg';
+    
+    if (!avatar) {
+      return (
+        <div className={`${containerClass} ${theme.bg} border ${theme.border} rounded-lg flex items-center justify-center`}>
+          <span className={iconSize}>🤖</span>
+        </div>
+      );
+    }
+
+    if (avatar.type === 'rom-unicorn' && avatar.unicornParts) {
+      return (
+        <div className={`${containerClass} ${theme.bg} border ${theme.border} rounded-lg flex items-center justify-center overflow-hidden`}>
+          <CompositeUnicorn parts={avatar.unicornParts} size={size} />
+        </div>
+      );
+    } else if (avatar.type === 'custom' && avatar.customType === 'upload' && avatar.uploadedImage) {
+      return (
+        <div className={`${containerClass} ${theme.bg} border ${theme.border} rounded-lg overflow-hidden`}>
+          <Image
+            src={avatar.uploadedImage}
+            alt="Avatar"
+            width={size}
+            height={size}
+            className="w-full h-full object-cover"
+          />
+        </div>
+      );
+    } else {
+      return (
+        <div className={`${containerClass} ${theme.bg} border ${theme.border} rounded-lg flex items-center justify-center`}>
+          <span className={iconSize}>🤖</span>
+        </div>
+      );
+    }
+  };
 
   // Handle new record form changes
   const handleNewRecordChange = useCallback((fieldName: string, value: any) => {
@@ -832,7 +875,134 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
     );
   };
 
+  const renderHomeContent = () => {
+    return (
+      <div className="p-4 space-y-6">
+        {/* Hero Section with Avatar */}
+        <div className="text-center space-y-4">
+          <div className="flex justify-center">
+            <div className={`p-4 ${theme.bg} border ${theme.border} rounded-2xl`}>
+              {renderAvatar(80)}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <h2 className={`font-mono font-bold text-xl ${theme.light}`}>{agentName}</h2>
+            <p className={`font-mono text-sm ${theme.dim} max-w-xs mx-auto leading-relaxed`}>
+              {agentData?.description || "Your intelligent AI assistant"}
+            </p>
+          </div>
+        </div>
+
+        {/* Agent Stats */}
+        <div className={`${theme.bg} border ${theme.border} rounded-xl p-4`}>
+          <h3 className={`font-mono font-semibold text-sm ${theme.light} mb-3`}>Agent Overview</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="text-center">
+              <div className={`font-mono font-bold text-lg ${theme.accent}`}>
+                {models.length}
+              </div>
+              <div className={`font-mono text-xs ${theme.dim}`}>Data Models</div>
+            </div>
+            <div className="text-center">
+              <div className={`font-mono font-bold text-lg ${theme.accent}`}>
+                {actions.length}
+              </div>
+              <div className={`font-mono text-xs ${theme.dim}`}>Smart Actions</div>
+            </div>
+            <div className="text-center">
+              <div className={`font-mono font-bold text-lg ${theme.accent}`}>
+                {schedules.length}
+              </div>
+              <div className={`font-mono text-xs ${theme.dim}`}>Schedules</div>
+            </div>
+            <div className="text-center">
+              <div className={`font-mono font-bold text-lg ${theme.accent}`}>
+                {schedules.filter(s => s.interval?.active).length}
+              </div>
+              <div className={`font-mono text-xs ${theme.dim}`}>Active Tasks</div>
+            </div>
+          </div>
+        </div>
+
+                 {/* Quick Actions */}
+         <div className={`${theme.bg} border ${theme.border} rounded-xl p-4`}>
+           <h3 className={`font-mono font-semibold text-sm ${theme.light} mb-3`}>Quick Actions</h3>
+           <div className="space-y-2">
+             <button
+               onClick={() => setActiveTab(3)} // Go to AI Chat
+               className={`w-full flex items-center gap-3 p-3 ${theme.bgActive} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}
+             >
+               <span className="text-lg">💬</span>
+               <div className="flex-1 text-left">
+                 <div className={`font-mono text-sm ${theme.light}`}>Chat with AI</div>
+                 <div className={`font-mono text-xs ${theme.dim}`}>Ask questions or give commands</div>
+               </div>
+               <span className={`text-xs ${theme.dim}`}>→</span>
+             </button>
+             
+             <button
+               onClick={() => setActiveTab(1)} // Go to Models
+               className={`w-full flex items-center gap-3 p-3 ${theme.bgActive} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}
+             >
+               <span className="text-lg">🗃️</span>
+               <div className="flex-1 text-left">
+                 <div className={`font-mono text-sm ${theme.light}`}>View Data</div>
+                 <div className={`font-mono text-xs ${theme.dim}`}>Manage your business information</div>
+               </div>
+               <span className={`text-xs ${theme.dim}`}>→</span>
+             </button>
+             
+             <button
+               onClick={() => setActiveTab(2)} // Go to Schedules
+               className={`w-full flex items-center gap-3 p-3 ${theme.bgActive} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}
+             >
+               <span className="text-lg">⏰</span>
+               <div className="flex-1 text-left">
+                 <div className={`font-mono text-sm ${theme.light}`}>Schedules</div>
+                 <div className={`font-mono text-xs ${theme.dim}`}>Manage automated tasks</div>
+               </div>
+               <span className={`text-xs ${theme.dim}`}>→</span>
+             </button>
+             
+             <button
+               onClick={() => setActiveTab(0)} // Go to Dashboard
+               className={`w-full flex items-center gap-3 p-3 ${theme.bgActive} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}
+             >
+               <span className="text-lg">📊</span>
+               <div className="flex-1 text-left">
+                 <div className={`font-mono text-sm ${theme.light}`}>Dashboard</div>
+                 <div className={`font-mono text-xs ${theme.dim}`}>View analytics and insights</div>
+               </div>
+               <span className={`text-xs ${theme.dim}`}>→</span>
+             </button>
+           </div>
+         </div>
+
+        {/* Status */}
+        <div className={`${theme.bg} border ${theme.border} rounded-xl p-4`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-3 h-3 bg-${theme.primary}-400 rounded-full animate-pulse`}></div>
+              <div>
+                <div className={`font-mono font-semibold text-sm ${theme.light}`}>System Status</div>
+                <div className={`font-mono text-xs ${theme.dim}`}>All systems operational</div>
+              </div>
+            </div>
+            <div className={`px-2 py-1 ${theme.bgActive} border ${theme.border} rounded-lg`}>
+              <span className={`font-mono text-xs ${theme.accent}`}>LIVE</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderTabContent = () => {
+    // Show home page when activeTab is null
+    if (activeTab === null) {
+      return renderHomeContent();
+    }
+    
     switch (activeTab) {
       case 0: // Dashboard
         return (
@@ -1027,9 +1197,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
         return (
           <div className="p-4 space-y-4">
             <div className="flex items-center gap-3 mb-6">
-              <div className={`w-8 h-8 ${theme.bg} border ${theme.border} rounded-lg flex items-center justify-center`}>
-                <span className={`text-sm ${theme.accent}`}>🤖</span>
-              </div>
+              {renderAvatar(32)}
               <h3 className={`font-mono font-bold text-lg ${theme.light}`}>AI Assistant</h3>
             </div>
             
@@ -1119,9 +1287,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
       {isMenuOpen && (
         <div className={`p-4 border-t ${theme.border}`}>
           <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 ${theme.bg} border ${theme.border} rounded-lg flex items-center justify-center`}>
-              <span className="text-lg">🤖</span>
-            </div>
+            {renderAvatar(32)}
             <div className="flex-1 min-w-0">
               <div className={`font-mono font-bold text-xs ${theme.light} truncate`}>{agentName}</div>
               <div className="flex items-center gap-1">
@@ -1153,7 +1319,15 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
             <div className={`bg-black/40 border-b ${theme.border} p-4 flex-shrink-0`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <h3 className={`font-mono font-bold text-lg ${theme.light}`}>{tabs[activeTab].label}</h3>
+                  <button
+                    onClick={() => setActiveTab(null)}
+                    className={`w-8 h-8 ${theme.bg} border ${theme.border} rounded-lg flex items-center justify-center ${theme.bgHover} transition-colors duration-200 mr-3`}
+                  >
+                    <span className={`text-sm ${theme.accent}`}>🏠</span>
+                  </button>
+                  <h3 className={`font-mono font-bold text-lg ${theme.light}`}>
+                    {activeTab !== null ? tabs[activeTab].label : agentName}
+                  </h3>
           </div>
           <div className="flex gap-1">
                   <div className={`w-1 h-1 bg-${theme.primary}-400 rounded-full`}></div>
@@ -1183,9 +1357,15 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
         <div className={`bg-black/40 border-b ${theme.border} p-4 flex-shrink-0`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 ${theme.bg} border ${theme.border} rounded-lg flex items-center justify-center`}>
-                <span className="text-lg">🤖</span>
-              </div>
+              {activeTab !== null && (
+                <button
+                  onClick={() => setActiveTab(null)}
+                  className={`w-8 h-8 ${theme.bg} border ${theme.border} rounded-lg flex items-center justify-center ${theme.bgHover} transition-colors duration-200`}
+                >
+                  <span className={`text-sm ${theme.accent}`}>🏠</span>
+                </button>
+              )}
+              {renderAvatar(32)}
               <div>
                 <h3 className={`font-mono font-bold text-sm ${theme.light}`}>{agentName}</h3>
                 <div className="flex items-center gap-1">
@@ -1207,31 +1387,33 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
         {renderTabContent()}
       </div>
 
-      {/* Bottom Tab Navigation */}
+      {/* Bottom Tab Navigation - Only show when not on home page */}
+      {activeTab !== null && (
         <div className={`bg-black/60 border-t ${theme.border} p-2 flex-shrink-0`}>
-        <div className={`grid gap-1`} style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
-          {tabs.map((tab, index) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(index)}
-              className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all duration-200 ${
-                activeTab === index
-                    ? `${theme.bgActive} border ${theme.borderActive}`
-                    : theme.bgHover
-              }`}
-            >
-              <span className="text-lg mb-1">{tab.icon}</span>
-                <span className={`text-xs font-mono font-medium ${
-                  activeTab === index 
-                    ? theme.light
-                    : theme.dim
-                }`}>
-                  {tab.label}
-                </span>
-            </button>
-          ))}
+          <div className={`grid gap-1`} style={{ gridTemplateColumns: `repeat(${tabs.length}, 1fr)` }}>
+            {tabs.map((tab, index) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(index)}
+                className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all duration-200 ${
+                  activeTab === index
+                      ? `${theme.bgActive} border ${theme.borderActive}`
+                      : theme.bgHover
+                }`}
+              >
+                <span className="text-lg mb-1">{tab.icon}</span>
+                  <span className={`text-xs font-mono font-medium ${
+                    activeTab === index 
+                      ? theme.light
+                      : theme.dim
+                  }`}>
+                    {tab.label}
+                  </span>
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
       {/* Model Modal */}
       {renderModelModal()}

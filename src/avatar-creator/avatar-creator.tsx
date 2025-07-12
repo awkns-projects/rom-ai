@@ -1040,115 +1040,125 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
 
                 <div className="space-y-4 sm:space-y-6">
                   {/* Mobile App Demo */}
-                  <div className="flex justify-center">
-                    <MobileAppDemoWrapper 
-                      agentData={({
-                        id: 'avatar-demo',
-                        name: avatarData.name || "My AI Agent",
-                        description: avatarData.personality || "A helpful AI assistant",
-                        domain: "E-commerce",
-                        theme: "green",
-                        createdAt: new Date().toISOString(),
-                        models: [
-                          {
-                            id: 'customer-model',
-                            name: 'Customer',
-                            emoji: '👤',
-                            hasPublishedField: true,
-                            idField: 'id',
-                            displayFields: ['name', 'email'],
-                            fields: [
-                              { id: '1', name: 'id', type: 'String', isId: true, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'ID', sort: true, order: 1 },
-                              { id: '2', name: 'email', type: 'String', isId: false, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'Email', sort: true, order: 2 },
-                              { id: '3', name: 'name', type: 'String', isId: false, unique: false, list: false, required: true, kind: 'scalar', relationField: false, title: 'Name', sort: true, order: 3 },
-                              { id: '4', name: 'status', type: 'String', isId: false, unique: false, list: false, required: false, kind: 'enum', relationField: false, title: 'Status', sort: true, order: 4 }
-                            ],
-                            enums: [],
-                            records: [
-                              { id: '1', modelId: 'customer-model', data: { id: '1', email: 'john@example.com', name: 'John Doe', status: 'active' }, createdAt: '2024-01-15T10:00:00Z', updatedAt: '2024-01-15T10:00:00Z' },
-                              { id: '2', modelId: 'customer-model', data: { id: '2', email: 'jane@example.com', name: 'Jane Smith', status: 'pending' }, createdAt: '2024-01-16T10:00:00Z', updatedAt: '2024-01-16T10:00:00Z' },
-                              { id: '3', modelId: 'customer-model', data: { id: '3', email: 'bob@example.com', name: 'Bob Wilson', status: 'active' }, createdAt: '2024-01-17T10:00:00Z', updatedAt: '2024-01-17T10:00:00Z' }
-                            ]
-                          },
-                          {
-                            id: 'cart-model',
-                            name: 'Shopping Cart',
-                            emoji: '🛒',
-                            hasPublishedField: false,
-                            idField: 'id',
-                            displayFields: ['customer_email', 'total'],
-                            fields: [
-                              { id: '1', name: 'id', type: 'String', isId: true, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'ID', sort: true, order: 1 },
-                              { id: '2', name: 'customer_email', type: 'String', isId: false, unique: false, list: false, required: true, kind: 'scalar', relationField: false, title: 'Customer', sort: true, order: 2 },
-                              { id: '3', name: 'total', type: 'Float', isId: false, unique: false, list: false, required: false, kind: 'scalar', relationField: false, title: 'Total', sort: true, order: 3 },
-                              { id: '4', name: 'abandoned_at', type: 'DateTime', isId: false, unique: false, list: false, required: false, kind: 'scalar', relationField: false, title: 'Abandoned At', sort: true, order: 4 }
-                            ],
-                            enums: [],
-                            records: [
-                              { id: '1', modelId: 'cart-model', data: { id: '1', customer_email: 'john@example.com', total: 299.99, abandoned_at: '2024-01-18T10:00:00Z' }, createdAt: '2024-01-18T10:00:00Z', updatedAt: '2024-01-18T10:00:00Z' },
-                              { id: '2', modelId: 'cart-model', data: { id: '2', customer_email: 'jane@example.com', total: 149.50, abandoned_at: '2024-01-19T10:00:00Z' }, createdAt: '2024-01-19T10:00:00Z', updatedAt: '2024-01-19T10:00:00Z' }
-                            ]
-                          }
-                        ],
-                        actions: [
-                          {
-                            id: 'send-email-action',
-                            name: 'Send Recovery Email',
-                            description: 'Send automated cart recovery email to customers',
-                            results: { actionType: 'Create', model: 'Email' }
-                          },
-                          {
-                            id: 'update-customer-action',
-                            name: 'Update Customer Status',
-                            description: 'Automatically update customer engagement status',
-                            results: { actionType: 'Update', model: 'Customer' }
-                          },
-                          {
-                            id: 'slack-notification-action',
-                            name: 'Slack Notification',
-                            description: 'Send alerts to team when high-value carts are abandoned',
-                            results: { actionType: 'Create', model: 'Notification' }
-                          }
-                        ],
-                        schedules: [
-                          {
-                            id: 'daily-email-schedule',
-                            name: 'Daily Email Campaign',
-                            description: 'Send cart recovery emails every day at 10 AM',
-                            interval: { pattern: '0 10 * * *', active: true },
-                            nextRun: '2024-01-21T10:00:00Z',
-                            lastRun: '2024-01-20T10:00:00Z',
-                            status: 'Active'
-                          },
-                          {
-                            id: 'weekly-report-schedule',
-                            name: 'Weekly Analytics Report',
-                            description: 'Generate and send weekly performance reports',
-                            interval: { pattern: '0 9 * * 1', active: true },
-                            nextRun: '2024-01-22T09:00:00Z',
-                            lastRun: '2024-01-15T09:00:00Z',
-                            status: 'Active'
-                          },
-                          {
-                            id: 'hourly-check-schedule',
-                            name: 'Abandoned Cart Check',
-                            description: 'Check for new abandoned carts every hour',
-                            interval: { pattern: '0 * * * *', active: false },
-                            nextRun: null,
-                            lastRun: '2024-01-20T11:00:00Z',
-                            status: 'Paused'
-                          }
-                        ]
-                      } as any)}
-                      onThemeChange={(theme) => {
-                        // Handle theme changes if needed
-                        console.log("Theme changed to:", theme);
-                      }}
-                      onDataChange={(agentData) => {
-                        // Handle data changes if needed
-                        console.log("Agent data changed:", agentData);
-                      }}
-                    />
+                  <div className="flex justify-center overflow-hidden">
+                    <div className="w-full max-w-4xl overflow-hidden">
+                      <MobileAppDemoWrapper 
+                        agentData={({
+                          id: 'avatar-demo',
+                          name: avatarData.name || "My AI Agent",
+                          description: avatarData.personality || "A helpful AI assistant",
+                          domain: "E-commerce",
+                          theme: "green",
+                          createdAt: new Date().toISOString(),
+                          avatar: avatarData.unicornParts ? {
+                            type: 'rom-unicorn',
+                            unicornParts: avatarData.unicornParts
+                          } : avatarData.uploadedImage ? {
+                            type: 'custom',
+                            customType: 'upload',
+                            uploadedImage: avatarData.uploadedImage
+                          } : null,
+                          models: [
+                            {
+                              id: 'customer-model',
+                              name: 'Customer',
+                              emoji: '👤',
+                              hasPublishedField: true,
+                              idField: 'id',
+                              displayFields: ['name', 'email'],
+                              fields: [
+                                { id: '1', name: 'id', type: 'String', isId: true, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'ID', sort: true, order: 1 },
+                                { id: '2', name: 'email', type: 'String', isId: false, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'Email', sort: true, order: 2 },
+                                { id: '3', name: 'name', type: 'String', isId: false, unique: false, list: false, required: true, kind: 'scalar', relationField: false, title: 'Name', sort: true, order: 3 },
+                                { id: '4', name: 'status', type: 'String', isId: false, unique: false, list: false, required: false, kind: 'enum', relationField: false, title: 'Status', sort: true, order: 4 }
+                              ],
+                              enums: [],
+                              records: [
+                                { id: '1', modelId: 'customer-model', data: { id: '1', email: 'john@example.com', name: 'John Doe', status: 'active' }, createdAt: '2024-01-15T10:00:00Z', updatedAt: '2024-01-15T10:00:00Z' },
+                                { id: '2', modelId: 'customer-model', data: { id: '2', email: 'jane@example.com', name: 'Jane Smith', status: 'pending' }, createdAt: '2024-01-16T10:00:00Z', updatedAt: '2024-01-16T10:00:00Z' },
+                                { id: '3', modelId: 'customer-model', data: { id: '3', email: 'bob@example.com', name: 'Bob Wilson', status: 'active' }, createdAt: '2024-01-17T10:00:00Z', updatedAt: '2024-01-17T10:00:00Z' }
+                              ]
+                            },
+                            {
+                              id: 'cart-model',
+                              name: 'Shopping Cart',
+                              emoji: '🛒',
+                              hasPublishedField: false,
+                              idField: 'id',
+                              displayFields: ['customer_email', 'total'],
+                              fields: [
+                                { id: '1', name: 'id', type: 'String', isId: true, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'ID', sort: true, order: 1 },
+                                { id: '2', name: 'customer_email', type: 'String', isId: false, unique: false, list: false, required: true, kind: 'scalar', relationField: false, title: 'Customer', sort: true, order: 2 },
+                                { id: '3', name: 'total', type: 'Float', isId: false, unique: false, list: false, required: false, kind: 'scalar', relationField: false, title: 'Total', sort: true, order: 3 },
+                                { id: '4', name: 'abandoned_at', type: 'DateTime', isId: false, unique: false, list: false, required: false, kind: 'scalar', relationField: false, title: 'Abandoned At', sort: true, order: 4 }
+                              ],
+                              enums: [],
+                              records: [
+                                { id: '1', modelId: 'cart-model', data: { id: '1', customer_email: 'john@example.com', total: 299.99, abandoned_at: '2024-01-18T10:00:00Z' }, createdAt: '2024-01-18T10:00:00Z', updatedAt: '2024-01-18T10:00:00Z' },
+                                { id: '2', modelId: 'cart-model', data: { id: '2', customer_email: 'jane@example.com', total: 149.50, abandoned_at: '2024-01-19T10:00:00Z' }, createdAt: '2024-01-19T10:00:00Z', updatedAt: '2024-01-19T10:00:00Z' }
+                              ]
+                            }
+                          ],
+                          actions: [
+                            {
+                              id: 'send-email-action',
+                              name: 'Send Recovery Email',
+                              description: 'Send automated cart recovery email to customers',
+                              results: { actionType: 'Create', model: 'Email' }
+                            },
+                            {
+                              id: 'update-customer-action',
+                              name: 'Update Customer Status',
+                              description: 'Automatically update customer engagement status',
+                              results: { actionType: 'Update', model: 'Customer' }
+                            },
+                            {
+                              id: 'slack-notification-action',
+                              name: 'Slack Notification',
+                              description: 'Send alerts to team when high-value carts are abandoned',
+                              results: { actionType: 'Create', model: 'Notification' }
+                            }
+                          ],
+                          schedules: [
+                            {
+                              id: 'daily-email-schedule',
+                              name: 'Daily Email Campaign',
+                              description: 'Send cart recovery emails every day at 10 AM',
+                              interval: { pattern: '0 10 * * *', active: true },
+                              nextRun: '2024-01-21T10:00:00Z',
+                              lastRun: '2024-01-20T10:00:00Z',
+                              status: 'Active'
+                            },
+                            {
+                              id: 'weekly-report-schedule',
+                              name: 'Weekly Analytics Report',
+                              description: 'Generate and send weekly performance reports',
+                              interval: { pattern: '0 9 * * 1', active: true },
+                              nextRun: '2024-01-22T09:00:00Z',
+                              lastRun: '2024-01-15T09:00:00Z',
+                              status: 'Active'
+                            },
+                            {
+                              id: 'hourly-check-schedule',
+                              name: 'Abandoned Cart Check',
+                              description: 'Check for new abandoned carts every hour',
+                              interval: { pattern: '0 * * * *', active: false },
+                              nextRun: null,
+                              lastRun: '2024-01-20T11:00:00Z',
+                              status: 'Paused'
+                            }
+                          ]
+                        } as any)}
+                        onThemeChange={(theme) => {
+                          // Handle theme changes if needed
+                          console.log("Theme changed to:", theme);
+                        }}
+                        onDataChange={(agentData) => {
+                          // Handle data changes if needed
+                          console.log("Agent data changed:", agentData);
+                        }}
+                      />
+                    </div>
                   </div>
 
                   {/* Demo Description */}

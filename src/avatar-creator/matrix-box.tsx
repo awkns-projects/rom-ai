@@ -45,7 +45,7 @@ interface MatrixBoxProps {
 
 export default function MatrixBox({ onUnicornGenerated }: MatrixBoxProps) {
   return (
-    <div className="w-full h-[400px] bg-black overflow-hidden rounded-lg">
+    <div style={{height: '600px'}} className="w-full bg-black overflow-hidden rounded-lg">
       <Canvas camera={{ position: [4, 4, 4], fov: 60 }}>
         <Scene onUnicornGenerated={onUnicornGenerated} />
       </Canvas>

@@ -12,6 +12,19 @@ export interface AgentData {
   schedules: AgentSchedule[];
   createdAt: string;
   theme?: string; // Stored theme selection for the agent
+  avatar?: {
+    type: 'rom-unicorn' | 'custom';
+    unicornParts?: {
+      body: string;
+      hair: string;
+      eyes: string;
+      mouth: string;
+      accessory: string;
+    };
+    customType?: 'upload' | 'wallet';
+    uploadedImage?: string;
+    selectedNFT?: string;
+  };
   metadata?: {
     createdAt: string;
     updatedAt: string;
