@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,11 +11,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import Image from "next/image"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-
-import MatrixBox from "./matrix-box"
-import { CompositeUnicorn } from "@/components/composite-unicorn"
-import { AvatarList } from "@/components/avatar-list"
-import { useAvatars, type Avatar } from "@/hooks/use-avatar"
 
 type AvatarType = "rom-unicorn" | "custom"
 type RomUnicornType = "default" | "random"
@@ -44,10 +39,6 @@ interface AvatarData {
   connectedWallet?: string
   selectedNFT?: string
   unicornParts?: UnicornParts
-}
-
-interface AvatarCreatorProps {
-  documentId?: string
 }
 
 const artStyles = [
@@ -81,6 +72,91 @@ const unicornParts = {
   accessories: ["corn_ice1.png", "corn_ice2.png"],
 }
 
+// Composite Unicorn Component
+const CompositeUnicorn: React.FC<{ parts: UnicornParts; size?: number }> = ({ parts, size = 128 }) => {
+  // Map the part names to their actual file paths
+  const getImageSrc = (category: string, filename: string) => {
+    // Direct mapping to the public folder files
+    const imageMap: { [key: string]: { [key: string]: string } } = {
+      bodies: {
+        "body.png": "/images/unicorn/bodies/body.png",
+        "body_h.png": "/images/unicorn/bodies/body_h.png",
+      },
+      hair: {
+        "hair_blue.png": "/images/unicorn/hair/hair_blue.png",
+        "hair_g.png": "/images/unicorn/hair/hair_g.png",
+      },
+      eyes: {
+        "eye_h.png": "/images/unicorn/eyes/eye_h.png",
+        "eye_heart.png": "/images/unicorn/eyes/eye_heart.png",
+      },
+      mouths: {
+        "m_.png": "/images/unicorn/mouths/m_.png",
+        "m_ice.png": "/images/unicorn/mouths/m_ice.png",
+      },
+      accessories: {
+        "corn_ice1.png": "/images/unicorn/accessories/corn_ice1.png",
+        "corn_ice2.png": "/images/unicorn/accessories/corn_ice2.png",
+      },
+    }
+    return imageMap[category]?.[filename] || `/placeholder.svg?height=${size}&width=${size}`
+  }
+
+  return (
+    <div className="relative inline-block" style={{ width: size, height: size }}>
+      {/* Body (base layer) */}
+      <Image
+        src={getImageSrc("bodies", parts.body) || "/placeholder.svg"}
+        alt="Unicorn body"
+        width={size}
+        height={size}
+        className="absolute inset-0 object-contain"
+        style={{ zIndex: 1 }}
+      />
+
+      {/* Hair */}
+      <Image
+        src={getImageSrc("hair", parts.hair) || "/placeholder.svg"}
+        alt="Unicorn hair"
+        width={size}
+        height={size}
+        className="absolute inset-0 object-contain"
+        style={{ zIndex: 2 }}
+      />
+
+      {/* Eyes */}
+      <Image
+        src={getImageSrc("eyes", parts.eyes) || "/placeholder.svg"}
+        alt="Unicorn eyes"
+        width={size}
+        height={size}
+        className="absolute inset-0 object-contain"
+        style={{ zIndex: 3 }}
+      />
+
+      {/* Mouth */}
+      <Image
+        src={getImageSrc("mouths", parts.mouth) || "/placeholder.svg"}
+        alt="Unicorn mouth"
+        width={size}
+        height={size}
+        className="absolute inset-0 object-contain"
+        style={{ zIndex: 4 }}
+      />
+
+      {/* Accessory (top layer) */}
+      <Image
+        src={getImageSrc("accessories", parts.accessory) || "/placeholder.svg"}
+        alt="Unicorn accessory"
+        width={size}
+        height={size}
+        className="absolute inset-0 object-contain"
+        style={{ zIndex: 5 }}
+      />
+    </div>
+  )
+}
+
 // Function to generate random unicorn parts
 const generateRandomUnicorn = (): UnicornParts => {
   const randomBody = unicornParts.bodies[Math.floor(Math.random() * unicornParts.bodies.length)]
@@ -98,7 +174,7 @@ const generateRandomUnicorn = (): UnicornParts => {
   }
 }
 
-export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
+export default function AvatarCreator() {
   const [step, setStep] = useState(1)
   const [avatarData, setAvatarData] = useState<AvatarData>({
     isAuthenticated: false,
@@ -114,10 +190,6 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
   const [showTokenModal, setShowTokenModal] = useState(false)
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const [showCreateNew, setShowCreateNew] = useState(false)
-
-  // Avatar management hooks
-  const { avatars, createAvatar: createAvatarInDB, setActiveAvatar } = useAvatars(documentId)
 
   // Auto-save functionality
   const saveToLocalStorage = useCallback((data: AvatarData, currentStep: number) => {
@@ -253,12 +325,12 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
     setAvatarData((prev) => ({ ...prev, characterNames }))
   }
 
-  const nextStep = () => setStep((prev) => Math.min(prev + 1, 3))
+  const nextStep = () => setStep((prev) => Math.min(prev + 1, 4))
   const prevStep = () => setStep((prev) => Math.max(prev - 1, 1))
 
   const handleGenerateRandomUnicorn = () => {
-    // Clear current unicorn to show Matrix Box again
-    setAvatarData((prev) => ({ ...prev, unicornParts: undefined }))
+    const randomParts = generateRandomUnicorn()
+    setAvatarData((prev) => ({ ...prev, unicornParts: randomParts }))
   }
 
   const connectWallet = async () => {
@@ -270,117 +342,25 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
     setAvatarData((prev) => ({ ...prev, selectedNFT: nftId }))
   }
 
+  const createAvatar = async () => {
+    console.log("Creating avatar with data:", avatarData)
+    setIsCreating(true)
+    setCreationProgress(0)
+    setGeneratedVariations([])
 
+    // Simulate AI generation process
+    for (let i = 0; i < facialExpressions.length; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      setCreationProgress(((i + 1) / facialExpressions.length) * 100)
+      setGeneratedVariations((prev) => [...prev, facialExpressions[i].emoji])
+    }
 
-
-
-  const regenerateAvatar = async () => {
-    console.log("Regenerating avatar...")
-    
-    // Generate new random parts - this will trigger auto-save via handleUnicornGenerated
-    const newParts = generateRandomUnicorn()
-    await handleUnicornGenerated(newParts)
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    setIsCreating(false)
   }
 
-  const [isSaving, setIsSaving] = useState(false)
-  const isProcessingRef = useRef(false)
-
-  const handleUnicornGenerated = useCallback(async (unicornParts: UnicornParts) => {
-    // Prevent multiple saves for the same generation using ref
-    if (isProcessingRef.current) {
-      console.log("Already processing avatar generation, skipping duplicate")
-      return
-    }
-
-    isProcessingRef.current = true
-    setIsSaving(true)
-    
-    // Generate unique timestamp for this specific generation
-    const timestamp = Date.now()
-    console.log("Starting avatar generation with timestamp:", timestamp)
-    
-    // Update avatar data with generated parts
-    const updatedAvatarData = {
-      ...avatarData,
-      unicornParts,
-      type: "rom-unicorn" as AvatarType,
-      romUnicornType: "random" as RomUnicornType,
-      name: avatarData.name || `Unicorn ${timestamp}` // Use specific timestamp
-    }
-    
-    setAvatarData(updatedAvatarData)
-    
-    try {
-      // Automatically save to database immediately after generation
-      const newAvatar = await createAvatarInDB({
-        name: updatedAvatarData.name,
-        personality: updatedAvatarData.personality,
-        characterNames: updatedAvatarData.characterNames,
-        type: updatedAvatarData.type,
-        romUnicornType: updatedAvatarData.romUnicornType,
-        customType: updatedAvatarData.customType,
-        uploadedImage: updatedAvatarData.uploadedImage,
-        selectedStyle: updatedAvatarData.selectedStyle,
-        connectedWallet: updatedAvatarData.connectedWallet,
-        selectedNFT: updatedAvatarData.selectedNFT,
-        unicornParts: updatedAvatarData.unicornParts,
-        isActive: false,
-      })
-      
-      // Auto-select the newly created avatar
-      if (newAvatar) {
-        await setActiveAvatar(newAvatar.id)
-      }
-      
-      console.log("Avatar automatically saved after lootbox generation:", newAvatar)
-    } catch (error) {
-      console.error("Failed to auto-save avatar:", error)
-    } finally {
-      setIsSaving(false)
-      isProcessingRef.current = false
-    }
-  }, [avatarData, createAvatarInDB, setActiveAvatar])
-
-  const handleSelectAvatar = async (avatar: Avatar) => {
-    try {
-      // Set this avatar as active for the current document
-      await setActiveAvatar(avatar.id)
-      
-      // Load the selected avatar data into the current form for viewing
-      setAvatarData({
-        name: avatar.name,
-        personality: avatar.personality,
-        characterNames: avatar.characterNames,
-        type: avatar.type as AvatarType,
-        romUnicornType: avatar.romUnicornType as RomUnicornType,
-        customType: avatar.customType as CustomType,
-        uploadedImage: avatar.uploadedImage,
-        selectedStyle: avatar.selectedStyle,
-        connectedWallet: avatar.connectedWallet,
-        selectedNFT: avatar.selectedNFT,
-        unicornParts: avatar.unicornParts,
-        isAuthenticated: avatarData.isAuthenticated,
-        accessToken: avatarData.accessToken,
-        shopifyStore: avatarData.shopifyStore,
-      })
-      
-      // Go to step 1 to show the selected avatar
-      setStep(1)
-      
-      console.log(`Avatar "${avatar.name}" is now active for this document`)
-    } catch (error) {
-      console.error('Failed to select avatar:', error)
-    }
-  }
-
-  const handleRegenerateAvatar = async (avatar: Avatar) => {
-    // Load the avatar data and regenerate
-    handleSelectAvatar(avatar)
-    await regenerateAvatar()
-  }
-
-  // Updated step titles - removed generate & review step
-  const stepTitles = ["Generate Avatar", "Name Your Avatar", "Connect Store"]
+  // Updated step titles with new order
+  const stepTitles = ["Choose Source", "Name Your Avatar", "Connect Store", "Generate & Review"]
 
   const getSelectedStyle = () => {
     return artStyles.find((style) => style.id === avatarData.selectedStyle)
@@ -470,14 +450,10 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
           )}
         </div>
 
-
-
-        {/* Avatar Creator Section */}
-        <div className="w-full">
         {/* Progress Steps */}
         <div className="mb-6 sm:mb-8">
           <div className="flex items-center">
-            {[1, 2, 3].map((i) => (
+            {[1, 2, 3, 4].map((i) => (
               <div key={i} className="flex items-center flex-1">
                 <div className="flex items-center">
                   <div
@@ -495,7 +471,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                     {stepTitles[i - 1]}
                   </span>
                 </div>
-                {i < 3 && (
+                {i < 4 && (
                   <div className="flex-1 mx-2 sm:mx-4">
                     <div className={`h-px transition-all duration-300 ${i < step ? "bg-green-500" : "bg-gray-800"}`} />
                   </div>
@@ -511,170 +487,338 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
 
         <Card className="bg-gray-900/50 border-gray-800">
           <CardHeader className="border-b border-gray-800 bg-gray-900/30 p-4 sm:p-6">
-                        <CardTitle className="text-green-400 text-base sm:text-lg font-medium flex items-center gap-2">
+            <CardTitle className="text-green-400 text-base sm:text-lg font-medium flex items-center gap-2">
               <div className="w-5 h-5 sm:w-6 sm:h-6 bg-green-500/20 rounded flex items-center justify-center">
                 <span className="text-green-400 text-xs sm:text-sm">
-                  {step === 1 && "🎲"}
+                  {step === 1 && "🎨"}
                   {step === 2 && "⚙️"}
                   {step === 3 && "🔐"}
- 
+                  {step === 4 && "✨"}
                 </span>
               </div>
-              Create New Avatar - {stepTitles[step - 1]}
+              {stepTitles[step - 1]}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
-            {/* Step 1: Generate Avatar with Matrix Box */}
+            {/* Step 1: Choose Source (previously Step 3) */}
             {step === 1 && (
               <div className="space-y-4 sm:space-y-6">
-                <div className="text-center mb-4 sm:mb-6">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
-                    <span className="text-green-400 text-lg sm:text-xl">🎲</span>
-                  </div>
-                  <h3 className="text-lg sm:text-xl font-medium text-green-400 mb-2">Choose Your Avatar</h3>
-                  <p className="text-sm sm:text-base text-gray-400">
-                    Select an existing avatar or create a new one
-                  </p>
-                </div>
-
-                {/* Existing Avatars Section - Show if avatars exist and not creating new */}
-                {avatars.length > 0 && !showCreateNew && (
-                  <div className="space-y-4 sm:space-y-6">
-                    <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
-                      <h4 className="text-sm sm:text-base font-medium text-blue-400 mb-3 flex items-center gap-2">
-                        <div className="w-5 h-5 bg-blue-500/20 rounded flex items-center justify-center">
-                          <span className="text-blue-400 text-xs">📚</span>
+                <RadioGroup value={avatarData.type} onValueChange={handleTypeChange}>
+                  <div className="grid gap-3 sm:gap-4">
+                    {/* Rom Unicorn Option */}
+                    <Label htmlFor="rom-unicorn" className="cursor-pointer">
+                      <Card
+                        className={`p-3 sm:p-4 transition-all duration-150 border hover:scale-[1.01] ${
+                          avatarData.type === "rom-unicorn"
+                            ? "border-green-500 bg-green-500/10"
+                            : "border-gray-700 bg-gray-800/50 hover:border-gray-600"
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <RadioGroupItem value="rom-unicorn" id="rom-unicorn" className="border-green-500" />
+                          <div className="flex-1">
+                            <h3 className="font-medium text-sm sm:text-base text-gray-100 flex items-center gap-2">
+                              Template Avatar
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <div className="w-4 h-4 bg-gray-600 rounded-full flex items-center justify-center cursor-help">
+                                      <span className="text-xs text-gray-300">?</span>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Pre-designed unicorn avatars with customizable parts</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </h3>
+                            <p className="text-xs sm:text-sm text-gray-400 mt-1">Ready-to-use unicorn designs</p>
+                          </div>
                         </div>
-                        Select Existing Avatar
-                      </h4>
-                      <AvatarList 
-                        onSelectAvatar={handleSelectAvatar}
-                        onRegenerateAvatar={handleRegenerateAvatar}
-                        showActions={true}
-                      />
-                    </div>
-                    
-                    {/* Create New Button */}
-                    <div className="text-center">
-                      <Button
-                        onClick={() => setShowCreateNew(true)}
-                        variant="outline"
-                        className="bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30 transition-all duration-150 h-10 sm:h-auto"
-                      >
-                        <span className="mr-2">✨</span>
-                        Create New Avatar
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                      </Card>
+                    </Label>
 
-                {/* No Avatars - Show create new directly */}
-                {avatars.length === 0 && !showCreateNew && (
-                  <div className="text-center space-y-4">
-                    <div className="p-6 bg-gray-800/30 rounded-lg border border-gray-700">
-                      <div className="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center mx-auto mb-4">
-                        <span className="text-gray-400 text-2xl">🎨</span>
-                      </div>
-                      <h4 className="text-lg font-medium text-gray-300 mb-2">No Avatars Yet</h4>
-                      <p className="text-sm text-gray-400 mb-4">Create your first avatar to get started!</p>
-                      <Button
-                        onClick={() => setShowCreateNew(true)}
-                        className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 h-10 sm:h-auto"
+                    {/* Custom Option */}
+                    <Label htmlFor="custom" className="cursor-pointer">
+                      <Card
+                        className={`p-3 sm:p-4 transition-all duration-150 border hover:scale-[1.01] ${
+                          avatarData.type === "custom"
+                            ? "border-green-500 bg-green-500/10"
+                            : "border-gray-700 bg-gray-800/50 hover:border-gray-600"
+                        }`}
                       >
-                        <span className="mr-2">✨</span>
-                        Create Your First Avatar
-                      </Button>
-                    </div>
+                        <div className="flex items-center space-x-3">
+                          <RadioGroupItem value="custom" id="custom" className="border-green-500" />
+                          <div className="flex-1">
+                            <h3 className="font-medium text-sm sm:text-base text-gray-100">Custom</h3>
+                            <p className="text-xs sm:text-sm text-gray-400 mt-1">Upload image or connect wallet</p>
+                          </div>
+                        </div>
+                      </Card>
+                    </Label>
                   </div>
-                )}
+                </RadioGroup>
 
-                {/* Create New Avatar Interface */}
-                {showCreateNew && (
-                  <div className="space-y-4 sm:space-y-6">
-                    {/* Back to Selection Button */}
-                    {avatars.length > 0 && (
-                      <div className="flex justify-start">
-                        <Button
-                          onClick={() => {
-                            setShowCreateNew(false)
-                            setAvatarData(prev => ({ ...prev, unicornParts: undefined }))
-                          }}
-                          variant="outline"
-                          size="sm"
-                          className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 transition-all duration-150 h-8"
+                {/* Rom Unicorn Sub-options */}
+                {avatarData.type === "rom-unicorn" && (
+                  <div className="p-3 sm:p-4 bg-gray-800/30 rounded-lg border border-gray-700">
+                    <h4 className="font-medium mb-3 text-sm sm:text-base text-gray-300">Template Type</h4>
+                    <RadioGroup value={avatarData.romUnicornType} onValueChange={handleRomUnicornTypeChange}>
+                      <div className="space-y-2 sm:space-y-3">
+                        <Label
+                          htmlFor="default"
+                          className="flex items-center space-x-3 cursor-pointer p-2 sm:p-3 rounded-lg hover:bg-gray-700/50 transition-all duration-150"
                         >
-                          <span className="mr-2">←</span>
-                          Back to Selection
+                          <RadioGroupItem value="default" id="default" className="border-green-500" />
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                              <span className="text-green-400 text-sm sm:text-base">⚡</span>
+                            </div>
+                            <div>
+                              <span className="font-medium text-sm sm:text-base text-gray-100">Classic Design</span>
+                              <p className="text-xs sm:text-sm text-gray-400">Our signature unicorn look</p>
+                            </div>
+                          </div>
+                        </Label>
+
+                        <Label
+                          htmlFor="random"
+                          className="flex items-center space-x-3 cursor-pointer p-2 sm:p-3 rounded-lg hover:bg-gray-700/50 transition-all duration-150"
+                        >
+                          <RadioGroupItem value="random" id="random" className="border-green-500" />
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                              <span className="text-blue-400 text-sm sm:text-base">🎲</span>
+                            </div>
+                            <div>
+                              <span className="font-medium text-sm sm:text-base text-gray-100">Surprise Me</span>
+                              <p className="text-xs sm:text-sm text-gray-400">Randomly mixed parts</p>
+                            </div>
+                          </div>
+                        </Label>
+                      </div>
+                    </RadioGroup>
+
+                    {avatarData.romUnicornType === "random" && (
+                      <div className="mt-3 sm:mt-4">
+                        <Button
+                          onClick={handleGenerateRandomUnicorn}
+                          className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 text-sm sm:text-base h-9 sm:h-auto"
+                        >
+                          <span className="mr-2">🎲</span>
+                          Generate Random
                         </Button>
                       </div>
                     )}
 
-                    <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
-                      <h4 className="text-sm sm:text-base font-medium text-green-400 mb-4 flex items-center gap-2">
-                        <div className="w-5 h-5 bg-green-500/20 rounded flex items-center justify-center">
-                          <span className="text-green-400 text-xs">🎲</span>
+                    {/* Unicorn Preview */}
+                    {avatarData.unicornParts && (
+                      <div className="mt-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+                        <h5 className="font-medium mb-3 text-sm sm:text-base text-gray-300 text-center">Preview</h5>
+                        <div className="flex justify-center">
+                          <CompositeUnicorn parts={avatarData.unicornParts} size={96} />
                         </div>
-                        Generate New Avatar
-                      </h4>
+                        <div className="mt-3 text-center">
+                          <p className="text-xs text-gray-400">
+                            {avatarData.romUnicornType === "default" ? "Default Template" : "Random Template"}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                      {/* Matrix Box - Only show when no unicorn parts generated */}
-                      {!avatarData.unicornParts && (
-                        <div className="space-y-4">
-                          <MatrixBox onUnicornGenerated={handleUnicornGenerated} />
-                          
-                          {/* Instructions */}
-                          <div className="p-3 sm:p-4 bg-blue-900/10 rounded-lg border border-blue-800/50">
-                            <h5 className="text-sm font-medium text-blue-400 mb-2 flex items-center gap-2">
-                              <span className="text-blue-400">💡</span>
-                              How to Use
-                            </h5>
-                            <div className="text-xs sm:text-sm text-blue-300 space-y-1">
-                              <p>• Hold down on the Matrix Box to charge it up</p>
-                              <p>• Release when charged to generate a random unicorn</p>
-                              <p>• Each generation creates a unique combination of parts</p>
-                              <p>• Keep generating until you find one you like!</p>
+                {/* Custom Options */}
+                {avatarData.type === "custom" && (
+                  <div className="p-3 sm:p-4 bg-gray-800/30 rounded-lg border border-gray-700">
+                    <h4 className="font-medium mb-3 text-sm sm:text-base text-gray-300">Source Type</h4>
+                    <RadioGroup value={avatarData.customType} onValueChange={handleCustomTypeChange}>
+                      <div className="space-y-2 sm:space-y-3">
+                        <Label
+                          htmlFor="upload"
+                          className="flex items-center space-x-3 cursor-pointer p-2 sm:p-3 rounded-lg hover:bg-gray-700/50 transition-all duration-150"
+                        >
+                          <RadioGroupItem value="upload" id="upload" className="border-green-500" />
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                              <span className="text-blue-400 text-sm sm:text-base">📤</span>
+                            </div>
+                            <div>
+                              <span className="font-medium text-sm sm:text-base text-gray-100">Upload Image</span>
+                              <p className="text-xs sm:text-sm text-gray-400">Upload custom image file</p>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        </Label>
 
-                      {/* Generated Unicorn Preview with Regenerate Button */}
-                      {avatarData.unicornParts && (
-                        <div className="space-y-4 sm:space-y-6">
-                          <div className="p-8 bg-black rounded-lg border border-gray-700 transition-all duration-700 ease-out opacity-100">
-                            <div className="flex justify-center">
-                              <div className="transform transition-all duration-300 ease-out hover:scale-110 hover:rotate-1">
-                                <CompositeUnicorn parts={avatarData.unicornParts} size={240} />
+                        <Label
+                          htmlFor="wallet"
+                          className="flex items-center space-x-3 cursor-pointer p-2 sm:p-3 rounded-lg hover:bg-gray-700/50 transition-all duration-150"
+                        >
+                          <RadioGroupItem value="wallet" id="wallet" className="border-green-500" />
+                          <div className="flex items-center gap-2 sm:gap-3">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
+                              <span className="text-orange-400 text-sm sm:text-base">🔗</span>
+                            </div>
+                            <div>
+                              <span className="font-medium text-sm sm:text-base text-gray-100">Connect Wallet</span>
+                              <p className="text-xs sm:text-sm text-gray-400">Use NFT from wallet</p>
+                            </div>
+                          </div>
+                        </Label>
+                      </div>
+                    </RadioGroup>
+
+                    {/* Upload Section */}
+                    {avatarData.customType === "upload" && (
+                      <div className="mt-3 sm:mt-4 space-y-3 sm:space-y-4">
+                        <div className="border-2 border-dashed border-gray-600 rounded-lg p-4 sm:p-6 text-center bg-gray-800/20 hover:border-gray-500 hover:bg-gray-800/30 transition-all duration-200">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileUpload}
+                            className="hidden"
+                            id="file-upload"
+                          />
+                          <Label htmlFor="file-upload" className="cursor-pointer">
+                            <div className="text-xl sm:text-2xl mb-2 text-gray-400">📤</div>
+                            <p className="text-sm sm:text-base text-gray-300 font-medium">Click to upload image</p>
+                            <p className="text-xs sm:text-sm text-gray-500 mt-1">PNG, JPG, GIF up to 10MB</p>
+                          </Label>
+                        </div>
+
+                        {avatarData.uploadedImage && (
+                          <div className="space-y-3 sm:space-y-4">
+                            <div className="text-center">
+                              <div className="relative inline-block">
+                                <Image
+                                  src={avatarData.uploadedImage || "/placeholder.svg"}
+                                  alt="Uploaded avatar"
+                                  width={80}
+                                  height={80}
+                                  className="sm:w-[100px] sm:h-[100px] rounded-lg object-cover border border-gray-600"
+                                />
+                                <div className="absolute -top-1 -right-1 sm:-top-2 sm:-right-2 w-5 h-5 sm:w-6 sm:h-6 bg-green-500 rounded-full flex items-center justify-center">
+                                  <span className="text-white text-xs">✓</span>
+                                </div>
+                              </div>
+                              <p className="text-xs sm:text-sm text-green-400 mt-2 font-medium">Upload successful</p>
+                            </div>
+
+                            {/* Style Selection */}
+                            <div className="p-3 sm:p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+                              <h5 className="font-medium mb-3 text-sm sm:text-base text-gray-300">Art Style</h5>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+                                {artStyles.map((style) => (
+                                  <div
+                                    key={style.id}
+                                    onClick={() => handleStyleSelect(style.id)}
+                                    className={`p-2 sm:p-3 rounded-lg cursor-pointer transition-all duration-150 border text-center hover:scale-[1.01] ${
+                                      avatarData.selectedStyle === style.id
+                                        ? "border-green-500 bg-green-500/10"
+                                        : "border-gray-700 bg-gray-800/50 hover:border-gray-600"
+                                    }`}
+                                  >
+                                    <p className="text-xs sm:text-sm font-medium text-gray-100">{style.name}</p>
+                                    <p className="text-xs text-gray-400 mt-1 hidden sm:block">{style.description}</p>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {avatarData.selectedStyle && (
+                                <div className="mt-3 sm:mt-4 p-2 sm:p-3 bg-gray-700/50 rounded-lg border border-gray-600">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 sm:w-4 sm:h-4 bg-green-500 rounded-full"></div>
+                                    <p className="text-green-400 text-xs sm:text-sm">
+                                      Selected: <strong>{getSelectedStyle()?.name}</strong>
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Wallet Section */}
+                    {avatarData.customType === "wallet" && (
+                      <div className="mt-3 sm:mt-4 space-y-3 sm:space-y-4">
+                        {!avatarData.connectedWallet ? (
+                          <div className="text-center p-4 sm:p-6 bg-gray-800/50 rounded-lg border border-gray-700">
+                            <div className="text-xl sm:text-2xl mb-3 text-gray-400">🔗</div>
+                            <p className="text-sm sm:text-base text-gray-300 font-medium mb-4">
+                              Connect wallet to access NFTs
+                            </p>
+                            <Button
+                              onClick={connectWallet}
+                              className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 text-sm sm:text-base h-9 sm:h-auto"
+                            >
+                              Connect Wallet
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-3 sm:space-y-4">
+                            <div className="p-3 sm:p-4 bg-green-900/20 rounded-lg border border-green-700">
+                              <div className="flex items-center gap-2 sm:gap-3">
+                                <div className="w-5 h-5 sm:w-6 sm:h-6 bg-green-500 rounded-full flex items-center justify-center">
+                                  <span className="text-white text-xs">✓</span>
+                                </div>
+                                <div>
+                                  <p className="text-green-400 text-sm sm:text-base">Connected</p>
+                                  <code className="text-xs sm:text-sm bg-gray-800 px-2 py-1 rounded text-gray-300">
+                                    {avatarData.connectedWallet}
+                                  </code>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          
-                          {/* Action Buttons */}
-                          <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
-                            <Button
-                              onClick={handleGenerateRandomUnicorn}
-                              variant="outline"
-                              className="bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30 transition-all duration-150 h-10 sm:h-auto"
-                            >
-                              <span className="mr-2">🔄</span>
-                              Regenerate
-                            </Button>
-                            
-                            {/* Auto-saved indicator */}
-                            <div className="flex items-center justify-center gap-2 text-green-400 text-sm">
-                              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                              <span>Avatar Saved Automatically</span>
+
+                            <div>
+                              <h5 className="font-medium text-sm sm:text-base text-gray-300 mb-3">Available NFTs</h5>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+                                {[
+                                  "🐵 Bored Ape #1234",
+                                  "🐱 Cool Cat #5678",
+                                  "🤖 Robot #9012",
+                                  "🦄 Unicorn #3456",
+                                  "👾 Pixel #7890",
+                                  "🎨 Art #2468",
+                                ].map((nft) => (
+                                  <div
+                                    key={nft}
+                                    onClick={() => selectNFT(nft)}
+                                    className={`p-2 sm:p-3 rounded-lg cursor-pointer transition-all duration-150 border text-center hover:scale-[1.01] ${
+                                      avatarData.selectedNFT === nft
+                                        ? "border-green-500 bg-green-500/10"
+                                        : "border-gray-700 bg-gray-800/50 hover:border-gray-600"
+                                    }`}
+                                  >
+                                    <div className="text-lg sm:text-xl mb-1">{nft.split(" ")[0]}</div>
+                                    <p className="text-xs text-gray-400">{nft.split(" ").slice(1).join(" ")}</p>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {avatarData.selectedNFT && (
+                                <div className="mt-3 sm:mt-4 p-2 sm:p-3 bg-gray-700/50 rounded-lg border border-gray-600">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-3 h-3 sm:w-4 sm:h-4 bg-green-500 rounded-full"></div>
+                                    <p className="text-green-400 text-xs sm:text-sm">
+                                      Selected: <strong>{avatarData.selectedNFT}</strong>
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             )}
 
-                {/* Step 2: Name Your Avatar */}
+            {/* Step 2: Name Your Avatar (previously Step 2) */}
             {step === 2 && (
               <div className="space-y-4 sm:space-y-6">
                 <div className="space-y-4 sm:space-y-5">
@@ -822,7 +966,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
               </div>
             )}
 
-                {/* Step 3: Connect Store */}
+            {/* Step 3: Connect Store (previously Step 1) */}
             {step === 3 && (
               <div className="space-y-4 sm:space-y-6">
                 <div className="text-center mb-4 sm:mb-6">
@@ -992,11 +1136,183 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
               </div>
             )}
 
+            {/* Step 4: Generate & Review (unchanged) */}
+            {step === 4 && !isCreating && generatedVariations.length === 0 && (
+              <div className="space-y-4 sm:space-y-6">
+                <div className="text-center mb-4 sm:mb-6">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <span className="text-green-400 text-lg sm:text-xl">✨</span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-medium text-green-400 mb-2">Ready to Generate</h3>
+                  <p className="text-sm sm:text-base text-gray-400">Review configuration and generate avatar</p>
+                </div>
 
+                {/* Preview */}
+                <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
+                  <div className="flex items-center justify-center mb-4 sm:mb-6">
+                    <div className="w-24 h-24 sm:w-32 sm:h-32 bg-gray-700 rounded-lg flex items-center justify-center border border-gray-600">
+                      {renderAvatarPreview(96)}
+                    </div>
+                  </div>
+
+                  <h3 className="text-base sm:text-lg font-medium text-center text-green-400 mb-4">
+                    {avatarData.name || "Avatar"}
+                  </h3>
+
+                  {/* Configuration Details */}
+                  <div className="grid gap-3 sm:gap-4">
+                    <div className="p-3 sm:p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+                      <h4 className="font-medium text-sm sm:text-base text-gray-300 mb-2">Configuration</h4>
+                      <div className="text-xs sm:text-sm text-gray-400 space-y-1">
+                        <p>
+                          Name: <span className="text-gray-200">{avatarData.name}</span>
+                        </p>
+                        {avatarData.personality && (
+                          <p>
+                            Personality: <span className="text-gray-200">{avatarData.personality}</span>
+                          </p>
+                        )}
+                        {avatarData.characterNames && (
+                          <p>
+                            Inspired by: <span className="text-blue-300">{avatarData.characterNames}</span>
+                          </p>
+                        )}
+                        <p>
+                          Type:{" "}
+                          <span className="text-gray-200">
+                            {avatarData.type === "rom-unicorn" ? "Template Avatar" : "Custom"}
+                          </span>
+                        </p>
+                        {avatarData.type === "rom-unicorn" && (
+                          <p>
+                            Template: <span className="text-gray-200">{avatarData.romUnicornType}</span>
+                          </p>
+                        )}
+                        {avatarData.type === "custom" && (
+                          <p>
+                            Source:{" "}
+                            <span className="text-gray-200">
+                              {avatarData.customType === "upload" ? "Uploaded Image" : "NFT"}
+                            </span>
+                          </p>
+                        )}
+                        {avatarData.selectedStyle && (
+                          <p>
+                            Style: <span className="text-gray-200">{getSelectedStyle()?.name}</span>
+                          </p>
+                        )}
+                        {avatarData.selectedNFT && (
+                          <p>
+                            NFT: <span className="text-gray-200">{avatarData.selectedNFT}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-3 sm:p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+                      <h4 className="font-medium text-sm sm:text-base text-green-400 mb-2">Generation Info</h4>
+                      <div className="text-xs sm:text-sm text-gray-400 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
+                          <span>Configuration validated</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
+                          <span>Ready for generation</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
+                          <span>8 expressions will be created</span>
+                        </div>
+                        {avatarData.selectedStyle && (
+                          <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
+                            <span>Style transformation ready</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
+                  <Button
+                    onClick={() => setStep(3)}
+                    variant="outline"
+                    className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 transition-all duration-150 h-10 sm:h-auto order-2 sm:order-1"
+                  >
+                    Back
+                  </Button>
+                  <Button
+                    onClick={createAvatar}
+                    className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 h-10 sm:h-auto order-1 sm:order-2"
+                  >
+                    <span className="mr-2">✨</span>
+                    Generate Avatar
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Creation Animation */}
+            {step === 4 && isCreating && (
+              <div className="space-y-4 sm:space-y-6">
+                <div className="text-center">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <span className="text-blue-400 text-lg sm:text-xl">🎨</span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-medium text-blue-400 mb-2">Generating Avatar</h3>
+                  <p className="text-sm sm:text-base text-gray-400">AI is processing facial expressions...</p>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="space-y-2 sm:space-y-3">
+                  <div className="w-full bg-gray-800 rounded-full h-1.5 sm:h-2 overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-green-500 to-blue-500 h-1.5 sm:h-2 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${creationProgress}%` }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between text-xs sm:text-sm">
+                    <span className="text-gray-400">{Math.round(creationProgress)}% Complete</span>
+                    <span className="text-gray-400">
+                      Expression {generatedVariations.length} of {facialExpressions.length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Original Avatar */}
+                <div className="text-center">
+                  <h4 className="text-xs sm:text-sm font-medium text-gray-300 mb-3 sm:mb-4">Source Image</h4>
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gray-700 rounded-lg mx-auto flex items-center justify-center border border-gray-600">
+                    {renderAvatarPreview(80)}
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div className="text-center p-3 sm:p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+                  <div className="flex items-center justify-center gap-2 text-gray-300">
+                    <div className="animate-spin text-lg sm:text-xl text-blue-400">⚡</div>
+                    <p className="font-medium text-sm sm:text-base">
+                      {generatedVariations.length === 0 && "Initializing AI processing..."}
+                      {generatedVariations.length > 0 &&
+                        generatedVariations.length < 3 &&
+                        "Analyzing facial structure..."}
+                      {generatedVariations.length >= 3 && generatedVariations.length < 6 && "Generating expressions..."}
+                      {generatedVariations.length >= 6 && generatedVariations.length < 8 && "Finalizing variations..."}
+                      {generatedVariations.length === 8 && "Completing generation..."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Creation Complete - similar to original, omitted for brevity */}
 
             {/* Navigation Buttons */}
-            {step < 3 && (
-              <div className="flex justify-between mt-4 pt-4 sm:pt-6 border-t border-gray-800">
+            {step < 4 && (
+              <div className="flex justify-between pt-4 sm:pt-6 border-t border-gray-800">
                 <Button
                   onClick={prevStep}
                   disabled={step === 1}
@@ -1008,10 +1324,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
 
                 <Button
                   onClick={nextStep}
-                  disabled={
-                    (step === 1 && !avatarData.unicornParts) ||
-                    (step === 2 && !avatarData.name)
-                  }
+                  disabled={(step === 3 && !avatarData.isAuthenticated) || (step === 2 && !avatarData.name)}
                   className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 disabled:opacity-50 h-10 sm:h-auto"
                 >
                   Next
@@ -1020,7 +1333,6 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
             )}
           </CardContent>
         </Card>
-        </div>
       </div>
     </div>
   )

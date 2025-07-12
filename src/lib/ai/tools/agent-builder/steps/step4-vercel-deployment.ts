@@ -304,7 +304,7 @@ function sanitizeVercelProjectName(name: string): string {
 /**
  * Vercel API client for deployment operations
  */
-class VercelClient {
+export class VercelClient {
   private apiKey: string;
   private baseUrl = 'https://api.vercel.com';
   private lastRequestTime = 0;
@@ -395,20 +395,56 @@ class VercelClient {
     const sanitizedName = sanitizeVercelProjectName(name);
     console.log(`🚀 Creating Vercel project: ${sanitizedName} (sanitized from: ${name})`);
     
-    const project = await this.request('/v10/projects', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: sanitizedName,
-        framework: framework,
-        buildCommand: 'npm run build',
-        devCommand: 'npm run dev',
-        installCommand: 'npm install',
-        outputDirectory: '.next'
-      }),
-    });
+    // Check if project already exists by attempting to create it
+    // If it fails with 409 conflict, generate a unique name
+    let projectName = sanitizedName;
+    let attempt = 0;
+    const maxAttempts = 10;
+    
+    while (attempt < maxAttempts) {
+      try {
+        const project = await this.request('/v10/projects', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: projectName,
+            framework: framework,
+            buildCommand: 'npm run build',
+            devCommand: 'npm run dev',
+            installCommand: 'npm install',
+            outputDirectory: '.next'
+          }),
+        });
 
-    console.log(`✅ Vercel project created: ${project.id}`);
-    return project;
+        console.log(`✅ Vercel project created: ${project.id} with name: ${projectName}`);
+        return project;
+      } catch (error: any) {
+        // Check if it's a 409 conflict error for project name conflicts
+        const errorMessage = error.message || '';
+        const isNameConflict = (
+          errorMessage.includes('409 Conflict') || 
+          errorMessage.includes('already exists') ||
+          errorMessage.includes('conflict') ||
+          (error.response?.status === 409)
+        );
+        
+        if (isNameConflict) {
+          attempt++;
+          // Generate a new unique name with timestamp and random component
+          const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
+          const randomSuffix = Math.random().toString(36).substring(2, 5); // 3 random characters
+          const previousName = projectName;
+          projectName = `${sanitizedName}-${timestamp}-${randomSuffix}`;
+          console.log(`⚠️ Project name "${previousName}" already exists. Trying: ${projectName} (attempt ${attempt}/${maxAttempts})`);
+          console.log(`🔄 Vercel project name conflict detected - generating unique name to resolve deployment issue`);
+          continue;
+        }
+        
+        // If it's not a name conflict, re-throw the error
+        throw error;
+      }
+    }
+    
+    throw new Error(`Failed to create Vercel project after ${maxAttempts} attempts. All generated names are taken.`);
   }
 
   async deployFromFiles(projectId: string, files: Record<string, string>, envVars: Record<string, string> = {}) {

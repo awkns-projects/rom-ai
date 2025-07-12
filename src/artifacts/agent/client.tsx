@@ -1200,6 +1200,7 @@ const AgentBuilderContent = memo(({
                     agentData={agentData}
                     onThemeChange={(theme) => updateAgentData({ ...agentData, theme })}
                     onDataChange={updateAgentData}
+                    documentId={documentId}
                   />
                 );
               }

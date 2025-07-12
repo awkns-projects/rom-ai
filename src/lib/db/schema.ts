@@ -119,6 +119,30 @@ export const suggestion = pgTable(
   }),
 );
 
+export const avatar = pgTable('Avatar', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  documentId: uuid('documentId'),
+  name: varchar('name', { length: 255 }).notNull(),
+  personality: text('personality'),
+  characterNames: text('characterNames'),
+  type: varchar('type', { length: 50 }).notNull().default('rom-unicorn'),
+  romUnicornType: varchar('romUnicornType', { length: 50 }),
+  customType: varchar('customType', { length: 50 }),
+  uploadedImage: text('uploadedImage'),
+  selectedStyle: varchar('selectedStyle', { length: 50 }),
+  connectedWallet: varchar('connectedWallet', { length: 255 }),
+  selectedNFT: varchar('selectedNFT', { length: 255 }),
+  unicornParts: json('unicornParts'),
+  isActive: boolean('isActive').notNull().default(false),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type Avatar = InferSelectModel<typeof avatar>;
+
 export type Suggestion = InferSelectModel<typeof suggestion>;
 
 export const stream = pgTable(

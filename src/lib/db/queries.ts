@@ -27,6 +27,8 @@ import {
   type Message,
   type Chat,
   stream,
+  avatar,
+  type Avatar,
 } from './schema';
 import type { ArtifactKind } from '@/components/artifact';
 import { generateUUID } from '../utils';
@@ -566,32 +568,275 @@ export async function deleteMessagesByChatIdAfterTimestamp({
   timestamp: Date;
 }) {
   try {
-    const messagesToDelete = await db
-      .select({ id: message.id })
-      .from(message)
-      .where(
-        and(eq(message.chatId, chatId), gte(message.createdAt, timestamp)),
-      );
-
-    const messageIds = messagesToDelete.map((message) => message.id);
-
-    if (messageIds.length > 0) {
-      await db
-        .delete(vote)
-        .where(
-          and(eq(vote.chatId, chatId), inArray(vote.messageId, messageIds)),
-        );
-
-      return await db
-        .delete(message)
-        .where(
-          and(eq(message.chatId, chatId), inArray(message.id, messageIds)),
-        );
-    }
+    return await db
+      .delete(message)
+      .where(and(eq(message.chatId, chatId), gt(message.createdAt, timestamp)));
   } catch (error) {
     throw new ChatSDKError(
       'bad_request:database',
-      'Failed to delete messages by chat id after timestamp',
+      'Failed to delete messages by chat ID after timestamp',
+    );
+  }
+}
+
+// Avatar queries
+export async function createAvatar({
+  userId,
+  documentId,
+  name,
+  personality,
+  characterNames,
+  type,
+  romUnicornType,
+  customType,
+  uploadedImage,
+  selectedStyle,
+  connectedWallet,
+  selectedNFT,
+  unicornParts,
+  isActive = false,
+}: {
+  userId: string;
+  documentId?: string;
+  name: string;
+  personality?: string;
+  characterNames?: string;
+  type: string;
+  romUnicornType?: string;
+  customType?: string;
+  uploadedImage?: string;
+  selectedStyle?: string;
+  connectedWallet?: string;
+  selectedNFT?: string;
+  unicornParts?: any;
+  isActive?: boolean;
+}) {
+  try {
+    const [newAvatar] = await db.insert(avatar).values({
+      userId,
+      documentId,
+      name,
+      personality,
+      characterNames,
+      type,
+      romUnicornType,
+      customType,
+      uploadedImage,
+      selectedStyle,
+      connectedWallet,
+      selectedNFT,
+      unicornParts,
+      isActive,
+    }).returning();
+
+    return newAvatar;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to create avatar',
+    );
+  }
+}
+
+export async function getAvatarsByUserId({
+  userId,
+  limit = 50,
+}: {
+  userId: string;
+  limit?: number;
+}) {
+  try {
+      return await db
+      .select()
+      .from(avatar)
+      .where(eq(avatar.userId, userId))
+      .orderBy(desc(avatar.createdAt))
+      .limit(limit);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get avatars by user ID',
+    );
+  }
+}
+
+export async function getAvatarsByDocumentId({
+  documentId,
+  userId,
+  limit = 50,
+}: {
+  documentId: string;
+  userId: string;
+  limit?: number;
+}) {
+  try {
+      return await db
+      .select()
+      .from(avatar)
+      .where(and(eq(avatar.documentId, documentId), eq(avatar.userId, userId)))
+      .orderBy(desc(avatar.createdAt))
+      .limit(limit);
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get avatars by document ID',
+    );
+  }
+}
+
+export async function getAvatarById({
+  id,
+}: {
+  id: string;
+}) {
+  try {
+    const [avatarResult] = await db
+      .select()
+      .from(avatar)
+      .where(eq(avatar.id, id));
+
+    return avatarResult;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get avatar by ID',
+    );
+  }
+}
+
+export async function updateAvatar({
+  id,
+  name,
+  personality,
+  characterNames,
+  type,
+  romUnicornType,
+  customType,
+  uploadedImage,
+  selectedStyle,
+  connectedWallet,
+  selectedNFT,
+  unicornParts,
+  isActive,
+}: {
+  id: string;
+  name?: string;
+  personality?: string;
+  characterNames?: string;
+  type?: string;
+  romUnicornType?: string;
+  customType?: string;
+  uploadedImage?: string;
+  selectedStyle?: string;
+  connectedWallet?: string;
+  selectedNFT?: string;
+  unicornParts?: any;
+  isActive?: boolean;
+}) {
+  try {
+    const updateData: any = { updatedAt: new Date() };
+    
+    if (name !== undefined) updateData.name = name;
+    if (personality !== undefined) updateData.personality = personality;
+    if (characterNames !== undefined) updateData.characterNames = characterNames;
+    if (type !== undefined) updateData.type = type;
+    if (romUnicornType !== undefined) updateData.romUnicornType = romUnicornType;
+    if (customType !== undefined) updateData.customType = customType;
+    if (uploadedImage !== undefined) updateData.uploadedImage = uploadedImage;
+    if (selectedStyle !== undefined) updateData.selectedStyle = selectedStyle;
+    if (connectedWallet !== undefined) updateData.connectedWallet = connectedWallet;
+    if (selectedNFT !== undefined) updateData.selectedNFT = selectedNFT;
+    if (unicornParts !== undefined) updateData.unicornParts = unicornParts;
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    const [updatedAvatar] = await db
+      .update(avatar)
+      .set(updateData)
+      .where(eq(avatar.id, id))
+      .returning();
+
+    return updatedAvatar;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to update avatar',
+    );
+  }
+}
+
+export async function deleteAvatar({
+  id,
+}: {
+  id: string;
+}) {
+  try {
+    await db.delete(avatar).where(eq(avatar.id, id));
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to delete avatar',
+    );
+  }
+}
+
+export async function setActiveAvatar({
+  userId,
+  avatarId,
+  documentId,
+}: {
+  userId: string;
+  avatarId: string;
+  documentId?: string;
+}) {
+  try {
+    // First, set all avatars for this user and document to inactive
+    const whereCondition = documentId 
+      ? and(eq(avatar.userId, userId), eq(avatar.documentId, documentId))
+      : eq(avatar.userId, userId);
+      
+    await db
+      .update(avatar)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(whereCondition);
+
+    // Then, set the specified avatar to active
+    const [activeAvatar] = await db
+      .update(avatar)
+      .set({ isActive: true, updatedAt: new Date() })
+      .where(and(eq(avatar.id, avatarId), eq(avatar.userId, userId)))
+      .returning();
+
+    return activeAvatar;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to set active avatar',
+    );
+  }
+}
+
+export async function getActiveAvatar({
+  userId,
+  documentId,
+}: {
+  userId: string;
+  documentId?: string;
+}) {
+  try {
+    const whereCondition = documentId 
+      ? and(eq(avatar.userId, userId), eq(avatar.documentId, documentId), eq(avatar.isActive, true))
+      : and(eq(avatar.userId, userId), eq(avatar.isActive, true));
+      
+    const [activeAvatar] = await db
+      .select()
+      .from(avatar)
+      .where(whereCondition);
+
+    return activeAvatar;
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get active avatar',
     );
   }
 }

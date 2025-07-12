@@ -11,6 +11,7 @@ interface OnboardContentProps {
   agentData?: any; // Add agentData prop
   onThemeChange?: (theme: string) => void; // Add theme change callback
   onDataChange?: (agentData: any) => void; // Add data change callback
+  documentId?: string; // Add documentId prop
 }
 
 // Simple wrapper to set the correct tab for the demo
@@ -67,7 +68,7 @@ const DemoWithTab = memo(({ agentData, currentTheme, viewMode, targetTab, onData
   );
 });
 
-export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThemeChange, onDataChange }: OnboardContentProps) => {
+export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThemeChange, onDataChange, documentId }: OnboardContentProps) => {
   // Determine initial view based on models length
   const hasModels = models.length > 0;
   const [showDemo, setShowDemo] = useState(hasModels);
@@ -496,7 +497,7 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
           
           <div className="flex justify-center">
             <div className="w-full max-w-4xl">
-              <AvatarCreator />
+              <AvatarCreator documentId={documentId} />
             </div>
           </div>
         </div>
