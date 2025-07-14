@@ -175,31 +175,48 @@ export async function executeAgentGeneration(
 
       // IMMEDIATE FIX: Stream partial agent data with external API metadata
       // This allows AvatarCreator to show correct connection UI right away
-      const partialAgentData = {
-        id: config.existingAgent?.id || crypto.randomUUID(),
-        name: step0Result.agentName || 'Generated Agent',
-        description: step0Result.agentDescription || 'AI-generated agent description',
-        domain: step0Result.domain || 'general',
-        models: [], // Empty arrays for now - will be filled in later steps
-        actions: [],
-        schedules: [],
-        createdAt: config.existingAgent?.createdAt || new Date().toISOString(),
-        externalApi: {
-          provider: step0Result.externalApi.provider,
-          requiresConnection: step0Result.externalApi.requiresConnection,
-          connectionType: step0Result.externalApi.connectionType,
-          primaryUseCase: step0Result.externalApi.primaryUseCase,
-          requiredScopes: step0Result.externalApi.requiredScopes
-        }
-      };
+      try {
+        const partialAgentData = {
+          id: config.existingAgent?.id || crypto.randomUUID(),
+          name: step0Result.agentName || 'Generated Agent',
+          description: step0Result.agentDescription || 'AI-generated agent description',
+          domain: step0Result.domain || 'general',
+          models: [], // Empty arrays for now - will be filled in later steps
+          actions: [],
+          schedules: [],
+          createdAt: config.existingAgent?.createdAt || new Date().toISOString(),
+          externalApi: {
+            provider: step0Result.externalApi.provider,
+            requiresConnection: step0Result.externalApi.requiresConnection,
+            connectionType: step0Result.externalApi.connectionType,
+            primaryUseCase: step0Result.externalApi.primaryUseCase,
+            requiredScopes: step0Result.externalApi.requiredScopes
+          }
+        };
 
-      // Stream partial agent data immediately so UI can update
-      if (config.dataStream) {
-        console.log('🔄 Streaming partial agent data with external API metadata after Step 0');
-        config.dataStream.writeData({ 
-          type: 'agent-data', 
-          content: JSON.stringify(partialAgentData, null, 2)
-        });
+        // Only stream if we have a valid dataStream and the agent data is meaningful
+        if (config.dataStream && partialAgentData.name && partialAgentData.name !== 'Generated Agent') {
+          console.log('🔄 Streaming partial agent data with external API metadata after Step 0:', {
+            provider: partialAgentData.externalApi.provider,
+            requiresConnection: partialAgentData.externalApi.requiresConnection,
+            agentName: partialAgentData.name
+          });
+          
+          // Use a slight delay to ensure the UI is ready to receive the data
+          setTimeout(() => {
+            if (config.dataStream) {
+              config.dataStream.writeData({ 
+                type: 'agent-data', 
+                content: JSON.stringify(partialAgentData, null, 2)
+              });
+            }
+          }, 100);
+        } else {
+          console.log('⚠️ Skipping immediate agent data streaming - insufficient data or no stream available');
+        }
+      } catch (error) {
+        console.error('❌ Error streaming partial agent data:', error);
+        // Don't let this error break the entire orchestration
       }
     }
 

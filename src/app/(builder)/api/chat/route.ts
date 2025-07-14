@@ -328,14 +328,16 @@ async function getModelProvider(modelId: string, session: Session | null) {
   if (model.providerId === 'openai') {
     const apiKey = userApiKeys.openaiApiKey || process.env.OPENAI_API_KEY;
     if (apiKey) {
-      // Use user's API key or environment variable
+      const usingUserKey = !!userApiKeys.openaiApiKey;
+      console.log(`🔑 Using ${usingUserKey ? 'user' : 'system'} OpenAI API key for model ${modelId}`);
       const provider = createOpenAI({ apiKey });
       return provider(modelId);
     }
   } else if (model.providerId === 'xai') {
     const apiKey = userApiKeys.xaiApiKey || process.env.XAI_API_KEY;
     if (apiKey) {
-      // Use user's API key or environment variable
+      const usingUserKey = !!userApiKeys.xaiApiKey;
+      console.log(`🔑 Using ${usingUserKey ? 'user' : 'system'} xAI API key for model ${modelId}`);
       const provider = createXai({ apiKey });
       return provider(modelId);
     }
@@ -367,13 +369,32 @@ export async function POST(request: Request) {
 
     const userType: UserType = session.user.type;
 
-    const messageCount = await getMessageCountByUserId({
-      id: session.user.id,
-      differenceInHours: 24,
-    });
+    // Check if user has their own API keys - if so, bypass rate limiting
+    let hasUserApiKeys = false;
+    try {
+      const userApiKeys = await getUserApiKeys(session.user.id);
+      hasUserApiKeys = !!(userApiKeys.openaiApiKey || userApiKeys.xaiApiKey);
+      
+      if (hasUserApiKeys) {
+        console.log(`✅ User ${session.user.id} has personal API keys - bypassing rate limits`);
+      }
+    } catch (error) {
+      console.warn('Failed to check user API keys for rate limiting:', error);
+    }
 
-    if (messageCount > entitlementsByUserType[userType].maxMessagesPerDay) {
-      return new ChatSDKError('rate_limit:chat').toResponse();
+    // Only apply rate limiting if user doesn't have their own API keys
+    if (!hasUserApiKeys) {
+      const messageCount = await getMessageCountByUserId({
+        id: session.user.id,
+        differenceInHours: 24,
+      });
+
+      if (messageCount > entitlementsByUserType[userType].maxMessagesPerDay) {
+        console.log(`🚫 User ${session.user.id} hit rate limit: ${messageCount}/${entitlementsByUserType[userType].maxMessagesPerDay} messages`);
+        return new ChatSDKError('rate_limit:chat').toResponse();
+      }
+      
+      console.log(`📊 User ${session.user.id} using shared resources: ${messageCount}/${entitlementsByUserType[userType].maxMessagesPerDay} messages`);
     }
 
     const chat = await getChatById({ id });

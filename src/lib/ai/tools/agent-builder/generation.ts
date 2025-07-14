@@ -3325,8 +3325,8 @@ STEP TYPES TO USE:
 - Database update many: Update multiple records
 - Database delete unique: Delete one specific record
 - Database delete many: Delete multiple records
-- Call External API: Make API calls to external services (Shopify, payment processors, etc.)
-- AI Analysis: Use AI for analysis, decision making, or data processing
+- call external api: Make API calls to external services (Shopify, payment processors, etc.)
+- ai analysis: Use AI for analysis, decision making, or data processing
 
 **CRITICAL FIELD TYPE RULES**:
 When defining field types, follow these EXACT patterns:

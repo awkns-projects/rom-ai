@@ -393,7 +393,11 @@ const useAgentData = (content: string) => {
           name: initialData.name,
           modelCount: initialData.models.length,
           actionCount: initialData.actions.length,
-          hasMetadata: !!initialData.metadata
+          scheduleCount: initialData.schedules.length,
+          hasMetadata: !!initialData.metadata,
+          hasExternalApi: !!initialData.externalApi,
+          externalApiProvider: initialData.externalApi?.provider || 'none',
+          externalApiRequiresConnection: initialData.externalApi?.requiresConnection || false
         });
 
         return initialData;
@@ -410,8 +414,9 @@ const useAgentData = (content: string) => {
         };
       }
     } catch (e) {
-      console.warn('⚠️ Failed to parse initial content, using defaults. Error:', (e as Error).message);
-      console.warn('📄 Problematic content (first 200 chars):', content ? content.substring(0, 200) : 'none');
+      console.error('❌ Failed to parse initial content, using defaults. Error:', (e as Error).message);
+      console.error('📄 Problematic content (first 500 chars):', content ? content.substring(0, 500) : 'none');
+      console.error('🔍 Full error stack:', e);
       return {
         name: 'New Agent',
         description: '',
@@ -866,7 +871,14 @@ const AgentBuilderContent = memo(({
           metadata: parsed.metadata
         };
         
-        // Use a more stable comparison approach
+        console.log('🔄 Content update with external API:', {
+          hasExternalApi: !!updatedData.externalApi,
+          provider: updatedData.externalApi?.provider || 'none',
+          requiresConnection: updatedData.externalApi?.requiresConnection || false,
+          fullExternalApi: updatedData.externalApi
+        });
+        
+        // Use a more stable comparison approach - FIXED: Include externalApi in comparison
         setAgentData(prevData => {
           const currentDataString = JSON.stringify({
             name: prevData.name,
@@ -875,19 +887,37 @@ const AgentBuilderContent = memo(({
             models: prevData.models,
             actions: prevData.actions,
             schedules: prevData.schedules,
-            theme: prevData.theme
+            theme: prevData.theme,
+            externalApi: prevData.externalApi // FIXED: Include externalApi in comparison
           });
-          const newDataString = JSON.stringify(updatedData);
+          const newDataString = JSON.stringify({
+            name: updatedData.name,
+            description: updatedData.description,
+            domain: updatedData.domain,
+            models: updatedData.models,
+            actions: updatedData.actions,
+            schedules: updatedData.schedules,
+            theme: updatedData.theme,
+            externalApi: updatedData.externalApi // FIXED: Include externalApi in comparison
+          });
           
           // Only update if data has actually changed
           if (currentDataString !== newDataString) {
+            console.log('📥 Updating agent data from content change:', {
+              previousExternalApi: prevData.externalApi?.provider || 'none',
+              newExternalApi: updatedData.externalApi?.provider || 'none',
+              dataChanged: true
+            });
             return updatedData;
           }
+          
+          console.log('⚪ No agent data update needed (content unchanged)');
           return prevData;
         });
       }
     } catch (e) {
-      console.warn('Failed to parse updated content:', e);
+      console.warn('❌ Failed to parse updated content:', e);
+      console.warn('📄 Problematic content (first 200 chars):', content ? content.substring(0, 200) : 'none');
     }
   }, [content]); // Remove agentData dependency to prevent infinite loop
 

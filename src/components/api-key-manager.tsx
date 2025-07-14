@@ -18,6 +18,8 @@ import { KeyIcon, EyeIcon, EyeOffIcon, TrashIcon } from './icons';
 interface ApiKeyStatus {
   hasOpenaiKey: boolean;
   hasXaiKey: boolean;
+  openaiKeyPreview?: string;
+  xaiKeyPreview?: string;
 }
 
 export function ApiKeyManager() {
@@ -28,6 +30,8 @@ export function ApiKeyManager() {
   const [showXaiKey, setShowXaiKey] = useState(false);
   const [openaiKey, setOpenaiKey] = useState('');
   const [xaiKey, setXaiKey] = useState('');
+  const [isEditingOpenai, setIsEditingOpenai] = useState(false);
+  const [isEditingXai, setIsEditingXai] = useState(false);
 
   // Fetch API key status when component mounts
   useEffect(() => {
@@ -60,8 +64,14 @@ export function ApiKeyManager() {
       if (response.ok) {
         toast.success(`${provider === 'openai' ? 'OpenAI' : 'xAI'} API key saved successfully`);
         await fetchKeyStatus();
-        if (provider === 'openai') setOpenaiKey('');
-        if (provider === 'xai') setXaiKey('');
+        if (provider === 'openai') {
+          setOpenaiKey('');
+          setIsEditingOpenai(false);
+        }
+        if (provider === 'xai') {
+          setXaiKey('');
+          setIsEditingXai(false);
+        }
       } else {
         const error = await response.json();
         toast.error(error.message || 'Failed to save API key');
@@ -99,6 +109,13 @@ export function ApiKeyManager() {
   };
 
   const handleOpenaiSave = () => {
+    // If not editing and has existing key, switch to edit mode
+    if (keyStatus.hasOpenaiKey && !isEditingOpenai) {
+      setIsEditingOpenai(true);
+      setOpenaiKey(''); // Clear field to allow new input
+      return;
+    }
+
     if (!openaiKey.trim()) {
       toast.error('Please enter an OpenAI API key');
       return;
@@ -111,6 +128,13 @@ export function ApiKeyManager() {
   };
 
   const handleXaiSave = () => {
+    // If not editing and has existing key, switch to edit mode
+    if (keyStatus.hasXaiKey && !isEditingXai) {
+      setIsEditingXai(true);
+      setXaiKey(''); // Clear field to allow new input
+      return;
+    }
+
     if (!xaiKey.trim()) {
       toast.error('Please enter an xAI API key');
       return;
@@ -120,6 +144,34 @@ export function ApiKeyManager() {
       return;
     }
     saveApiKey('xai', xaiKey);
+  };
+
+  // Helper functions to get display values
+  const getOpenaiDisplayValue = () => {
+    if (isEditingOpenai) return openaiKey;
+    if (keyStatus.hasOpenaiKey && keyStatus.openaiKeyPreview) return keyStatus.openaiKeyPreview;
+    return openaiKey;
+  };
+
+  const getXaiDisplayValue = () => {
+    if (isEditingXai) return xaiKey;
+    if (keyStatus.hasXaiKey && keyStatus.xaiKeyPreview) return keyStatus.xaiKeyPreview;
+    return xaiKey;
+  };
+
+  // Handle input changes that switch to editing mode
+  const handleOpenaiChange = (value: string) => {
+    setOpenaiKey(value);
+    if (!isEditingOpenai && keyStatus.hasOpenaiKey) {
+      setIsEditingOpenai(true);
+    }
+  };
+
+  const handleXaiChange = (value: string) => {
+    setXaiKey(value);
+    if (!isEditingXai && keyStatus.hasXaiKey) {
+      setIsEditingXai(true);
+    }
   };
 
   return (
@@ -167,9 +219,10 @@ export function ApiKeyManager() {
                   id="openai-key"
                   type={showOpenaiKey ? 'text' : 'password'}
                   placeholder="sk-..."
-                  value={openaiKey}
-                  onChange={(e) => setOpenaiKey(e.target.value)}
+                  value={getOpenaiDisplayValue()}
+                  onChange={(e) => handleOpenaiChange(e.target.value)}
                   disabled={loading}
+                  className={keyStatus.hasOpenaiKey && !isEditingOpenai ? 'text-muted-foreground' : ''}
                 />
                 <Button
                   type="button"
@@ -182,8 +235,20 @@ export function ApiKeyManager() {
                 </Button>
               </div>
               <Button onClick={handleOpenaiSave} disabled={loading}>
-                Save
+                {keyStatus.hasOpenaiKey && !isEditingOpenai ? 'Edit' : 'Save'}
               </Button>
+              {isEditingOpenai && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setIsEditingOpenai(false);
+                    setOpenaiKey('');
+                  }}
+                  disabled={loading}
+                >
+                  Cancel
+                </Button>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               Get your API key from{' '}
@@ -217,9 +282,10 @@ export function ApiKeyManager() {
                   id="xai-key"
                   type={showXaiKey ? 'text' : 'password'}
                   placeholder="xai-..."
-                  value={xaiKey}
-                  onChange={(e) => setXaiKey(e.target.value)}
+                  value={getXaiDisplayValue()}
+                  onChange={(e) => handleXaiChange(e.target.value)}
                   disabled={loading}
+                  className={keyStatus.hasXaiKey && !isEditingXai ? 'text-muted-foreground' : ''}
                 />
                 <Button
                   type="button"
@@ -232,8 +298,20 @@ export function ApiKeyManager() {
                 </Button>
               </div>
               <Button onClick={handleXaiSave} disabled={loading}>
-                Save
+                {keyStatus.hasXaiKey && !isEditingXai ? 'Edit' : 'Save'}
               </Button>
+              {isEditingXai && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setIsEditingXai(false);
+                    setXaiKey('');
+                  }}
+                  disabled={loading}
+                >
+                  Cancel
+                </Button>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               Get your API key from{' '}

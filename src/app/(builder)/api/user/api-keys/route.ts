@@ -12,7 +12,7 @@ const deleteSchema = z.object({
   providers: z.array(z.enum(['openai', 'xai'])).min(1),
 });
 
-// Get user's API key status (not the actual keys for security)
+// Get user's API key status with masked key previews
 export async function GET() {
   try {
     const session = await auth();
@@ -23,13 +23,35 @@ export async function GET() {
 
     const keyStatus = await hasUserApiKeys(session.user.id);
     
-    return Response.json(keyStatus);
+    // If keys exist, get masked versions for display
+    let maskedKeys = {};
+    if (keyStatus.hasOpenaiKey || keyStatus.hasXaiKey) {
+      const { getUserApiKeys } = await import('@/lib/db/api-keys');
+      const apiKeys = await getUserApiKeys(session.user.id);
+      
+      maskedKeys = {
+        openaiKeyPreview: apiKeys.openaiApiKey ? maskApiKey(apiKeys.openaiApiKey) : null,
+        xaiKeyPreview: apiKeys.xaiApiKey ? maskApiKey(apiKeys.xaiApiKey) : null,
+      };
+    }
+    
+    return Response.json({ ...keyStatus, ...maskedKeys });
   } catch (error) {
     if (error instanceof ChatSDKError) {
       return error.toResponse();
     }
     return new ChatSDKError('bad_request:api').toResponse();
   }
+}
+
+// Helper function to mask API keys for display
+function maskApiKey(apiKey: string): string {
+  if (!apiKey || apiKey.length < 10) return apiKey;
+  
+  // Show first 6 characters and last 4 characters
+  const start = apiKey.substring(0, 6);
+  const end = apiKey.substring(apiKey.length - 4);
+  return `${start}${'•'.repeat(8)}${end}`;
 }
 
 // Save/update user's API key

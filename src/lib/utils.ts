@@ -9,14 +9,32 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const fetcher = async (url: string) => {
-  const response = await fetch(url);
+  try {
+    const response = await fetch(url);
 
-  if (!response.ok) {
-    const { code, cause } = await response.json();
-    throw new ChatSDKError(code as ErrorCode, cause);
+    if (!response.ok) {
+      try {
+        const errorData = await response.json();
+        const { code, cause } = errorData;
+        throw new ChatSDKError(code as ErrorCode, cause);
+      } catch (parseError) {
+        // If we can't parse the error response as JSON, create a generic error
+        console.error('Failed to parse error response:', parseError);
+        throw new ChatSDKError('bad_request:api', `HTTP ${response.status}: ${response.statusText}`);
+      }
+    }
+
+    return response.json();
+  } catch (error) {
+    // Handle network errors or other fetch failures
+    if (error instanceof ChatSDKError) {
+      throw error; // Re-throw ChatSDKError as-is
+    }
+    
+    // For other errors (network issues, etc.), create a generic error
+    console.error('Fetch request failed:', error);
+    throw new ChatSDKError('offline:api', error instanceof Error ? error.message : 'Network request failed');
   }
-
-  return response.json();
 };
 
 export async function fetchWithErrorHandlers(
