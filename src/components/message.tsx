@@ -51,9 +51,10 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
   
   const steps = [
     { id: 'step0', label: 'Comprehensive Analysis' },
-    { id: 'step1', label: 'Data Models' },
-    { id: 'step2', label: 'Automated Actions' },
-    { id: 'step3', label: 'Scheduling & Timing' },
+    { id: 'step1', label: 'Database Generation' },
+    { id: 'step2', label: 'Action Generation' },
+    { id: 'step3', label: 'Schedule Generation' },
+    { id: 'step4', label: 'Deployment' },
     { id: 'complete', label: 'Complete' }
   ];
 
@@ -133,7 +134,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
     console.log(`🔍 Getting step status for: ${stepId}`);
     
     // Define step order for position-based status determination
-    const stepOrder = ['step0', 'step1', 'step2', 'step3', 'complete'];
+    const stepOrder = ['step0', 'step1', 'step2', 'step3', 'step4', 'complete'];
     
     // Check for step data in message parts (for streaming state)
     if (message?.parts) {
@@ -192,15 +193,14 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
     }
 
     // Check if all steps are complete (for completed agents)
-    const allStepsComplete = stepOrder.every(step => {
-      if (step === stepId) return false; // Don't check self
+    const allMainStepsComplete = ['step0', 'step1', 'step2', 'step3', 'step4'].every(step => {
       return (metadata?.stepProgress && metadata.stepProgress[step] === 'complete') ||
              (persistedMetadata?.stepProgress && persistedMetadata.stepProgress[step] === 'complete') ||
              (persistedMetadataFromDoc?.stepProgress && persistedMetadataFromDoc.stepProgress[step] === 'complete');
     });
 
-    if (allStepsComplete && stepId === 'complete') {
-      console.log(`✅ All steps complete - marking ${stepId} as complete`);
+    if (allMainStepsComplete && stepId === 'complete') {
+      console.log(`✅ All main steps complete - marking ${stepId} as complete`);
       return 'complete';
     }
 
@@ -302,7 +302,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
 
   // Check if all steps are complete and update artifact status
   const allStepsComplete = useMemo(() => {
-    const stepOrder = ['step0', 'step1', 'step2', 'step3'];
+    const stepOrder = ['step0', 'step1', 'step2', 'step3', 'step4'];
     
     const isComplete = stepOrder.every(step => {
       return (metadata?.stepProgress && metadata.stepProgress[step] === 'complete') ||

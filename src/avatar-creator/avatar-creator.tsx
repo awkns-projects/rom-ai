@@ -34,7 +34,7 @@ interface UnicornParts {
 interface AvatarData {
   accessToken?: string
   isAuthenticated?: boolean
-  shopifyStore?: string
+  externalService?: string // Make this generic instead of shopifyStore
   name: string
   personality?: string
   characterNames?: string
@@ -50,6 +50,13 @@ interface AvatarData {
 
 interface AvatarCreatorProps {
   documentId?: string
+  externalApiMetadata?: {
+    provider: string | null;
+    requiresConnection: boolean;
+    connectionType: 'oauth' | 'api_key' | 'none';
+    primaryUseCase: string;
+    requiredScopes: string[];
+  };
 }
 
 const artStyles = [
@@ -100,7 +107,85 @@ const generateRandomUnicorn = (): UnicornParts => {
   }
 }
 
-export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
+// Helper function to get API configuration based on provider
+const getApiConfig = (provider: string | null) => {
+  const configs = {
+    shopify: {
+      name: 'Shopify',
+      icon: '🛍️',
+      color: 'green',
+      description: 'Connect to your Shopify store',
+      oauthText: 'Connect with Shopify',
+      tokenPlaceholder: 'shpat_...',
+      tokenHelp: 'Find this in your Shopify admin under Apps → Private apps'
+    },
+    gmail: {
+      name: 'Gmail',
+      icon: '📧',
+      color: 'red',
+      description: 'Connect to your Gmail account',
+      oauthText: 'Connect with Gmail',
+      tokenPlaceholder: 'gmail_api_key_...',
+      tokenHelp: 'Get this from Google Cloud Console → APIs & Services → Credentials'
+    },
+    slack: {
+      name: 'Slack',
+      icon: '💬',
+      color: 'purple',
+      description: 'Connect to your Slack workspace',
+      oauthText: 'Connect with Slack',
+      tokenPlaceholder: 'xoxb-...',
+      tokenHelp: 'Create a Slack app and get the bot token from OAuth & Permissions'
+    },
+    stripe: {
+      name: 'Stripe',
+      icon: '💳',
+      color: 'blue',
+      description: 'Connect to your Stripe account',
+      oauthText: 'Connect with Stripe',
+      tokenPlaceholder: 'sk_live_... or sk_test_...',
+      tokenHelp: 'Find this in your Stripe dashboard under Developers → API keys'
+    },
+    salesforce: {
+      name: 'Salesforce',
+      icon: '☁️',
+      color: 'blue',
+      description: 'Connect to your Salesforce org',
+      oauthText: 'Connect with Salesforce',
+      tokenPlaceholder: 'salesforce_token_...',
+      tokenHelp: 'Get this from your Salesforce Connected App configuration'
+    },
+    instagram: {
+      name: 'Instagram',
+      icon: '📸',
+      color: 'pink',
+      description: 'Connect to your Instagram account',
+      oauthText: 'Connect with Instagram',
+      tokenPlaceholder: 'IGQVJXa2...',
+      tokenHelp: 'Get this from Facebook Developers → Instagram Basic Display API → Access Tokens'
+    },
+    default: {
+      name: 'External Service',
+      icon: '🔗',
+      color: 'gray',
+      description: 'Connect to external service',
+      oauthText: 'Connect with OAuth',
+      tokenPlaceholder: 'api_key_...',
+      tokenHelp: 'Enter your API key or access token'
+    }
+  };
+  
+  return configs[provider as keyof typeof configs] || configs.default;
+};
+
+export default function AvatarCreator({ documentId, externalApiMetadata }: AvatarCreatorProps = {}) {
+  console.log('🎨 AvatarCreator initialized with externalApiMetadata:', {
+    externalApiMetadata,
+    hasMetadata: !!externalApiMetadata,
+    provider: externalApiMetadata?.provider,
+    requiresConnection: externalApiMetadata?.requiresConnection
+  });
+
   const [step, setStep] = useState(1)
   const [avatarData, setAvatarData] = useState<AvatarData>({
     isAuthenticated: false,
@@ -220,16 +305,33 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
     setAvatarData((prev) => ({ ...prev, accessToken: token }))
   }
 
-  const handleShopifyLogin = async () => {
-    console.log("Initiating Shopify OAuth...")
+  const handleApiLogin = async () => {
+    const apiConfig = getApiConfig(externalApiMetadata?.provider || null);
+    console.log(`🔗 Initiating ${apiConfig.name} OAuth for provider: ${externalApiMetadata?.provider}`);
+    console.log('🔍 External API metadata:', externalApiMetadata);
     // Simulate OAuth flow
     await new Promise((resolve) => setTimeout(resolve, 1500))
     setAvatarData((prev) => ({
       ...prev,
       isAuthenticated: true,
-      shopifyStore: "my-store.myshopify.com",
-      accessToken: "shpat_" + Math.random().toString(36).substring(2, 15),
+      externalService: externalApiMetadata?.provider === 'shopify' ? "my-store.myshopify.com" : `${apiConfig.name.toLowerCase()}.example.com`,
+      accessToken: generateTokenForProvider(externalApiMetadata?.provider || 'default'),
     }))
+  }
+
+  // Helper function to generate appropriate token format for each provider
+  const generateTokenForProvider = (provider: string | null) => {
+    const tokenPrefixes: Record<string, string> = {
+      shopify: "shpat_",
+      instagram: "IGQVJXa",
+      gmail: "gmail_",
+      slack: "xoxb-",
+      stripe: "sk_test_",
+      salesforce: "sf_",
+    };
+    
+    const prefix = tokenPrefixes[provider || 'default'] || "api_";
+    return prefix + Math.random().toString(36).substring(2, 15);
   }
 
   const handleTokenSubmit = () => {
@@ -243,7 +345,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
       ...prev,
       isAuthenticated: false,
       accessToken: undefined,
-      shopifyStore: undefined,
+      externalService: undefined,
     }))
   }
 
@@ -372,7 +474,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
         unicornParts: avatar.unicornParts,
         isAuthenticated: avatarData.isAuthenticated,
         accessToken: avatarData.accessToken,
-        shopifyStore: avatarData.shopifyStore,
+        externalService: avatarData.externalService,
       })
       
       // Go to step 1 to show the selected avatar
@@ -387,7 +489,15 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
 
 
   // Updated step titles
-  const stepTitles = ["Avatar", "Personality", "Connection", "App"]
+  const getStepTitle = (stepIndex: number) => {
+    const titles = ["Avatar", "Personality", "Connection", "App"];
+    if (stepIndex === 2) { // Connection step (index 2, step 3)
+      const hasExternalApi = externalApiMetadata?.requiresConnection;
+      const apiConfig = getApiConfig(externalApiMetadata?.provider || null);
+      return hasExternalApi ? `${apiConfig.name} Setup` : 'Setup Complete';
+    }
+    return titles[stepIndex];
+  };
 
   const getSelectedStyle = () => {
     return artStyles.find((style) => style.id === avatarData.selectedStyle)
@@ -501,7 +611,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                       i <= step ? "text-green-400" : "text-gray-500"
                     } hidden sm:inline`}
                   >
-                    {stepTitles[i - 1]}
+                    {getStepTitle(i - 1)}
                   </button>
                 </div>
                 {i < 4 && (
@@ -514,7 +624,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
           </div>
           {/* Mobile step titles */}
           <div className="mt-2 text-center sm:hidden">
-            <span className="text-xs text-green-400">{stepTitles[step - 1]}</span>
+            <span className="text-xs text-green-400">{getStepTitle(step - 1)}</span>
           </div>
         </div>
 
@@ -529,7 +639,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                   {step === 4 && "🚀"}
                 </span>
               </div>
-              Create New Avatar - {stepTitles[step - 1]}
+              Create New Avatar - {getStepTitle(step - 1)}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 sm:p-6">
@@ -571,7 +681,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                           setAvatarData({
                             isAuthenticated: avatarData.isAuthenticated,
                             accessToken: avatarData.accessToken,
-                            shopifyStore: avatarData.shopifyStore,
+                            externalService: avatarData.externalService,
                             name: "",
                             type: "rom-unicorn",
                             romUnicornType: "default",
@@ -604,7 +714,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                           setAvatarData({
                             isAuthenticated: avatarData.isAuthenticated,
                             accessToken: avatarData.accessToken,
-                            shopifyStore: avatarData.shopifyStore,
+                            externalService: avatarData.externalService,
                             name: "",
                             type: "rom-unicorn",
                             romUnicornType: "default",
@@ -857,168 +967,255 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                 {/* Step 3: Connect Store */}
             {step === 3 && (
               <div className="space-y-4 sm:space-y-6">
-                <div className="text-center mb-4 sm:mb-6">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
-                    <span className="text-blue-400 text-lg sm:text-xl">🔐</span>
-                  </div>
-                  <h3 className="text-lg sm:text-xl font-medium text-blue-400 mb-2">Connect to Shopify</h3>
-                  <p className="text-sm sm:text-base text-gray-400">
-                    Connect to your Shopify store to save and manage your avatars
-                  </p>
-                  <div className="mt-2 p-2 bg-blue-900/10 rounded border border-blue-800/30">
-                    <p className="text-xs text-blue-300">💡 Your progress is automatically saved as you work</p>
-                  </div>
-                </div>
+                {(() => {
+                  const apiConfig = getApiConfig(externalApiMetadata?.provider || null);
+                  const hasExternalApi = externalApiMetadata?.requiresConnection;
+                  
+                  console.log('🔐 Step 3 - Connection step rendering with:', {
+                    externalApiMetadata,
+                    provider: externalApiMetadata?.provider,
+                    requiresConnection: externalApiMetadata?.requiresConnection,
+                    apiConfig: { name: apiConfig.name, icon: apiConfig.icon, color: apiConfig.color },
+                    hasExternalApi,
+                    expectedForInstagram: externalApiMetadata?.provider === 'instagram'
+                  });
+                  
+                  return (
+                    <div className="text-center mb-4 sm:mb-6">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
+                        <span className="text-blue-400 text-lg sm:text-xl">
+                          {hasExternalApi ? apiConfig.icon : '🔐'}
+                        </span>
+                      </div>
+                      <h3 className="text-lg sm:text-xl font-medium text-blue-400 mb-2">
+                        {hasExternalApi ? `Connect to ${apiConfig.name}` : 'Connection (Optional)'}
+                      </h3>
+                      <p className="text-sm sm:text-base text-gray-400">
+                        {hasExternalApi 
+                          ? `${apiConfig.description} for ${externalApiMetadata?.primaryUseCase || 'your agent functionality'}`
+                          : 'No external API connection required for this agent'
+                        }
+                      </p>
+                      <div className="mt-2 p-2 bg-blue-900/10 rounded border border-blue-800/30">
+                        <p className="text-xs text-blue-300">
+                          {hasExternalApi 
+                            ? '💡 Your progress is automatically saved as you work'
+                            : '💡 This agent works with internal data only'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {!avatarData.isAuthenticated ? (
                   <div className="space-y-4 sm:space-y-6">
-                    {/* OAuth Login Option */}
-                    <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
-                      <div className="text-center">
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-green-500/10 rounded-lg flex items-center justify-center mx-auto mb-4">
-                          <span className="text-green-400 text-2xl sm:text-3xl">🛍️</span>
-                        </div>
-                        <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-2">Shopify OAuth</h4>
-                        <p className="text-sm text-gray-400 mb-4">Securely connect using Shopify's OAuth system</p>
-                        <Button
-                          onClick={handleShopifyLogin}
-                          className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 h-10 sm:h-auto w-full sm:w-auto"
-                        >
-                          <span className="mr-2">🔗</span>
-                          Connect with Shopify
-                        </Button>
-                      </div>
-                    </div>
+                    {(() => {
+                      const apiConfig = getApiConfig(externalApiMetadata?.provider || null);
+                      const hasExternalApi = externalApiMetadata?.requiresConnection;
+                      
+                      if (!hasExternalApi) {
+                        return (
+                          <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
+                            <div className="text-center">
+                              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-500/10 rounded-lg flex items-center justify-center mx-auto mb-4">
+                                <span className="text-gray-400 text-2xl sm:text-3xl">✅</span>
+                              </div>
+                              <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-2">No Connection Required</h4>
+                              <p className="text-sm text-gray-400 mb-4">This agent works with internal data only</p>
+                              <Button
+                                onClick={() => setAvatarData(prev => ({ ...prev, isAuthenticated: true }))}
+                                className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 h-10 sm:h-auto w-full sm:w-auto"
+                              >
+                                <span className="mr-2">✓</span>
+                                Continue
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      return (
+                        <>
+                          {/* OAuth Login Option */}
+                          <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
+                            <div className="text-center">
+                              <div className={`w-16 h-16 sm:w-20 sm:h-20 bg-${apiConfig.color}-500/10 rounded-lg flex items-center justify-center mx-auto mb-4`}>
+                                <span className={`text-${apiConfig.color}-400 text-2xl sm:text-3xl`}>{apiConfig.icon}</span>
+                              </div>
+                              <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-2">{apiConfig.name} OAuth</h4>
+                              <p className="text-sm text-gray-400 mb-4">Securely connect using {apiConfig.name}'s OAuth system</p>
+                              <Button
+                                onClick={handleApiLogin}
+                                className={`bg-${apiConfig.color}-500 hover:bg-${apiConfig.color}-600 text-white transition-all duration-150 h-10 sm:h-auto w-full sm:w-auto`}
+                              >
+                                <span className="mr-2">🔗</span>
+                                {apiConfig.oauthText}
+                              </Button>
+                            </div>
+                          </div>
+                          
+                          {/* Divider */}
+                          <div className="relative">
+                            <div className="absolute inset-0 flex items-center">
+                              <div className="w-full border-t border-gray-700"></div>
+                            </div>
+                            <div className="relative flex justify-center text-xs sm:text-sm">
+                              <span className="bg-[#0a0a0a] px-3 text-gray-400">or</span>
+                            </div>
+                          </div>
 
-                    {/* Divider */}
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-gray-700"></div>
-                      </div>
-                      <div className="relative flex justify-center text-xs sm:text-sm">
-                        <span className="bg-[#0a0a0a] px-3 text-gray-400">or</span>
-                      </div>
-                    </div>
+                          {/* Manual Token Entry */}
+                          <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
+                            <div className="text-center mb-4">
+                              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-orange-500/10 rounded-lg flex items-center justify-center mx-auto mb-3">
+                                <span className="text-orange-400 text-lg sm:text-xl">🔑</span>
+                              </div>
+                              <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-2">Access Token</h4>
+                              <p className="text-sm text-gray-400 mb-4">Enter your {apiConfig.name} access token</p>
+                            </div>
 
-                    {/* Manual Token Entry */}
-                    <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
-                      <div className="text-center mb-4">
-                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-orange-500/10 rounded-lg flex items-center justify-center mx-auto mb-3">
-                          <span className="text-orange-400 text-lg sm:text-xl">🔑</span>
-                        </div>
-                        <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-2">Access Token</h4>
-                        <p className="text-sm text-gray-400 mb-4">Enter your Shopify private app access token</p>
-                      </div>
+                            <div className="space-y-3 sm:space-y-4">
+                              <div>
+                                <Label htmlFor="access-token" className="text-sm font-medium text-gray-300 mb-2 block">
+                                  {apiConfig.name} Access Token
+                                </Label>
+                                <Input
+                                  id="access-token"
+                                  type="password"
+                                  placeholder={apiConfig.tokenPlaceholder}
+                                  value={avatarData.accessToken || ""}
+                                  onChange={(e) => handleAccessTokenChange(e.target.value)}
+                                  className="bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500 focus:border-green-500 focus:ring-green-500/20 transition-all duration-150 h-10 sm:h-auto font-mono text-sm"
+                                />
+                                <p className="text-xs text-gray-500 mt-2">
+                                  {apiConfig.tokenHelp}
+                                </p>
+                              </div>
 
-                      <div className="space-y-3 sm:space-y-4">
-                        <div>
-                          <Label htmlFor="access-token" className="text-sm font-medium text-gray-300 mb-2 block">
-                            Private App Access Token
-                          </Label>
-                          <Input
-                            id="access-token"
-                            type="password"
-                            placeholder="shpat_..."
-                            value={avatarData.accessToken || ""}
-                            onChange={(e) => handleAccessTokenChange(e.target.value)}
-                            className="bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500 focus:border-green-500 focus:ring-green-500/20 transition-all duration-150 h-10 sm:h-auto font-mono text-sm"
-                          />
-                          <p className="text-xs text-gray-500 mt-2">
-                            Find this in your Shopify admin under Apps → Private apps
-                          </p>
-                        </div>
-
-                        <Button
-                          onClick={handleTokenSubmit}
-                          disabled={!avatarData.accessToken || avatarData.accessToken.length < 10}
-                          className="bg-blue-500 hover:bg-blue-600 text-white transition-all duration-150 disabled:opacity-50 h-10 sm:h-auto w-full"
-                        >
-                          <span className="mr-2">✓</span>
-                          Authenticate
-                        </Button>
-                      </div>
-                    </div>
+                              <Button
+                                onClick={handleTokenSubmit}
+                                disabled={!avatarData.accessToken || avatarData.accessToken.length < 10}
+                                className="bg-blue-500 hover:bg-blue-600 text-white transition-all duration-150 disabled:opacity-50 h-10 sm:h-auto w-full"
+                              >
+                                <span className="mr-2">✓</span>
+                                Authenticate
+                              </Button>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
 
                     {/* Help Section with Modal */}
-                    <div className="p-3 sm:p-4 bg-blue-900/10 rounded-lg border border-blue-800/50">
-                      <div className="flex items-start gap-2 sm:gap-3">
-                        <div className="w-5 h-5 sm:w-6 sm:h-6 bg-blue-500/20 rounded flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-blue-400 text-xs sm:text-sm">ℹ️</span>
-                        </div>
-                        <div className="flex-1">
-                          <h5 className="text-sm sm:text-base font-medium text-blue-400 mb-1">Need help?</h5>
-                          <p className="text-xs sm:text-sm text-gray-400 mb-3">
-                            To create a private app: Go to your Shopify admin → Settings → Apps and sales channels →
-                            Develop apps → Create an app → Configure Admin API scopes → Install app
-                          </p>
+                    {(() => {
+                      const apiConfig = getApiConfig(externalApiMetadata?.provider || null);
+                      const hasExternalApi = externalApiMetadata?.requiresConnection;
+                      
+                      if (!hasExternalApi) return null;
+                      
+                      return (
+                        <div className="p-3 sm:p-4 bg-blue-900/10 rounded-lg border border-blue-800/50">
+                          <div className="flex items-start gap-2 sm:gap-3">
+                            <div className="w-5 h-5 sm:w-6 sm:h-6 bg-blue-500/20 rounded flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <span className="text-blue-400 text-xs sm:text-sm">ℹ️</span>
+                            </div>
+                            <div className="flex-1">
+                              <h5 className="text-sm sm:text-base font-medium text-blue-400 mb-1">Need help?</h5>
+                              <p className="text-xs sm:text-sm text-gray-400 mb-3">
+                                {apiConfig.tokenHelp}
+                              </p>
 
-                          <Dialog open={showTokenModal} onOpenChange={setShowTokenModal}>
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/50 transition-all duration-150 h-8 text-xs"
-                              >
-                                <span className="mr-1">📖</span>
-                                Step-by-Step Guide
-                              </Button>
-                            </DialogTrigger>
-                          </Dialog>
+                              <Dialog open={showTokenModal} onOpenChange={setShowTokenModal}>
+                                <DialogTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/50 transition-all duration-150 h-8 text-xs"
+                                  >
+                                    <span className="mr-1">📖</span>
+                                    Step-by-Step Guide
+                                  </Button>
+                                </DialogTrigger>
+                              </Dialog>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
                   </div>
                 ) : (
                   /* Authenticated State */
                   <div className="space-y-4 sm:space-y-6">
-                    <div className="p-4 sm:p-6 bg-green-900/20 rounded-lg border border-green-700">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-500 rounded-lg flex items-center justify-center">
-                            <span className="text-white text-lg sm:text-xl">✓</span>
+                    {(() => {
+                      const apiConfig = getApiConfig(externalApiMetadata?.provider || null);
+                      const hasExternalApi = externalApiMetadata?.requiresConnection;
+                      
+                      return (
+                        <>
+                          <div className="p-4 sm:p-6 bg-green-900/20 rounded-lg border border-green-700">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-500 rounded-lg flex items-center justify-center">
+                                  <span className="text-white text-lg sm:text-xl">✓</span>
+                                </div>
+                                <div>
+                                  <h4 className="text-base sm:text-lg font-medium text-green-400">
+                                    {hasExternalApi ? 'Connected Successfully' : 'Ready to Continue'}
+                                  </h4>
+                                  <p className="text-sm text-green-200">
+                                    {hasExternalApi ? (
+                                      avatarData.externalService
+                                        ? `${apiConfig.name}: ${avatarData.externalService}`
+                                        : `${apiConfig.name} authentication verified`
+                                    ) : (
+                                      'No external connection required'
+                                    )}
+                                  </p>
+                                  {hasExternalApi && avatarData.accessToken && (
+                                    <p className="text-xs text-green-300 font-mono mt-1">
+                                      Token: {avatarData.accessToken.substring(0, 12)}...
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              {hasExternalApi && (
+                                <Button
+                                  onClick={handleLogout}
+                                  variant="outline"
+                                  size="sm"
+                                  className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 transition-all duration-150 h-8 sm:h-auto"
+                                >
+                                  Disconnect
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="text-base sm:text-lg font-medium text-green-400">Connected Successfully</h4>
-                            <p className="text-sm text-green-200">
-                              {avatarData.shopifyStore
-                                ? `Store: ${avatarData.shopifyStore}`
-                                : "Authentication verified"}
-                            </p>
-                            {avatarData.accessToken && (
-                              <p className="text-xs text-green-300 font-mono mt-1">
-                                Token: {avatarData.accessToken.substring(0, 12)}...
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                        <Button
-                          onClick={handleLogout}
-                          variant="outline"
-                          size="sm"
-                          className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 transition-all duration-150 h-8 sm:h-auto"
-                        >
-                          Disconnect
-                        </Button>
-                      </div>
-                    </div>
 
-                    <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
-                      <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-3">Ready to Continue</h4>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-sm text-gray-300">Shopify connection established</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-sm text-gray-300">API access verified</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-sm text-gray-300">Ready for avatar creation</span>
-                        </div>
-                      </div>
-                    </div>
+                          <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
+                            <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-3">Ready to Continue</h4>
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
+                                <span className="text-sm text-gray-300">
+                                  {hasExternalApi ? `${apiConfig.name} connection established` : 'Internal data processing ready'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
+                                <span className="text-sm text-gray-300">
+                                  {hasExternalApi ? 'API access verified' : 'Local functionality verified'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
+                                <span className="text-sm text-gray-300">Ready for avatar creation</span>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
@@ -1194,7 +1391,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                   disabled={
                     (step === 1 && !avatarData.unicornParts) ||
                     (step === 2 && !avatarData.name) ||
-                    (step === 3 && !avatarData.isAuthenticated)
+                    (step === 3 && externalApiMetadata?.requiresConnection && !avatarData.isAuthenticated)
                   }
                   className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 disabled:opacity-50 h-10 sm:h-auto"
                 >

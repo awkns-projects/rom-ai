@@ -355,9 +355,11 @@ export const ScheduleEditor = memo(({
         },
         body: JSON.stringify({
           name: schedule.name,
+          type: (schedule as any).type || 'mutation', // Default to mutation if type is not set
           description: schedule.description || `Schedule to ${schedule.name}`,
           availableModels: allModels,
           entityType: 'schedule',
+          type: (schedule as any).type || 'mutation', // Default to mutation if type is not set
           businessContext: `Generate pseudo steps for ${schedule.name}. This is a scheduled task that runs automatically. Make it comprehensive and realistic for business operations.`
         }),
       });

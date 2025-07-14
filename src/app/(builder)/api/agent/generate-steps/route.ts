@@ -4,7 +4,7 @@ import { generatePseudoSteps } from '@/lib/ai/tools/agent-builder/generation';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, description, availableModels, entityType, businessContext } = body;
+    const { name, description, availableModels, entityType, businessContext, type } = body;
 
     // Validate required fields
     if (!name || !description || !entityType) {
@@ -14,11 +14,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Default to 'mutation' if no type is provided, or validate the provided type
+    const actionType = type || 'mutation';
+    if (actionType !== 'query' && actionType !== 'mutation') {
+      return NextResponse.json(
+        { error: 'Invalid type. Must be "query" or "mutation"' },
+        { status: 400 }
+      );
+    }
+
     // Generate pseudo steps using AI
     const pseudoSteps = await generatePseudoSteps(
       name,
       description,
-      'Create',
+      actionType,
       availableModels || [],
       entityType,
       businessContext
@@ -48,7 +57,9 @@ export async function GET() {
       endpoint: '/api/agent/generate-steps',
       method: 'POST',
       requiredFields: ['name', 'description', 'entityType'],
-      optionalFields: ['availableModels', 'businessContext'],
+      optionalFields: ['availableModels', 'businessContext', 'type'],
+      supportedTypes: ['query', 'mutation'],
+      defaultType: 'mutation',
       responseFormat: 'Generated pseudo steps array'
     }
   });

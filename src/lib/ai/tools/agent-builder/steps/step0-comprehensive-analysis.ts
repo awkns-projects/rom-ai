@@ -53,6 +53,20 @@ export interface Step0AOutput {
     clarity: 'very_clear' | 'clear' | 'somewhat_unclear' | 'unclear';
   };
   
+  // External API analysis
+  externalApiAnalysis: {
+    requiredApis: Array<{
+      name: string; // e.g., 'gmail', 'shopify', 'slack', 'stripe'
+      purpose: string;
+      priority: 'critical' | 'high' | 'medium' | 'low';
+      useCase: string;
+      requiredScopes: string[];
+    }>;
+    primaryApi: string | null; // The main API this agent will focus on
+    requiresExternalApi: boolean;
+    apiConflictResolution?: string; // If multiple APIs detected, explanation of which one was chosen
+  };
+  
   // Feature imagination
   featureRequirements: {
     coreFeatures: string[];
@@ -104,6 +118,15 @@ export interface Step0BOutput {
   agentName: string;
   agentDescription: string;
   domain: string;
+  
+  // External API metadata (simplified from Phase A)
+  externalApi: {
+    provider: string | null; // e.g., 'shopify', 'gmail', 'slack', 'stripe', null
+    requiresConnection: boolean;
+    connectionType: 'oauth' | 'api_key' | 'none';
+    primaryUseCase: string;
+    requiredScopes: string[];
+  };
   
   // Enhanced arrays with operation tracking
   models: Array<{
@@ -194,21 +217,29 @@ ANALYSIS FOCUS:
    - How complex is this requirement?
    - How urgent and clear is the request?
 
-2. IDENTIFY BUSINESS FEATURES:
+2. IDENTIFY EXTERNAL API REQUIREMENTS:
+   - Does this request mention any external services or APIs?
+   - Common APIs include: gmail, shopify, slack, stripe, salesforce, hubspot, google-calendar, microsoft-teams, etc.
+   - If multiple APIs are mentioned, pick the MOST CRITICAL ONE for the primary use case
+   - What specific functionality is needed from the external API?
+   - What scopes/permissions would be required?
+   - IMPORTANT: Each agent can only connect to ONE external API
+
+3. IDENTIFY BUSINESS FEATURES:
    - What are the 3-5 core features needed?
    - What 2-3 additional features would add value?
    - What user experience improvements are required?
    - What business rules must be enforced?
    - What integrations might be needed?
 
-3. EXTRACT SEMANTIC REQUIREMENTS:
+4. EXTRACT SEMANTIC REQUIREMENTS:
    - What business entities/concepts need to be represented?
    - What business processes need to happen?
    - What manual actions do users need to perform?
    - What automated schedules need to run?
    - Focus on WHAT needs to be done, not HOW
 
-4. AGENT DETAILS:
+5. AGENT DETAILS:
    - Suggest an appropriate agent name
    - Provide a clear agent description
    - Identify the business domain
@@ -235,6 +266,19 @@ Be focused on business value and user needs. Don't worry about technical impleme
           complexity: z.enum(['simple', 'moderate', 'complex', 'enterprise']),
           urgency: z.enum(['low', 'medium', 'high', 'critical']),
           clarity: z.enum(['very_clear', 'clear', 'somewhat_unclear', 'unclear'])
+        }),
+        
+        externalApiAnalysis: z.object({
+          requiredApis: z.array(z.object({
+            name: z.string(),
+            purpose: z.string(),
+            priority: z.enum(['critical', 'high', 'medium', 'low']),
+            useCase: z.string(),
+            requiredScopes: z.array(z.string()).max(5)
+          })).max(5),
+          primaryApi: z.string().nullable(),
+          requiresExternalApi: z.boolean(),
+          apiConflictResolution: z.string().optional()
         }),
         
         featureRequirements: z.object({
@@ -287,6 +331,13 @@ Be focused on business value and user needs. Don't worry about technical impleme
           content: `USER REQUEST: "${userRequest}"
 
 Analyze this request and extract the business features and semantic requirements. Focus on WHAT needs to be done and WHY, not HOW to implement it.
+
+EXTERNAL API DETECTION:
+- Carefully analyze the request for any mention of external services or APIs
+- Look for keywords like: email, gmail, shopify, slack, stripe, salesforce, hubspot, calendar, teams, etc.
+- If multiple APIs are mentioned, pick the MOST CRITICAL one for the primary use case
+- Each agent can only connect to ONE external API
+- If no external API is mentioned, set requiresExternalApi to false and primaryApi to null
 
 ${existingAgent ? 'Focus on what NEW functionality is needed beyond what already exists.' : 'This is a new system - identify all requirements from scratch.'}`
         }
@@ -345,6 +396,19 @@ For "update" operations, provide updateDescription explaining what changes are n
 
 TECHNICAL SPECIFICATION REQUIREMENTS:
 
+0. EXTERNAL API INTEGRATION:
+   - Based on the Phase A analysis, determine if external API integration is needed
+   - If primaryApi is provided, focus the entire agent design around that single API
+   - Common APIs and their connection types:
+     * shopify: oauth, scopes like 'read_products', 'write_orders'
+     * gmail: oauth, scopes like 'gmail.readonly', 'gmail.send'
+     * slack: oauth, scopes like 'channels:read', 'chat:write'
+     * stripe: api_key, no scopes (uses API key)
+     * salesforce: oauth, scopes like 'api', 'refresh_token'
+   - If no external API needed, set provider to null and requiresConnection to false
+   - primaryUseCase should explain the main functionality this API enables
+   - CRITICAL: Design all models, actions, and schedules around this single API integration
+
 1. DATABASE MODELS:
    ${existingAgent ? `
    - For EXISTING models: operation="update", add new fields, update existing fields, add enums
@@ -359,6 +423,7 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    - Include proper field types (String, Int, DateTime, Boolean, etc.)
    - Define necessary enums (max 3 per model, 5 values each)
    - Specify relationships between models
+   - If external API is specified, design models that integrate with that API's data structure
 
 2. MANUAL ACTIONS (query/mutation only):
    ${existingAgent ? `
@@ -372,6 +437,7 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    - Include role requirements (admin/member)
    - Specify input/output requirements
    - Define complexity and business value
+   - If external API is specified, design actions that interact with that API
 
 3. AUTOMATED SCHEDULES (query/mutation only):
    ${existingAgent ? `
@@ -386,6 +452,7 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    - Define frequency and timing
    - Include role requirements (admin/member)
    - Specify expected outputs
+   - If external API is specified, design schedules that sync with or process that API's data
 
 4. UPDATE DESCRIPTIONS:
    - For models: "Add support for X feature by including Y fields"
@@ -394,7 +461,7 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    - For actions: "Enhance action to support Z functionality"
    - For schedules: "Update schedule to include X processing"
 
-Convert the semantic requirements into concrete technical specifications with proper create/update tracking.`;
+Convert the semantic requirements into concrete technical specifications with proper create/update tracking, focusing on the single external API integration if specified.`;
 
     const result = await generateObject({
       model,
@@ -406,6 +473,14 @@ Convert the semantic requirements into concrete technical specifications with pr
         agentName: z.string(),
         agentDescription: z.string(),
         domain: z.string(),
+        
+        externalApi: z.object({
+          provider: z.string().nullable(),
+          requiresConnection: z.boolean(),
+          connectionType: z.enum(['oauth', 'api_key', 'none']),
+          primaryUseCase: z.string(),
+          requiredScopes: z.array(z.string()).max(5)
+        }),
         
         models: z.array(z.object({
           name: z.string(),
@@ -469,6 +544,12 @@ USER REQUEST ANALYSIS:
 - Urgency: ${phaseAOutput.userRequestAnalysis.urgency}
 - Clarity: ${phaseAOutput.userRequestAnalysis.clarity}
 
+EXTERNAL API ANALYSIS:
+- Requires External API: ${phaseAOutput.externalApiAnalysis.requiresExternalApi}
+- Primary API: ${phaseAOutput.externalApiAnalysis.primaryApi || 'none'}
+- Required APIs: ${phaseAOutput.externalApiAnalysis.requiredApis.map(api => `${api.name} (${api.priority})`).join(', ') || 'none'}
+${phaseAOutput.externalApiAnalysis.apiConflictResolution ? `- Conflict Resolution: ${phaseAOutput.externalApiAnalysis.apiConflictResolution}` : ''}
+
 FEATURE REQUIREMENTS:
 - Core Features: ${phaseAOutput.featureRequirements.coreFeatures.join(', ')}
 - Additional Features: ${phaseAOutput.featureRequirements.additionalFeatures.join(', ')}
@@ -510,23 +591,32 @@ TECHNICAL DESIGN INSTRUCTIONS:
 
 Using ALL the above information, convert these semantic requirements into concrete technical specifications:
 
+0. EXTERNAL API INTEGRATION:
+   - Primary API: ${phaseAOutput.externalApiAnalysis.primaryApi || 'none'}
+   - If primary API is specified, design the ENTIRE agent around that single API
+   - All models, actions, and schedules should integrate with this API
+   - If no external API needed, set provider to null and requiresConnection to false
+
 1. DATABASE MODELS - Use entity priorities, relationships, and business rules:
    - High/Critical priority entities should become primary models
    - Use relationship information to design proper foreign keys and associations
    - Apply business rules as field constraints and validations
    - Consider integration requirements for external data fields
+   - If external API specified, design models that match that API's data structure
 
 2. MANUAL ACTIONS - Use core features, user roles, and required data:
    - Map core features to essential actions
    - Design actions based on user roles (admin vs member)
    - Include input fields based on required data from semantic analysis
    - Consider urgency level for action prioritization
+   - If external API specified, design actions that interact with that API
 
 3. AUTOMATED SCHEDULES - Use business processes and automation potential:
    - High automation potential processes should become schedules
    - Use frequency information from automated schedules
    - Consider business process triggers and outcomes
    - Map recurring business processes to schedule operations
+   - If external API specified, design schedules that sync with or process that API's data
 
 ${existingAgent ? 'Focus on NEW models and additional fields for existing models, plus new actions and schedules that fulfill the identified requirements.' : 'Design everything from scratch based on the comprehensive analysis above.'}`
         }

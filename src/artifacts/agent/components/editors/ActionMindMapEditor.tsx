@@ -199,6 +199,7 @@ export const ActionMindMapEditor = memo(({
           description: action.description || `Action to ${action.name}`,
           availableModels: allModels,
           entityType: 'action',
+          type: (action as any).type || 'mutation', // Default to mutation if type is not set
           businessContext: `Generate pseudo steps for ${action.name}. Make it comprehensive and realistic for business operations.`
         }),
       });

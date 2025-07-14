@@ -472,7 +472,20 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
           
           <div className="flex justify-center">
             <div className="w-full max-w-4xl">
-              <AvatarCreator documentId={documentId} />
+              {(() => {
+                console.log('🎨 OnboardContent rendering AvatarCreator with:', {
+                  documentId,
+                  externalApiMetadata: agentData?.externalApi,
+                  hasExternalApi: !!agentData?.externalApi,
+                  provider: agentData?.externalApi?.provider
+                });
+                return (
+                  <AvatarCreator 
+                    documentId={documentId} 
+                    externalApiMetadata={agentData?.externalApi} 
+                  />
+                );
+              })()}
             </div>
           </div>
         </div>

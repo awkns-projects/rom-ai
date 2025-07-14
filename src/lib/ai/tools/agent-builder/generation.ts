@@ -3283,7 +3283,7 @@ export {
 export async function generatePseudoSteps(
   name: string,
   description: string,
-  type: 'create' | 'update',
+  type: 'query' | 'mutation',
   availableModels: AgentModel[],
   entityType: 'action' | 'schedule',
   businessContext?: string
@@ -3352,7 +3352,7 @@ ${availableModels.map(model => `
 **IMPORTANT**: When you see field names like "leadId", "customerId", "orderId", etc., the type should be "${availableModels.map(m => m.name).find(name => name.toLowerCase() === 'lead') ? 'LeadId' : 'ModelNameId'}", NOT "String"!
 
 For ${type} operations:
-${type === 'create' ? '- Focus on data validation, creation, and confirmation steps' : '- Focus on finding existing records, validation, updating, and confirmation steps'}
+${type === 'mutation' ? '- Focus on data validation, creation/updating, and confirmation steps' : '- Focus on finding existing records, reading data, and presenting results'}
 
 Generate 3-7 logical steps that would accomplish this ${entityType}'s purpose. Be specific about database model relationships and connections.
 
