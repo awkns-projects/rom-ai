@@ -1,4 +1,4 @@
-import type { DatabaseModel, EnvVar, PseudoCodeStep } from './action';
+import type { DatabaseModel, EnvVar, PseudoCodeStep, StepExecutionResult } from './action';
 
 // Interface for recurring scheduled tasks
 export interface AgentSchedule {
@@ -6,7 +6,7 @@ export interface AgentSchedule {
   name: string;
   emoji?: string; // AI-generated emoji representing the schedule
   description: string;
-  type: 'Create' | 'Update';
+  type: 'view' | 'mutation'; // View for read operations, mutation for write operations
   role: 'admin' | 'member';
   pseudoSteps?: PseudoCodeStep[];
   interval: {
@@ -27,7 +27,8 @@ export interface AgentSchedule {
   execute: {
     type: 'code' | 'prompt';
     code?: {
-      script: string;
+      script: string; // Main function that composes all step functions
+      stepFunctions?: string[]; // Individual step function codes
       envVars?: EnvVar[];
     };
     prompt?: {
@@ -49,4 +50,11 @@ export interface AgentSchedule {
     envVars: Record<string, string>;
     lastUpdated: string;
   };
+  executionHistory?: Array<{
+    executedAt: string;
+    success: boolean;
+    stepResults: StepExecutionResult[];
+    totalExecutionTime: number;
+    error?: string;
+  }>;
 } 

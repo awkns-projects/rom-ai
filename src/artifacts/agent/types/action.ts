@@ -15,7 +15,38 @@ export interface PseudoCodeStep {
   inputFields: StepField[];
   outputFields: StepField[];
   description: string;
-  type: 'Database find unique' | 'Database find many' | 'Database update unique' | 'Database update many' | 'Database create' | 'Database create many' | 'Database delete unique' | 'Database delete many' | 'call external api' | 'ai analysis';
+  type: 'Database create' | 'Database update' | 'Database read' | 'Database delete' | 'External api read' | 'External api write' | 'AI analysis' | 'AI generation';
+  generatedCode?: string; // Generated step function code
+  testCode?: string; // Generated test code for the step
+  testCases?: Array<{
+    name: string;
+    input: Record<string, any>;
+    expectedOutput: Record<string, any>;
+    expectedChanges?: Array<{
+      type: 'database' | 'external_api' | 'ai_analysis' | 'ai_generation';
+      description: string;
+      model?: string;
+      operation?: string;
+      recordCount?: number;
+    }>;
+  }>;
+}
+
+export interface StepExecutionResult {
+  stepId: string;
+  success: boolean;
+  output: Record<string, any>;
+  changes: Array<{
+    type: 'database' | 'external_api' | 'ai_analysis' | 'ai_generation';
+    description: string;
+    model?: string;
+    operation?: string;
+    recordCount?: number;
+    apiEndpoint?: string;
+    tokensUsed?: number;
+    executionTime?: number;
+  }>;
+  error?: string;
 }
 
 export interface AgentAction {
@@ -24,6 +55,7 @@ export interface AgentAction {
   emoji?: string; // AI-generated emoji representing the action
   description: string;
   role: 'admin' | 'member';
+  type: 'view' | 'mutation'; // View for read operations, mutation for write operations
   pseudoSteps?: PseudoCodeStep[];
   dataSource: {
     type: 'custom' | 'database';
@@ -38,7 +70,8 @@ export interface AgentAction {
   execute: {
     type: 'code' | 'prompt';
     code?: {
-      script: string;
+      script: string; // Main function that composes all step functions
+      stepFunctions?: string[]; // Individual step function codes
       envVars?: EnvVar[];
     };
     prompt?: {

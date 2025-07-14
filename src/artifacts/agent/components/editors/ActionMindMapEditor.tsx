@@ -451,7 +451,7 @@ export const ActionMindMapEditor = memo(({
                       <Label className="text-blue-300 font-mono text-xs">Type</Label>
                       <Select
                         value={step.type}
-                        onValueChange={(value) => {
+                        onValueChange={(value: 'Database create' | 'Database update' | 'Database read' | 'Database delete' | 'External api read' | 'External api write' | 'AI analysis' | 'AI generation') => {
                           const updatedSteps = action.pseudoSteps?.map(s => 
                             s.id === step.id ? { ...s, type: value } : s
                           ) || [];
@@ -465,16 +465,14 @@ export const ActionMindMapEditor = memo(({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="bg-black border-blue-500/30">
-                          <SelectItem value="Database find unique" className="text-blue-200 font-mono">Database find unique</SelectItem>
-                          <SelectItem value="Database find many" className="text-blue-200 font-mono">Database find many</SelectItem>
-                          <SelectItem value="Database update unique" className="text-blue-200 font-mono">Database update unique</SelectItem>
-                          <SelectItem value="Database update many" className="text-blue-200 font-mono">Database update many</SelectItem>
                           <SelectItem value="Database create" className="text-blue-200 font-mono">Database create</SelectItem>
-                          <SelectItem value="Database create many" className="text-blue-200 font-mono">Database create many</SelectItem>
-                          <SelectItem value="Database delete unique" className="text-blue-200 font-mono">Database delete unique</SelectItem>
-                          <SelectItem value="Database delete many" className="text-blue-200 font-mono">Database delete many</SelectItem>
-                          <SelectItem value="call external api" className="text-blue-200 font-mono">Call External API</SelectItem>
-                          <SelectItem value="ai analysis" className="text-blue-200 font-mono">AI Analysis</SelectItem>
+                          <SelectItem value="Database update" className="text-blue-200 font-mono">Database update</SelectItem>
+                          <SelectItem value="Database read" className="text-blue-200 font-mono">Database read</SelectItem>
+                          <SelectItem value="Database delete" className="text-blue-200 font-mono">Database delete</SelectItem>
+                          <SelectItem value="External api read" className="text-blue-200 font-mono">External api read</SelectItem>
+                          <SelectItem value="External api write" className="text-blue-200 font-mono">External api write</SelectItem>
+                          <SelectItem value="AI analysis" className="text-blue-200 font-mono">AI analysis</SelectItem>
+                          <SelectItem value="AI generation" className="text-blue-200 font-mono">AI generation</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -543,9 +541,9 @@ export const ActionMindMapEditor = memo(({
             <Button
               onClick={(e) => {
                 e.stopPropagation();
-                const newStep = {
+                const newStep: PseudoCodeStep = {
                   id: generateNewId('step', action.pseudoSteps || []),
-                  type: 'Database find many',
+                  type: 'Database read' as const,
                   description: '',
                   inputFields: [{
                     id: generateNewId('field', []),
@@ -571,7 +569,7 @@ export const ActionMindMapEditor = memo(({
               }}
               className="btn-matrix w-full text-xs py-2"
             >
-              <PlusIcon size={14} className="mr-1" />
+              <PlusIcon size={14} />
               Add Step
             </Button>
 
