@@ -107,3 +107,186 @@ export function getTrailingMessageId({
 export function sanitizeText(text: string) {
   return text.replace('<has_function_call>', '');
 }
+
+/**
+ * Avatar Authentication Utilities
+ */
+
+export interface AvatarAuthState {
+  isAuthenticated: boolean;
+  provider: string | null;
+  accessToken: string | null;
+  envVars: Record<string, string>;
+  externalService: string | null;
+  availableProviders: string[];
+  connectionType: 'oauth' | 'api_key' | 'none' | 'unknown';
+}
+
+/**
+ * Fetch avatar authentication tokens for action execution via client app API
+ */
+export async function getAvatarAuthTokens(documentId: string, component?: string): Promise<AvatarAuthState> {
+  try {
+    // Use client app API instead of main app API
+    const url = new URL('/api/client/auth', window.location.origin);
+    url.searchParams.set('documentId', documentId);
+    if (component) {
+      url.searchParams.set('component', component);
+    }
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.warn('Failed to fetch avatar auth tokens via client API:', response.statusText);
+      return {
+        isAuthenticated: false,
+        provider: null,
+        accessToken: null,
+        envVars: {},
+        externalService: null,
+        availableProviders: [],
+        connectionType: 'unknown'
+      };
+    }
+
+    const result = await response.json();
+    
+    // Extract auth state from client API response
+    const authState = {
+      isAuthenticated: result.isAuthenticated || false,
+      provider: result.provider || null,
+      accessToken: result.accessToken || null,
+      envVars: result.envVars || {},
+      externalService: result.externalService || null,
+      availableProviders: result.availableProviders || [],
+      connectionType: result.connectionType || 'unknown'
+    };
+
+    console.log('🔗 Client API: Retrieved avatar auth tokens', {
+      isAuthenticated: authState.isAuthenticated,
+      provider: authState.provider,
+      hasEnvVars: Object.keys(authState.envVars).length > 0,
+      requestId: result.clientMetadata?.requestId
+    });
+
+    return authState;
+  } catch (error) {
+    console.error('Error fetching avatar auth tokens via client API:', error);
+    return {
+      isAuthenticated: false,
+      provider: null,
+      accessToken: null,
+      envVars: {},
+      externalService: null,
+      availableProviders: [],
+      connectionType: 'unknown'
+    };
+  }
+}
+
+/**
+ * Merge avatar tokens with action environment variables
+ */
+export function mergeAvatarTokensWithEnvVars(
+  avatarTokens: AvatarAuthState,
+  actionEnvVars: Record<string, string> = {}
+): Record<string, string> {
+  const mergedEnvVars = { ...actionEnvVars };
+  
+  // Add avatar tokens to environment variables
+  if (avatarTokens.isAuthenticated && avatarTokens.envVars) {
+    Object.assign(mergedEnvVars, avatarTokens.envVars);
+  }
+  
+  return mergedEnvVars;
+}
+
+/**
+ * Check if an action requires external authentication
+ */
+export function actionRequiresExternalAuth(actionCode: string): boolean {
+  if (!actionCode) return false;
+  
+  // Check for common external API patterns
+  const externalApiPatterns = [
+    /fetch.*api\./i,
+    /shopify/i,
+    /slack/i,
+    /gmail/i,
+    /stripe/i,
+    /salesforce/i,
+    /hubspot/i,
+    /calendar/i,
+    /teams/i,
+    /github/i,
+    /trello/i,
+    /notion/i,
+    /airtable/i,
+    /mailchimp/i,
+    /twilio/i,
+    /discord/i,
+    /linkedin/i,
+    /twitter/i,
+    /facebook/i,
+    /pinterest/i,
+    /tiktok/i,
+    /instagram/i
+  ];
+  
+  return externalApiPatterns.some(pattern => pattern.test(actionCode));
+}
+
+/**
+ * Get authentication status message for UI
+ */
+export function getAuthStatusMessage(avatarTokens: AvatarAuthState): string {
+  if (!avatarTokens.isAuthenticated) {
+    return 'No external API authentication configured';
+  }
+  
+  if (avatarTokens.provider) {
+    return `Connected to ${avatarTokens.provider}${avatarTokens.externalService ? ` (${avatarTokens.externalService})` : ''}`;
+  }
+  
+  return 'External API authentication available';
+}
+
+/**
+ * Validate authentication requirements for action execution
+ */
+export function validateAuthRequirements(
+  actionCode: string,
+  avatarTokens: AvatarAuthState
+): { isValid: boolean; message: string; requiredAuth?: string } {
+  const requiresAuth = actionRequiresExternalAuth(actionCode);
+  
+  if (!requiresAuth) {
+    return { isValid: true, message: 'No external authentication required' };
+  }
+  
+  if (!avatarTokens.isAuthenticated) {
+    return {
+      isValid: false,
+      message: 'Action requires external API authentication, but no tokens are configured. Please set up authentication in the avatar creator.',
+      requiredAuth: 'external_api'
+    };
+  }
+  
+  if (!avatarTokens.provider) {
+    return {
+      isValid: false,
+      message: 'External API provider not identified. Please check your authentication setup.',
+      requiredAuth: 'provider_identification'
+    };
+  }
+  
+  return {
+    isValid: true,
+    message: `Ready to execute with ${avatarTokens.provider} authentication`
+  };
+}

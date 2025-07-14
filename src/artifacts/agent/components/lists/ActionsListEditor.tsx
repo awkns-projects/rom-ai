@@ -8,6 +8,14 @@ import { PlusIcon, PencilEditIcon } from '@/components/icons';
 import { ActionEditor } from '../editors/ActionEditor';
 import type { AgentAction, AgentModel } from '../../types';
 import { generateNewId } from '../../utils';
+import { 
+  getAvatarAuthTokens, 
+  mergeAvatarTokensWithEnvVars, 
+  actionRequiresExternalAuth,
+  getAuthStatusMessage,
+  validateAuthRequirements,
+  type AvatarAuthState 
+} from '@/lib/utils';
 
 interface ActionsListEditorProps {
   actions: AgentAction[];
@@ -42,6 +50,7 @@ export const ActionsListEditor = memo(({
   const [envVarValues, setEnvVarValues] = useState<Record<string, string>>({});
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState<any>(null);
+  const [avatarAuthState, setAvatarAuthState] = useState<AvatarAuthState | null>(null);
 
   // Check if action is ready to run
   const isActionReady = useCallback((action: AgentAction): { ready: boolean; issues: string[] } => {
@@ -130,7 +139,31 @@ export const ActionsListEditor = memo(({
     setExecutionResult(null);
 
     try {
-      const response = await fetch('/api/agent/execute-action', {
+      // Get fresh avatar authentication tokens
+      const currentAvatarTokens = await getAvatarAuthTokens(documentId, 'ActionsListEditor');
+      setAvatarAuthState(currentAvatarTokens);
+
+      // Validate authentication requirements
+      const authValidation = validateAuthRequirements(action.execute.code.script, currentAvatarTokens);
+      if (!authValidation.isValid) {
+        alert(`Authentication Error:\n${authValidation.message}`);
+        setIsExecuting(false);
+        return;
+      }
+
+      // Merge avatar tokens with action environment variables
+      const mergedEnvVars = mergeAvatarTokensWithEnvVars(currentAvatarTokens, envVarValues);
+
+      console.log('🔐 Executing action with authentication:', {
+        actionName: action.name,
+        hasAvatarAuth: currentAvatarTokens.isAuthenticated,
+        provider: currentAvatarTokens.provider,
+        envVarsCount: Object.keys(mergedEnvVars).length,
+        actionRequiresAuth: actionRequiresExternalAuth(action.execute.code.script),
+        testMode
+      });
+
+      const response = await fetch('/api/client/execute-action', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -139,8 +172,14 @@ export const ActionsListEditor = memo(({
           documentId,
           code: action.execute.code.script,
           inputParameters: inputValues,
-          envVars: envVarValues,
-          testMode
+          envVars: mergedEnvVars, // Now includes avatar tokens
+          testMode,
+          clientMetadata: {
+            component: 'ActionsListEditor',
+            userId: undefined, // Will be set by client API
+            sessionId: undefined, // Will be set by client API
+            timestamp: new Date().toISOString()
+          }
         }),
       });
 

@@ -11,6 +11,14 @@ import { ModelExecutionChangesViewer } from './ModelExecutionChangesViewer';
 import { ActionMindMapEditor } from './ActionMindMapEditor';
 import type { AgentAction, EnvVar, PseudoCodeStep, StepField, AgentModel } from '../../types';
 import { generateNewId } from '../../utils';
+import { 
+  getAvatarAuthTokens, 
+  mergeAvatarTokensWithEnvVars, 
+  actionRequiresExternalAuth,
+  getAuthStatusMessage,
+  validateAuthRequirements,
+  type AvatarAuthState 
+} from '@/lib/utils';
 
 interface ActionEditorProps {
   action: AgentAction;
@@ -70,9 +78,22 @@ export const ActionEditor = memo(({
   const [showInputDialog, setShowInputDialog] = useState(false);
   const [executionMode, setExecutionMode] = useState<'test' | 'production'>('test');
   const [isGeneratingDescription, setIsGeneratingDescription] = useState(false);
+  const [avatarAuthState, setAvatarAuthState] = useState<AvatarAuthState | null>(null);
   const [showRunModeModal, setShowRunModeModal] = useState(false);
   const [newListValue, setNewListValue] = useState('');
   const [viewingModelChanges, setViewingModelChanges] = useState<any>(null);
+
+  // Fetch avatar authentication state
+  useEffect(() => {
+    if (documentId) {
+      getAvatarAuthTokens(documentId, 'ActionEditor')
+        .then(setAvatarAuthState)
+        .catch(error => {
+          console.error('Failed to fetch avatar auth state:', error);
+          setAvatarAuthState(null);
+        });
+    }
+  }, [documentId]);
 
   const [actionInputParameters, setActionInputParameters] = useState<InputParameter[]>([]);
   const [inputParametersCollapsed, setInputParametersCollapsed] = useState(true);
@@ -542,7 +563,30 @@ export const ActionEditor = memo(({
     setExecutionResult(null);
 
     try {
-      const response = await fetch('/api/agent/execute-action', {
+      // Get fresh avatar authentication tokens
+      const currentAvatarTokens = await getAvatarAuthTokens(documentId, 'ActionEditor');
+      setAvatarAuthState(currentAvatarTokens);
+
+      // Validate authentication requirements
+      const authValidation = validateAuthRequirements(executeCode, currentAvatarTokens);
+      if (!authValidation.isValid) {
+        alert(`Authentication Error:\n${authValidation.message}`);
+        setIsExecuting(false);
+        return;
+      }
+
+      // Merge avatar tokens with action environment variables
+      const mergedEnvVars = mergeAvatarTokensWithEnvVars(currentAvatarTokens, envVarValues);
+
+      console.log('🔐 Executing action with authentication:', {
+        hasAvatarAuth: currentAvatarTokens.isAuthenticated,
+        provider: currentAvatarTokens.provider,
+        envVarsCount: Object.keys(mergedEnvVars).length,
+        actionRequiresAuth: actionRequiresExternalAuth(executeCode),
+        testMode
+      });
+
+      const response = await fetch('/api/client/execute-action', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -551,8 +595,14 @@ export const ActionEditor = memo(({
           documentId,
           code: executeCode,
           inputParameters: inputValues,
-          envVars: envVarValues,
-          testMode
+          envVars: mergedEnvVars, // Now includes avatar tokens
+          testMode,
+          clientMetadata: {
+            component: 'ActionEditor',
+            userId: undefined, // Will be set by client API
+            sessionId: undefined, // Will be set by client API
+            timestamp: new Date().toISOString()
+          }
         }),
       });
 
@@ -562,7 +612,10 @@ export const ActionEditor = memo(({
       if (result.success) {
         const modeText = testMode ? 'test' : 'production';
         const dbUpdateText = result.databaseUpdated ? 'Database updated successfully!' : 'Database not modified (test mode)';
-        alert(`Action executed successfully in ${modeText} mode!\n\nExecution time: ${result.executionTime}ms\n${dbUpdateText}\n\nModels affected: ${result.modelsAffected?.map((m: any) => `${m.name} (${m.recordCount} records)`).join(', ') || 'None'}`);
+        const authInfo = currentAvatarTokens.isAuthenticated 
+          ? `\n🔐 Authentication: ${getAuthStatusMessage(currentAvatarTokens)}`
+          : '';
+        alert(`Action executed successfully in ${modeText} mode!${authInfo}\n\nExecution time: ${result.executionTime}ms\n${dbUpdateText}\n\nModels affected: ${result.modelsAffected?.map((m: any) => `${m.name} (${m.recordCount} records)`).join(', ') || 'None'}`);
       } else {
         alert(`Action execution failed:\n${result.error || 'Unknown error'}`);
       }

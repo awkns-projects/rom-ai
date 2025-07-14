@@ -309,14 +309,90 @@ export const RunActionModal: React.FC<{
       let result;
       
       if (action.execute?.type === 'code' && action.execute.code?.script) {
-        // Execute custom code
+        // Execute custom code with new execution pattern
         const functionBody = action.execute.code.script;
         
-        // Create the function using new Function() constructor
-        const actionFunction = new Function('database', 'input', 'member', functionBody);
+        // Create execution context (same pattern as action execution API)
+        const executionContext = {
+          prisma: mockDatabase, // Map database to prisma for compatibility
+          db: mockDatabase, // Keep original for backward compatibility
+          ai: {
+            generateObject: async (config: any) => {
+              console.log('Mock AI call:', config);
+              return { object: { result: 'mock ai result' } };
+            }
+          },
+          openai: {
+            chat: {
+              completions: {
+                create: async (config: any) => {
+                  console.log('Mock OpenAI call:', config);
+                  return { choices: [{ message: { content: 'mock response' } }] };
+                }
+              }
+            }
+          },
+          xai: {
+            chat: {
+              completions: {
+                create: async (config: any) => {
+                  console.log('Mock xAI call:', config);
+                  return { choices: [{ message: { content: 'mock response' } }] };
+                }
+              }
+            }
+          },
+          replicate: {
+            run: async (model: string, input: any) => {
+              console.log('Mock Replicate call:', model, input);
+              return { output: 'mock ai generation result' };
+            }
+          },
+          input: inputData,
+          env: action.execute.code?.envVars?.reduce((acc: any, envVar: any) => {
+            acc[envVar.name] = `mock_${envVar.name.toLowerCase()}`;
+            return acc;
+          }, {}) || {},
+          // Utility functions
+          console: {
+            log: (...args: any[]) => console.log('[Action Test]', ...args),
+            error: (...args: any[]) => console.error('[Action Test]', ...args),
+            warn: (...args: any[]) => console.warn('[Action Test]', ...args)
+          },
+          generateId: () => `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          formatDate: (date: Date | string) => new Date(date).toISOString(),
+          validateRequired: (obj: any, fields: string[]) => {
+            const missing = fields.filter(field => !obj[field]);
+            if (missing.length > 0) {
+              throw new Error(`Missing required fields: ${missing.join(', ')}`);
+            }
+          },
+          z: {} // Mock zod for testing
+        };
+
+        // Create the function using new Function() constructor with context parameter
+        const actionFunction = new Function(
+          'context',
+          `
+          return (async () => {
+            try {
+              // Destructure context for generated code compatibility
+              const { prisma, ai, openai, xai, replicate, input, env } = context;
+              
+              // Make other utilities available in scope
+              const { db, console: consoleUtils, generateId, formatDate, validateRequired, z } = context;
+              
+              // Execute the generated code
+              ${functionBody}
+            } catch (error) {
+              throw new Error('Execution error: ' + error.message);
+            }
+          })();
+          `
+        );
         
-        // Execute with mock data for now
-        result = await actionFunction(mockDatabase, inputData, mockMember);
+        // Execute with the context object
+        result = await actionFunction(executionContext);
       } else {
         // Fallback to mock execution
         await new Promise(resolve => setTimeout(resolve, 2000));

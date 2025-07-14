@@ -1637,6 +1637,344 @@ Be conservative - when in doubt, preserve existing data.`
   return result;
 }
 
+/**
+ * Generate step function code with the required signature
+ */
+export async function generateStepFunctionCode(
+  step: PseudoCodeStep,
+  stepIndex: number,
+  availableModels: AgentModel[],
+  businessContext?: string
+): Promise<string> {
+  console.log(`🔧 Generating step function code for: ${step.description}`);
+  
+  const model = await getAgentBuilderModel();
+  
+  const availableModelNames = availableModels.map(m => m.name).join(', ');
+  const stepTypeInstructions = getStepTypeInstructions(step.type);
+  
+  const systemPrompt = `You are an expert JavaScript developer generating step function code.
+
+STEP DETAILS:
+- Type: ${step.type}
+- Description: ${step.description}
+- Input Fields: ${step.inputFields.map(f => `${f.name}: ${f.type}${f.required ? ' (required)' : ' (optional)'}`).join(', ')}
+- Output Fields: ${step.outputFields.map(f => `${f.name}: ${f.type}${f.required ? ' (required)' : ' (optional)'}`).join(', ')}
+
+AVAILABLE MODELS: ${availableModelNames}
+BUSINESS CONTEXT: ${businessContext || 'General business operations'}
+
+FUNCTION SIGNATURE REQUIREMENTS:
+- Function name: step${stepIndex + 1}
+- Parameters: EXACTLY this structure: \`function step${stepIndex + 1}({prisma, ai, openai, xai, replicate, input, env})\`
+- Return: Promise<{ success: boolean, output: any, changes: Array<ChangeLog> }>
+
+PARAMETER DETAILS:
+- prisma: Prisma client for database operations
+- ai: Vercel AI SDK client for generateObject
+- openai: OpenAI client from @ai-sdk/openai
+- xai: xAI client from @ai-sdk/xai  
+- replicate: Replicate client for AI generation
+- input: Object containing input fields for this step
+- env: Object containing environment variables
+
+CHANGE LOG FORMAT:
+Each change should be: {
+  type: 'database' | 'external_api' | 'ai_analysis' | 'ai_generation',
+  description: string,
+  model?: string,
+  operation?: string,
+  recordCount?: number,
+  apiEndpoint?: string,
+  tokensUsed?: number,
+  executionTime?: number
+}
+
+${stepTypeInstructions}
+
+Generate a complete, production-ready step function with proper error handling, validation, and change tracking.
+
+IMPORTANT:
+- Use try-catch for all operations
+- Validate input fields according to the requirements
+- Return proper change logs for tracking
+- Use the exact function signature specified
+- Include meaningful error messages
+- Follow JavaScript/TypeScript best practices`;
+
+  const result = await generateObject({
+    model,
+    schema: z.object({
+      functionCode: z.string().describe('Complete step function code')
+    }),
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      }
+    ],
+    temperature: 0.1
+  });
+
+  return result.object.functionCode;
+}
+
+/**
+ * Generate test code for a step function
+ */
+export async function generateStepTestCode(
+  step: PseudoCodeStep,
+  stepIndex: number,
+  availableModels: AgentModel[]
+): Promise<{
+  testCode: string;
+  testCases: Array<{
+    name: string;
+    input: Record<string, any>;
+    expectedOutput: Record<string, any>;
+    expectedChanges?: Array<{
+      type: 'database' | 'external_api';
+      description: string;
+      model?: string;
+      operation?: string;
+      recordCount?: number;
+    }>;
+  }>;
+}> {
+  console.log(`🧪 Generating test code for step: ${step.description}`);
+  
+  const model = await getAgentBuilderModel();
+  
+  const systemPrompt = `Generate comprehensive test code and test cases for the step function.
+
+STEP DETAILS:
+- Type: ${step.type}
+- Description: ${step.description}
+- Input Fields: ${step.inputFields.map(f => `${f.name}: ${f.type}${f.required ? ' (required)' : ' (optional)'}`).join(', ')}
+- Output Fields: ${step.outputFields.map(f => `${f.name}: ${f.type}${f.required ? ' (required)' : ' (optional)'}`).join(', ')}
+
+Generate:
+1. Complete test function that tests the step function
+2. 2-3 test cases with realistic input/output data
+3. Mock objects for prisma, ai, openai, xai, replicate, env
+4. Expected change logs for each test case
+
+The test code should use a testing framework structure and include:
+- Setup mocks
+- Test execution
+- Assertions for output and change logs
+- Error scenario testing`;
+
+  const result = await generateObject({
+    model,
+    schema: z.object({
+      testCode: z.string().describe('Complete test function code'),
+      testCases: z.array(z.object({
+        name: z.string(),
+        input: z.record(z.any()),
+        expectedOutput: z.record(z.any()),
+        expectedChanges: z.array(z.object({
+          type: z.enum(['database', 'external_api']),
+          description: z.string(),
+          model: z.string().optional(),
+          operation: z.string().optional(),
+          recordCount: z.number().optional()
+        })).optional()
+      }))
+    }),
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      }
+    ],
+    temperature: 0.2
+  });
+
+  return result.object;
+}
+
+/**
+ * Generate main action/schedule function that composes all steps
+ */
+export async function generateMainCompositionFunction(
+  name: string,
+  description: string,
+  steps: PseudoCodeStep[],
+  entityType: 'action' | 'schedule',
+  availableModels: AgentModel[]
+): Promise<string> {
+  console.log(`🏗️ Generating main ${entityType} function: ${name}`);
+  
+  const model = await getAgentBuilderModel();
+  
+  const systemPrompt = `Generate a main ${entityType} function that composes all step functions in sequence.
+
+${entityType.toUpperCase()} DETAILS:
+- Name: ${name}
+- Description: ${description}
+- Steps: ${steps.length} steps to execute in order
+
+STEP SUMMARY:
+${steps.map((step, index) => `${index + 1}. ${step.type}: ${step.description}`).join('\n')}
+
+FUNCTION REQUIREMENTS:
+- Function name: execute${entityType === 'action' ? 'Action' : 'Schedule'}
+- Parameters: \`function execute${entityType === 'action' ? 'Action' : 'Schedule'}({prisma, ai, openai, xai, replicate, input, env})\`
+- Execute steps in order: step1, step2, step3, etc.
+- Pass output from previous steps to next steps as needed
+- Collect all change logs from each step
+- Return final result with complete change log
+
+EXECUTION FLOW:
+1. Validate initial input
+2. Initialize step tracking and change logs
+3. Execute each step function in sequence
+4. Handle step dependencies (step N output becomes step N+1 input)
+5. Aggregate all change logs
+6. Return final output with complete change tracking
+
+RETURN FORMAT:
+{
+  success: boolean,
+  output: any, // Final step output
+  changes: Array<ChangeLog>, // All changes from all steps
+  executionTime: number,
+  stepsExecuted: number
+}
+
+ERROR HANDLING:
+- If any step fails, stop execution and return error
+- Include which step failed in error message
+- Rollback capability for database operations if needed
+
+Generate a robust, production-ready main function.`;
+
+  const result = await generateObject({
+    model,
+    schema: z.object({
+      mainFunctionCode: z.string().describe('Complete main composition function code')
+    }),
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      }
+    ],
+    temperature: 0.1
+  });
+
+  return result.object.mainFunctionCode;
+}
+
+/**
+ * Get step type specific instructions for code generation
+ */
+function getStepTypeInstructions(stepType: string): string {
+  switch (stepType) {
+    case 'Database create':
+      return `
+DATABASE CREATE INSTRUCTIONS:
+- Use prisma.modelName.create() or prisma.modelName.createMany()
+- Validate required fields before creation
+- Handle unique constraint violations
+- Return created record(s) in output
+- Log database changes with model name and record count`;
+
+    case 'Database update':
+      return `
+DATABASE UPDATE INSTRUCTIONS:
+- Use prisma.modelName.update() or prisma.modelName.updateMany()
+- Include proper where clause for targeting records
+- Validate update data before execution
+- Return updated record(s) in output
+- Log database changes with model name and record count`;
+
+    case 'Database read':
+      return `
+DATABASE READ INSTRUCTIONS:
+- Use prisma.modelName.findUnique(), findFirst(), or findMany()
+- Include proper where clauses and filters
+- Use include/select for related data as needed
+- Handle pagination if applicable
+- Return found record(s) in output
+- Log read operations with model name and record count`;
+
+    case 'Database delete':
+      return `
+DATABASE DELETE INSTRUCTIONS:
+- Use prisma.modelName.delete() or prisma.modelName.deleteMany()
+- Include proper where clause for targeting records
+- Consider soft delete vs hard delete
+- Return deletion count in output
+- Log database changes with model name and record count`;
+
+    case 'External api read':
+      return `
+EXTERNAL API READ INSTRUCTIONS:
+- Use fetch() for GET requests
+- Include proper headers and authentication from env
+- Parse JSON response
+- Handle API rate limits and errors
+- Return API response data in output
+- Log API calls with endpoint and response status`;
+
+    case 'External api write':
+      return `
+EXTERNAL API WRITE INSTRUCTIONS:
+- Use fetch() for POST/PUT/DELETE requests
+- Include proper headers, body, and authentication from env
+- Parse JSON response
+- Handle API rate limits and errors
+- Return API response data in output
+- Log API calls with endpoint, method, and response status`;
+
+    case 'AI analysis':
+      return `
+AI ANALYSIS INSTRUCTIONS:
+- Use ai.generateObject() with proper Zod schema
+- Define structured output schema for analysis results
+- Include meaningful prompts for the AI model
+- Handle AI model errors and rate limits
+- Return structured analysis results in output
+- Log AI usage with tokens used and execution time
+- Example:
+  const result = await ai.generateObject({
+    model: openai('gpt-4'),
+    schema: z.object({
+      sentiment: z.enum(['positive', 'negative', 'neutral']),
+      confidence: z.number(),
+      summary: z.string()
+    }),
+    messages: [
+      { role: 'system', content: 'Analyze sentiment' },
+      { role: 'user', content: input.text }
+    ]
+  });`;
+
+    case 'AI generation':
+      return `
+AI GENERATION INSTRUCTIONS:
+- Use replicate client for AI content generation
+- Handle different model types (text, image, etc.)
+- Include proper prompts and parameters
+- Handle generation errors and timeouts
+- Return generated content in output
+- Log AI generation with model used and execution time
+- Example:
+  const result = await replicate.run(
+    "meta/llama-2-70b-chat",
+    { input: { prompt: input.prompt } }
+  );`;
+
+    default:
+      return 'Handle this step type according to its specific requirements.';
+  }
+}
+
+/**
+ * Generate example records for newly created models
+ */
 export async function generateExampleRecords(
   models: AgentModel[],
   existingModels: AgentModel[] = [],

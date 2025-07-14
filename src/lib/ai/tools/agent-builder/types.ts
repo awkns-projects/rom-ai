@@ -47,6 +47,47 @@ export interface AgentSchedule {
   description: string;
   type: 'mutation' | 'query';
   role: 'admin' | 'member';
+  pseudoSteps?: Array<{
+    id: string;
+    type: 'Database create' | 'Database update' | 'Database read' | 'Database delete' | 'External api read' | 'External api write' | 'AI analysis' | 'AI generation';
+    description: string;
+    inputFields: Array<{
+      id: string;
+      name: string;
+      type: string;
+      kind: 'scalar' | 'object' | 'enum';
+      required: boolean;
+      list: boolean;
+      description: string;
+      relationModel?: string;
+    }>;
+    outputFields: Array<{
+      id: string;
+      name: string;
+      type: string;
+      kind: 'scalar' | 'object' | 'enum';
+      required: boolean;
+      list: boolean;
+      description: string;
+      relationModel?: string;
+    }>;
+    generatedCode?: string;
+    testCode?: string;
+    testCases?: Array<{
+      name: string;
+      input: Record<string, any>;
+      expectedOutput: Record<string, any>;
+      expectedChanges?: Array<{
+        type: 'database' | 'external_api' | 'ai_analysis' | 'ai_generation';
+        description: string;
+        model?: string;
+        operation?: string;
+        recordCount?: number;
+      }>;
+    }>;
+  }>;
+  stepFunctions?: string[];
+  executionInstructions?: string;
   interval: {
     pattern: string;
     timezone?: string;
@@ -109,6 +150,47 @@ export interface AgentAction {
   description: string;
   type: 'mutation' | 'query';
   role: 'admin' | 'member';
+  pseudoSteps?: Array<{
+    id: string;
+    type: 'Database create' | 'Database update' | 'Database read' | 'Database delete' | 'External api read' | 'External api write' | 'AI analysis' | 'AI generation';
+    description: string;
+    inputFields: Array<{
+      id: string;
+      name: string;
+      type: string;
+      kind: 'scalar' | 'object' | 'enum';
+      required: boolean;
+      list: boolean;
+      description: string;
+      relationModel?: string;
+    }>;
+    outputFields: Array<{
+      id: string;
+      name: string;
+      type: string;
+      kind: 'scalar' | 'object' | 'enum';
+      required: boolean;
+      list: boolean;
+      description: string;
+      relationModel?: string;
+    }>;
+    generatedCode?: string;
+    testCode?: string;
+    testCases?: Array<{
+      name: string;
+      input: Record<string, any>;
+      expectedOutput: Record<string, any>;
+      expectedChanges?: Array<{
+        type: 'database' | 'external_api' | 'ai_analysis' | 'ai_generation';
+        description: string;
+        model?: string;
+        operation?: string;
+        recordCount?: number;
+      }>;
+    }>;
+  }>;
+  stepFunctions?: string[];
+  executionInstructions?: string;
   dataSource?: {
     type: 'database' | 'custom';
     customFunction?: {

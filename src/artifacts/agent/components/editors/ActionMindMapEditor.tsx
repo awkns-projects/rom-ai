@@ -10,6 +10,14 @@ import { StepFieldEditor } from './StepFieldEditor';
 import { ModelExecutionChangesViewer } from './ModelExecutionChangesViewer';
 import type { AgentAction, EnvVar, PseudoCodeStep, StepField, AgentModel } from '../../types';
 import { generateNewId } from '../../utils';
+import { 
+  getAvatarAuthTokens, 
+  mergeAvatarTokensWithEnvVars, 
+  actionRequiresExternalAuth,
+  getAuthStatusMessage,
+  validateAuthRequirements,
+  type AvatarAuthState 
+} from '@/lib/utils';
 
 interface ActionMindMapEditorProps {
   action: AgentAction;
@@ -56,6 +64,7 @@ export const ActionMindMapEditor = memo(({
   const [animatingConnection, setAnimatingConnection] = useState<string | null>(null);
   const [viewingModelChanges, setViewingModelChanges] = useState<any>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [avatarAuthState, setAvatarAuthState] = useState<AvatarAuthState | null>(null);
 
   // Detect mobile/desktop
   useEffect(() => {
@@ -67,6 +76,18 @@ export const ActionMindMapEditor = memo(({
     window.addEventListener('resize', checkIsMobile);
     return () => window.removeEventListener('resize', checkIsMobile);
   }, []);
+
+  // Fetch avatar authentication state
+  useEffect(() => {
+    if (documentId) {
+      getAvatarAuthTokens(documentId, 'ActionMindMapEditor')
+        .then(setAvatarAuthState)
+        .catch(error => {
+          console.error('Failed to fetch avatar auth state:', error);
+          setAvatarAuthState(null);
+        });
+    }
+  }, [documentId]);
 
   // Initialize mind map nodes with responsive positioning
   const [nodes, setNodes] = useState<MindMapNode[]>(() => [
@@ -189,7 +210,7 @@ export const ActionMindMapEditor = memo(({
     ));
 
     try {
-      const response = await fetch('/api/agent/generate-steps', {
+      const response = await fetch('/api/client/generate-steps', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -200,7 +221,11 @@ export const ActionMindMapEditor = memo(({
           availableModels: allModels,
           entityType: 'action',
           type: (action as any).type || 'mutation', // Default to mutation if type is not set
-          businessContext: `Generate pseudo steps for ${action.name}. Make it comprehensive and realistic for business operations.`
+          businessContext: `Generate pseudo steps for ${action.name}. Make it comprehensive and realistic for business operations.`,
+          clientMetadata: {
+            component: 'ActionMindMapEditor',
+            generationType: 'initial'
+          }
         }),
       });
 
@@ -240,7 +265,7 @@ export const ActionMindMapEditor = memo(({
     ));
 
     try {
-      const response = await fetch('/api/agent/generate-code', {
+      const response = await fetch('/api/client/generate-code', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -251,7 +276,11 @@ export const ActionMindMapEditor = memo(({
           pseudoSteps: action.pseudoSteps,
           availableModels: allModels,
           entityType: 'action',
-          businessContext: `Generate comprehensive, executable code for ${action.name}.`
+          businessContext: `Generate comprehensive, executable code for ${action.name}.`,
+          clientMetadata: {
+            component: 'ActionMindMapEditor',
+            generationType: 'initial'
+          }
         }),
       });
 
@@ -287,6 +316,11 @@ export const ActionMindMapEditor = memo(({
       return;
     }
 
+    if (!documentId) {
+      alert('Document ID is required for action execution.');
+      return;
+    }
+
     setIsExecuting(true);
     setSelectedNode('execution');
     animateConnection('code-to-exec');
@@ -297,7 +331,37 @@ export const ActionMindMapEditor = memo(({
     ));
 
     try {
-      const response = await fetch('/api/agent/execute-action', {
+      // Get fresh avatar authentication tokens
+      const currentAvatarTokens = await getAvatarAuthTokens(documentId, 'ActionMindMapEditor');
+      setAvatarAuthState(currentAvatarTokens);
+
+      // Validate authentication requirements
+      const authValidation = validateAuthRequirements(action.execute.code.script, currentAvatarTokens);
+      if (!authValidation.isValid) {
+        alert(`Authentication Error:\n${authValidation.message}`);
+        setNodes(prev => prev.map(node => 
+          node.id === 'execution' ? { ...node, status: 'ready', content: 'Authentication required' } : node
+        ));
+        return;
+      }
+
+      // Prepare environment variables
+      const actionEnvVars = (action.execute.code.envVars || []).reduce((acc: Record<string, string>, envVar: any) => {
+        acc[envVar.name] = envVar.name; // Placeholder - in real execution, these would be actual values
+        return acc;
+      }, {});
+
+      // Merge avatar tokens with action environment variables
+      const mergedEnvVars = mergeAvatarTokensWithEnvVars(currentAvatarTokens, actionEnvVars);
+
+      console.log('🔐 Executing action with authentication:', {
+        hasAvatarAuth: currentAvatarTokens.isAuthenticated,
+        provider: currentAvatarTokens.provider,
+        envVarsCount: Object.keys(mergedEnvVars).length,
+        actionRequiresAuth: actionRequiresExternalAuth(action.execute.code.script)
+      });
+
+      const response = await fetch('/api/client/execute-action', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -306,8 +370,14 @@ export const ActionMindMapEditor = memo(({
           documentId,
           code: action.execute.code.script,
           inputParameters: {},
-          envVars: {},
-          testMode: true
+          envVars: mergedEnvVars, // Now includes avatar tokens
+          testMode: true,
+          clientMetadata: {
+            component: 'ActionMindMapEditor',
+            userId: undefined, // Will be set by client API
+            sessionId: undefined, // Will be set by client API
+            timestamp: new Date().toISOString()
+          }
         }),
       });
 
@@ -324,8 +394,14 @@ export const ActionMindMapEditor = memo(({
           } : node
         ));
         
+        const authInfo = currentAvatarTokens.isAuthenticated 
+          ? `\n🔐 Authentication: ${getAuthStatusMessage(currentAvatarTokens)}`
+          : '';
+        
         if (result.modelsAffected?.length > 0) {
-          alert(`Action executed successfully!\n\nModels affected: ${result.modelsAffected.map((m: any) => `${m.name} (${m.recordCount} records)`).join(', ')}`);
+          alert(`Action executed successfully!${authInfo}\n\nModels affected: ${result.modelsAffected.map((m: any) => `${m.name} (${m.recordCount} records)`).join(', ')}`);
+        } else {
+          alert(`Action executed successfully!${authInfo}`);
         }
       } else {
         alert(`Action execution failed:\n${result.error || 'Unknown error'}`);
@@ -451,7 +527,7 @@ export const ActionMindMapEditor = memo(({
                       <Label className="text-blue-300 font-mono text-xs">Type</Label>
                       <Select
                         value={step.type}
-                        onValueChange={(value) => {
+                        onValueChange={(value: 'Database create' | 'Database update' | 'Database read' | 'Database delete' | 'External api read' | 'External api write' | 'AI analysis' | 'AI generation') => {
                           const updatedSteps = action.pseudoSteps?.map(s => 
                             s.id === step.id ? { ...s, type: value } : s
                           ) || [];
@@ -465,16 +541,14 @@ export const ActionMindMapEditor = memo(({
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent className="bg-black border-blue-500/30">
-                          <SelectItem value="Database find unique" className="text-blue-200 font-mono">Database find unique</SelectItem>
-                          <SelectItem value="Database find many" className="text-blue-200 font-mono">Database find many</SelectItem>
-                          <SelectItem value="Database update unique" className="text-blue-200 font-mono">Database update unique</SelectItem>
-                          <SelectItem value="Database update many" className="text-blue-200 font-mono">Database update many</SelectItem>
                           <SelectItem value="Database create" className="text-blue-200 font-mono">Database create</SelectItem>
-                          <SelectItem value="Database create many" className="text-blue-200 font-mono">Database create many</SelectItem>
-                          <SelectItem value="Database delete unique" className="text-blue-200 font-mono">Database delete unique</SelectItem>
-                          <SelectItem value="Database delete many" className="text-blue-200 font-mono">Database delete many</SelectItem>
-                          <SelectItem value="call external api" className="text-blue-200 font-mono">Call External API</SelectItem>
-                          <SelectItem value="ai analysis" className="text-blue-200 font-mono">AI Analysis</SelectItem>
+                          <SelectItem value="Database update" className="text-blue-200 font-mono">Database update</SelectItem>
+                          <SelectItem value="Database read" className="text-blue-200 font-mono">Database read</SelectItem>
+                          <SelectItem value="Database delete" className="text-blue-200 font-mono">Database delete</SelectItem>
+                          <SelectItem value="External api read" className="text-blue-200 font-mono">External api read</SelectItem>
+                          <SelectItem value="External api write" className="text-blue-200 font-mono">External api write</SelectItem>
+                          <SelectItem value="AI analysis" className="text-blue-200 font-mono">AI analysis</SelectItem>
+                          <SelectItem value="AI generation" className="text-blue-200 font-mono">AI generation</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -543,9 +617,9 @@ export const ActionMindMapEditor = memo(({
             <Button
               onClick={(e) => {
                 e.stopPropagation();
-                const newStep = {
+                const newStep: PseudoCodeStep = {
                   id: generateNewId('step', action.pseudoSteps || []),
-                  type: 'Database find many',
+                  type: 'Database read' as const,
                   description: '',
                   inputFields: [{
                     id: generateNewId('field', []),
@@ -571,7 +645,7 @@ export const ActionMindMapEditor = memo(({
               }}
               className="btn-matrix w-full text-xs py-2"
             >
-              <PlusIcon size={14} className="mr-1" />
+              <PlusIcon size={14} />
               Add Step
             </Button>
 
@@ -868,6 +942,23 @@ async function executeAction(input, env) {
                 <div className="text-blue-400/70 font-mono text-xs text-center mt-1">
                   Execute the action to see results here
                 </div>
+                {avatarAuthState && (
+                  <div className="mt-2 pt-2 border-t border-blue-500/20">
+                    <div className="text-blue-400 font-mono text-xs text-center">
+                      🔐 {getAuthStatusMessage(avatarAuthState)}
+                    </div>
+                    {avatarAuthState.isAuthenticated && actionRequiresExternalAuth(action.execute?.code?.script || '') && (
+                      <div className="text-green-400 font-mono text-xs text-center mt-1">
+                        ✅ Ready for external API calls
+                      </div>
+                    )}
+                    {!avatarAuthState.isAuthenticated && actionRequiresExternalAuth(action.execute?.code?.script || '') && (
+                      <div className="text-yellow-400 font-mono text-xs text-center mt-1">
+                        ⚠️ Action may require authentication
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

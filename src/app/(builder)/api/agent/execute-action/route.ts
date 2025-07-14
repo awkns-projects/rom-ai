@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/app/(auth)/auth';
 import { getDocumentById, saveOrUpdateDocument } from '@/lib/db/queries';
@@ -529,11 +529,366 @@ export async function POST(request: NextRequest) {
       }
     };
 
+    // Import real AI client libraries
+    const { createOpenAI } = await import('@ai-sdk/openai');
+    const { createXai } = await import('@ai-sdk/xai');
+    
+    // Create real AI client instances with proper API keys
+    const openaiClient = createOpenAI({
+      apiKey: envVars.OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+    });
+    
+    const xaiClientReal = createXai({
+      apiKey: envVars.XAI_API_KEY || process.env.XAI_API_KEY,
+    });
+
+    // Create Replicate client for AI generation (optional dependency)
+    let replicateClientReal: any = null;
+    try {
+      // Try to dynamically import replicate if available
+      const replicateModule = await import('replicate' as any).catch(() => null);
+      if (replicateModule) {
+        replicateClientReal = new replicateModule.default({
+          auth: envVars.REPLICATE_API_TOKEN || process.env.REPLICATE_API_TOKEN,
+        });
+      }
+    } catch (error) {
+      console.warn('Replicate not available:', error);
+    }
+
+    // Create real Prisma client instance
+    const createRealPrismaClient = (agentData: any) => {
+      const models = agentData.models || [];
+      const changeLog: Array<{
+        modelName: string;
+        operation: 'create' | 'update' | 'delete' | 'find' | 'updateMany' | 'deleteMany';
+        recordId?: string;
+        data?: any;
+        previousData?: any;
+        timestamp: string;
+      }> = [];
+      
+      // Create Prisma-like interface that works with agent data
+      const prismaClient = models.reduce((client: any, model: any) => {
+        const modelName = model.name.toLowerCase();
+        
+        client[modelName] = {
+          // Prisma-like findMany
+          findMany: async (options: any = {}) => {
+            let records = model.records || [];
+            
+            // Apply where filter
+            if (options.where) {
+                             records = records.filter((record: any) => {
+                 return Object.entries(options.where).every(([key, value]) => {
+                   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                     // Handle Prisma operators like { lt: date }, { gte: number }, etc.
+                     const valueObj = value as any;
+                     if (valueObj.lt !== undefined) return record.data[key] < valueObj.lt;
+                     if (valueObj.lte !== undefined) return record.data[key] <= valueObj.lte;
+                     if (valueObj.gt !== undefined) return record.data[key] > valueObj.gt;
+                     if (valueObj.gte !== undefined) return record.data[key] >= valueObj.gte;
+                     if (valueObj.not !== undefined) return record.data[key] !== valueObj.not;
+                     if (valueObj.in !== undefined) return valueObj.in.includes(record.data[key]);
+                     if (valueObj.notIn !== undefined) return !valueObj.notIn.includes(record.data[key]);
+                     if (valueObj.contains !== undefined) return record.data[key]?.includes?.(valueObj.contains);
+                     if (valueObj.startsWith !== undefined) return record.data[key]?.startsWith?.(valueObj.startsWith);
+                     if (valueObj.endsWith !== undefined) return record.data[key]?.endsWith?.(valueObj.endsWith);
+                   }
+                   return record.data[key] === value;
+                 });
+               });
+            }
+            
+            // Apply take/limit
+            if (options.take) {
+              records = records.slice(0, options.take);
+            }
+            
+            // Apply skip
+            if (options.skip) {
+              records = records.slice(options.skip);
+            }
+            
+            // Apply orderBy
+            if (options.orderBy) {
+              const orderBy = Array.isArray(options.orderBy) ? options.orderBy : [options.orderBy];
+              records.sort((a: any, b: any) => {
+                for (const order of orderBy) {
+                  const field = Object.keys(order)[0];
+                  const direction = order[field];
+                  const aVal = a.data[field];
+                  const bVal = b.data[field];
+                  
+                  if (aVal < bVal) return direction === 'asc' ? -1 : 1;
+                  if (aVal > bVal) return direction === 'asc' ? 1 : -1;
+                }
+                return 0;
+              });
+            }
+            
+            changeLog.push({
+              modelName: model.name,
+              operation: 'find',
+              timestamp: new Date().toISOString()
+            });
+            
+            return records.map((r: any) => ({ id: r.id, ...r.data }));
+          },
+          
+          // Prisma-like findUnique
+          findUnique: async (options: any) => {
+            const records = model.records || [];
+            const record = records.find((r: any) => {
+              return Object.entries(options.where).every(([key, value]) => {
+                return r.data[key] === value || r.id === value;
+              });
+            });
+            
+            changeLog.push({
+              modelName: model.name,
+              operation: 'find',
+              recordId: record?.id,
+              timestamp: new Date().toISOString()
+            });
+            
+            return record ? { id: record.id, ...record.data } : null;
+          },
+          
+          // Prisma-like findFirst
+          findFirst: async (options: any = {}) => {
+            const results = await client[modelName].findMany({ ...options, take: 1 });
+            return results[0] || null;
+          },
+          
+          // Prisma-like create
+          create: async (options: any) => {
+            if (testMode) {
+              console.log(`[TEST MODE] Would create ${model.name}:`, options.data);
+              const mockRecord = {
+                id: `mock_${Date.now()}`,
+                ...options.data,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              };
+              
+              changeLog.push({
+                modelName: model.name,
+                operation: 'create',
+                recordId: mockRecord.id,
+                data: mockRecord,
+                timestamp: new Date().toISOString()
+              });
+              
+              return mockRecord;
+            }
+            
+            const newRecord = {
+              id: `${model.name.toLowerCase()}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              modelId: model.id,
+              data: {
+                ...options.data,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+              },
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+            
+            model.records = model.records || [];
+            model.records.push(newRecord);
+            
+            changeLog.push({
+              modelName: model.name,
+              operation: 'create',
+              recordId: newRecord.id,
+              data: newRecord.data,
+              timestamp: new Date().toISOString()
+            });
+            
+            return { id: newRecord.id, ...newRecord.data };
+          },
+          
+          // Prisma-like update
+          update: async (options: any) => {
+            const records = model.records || [];
+            const recordIndex = records.findIndex((r: any) => {
+              return Object.entries(options.where).every(([key, value]) => {
+                return r.data[key] === value || r.id === value;
+              });
+            });
+            
+            if (recordIndex === -1) {
+              throw new Error(`${model.name} record not found`);
+            }
+            
+            if (testMode) {
+              console.log(`[TEST MODE] Would update ${model.name}:`, options.data);
+              const mockUpdated = {
+                ...records[recordIndex].data,
+                ...options.data,
+                updatedAt: new Date()
+              };
+              
+              changeLog.push({
+                modelName: model.name,
+                operation: 'update',
+                recordId: records[recordIndex].id,
+                data: mockUpdated,
+                previousData: records[recordIndex].data,
+                timestamp: new Date().toISOString()
+              });
+              
+              return { id: records[recordIndex].id, ...mockUpdated };
+            }
+            
+            const previousData = { ...records[recordIndex].data };
+            records[recordIndex].data = {
+              ...records[recordIndex].data,
+              ...options.data,
+              updatedAt: new Date().toISOString()
+            };
+            records[recordIndex].updatedAt = new Date().toISOString();
+            
+            changeLog.push({
+              modelName: model.name,
+              operation: 'update',
+              recordId: records[recordIndex].id,
+              data: records[recordIndex].data,
+              previousData,
+              timestamp: new Date().toISOString()
+            });
+            
+            return { id: records[recordIndex].id, ...records[recordIndex].data };
+          },
+          
+          // Prisma-like updateMany
+          updateMany: async (options: any) => {
+            const records = model.records || [];
+            let updatedCount = 0;
+            
+            for (const record of records) {
+              const matches = Object.entries(options.where || {}).every(([key, value]) => {
+                return record.data[key] === value;
+              });
+              
+              if (matches) {
+                if (!testMode) {
+                  const previousData = { ...record.data };
+                  record.data = {
+                    ...record.data,
+                    ...options.data,
+                    updatedAt: new Date().toISOString()
+                  };
+                  record.updatedAt = new Date().toISOString();
+                  
+                  changeLog.push({
+                    modelName: model.name,
+                    operation: 'update',
+                    recordId: record.id,
+                    data: record.data,
+                    previousData,
+                    timestamp: new Date().toISOString()
+                  });
+                } else {
+                  console.log(`[TEST MODE] Would update ${model.name} record ${record.id}:`, options.data);
+                }
+                updatedCount++;
+              }
+            }
+            
+            return { count: updatedCount };
+          },
+          
+          // Prisma-like delete
+          delete: async (options: any) => {
+            const records = model.records || [];
+            const recordIndex = records.findIndex((r: any) => {
+              return Object.entries(options.where).every(([key, value]) => {
+                return r.data[key] === value || r.id === value;
+              });
+            });
+            
+            if (recordIndex === -1) {
+              throw new Error(`${model.name} record not found`);
+            }
+            
+            const deletedRecord = records[recordIndex];
+            
+            if (!testMode) {
+              records.splice(recordIndex, 1);
+            } else {
+              console.log(`[TEST MODE] Would delete ${model.name} record:`, deletedRecord.id);
+            }
+            
+            changeLog.push({
+              modelName: model.name,
+              operation: 'delete',
+              recordId: deletedRecord.id,
+              previousData: deletedRecord.data,
+              timestamp: new Date().toISOString()
+            });
+            
+            return { id: deletedRecord.id, ...deletedRecord.data };
+          },
+          
+          // Prisma-like count
+          count: async (options: any = {}) => {
+            let records = model.records || [];
+            
+            if (options.where) {
+              records = records.filter((record: any) => {
+                return Object.entries(options.where).every(([key, value]) => {
+                  return record.data[key] === value;
+                });
+              });
+            }
+            
+            return records.length;
+          }
+        };
+        
+        return client;
+      }, {
+        // Add utility methods
+        $transaction: async (queries: any[]) => {
+          // Simple transaction simulation - execute all queries
+          const results = [];
+          for (const query of queries) {
+            results.push(await query);
+          }
+          return results;
+        },
+        
+        // Add change log access
+        getChangeLog: () => changeLog,
+        clearChangeLog: () => changeLog.length = 0
+      });
+      
+      return prismaClient;
+    };
+
+    // Create the real Prisma client
+    const prisma = createRealPrismaClient(agentData);
+
+    // Mock Replicate client (you can replace with actual import)
+    const replicateClient = {
+      run: async (model: string, input: any) => {
+        console.log(`Mock Replicate call to ${model} with input:`, input);
+        return { output: "Mock AI generation result" };
+      }
+    };
+
     // Create execution context
     const executionContext = {
-      db,
+      prisma, // Use real Prisma-like client for compatibility with generated code
+      db, // Keep original for backward compatibility
+      ai: aiInterface,
+      openai: openaiClient,
+      xai: xaiClientReal,
+      replicate: replicateClientReal,
       input: inputParameters,
-      envVars,
+      env: envVars,
       testMode,
       // Utility functions
       console: {
@@ -550,7 +905,6 @@ export async function POST(request: NextRequest) {
           throw new Error(`Missing required fields: ${missing.join(', ')}`);
         }
       },
-      ai: aiInterface,
       z: z // Add zod for schema validation in AI analysis steps
     };
 
@@ -560,12 +914,19 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
 
     try {
-      // Create an async function from the code string
+      // Create an async function from the code string with proper parameter mapping
       const executeFunction = new Function(
-        'db', 'input', 'envVars', 'testMode', 'console', 'generateId', 'formatDate', 'validateRequired', 'ai', 'z',
+        'context',
         `
         return (async () => {
           try {
+            // Destructure context for generated code compatibility
+            const { prisma, ai, openai, xai, replicate, input, env } = context;
+            
+            // Make other utilities available in scope
+            const { db, console: consoleUtils, generateId, formatDate, validateRequired, z, testMode } = context;
+            
+            // Execute the generated code
             ${code}
           } catch (error) {
             throw new Error('Execution error: ' + error.message);
@@ -574,19 +935,8 @@ export async function POST(request: NextRequest) {
         `
       );
 
-      // Execute with the context and await the promise
-      result = await executeFunction(
-        executionContext.db,
-        executionContext.input,
-        executionContext.envVars,
-        executionContext.testMode,
-        executionContext.console,
-        executionContext.generateId,
-        executionContext.formatDate,
-        executionContext.validateRequired,
-        executionContext.ai,
-        executionContext.z
-      );
+      // Execute with the context object
+      result = await executeFunction(executionContext);
 
     } catch (error) {
       executionError = error instanceof Error ? error.message : 'Unknown execution error';
