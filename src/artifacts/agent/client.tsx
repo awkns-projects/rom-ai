@@ -186,6 +186,13 @@ interface AgentData {
   schedules: AgentSchedule[];
   createdAt: string;
   theme?: string; // Stored theme selection for the agent
+  externalApi?: {
+    provider: string | null;
+    requiresConnection: boolean;
+    connectionType: 'oauth' | 'api_key' | 'none';
+    primaryUseCase: string;
+    requiredScopes: string[];
+  };
   metadata?: {
     createdAt: string;
     updatedAt: string;
@@ -376,6 +383,8 @@ const useAgentData = (content: string) => {
           actions,
           schedules,
           createdAt: parsed.createdAt || new Date().toISOString(),
+          theme: parsed.theme, // Preserve theme selection
+          externalApi: parsed.externalApi, // Preserve external API metadata
           metadata: parsed.metadata // Keep metadata if it exists (from orchestrator)
         };
 
@@ -384,7 +393,11 @@ const useAgentData = (content: string) => {
           name: initialData.name,
           modelCount: initialData.models.length,
           actionCount: initialData.actions.length,
-          hasMetadata: !!initialData.metadata
+          scheduleCount: initialData.schedules.length,
+          hasMetadata: !!initialData.metadata,
+          hasExternalApi: !!initialData.externalApi,
+          externalApiProvider: initialData.externalApi?.provider || 'none',
+          externalApiRequiresConnection: initialData.externalApi?.requiresConnection || false
         });
 
         return initialData;
@@ -401,8 +414,9 @@ const useAgentData = (content: string) => {
         };
       }
     } catch (e) {
-      console.warn('⚠️ Failed to parse initial content, using defaults. Error:', (e as Error).message);
-      console.warn('📄 Problematic content (first 200 chars):', content ? content.substring(0, 200) : 'none');
+      console.error('❌ Failed to parse initial content, using defaults. Error:', (e as Error).message);
+      console.error('📄 Problematic content (first 500 chars):', content ? content.substring(0, 500) : 'none');
+      console.error('🔍 Full error stack:', e);
       return {
         name: 'New Agent',
         description: '',
@@ -757,10 +771,12 @@ const AgentBuilderContent = memo(({
       currentActions: agentData.actions?.length || 0,
       currentSchedules: agentData.schedules?.length || 0,
       currentTheme: agentData.theme,
+      currentExternalApi: agentData.externalApi?.provider || 'none',
       newModels: newData.models?.length || 0,
       newActions: newData.actions?.length || 0,
       newSchedules: newData.schedules?.length || 0,
       newTheme: newData.theme,
+      newExternalApi: newData.externalApi?.provider || 'none',
       currentModelNames: (agentData.models || []).map((m: AgentModel) => m.name),
       newModelNames: (newData.models || []).map((m: AgentModel) => m.name),
       currentActionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
@@ -851,10 +867,18 @@ const AgentBuilderContent = memo(({
           schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
           createdAt: parsed.createdAt || new Date().toISOString(),
           theme: parsed.theme, // Preserve theme selection
+          externalApi: parsed.externalApi, // Preserve external API metadata
           metadata: parsed.metadata
         };
         
-        // Use a more stable comparison approach
+        console.log('🔄 Content update with external API:', {
+          hasExternalApi: !!updatedData.externalApi,
+          provider: updatedData.externalApi?.provider || 'none',
+          requiresConnection: updatedData.externalApi?.requiresConnection || false,
+          fullExternalApi: updatedData.externalApi
+        });
+        
+        // Use a more stable comparison approach - FIXED: Include externalApi in comparison
         setAgentData(prevData => {
           const currentDataString = JSON.stringify({
             name: prevData.name,
@@ -863,19 +887,37 @@ const AgentBuilderContent = memo(({
             models: prevData.models,
             actions: prevData.actions,
             schedules: prevData.schedules,
-            theme: prevData.theme
+            theme: prevData.theme,
+            externalApi: prevData.externalApi // FIXED: Include externalApi in comparison
           });
-          const newDataString = JSON.stringify(updatedData);
+          const newDataString = JSON.stringify({
+            name: updatedData.name,
+            description: updatedData.description,
+            domain: updatedData.domain,
+            models: updatedData.models,
+            actions: updatedData.actions,
+            schedules: updatedData.schedules,
+            theme: updatedData.theme,
+            externalApi: updatedData.externalApi // FIXED: Include externalApi in comparison
+          });
           
           // Only update if data has actually changed
           if (currentDataString !== newDataString) {
+            console.log('📥 Updating agent data from content change:', {
+              previousExternalApi: prevData.externalApi?.provider || 'none',
+              newExternalApi: updatedData.externalApi?.provider || 'none',
+              dataChanged: true
+            });
             return updatedData;
           }
+          
+          console.log('⚪ No agent data update needed (content unchanged)');
           return prevData;
         });
       }
     } catch (e) {
-      console.warn('Failed to parse updated content:', e);
+      console.warn('❌ Failed to parse updated content:', e);
+      console.warn('📄 Problematic content (first 200 chars):', content ? content.substring(0, 200) : 'none');
     }
   }, [content]); // Remove agentData dependency to prevent infinite loop
 
@@ -959,42 +1001,95 @@ const AgentBuilderContent = memo(({
           {/* Enhanced Progress Indicator - Only show when AI is actually running */}
           {status === 'streaming' && (
             <div className="mt-2 sm:mt-6">
-              {/* Mobile: Ultra-compact single line */}
-              <div className="sm:hidden p-2 rounded-lg bg-black/50 border border-green-500/20 backdrop-blur-sm">
-                <div className="flex items-center justify-between gap-2">
+              {/* Mobile: Compact with all steps */}
+              <div className="sm:hidden p-3 rounded-lg bg-black/50 border border-green-500/20 backdrop-blur-sm">
+                <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2">
                     <div className="w-1 h-1 bg-yellow-400 rounded-full animate-pulse" />
                     <span className="text-xs font-mono text-green-200">
                       {(() => {
-                        const steps = [
-                          { id: 'analysis', label: 'Analysis' },
-                          { id: 'models', label: 'Models' },
-                          { id: 'actions', label: 'Actions' },
-                          { id: 'schedules', label: 'Schedules' },
-                          { id: 'deployment', label: 'Deployment' },
-                          { id: 'complete', label: 'Complete' }
-                        ];
-                        
-                        const currentStep = steps.find(step => {
-                          const stepStatus = getStepStatus(step.id, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
-                          return stepStatus === 'processing';
-                        });
-                        
-                        return currentStep ? currentStep.label : 'Building...';
+                        const currentStepMessage = safeMetadata.stepMessages?.[safeMetadata.currentStep || ''];
+                        if (currentStepMessage) {
+                          // Truncate long messages for mobile
+                          return currentStepMessage.length > 40 
+                            ? currentStepMessage.substring(0, 37) + '...'
+                            : currentStepMessage;
+                        }
+                        return 'Building Agent';
                       })()}
                     </span>
                   </div>
                   <div className="text-sm font-bold text-blue-600">{Math.round(calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData))}%</div>
                 </div>
-                <div className="relative h-0.5 bg-green-500/10 rounded-full overflow-hidden mt-1">
+                
+                {/* Progress Bar */}
+                <div className="relative h-1 bg-green-500/10 rounded-full overflow-hidden mb-2">
                   <div 
                     className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-700 rounded-full transition-all duration-1000 ease-out"
                     style={{ width: `${calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData)}%` }}
                   />
                 </div>
+                
+                {/* Mobile Steps - Horizontal dots */}
+                <div className="flex items-center justify-center gap-1">
+                  {(() => {
+                    const steps = [
+                      { id: 'analysis', label: 'Analysis' },
+                      { id: 'models', label: 'Models' },
+                      { id: 'actions', label: 'Actions' },
+                      { id: 'schedules', label: 'Schedules' },
+                      { id: 'deployment', label: 'Deployment' }
+                    ];
+                    
+                    const getEnhancedStepStatus = (stepId: string) => {
+                      const stepIdMapping: Record<string, string> = {
+                        'step0': 'analysis',
+                        'step1': 'models',
+                        'step2': 'actions',
+                        'step3': 'schedules',
+                        'step4': 'deployment',
+                        'complete': 'complete'
+                      };
+                      
+                      const orchestratorStepId = Object.keys(stepIdMapping).find(key => stepIdMapping[key] === stepId) || stepId;
+                      
+                      if (safeMetadata.stepProgress) {
+                        if (safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress]) {
+                          return safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress];
+                        }
+                        if (orchestratorStepId && safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress]) {
+                          return safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress];
+                        }
+                      }
+                      
+                      if (safeMetadata.currentStep === stepId || safeMetadata.currentStep === orchestratorStepId) {
+                        return 'processing';
+                      }
+                      
+                      return getStepStatus(stepId, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
+                    };
+                    
+                    return steps.map((step, index) => {
+                      const stepStatus = getEnhancedStepStatus(step.id);
+                      return (
+                        <div 
+                          key={step.id}
+                          className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                            stepStatus === 'complete' 
+                              ? 'bg-green-400 shadow-sm shadow-green-500/50' 
+                              : stepStatus === 'processing' 
+                              ? 'bg-yellow-400 shadow-sm shadow-yellow-500/50 animate-pulse'
+                              : 'bg-green-500/20 border border-green-500/30'
+                          }`} 
+                          title={step.label}
+                        />
+                      );
+                    });
+                  })()}
+                </div>
               </div>
               
-              {/* Desktop: Full version */}
+              {/* Desktop: Full version with all steps */}
               <div className="hidden sm:block p-4 rounded-2xl bg-black/50 border border-green-500/20 backdrop-blur-sm shadow-lg shadow-green-500/10">
                 <div className="flex items-center justify-between gap-0 mb-3">
                   <div className="flex items-center gap-3">
@@ -1009,6 +1104,21 @@ const AgentBuilderContent = memo(({
                   </div>
                 </div>
                 
+                {/* Current Step Message */}
+                {(() => {
+                  const currentStepMessage = safeMetadata.stepMessages?.[safeMetadata.currentStep || ''];
+                  if (currentStepMessage) {
+                    return (
+                      <div className="mb-3 p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                        <div className="text-xs font-mono text-blue-300">
+                          🔄 {currentStepMessage}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+                
                 {/* Progress Bar */}
                 <div className="relative h-2 bg-green-500/10 rounded-full overflow-hidden border border-green-500/20 mb-4">
                   <div 
@@ -1019,21 +1129,18 @@ const AgentBuilderContent = memo(({
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
                 </div>
                 
-                {/* Progress Steps */}
-                 <div className="flex justify-center text-xs font-mono">
+                {/* Desktop Steps - Show all steps */}
+                <div className="flex items-center justify-between text-xs font-mono">
                   {(() => {
                     const steps = [
                       { id: 'analysis', label: 'Analysis' },
                       { id: 'models', label: 'Models' },
                       { id: 'actions', label: 'Actions' },
                       { id: 'schedules', label: 'Schedules' },
-                      { id: 'deployment', label: 'Deployment' },
-                      { id: 'complete', label: 'Complete' }
+                      { id: 'deployment', label: 'Deployment' }
                     ];
                     
-                    // Use the enhanced step status function to properly handle API sync
                     const getEnhancedStepStatus = (stepId: string) => {
-                      // Map orchestrator step IDs to UI step IDs
                       const stepIdMapping: Record<string, string> = {
                         'step0': 'analysis',
                         'step1': 'models',
@@ -1043,11 +1150,8 @@ const AgentBuilderContent = memo(({
                         'complete': 'complete'
                       };
                       
-                      // Check both the UI step ID and orchestrator step ID
                       const orchestratorStepId = Object.keys(stepIdMapping).find(key => stepIdMapping[key] === stepId) || stepId;
-                      const uiStepId = stepIdMapping[stepId] || stepId;
                       
-                      // Check stepProgress for both IDs
                       if (safeMetadata.stepProgress) {
                         if (safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress]) {
                           return safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress];
@@ -1055,52 +1159,46 @@ const AgentBuilderContent = memo(({
                         if (orchestratorStepId && safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress]) {
                           return safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress];
                         }
-                        if (uiStepId && safeMetadata.stepProgress[uiStepId as keyof typeof safeMetadata.stepProgress]) {
-                          return safeMetadata.stepProgress[uiStepId as keyof typeof safeMetadata.stepProgress];
-                        }
                       }
                       
-                      // Check if this is the current step
-                      if (safeMetadata.currentStep === stepId || safeMetadata.currentStep === orchestratorStepId || safeMetadata.currentStep === uiStepId) {
+                      if (safeMetadata.currentStep === stepId || safeMetadata.currentStep === orchestratorStepId) {
                         return 'processing';
                       }
                       
-                      // Use the existing getStepStatus function as fallback
                       return getStepStatus(stepId, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
                     };
                     
-                    // Find the current step
-                    const currentStep = steps.find(step => {
+                    return steps.map((step, index) => {
                       const stepStatus = getEnhancedStepStatus(step.id);
-                      return stepStatus === 'processing';
-                    }) || steps.find(step => step.id === 'complete');
-                    
-                    if (!currentStep) return null;
-                    
-                    const stepStatus = getEnhancedStepStatus(currentStep.id);
-                    const isComplete = stepStatus === 'complete';
-                    const isProcessing = stepStatus === 'processing';
-                    
-                    return (
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                          isComplete 
-                            ? 'bg-green-400 shadow-lg shadow-green-500/50 animate-matrix-glow' 
-                            : isProcessing 
-                            ? 'bg-yellow-400 shadow-lg shadow-yellow-500/50 animate-pulse'
-                            : 'bg-green-500/20 border border-green-500/30'
-                        }`} />
-                        <span className={`font-medium transition-colors duration-300 ${
-                          isComplete 
-                            ? 'text-green-400' 
-                            : isProcessing 
-                            ? 'text-yellow-400'
-                            : 'text-green-500/50'
-                        }`}>
-                          {currentStep.label}
-                        </span>
-                      </div>
-                    );
+                      const isComplete = stepStatus === 'complete';
+                      const isProcessing = stepStatus === 'processing';
+                      
+                      return (
+                        <div key={step.id} className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                            isComplete 
+                              ? 'bg-green-400 shadow-lg shadow-green-500/50' 
+                              : isProcessing 
+                              ? 'bg-yellow-400 shadow-lg shadow-yellow-500/50 animate-pulse'
+                              : 'bg-green-500/20 border border-green-500/30'
+                          }`} />
+                          <span className={`font-medium transition-colors duration-300 whitespace-nowrap ${
+                            isComplete 
+                              ? 'text-green-400' 
+                              : isProcessing 
+                              ? 'text-yellow-400'
+                              : 'text-green-500/50'
+                          }`}>
+                            {step.label}
+                          </span>
+                          {index < steps.length - 1 && (
+                            <div className={`w-8 h-0.5 transition-colors duration-300 ${
+                              isComplete ? 'bg-green-400/50' : 'bg-green-500/20'
+                            }`} />
+                          )}
+                        </div>
+                      );
+                    });
                   })()}
                 </div>
               </div>

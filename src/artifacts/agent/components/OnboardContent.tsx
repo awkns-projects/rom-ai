@@ -472,7 +472,44 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
           
           <div className="flex justify-center">
             <div className="w-full max-w-4xl">
-              <AvatarCreator documentId={documentId} />
+              {(() => {
+                console.log('🎨 OnboardContent rendering AvatarCreator with:', {
+                  documentId,
+                  agentDataExists: !!agentData,
+                  agentDataName: agentData?.name || 'none',
+                  agentDataDomain: agentData?.domain || 'none',
+                  externalApiMetadata: agentData?.externalApi,
+                  hasExternalApi: !!agentData?.externalApi,
+                  provider: agentData?.externalApi?.provider,
+                  requiresConnection: agentData?.externalApi?.requiresConnection,
+                  agentDataKeys: agentData ? Object.keys(agentData) : [],
+                  fullAgentData: agentData ? {
+                    name: agentData.name,
+                    domain: agentData.domain,
+                    hasExternalApi: !!agentData.externalApi,
+                    externalApiProvider: agentData.externalApi?.provider || 'none'
+                  } : null,
+                  // Raw debugging
+                  rawAgentData: agentData
+                });
+
+                // Additional check for debugging
+                if (!agentData?.externalApi && agentData?.name && agentData.name.toLowerCase().includes('instagram')) {
+                  console.warn('🚨 ISSUE DETECTED: Agent name suggests Instagram but no externalApi metadata found!', {
+                    agentName: agentData.name,
+                    agentDescription: agentData.description,
+                    agentDomain: agentData.domain,
+                    allKeys: Object.keys(agentData)
+                  });
+                }
+
+                return (
+                  <AvatarCreator 
+                    documentId={documentId} 
+                    externalApiMetadata={agentData?.externalApi} 
+                  />
+                );
+              })()}
             </div>
           </div>
         </div>

@@ -199,6 +199,7 @@ export const ScheduleMindMapEditor = memo(({
           description: schedule.description,
           availableModels: allModels,
           entityType: 'schedule',
+          type: (schedule as any).type || 'mutation', // Default to mutation if type is not set
           businessContext: `Generate pseudo steps for ${schedule.name}. This is a scheduled task that runs automatically.`
         }),
       });

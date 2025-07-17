@@ -51,9 +51,10 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
   
   const steps = [
     { id: 'step0', label: 'Comprehensive Analysis' },
-    { id: 'step1', label: 'Data Models' },
-    { id: 'step2', label: 'Automated Actions' },
-    { id: 'step3', label: 'Scheduling & Timing' },
+    { id: 'step1', label: 'Database Generation' },
+    { id: 'step2', label: 'Action Generation' },
+    { id: 'step3', label: 'Schedule Generation' },
+    { id: 'step4', label: 'Deployment' },
     { id: 'complete', label: 'Complete' }
   ];
 
@@ -133,7 +134,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
     console.log(`🔍 Getting step status for: ${stepId}`);
     
     // Define step order for position-based status determination
-    const stepOrder = ['step0', 'step1', 'step2', 'step3', 'complete'];
+    const stepOrder = ['step0', 'step1', 'step2', 'step3', 'step4', 'complete'];
     
     // Check for step data in message parts (for streaming state)
     if (message?.parts) {
@@ -192,15 +193,14 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
     }
 
     // Check if all steps are complete (for completed agents)
-    const allStepsComplete = stepOrder.every(step => {
-      if (step === stepId) return false; // Don't check self
+    const allMainStepsComplete = ['step0', 'step1', 'step2', 'step3', 'step4'].every(step => {
       return (metadata?.stepProgress && metadata.stepProgress[step] === 'complete') ||
              (persistedMetadata?.stepProgress && persistedMetadata.stepProgress[step] === 'complete') ||
              (persistedMetadataFromDoc?.stepProgress && persistedMetadataFromDoc.stepProgress[step] === 'complete');
     });
 
-    if (allStepsComplete && stepId === 'complete') {
-      console.log(`✅ All steps complete - marking ${stepId} as complete`);
+    if (allMainStepsComplete && stepId === 'complete') {
+      console.log(`✅ All main steps complete - marking ${stepId} as complete`);
       return 'complete';
     }
 
@@ -302,7 +302,7 @@ const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persiste
 
   // Check if all steps are complete and update artifact status
   const allStepsComplete = useMemo(() => {
-    const stepOrder = ['step0', 'step1', 'step2', 'step3'];
+    const stepOrder = ['step0', 'step1', 'step2', 'step3', 'step4'];
     
     const isComplete = stepOrder.every(step => {
       return (metadata?.stepProgress && metadata.stepProgress[step] === 'complete') ||
@@ -523,17 +523,48 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
     fetcher
   );
 
-  // Parse agent data from document content
+  // Helper function to check if a string looks like JSON
+  const isValidJSON = (str: string): boolean => {
+    if (!str || typeof str !== 'string') return false;
+    const trimmed = str.trim();
+    return (trimmed.startsWith('{') && trimmed.endsWith('}')) || 
+           (trimmed.startsWith('[') && trimmed.endsWith(']'));
+  };
+
+  // Parse agent data from document content or fallback to result content
   const agentData = useMemo(() => {
-    const content = documents?.[0]?.content;
-    if (!content) return null;
-    try {
-      return JSON.parse(content);
-    } catch (e) {
-      console.error('Failed to parse agent data:', e);
-      return null;
+    // First try to use document content (most up-to-date)
+    const documentContent = documents?.[0]?.content;
+    if (documentContent) {
+      try {
+        return JSON.parse(documentContent);
+      } catch (e) {
+        console.error('Failed to parse document content:', e);
+      }
     }
-  }, [documents]);
+    
+    // Fallback to result content if document doesn't exist yet or parsing failed
+    if (result?.content) {
+      try {
+        // If result.content is already an object, use it directly
+        if (typeof result.content === 'object') {
+          return result.content;
+        }
+        // If it's a string, check if it looks like JSON before parsing
+        if (typeof result.content === 'string') {
+          if (isValidJSON(result.content)) {
+            return JSON.parse(result.content);
+          } else {
+            console.warn('Result content does not appear to be valid JSON, skipping parse:', result.content.substring(0, 100) + '...');
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse result content:', e);
+      }
+    }
+    
+    return null;
+  }, [documents, result?.content]);
   
   const openAgentBuilder = () => {
     if (agentData && result?.id) {
@@ -541,7 +572,7 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
         documentId: result.id,
         title: agentData.name || result.title || 'Agent',
         kind: 'agent',
-        content: documents?.[0]?.content || '',
+        content: documents?.[0]?.content || result?.content || '',
         isVisible: true,
         status: 'idle',
         boundingBox: {
@@ -563,11 +594,22 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
     );
   }
 
-  if (error || !agentData) {
+  // Only show error if both document fetch failed AND we don't have result content
+  if (error && !result?.content) {
     return (
       <div className="flex items-center gap-2 p-4 text-muted-foreground">
         <WarningIcon size={16} />
         Failed to load agent data
+      </div>
+    );
+  }
+
+  // If we don't have agent data from either source, show error
+  if (!agentData) {
+    return (
+      <div className="flex items-center gap-2 p-4 text-muted-foreground">
+        <WarningIcon size={16} />
+        No agent data available
       </div>
     );
   }
@@ -587,11 +629,16 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
               <div className="flex-1 min-w-0">
                 <h3 className="text-xl font-semibold text-green-100">{agentData.name}</h3>
                 <p className="text-green-300/70 text-sm">{agentData.domain || 'AI Agent System'}</p>
+                {!documents?.[0] && (
+                  <p className="text-yellow-400/70 text-xs mt-1">⚡ Live preview - building in progress</p>
+                )}
               </div>
             </div>
             {isSuccess && (
               <div className="bg-green-500/20 backdrop-blur-sm px-3 py-1.5 rounded-full flex-shrink-0 border border-green-500/30">
-                <span className="text-green-200 text-xs font-medium font-mono">✅ READY</span>
+                <span className="text-green-200 text-xs font-medium font-mono">
+                  {documents?.[0] ? '✅ READY' : '🔄 BUILDING'}
+                </span>
               </div>
             )}
           </div>
@@ -718,12 +765,7 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
             </div>
           )}
 
-          {/* Success Message */}
-          {isSuccess && result.content && (
-            <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
-              <p className="text-green-300 text-sm font-mono">{result.content}</p>
-            </div>
-          )}
+          {/* Success Message - Removed: raw JSON was confusing to users */}
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-3">
@@ -876,7 +918,7 @@ const AgentBuilderWithStreamingSummary = memo(({ args, message, isLoading, isRea
           id: artifact.documentId,
           title: agentData.name || 'AI Agent System',
           kind: 'agent',
-          content: `Building in progress: ${agentData.name || 'AI Agent System'}`
+          content: artifact.content // Pass the actual agent JSON, not a status message
         };
       }
     } catch (e) {

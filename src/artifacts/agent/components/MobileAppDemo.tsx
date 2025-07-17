@@ -894,7 +894,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
         </div>
 
         {/* Agent Stats */}
-        <div className={`${theme.bg} border ${theme.border} rounded-xl p-4`}>
+        {/* <div className={`${theme.bg} border ${theme.border} rounded-xl p-4`}>
           <h3 className={`font-mono font-semibold text-sm ${theme.light} mb-3`}>Agent Overview</h3>
           <div className="grid grid-cols-2 gap-4">
             <div className="text-center">
@@ -922,7 +922,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
               <div className={`font-mono text-xs ${theme.dim}`}>Active Tasks</div>
             </div>
           </div>
-        </div>
+        </div> */}
 
                  {/* Quick Actions */}
          <div className={`${theme.bg} border ${theme.border} rounded-xl p-4`}>

@@ -219,6 +219,13 @@ export interface AgentData {
   createdAt: string;
   metadata: AgentMetadata;
   prismaSchema: string;
+  externalApi?: {
+    provider: string | null;
+    requiresConnection: boolean;
+    connectionType: 'oauth' | 'api_key' | 'none';
+    primaryUseCase: string;
+    requiredScopes: string[];
+  };
 }
 
 export interface PromptUnderstanding {

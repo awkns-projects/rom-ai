@@ -40,6 +40,14 @@ export interface OrchestratorConfig {
   dataStream?: any;
   documentId?: string;
   session?: any;
+  // External API metadata
+  externalApiMetadata?: {
+    provider: string | null;
+    requiresConnection: boolean;
+    connectionType: 'oauth' | 'api_key' | 'none';
+    primaryUseCase: string;
+    requiredScopes: string[];
+  };
 }
 
 export interface OrchestratorResult {
@@ -146,6 +154,70 @@ export async function executeAgentGeneration(
     // Extract insights
     if (config.enableInsights !== false) {
       result.insights.comprehensive = extractStep0Insights(step0Result);
+    }
+
+    // Extract external API metadata for avatar creator
+    if (step0Result.externalApi) {
+      console.log('🔍 Step 0 detected external API:', {
+        provider: step0Result.externalApi.provider,
+        requiresConnection: step0Result.externalApi.requiresConnection,
+        connectionType: step0Result.externalApi.connectionType,
+        primaryUseCase: step0Result.externalApi.primaryUseCase
+      });
+
+      config.externalApiMetadata = {
+        provider: step0Result.externalApi.provider,
+        requiresConnection: step0Result.externalApi.requiresConnection,
+        connectionType: step0Result.externalApi.connectionType,
+        primaryUseCase: step0Result.externalApi.primaryUseCase,
+        requiredScopes: step0Result.externalApi.requiredScopes
+      };
+
+      // IMMEDIATE FIX: Stream partial agent data with external API metadata
+      // This allows AvatarCreator to show correct connection UI right away
+      try {
+        const partialAgentData = {
+          id: config.existingAgent?.id || crypto.randomUUID(),
+          name: step0Result.agentName || 'Generated Agent',
+          description: step0Result.agentDescription || 'AI-generated agent description',
+          domain: step0Result.domain || 'general',
+          models: [], // Empty arrays for now - will be filled in later steps
+          actions: [],
+          schedules: [],
+          createdAt: config.existingAgent?.createdAt || new Date().toISOString(),
+          externalApi: {
+            provider: step0Result.externalApi.provider,
+            requiresConnection: step0Result.externalApi.requiresConnection,
+            connectionType: step0Result.externalApi.connectionType,
+            primaryUseCase: step0Result.externalApi.primaryUseCase,
+            requiredScopes: step0Result.externalApi.requiredScopes
+          }
+        };
+
+        // Only stream if we have a valid dataStream and the agent data is meaningful
+        if (config.dataStream && partialAgentData.name && partialAgentData.name !== 'Generated Agent') {
+          console.log('🔄 Streaming partial agent data with external API metadata after Step 0:', {
+            provider: partialAgentData.externalApi.provider,
+            requiresConnection: partialAgentData.externalApi.requiresConnection,
+            agentName: partialAgentData.name
+          });
+          
+          // Use a slight delay to ensure the UI is ready to receive the data
+          setTimeout(() => {
+            if (config.dataStream) {
+              config.dataStream.writeData({ 
+                type: 'agent-data', 
+                content: JSON.stringify(partialAgentData, null, 2)
+              });
+            }
+          }, 100);
+        } else {
+          console.log('⚠️ Skipping immediate agent data streaming - insufficient data or no stream available');
+        }
+      } catch (error) {
+        console.error('❌ Error streaming partial agent data:', error);
+        // Don't let this error break the entire orchestration
+      }
     }
 
     sendStepUpdate(config, 'step0', 'complete', `Analysis completed: ${step0Result.models.length} models, ${step0Result.actions.length} actions, ${step0Result.schedules.length} schedules`);
@@ -360,7 +432,10 @@ export async function executeAgentGeneration(
 
           const newDeployResult = await executeStepWithRetry(
             'step4',
-            () => executeStep4VercelDeployment(step4Input),
+            () => executeStep4VercelDeployment(step4Input, (message) => {
+              // Send real-time deployment progress updates
+              sendStepUpdate(config, 'step4', 'processing', message);
+            }),
             config,
             result
           );
@@ -391,7 +466,12 @@ export async function executeAgentGeneration(
           result.insights.deployment = extractStep4Insights(step4Result);
         }
 
-        sendStepUpdate(config, 'step4', 'complete', `Deployment completed: ${step4Result.deploymentUrl || 'No URL available'}`);
+        // Send final completion status for step4
+        const finalStatus = step4Result.status === 'ready' ? 'complete' : 'processing';
+        const finalMessage = step4Result.status === 'ready' 
+          ? `Deployment completed: ${step4Result.deploymentUrl}` 
+          : `Deployment submitted but may still be building: ${step4Result.deploymentUrl}`;
+        sendStepUpdate(config, 'step4', finalStatus, finalMessage);
 
         // Persist deployment metadata
         if (config.dataStream && config.documentId && config.session) {
@@ -473,8 +553,10 @@ async function executeStepWithRetry<T>(
   const stepStartTime = Date.now();
   const maxRetries = config.maxRetries || 3;
   
-  // Send processing update
-  sendStepUpdate(config, stepName, 'processing', `Starting ${stepName}...`);
+  // Send processing update only if not step4 (step4 handles its own progress)
+  if (stepName !== 'step4') {
+    sendStepUpdate(config, stepName, 'processing', `Starting ${stepName}...`);
+  }
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -486,9 +568,11 @@ async function executeStepWithRetry<T>(
       const stepDuration = Date.now() - stepStartTime;
       result.executionMetrics.stepDurations[stepName] = stepDuration;
       
-      // Send completion update with result summary
-      const resultSummary = getStepResultSummary(stepName, stepResult);
-      sendStepUpdate(config, stepName, 'complete', resultSummary);
+      // Send completion update with result summary only if not step4 (step4 handles its own completion)
+      if (stepName !== 'step4') {
+        const resultSummary = getStepResultSummary(stepName, stepResult);
+        sendStepUpdate(config, stepName, 'complete', resultSummary);
+      }
       
       // Persist step result to document if dataStream is available
       // NOTE: Removed step result persistence to reduce database load
@@ -647,6 +731,13 @@ function assembleCompleteAgent(
     schedules: step3.schedules,
     prismaSchema: step1.prismaSchema, // Not needed for UI
     createdAt: config.existingAgent?.createdAt || now,
+    externalApi: step0.externalApi ? {
+      provider: step0.externalApi.provider,
+      requiresConnection: step0.externalApi.requiresConnection,
+      connectionType: step0.externalApi.connectionType,
+      primaryUseCase: step0.externalApi.primaryUseCase,
+      requiredScopes: step0.externalApi.requiredScopes
+    } : undefined,
     metadata: {
       createdAt: config.existingAgent?.metadata?.createdAt || now,
       updatedAt: now,

@@ -149,12 +149,24 @@ function PureArtifact({
         setTimeout(() => revalidate({ retryCount }), timeout);
       },
       onError: (error) => {
-        console.error(`🚨 SWR Error for document ${artifact.documentId}:`, {
-          error: error?.message || error,
-          status: error?.status,
-          code: error?.code,
+        // Enhanced error logging with fallbacks for empty error objects
+        const errorInfo = {
+          error: error?.message || error || 'Unknown error',
+          status: error?.status || 'Unknown status',
+          code: error?.code || 'Unknown code',
+          type: error?.type || 'Unknown type',
+          errorObject: error,
+          documentId: artifact.documentId,
+          apiEndpoint,
           timestamp: new Date().toISOString()
-        });
+        };
+        
+        console.error(`🚨 SWR Error for document ${artifact.documentId}:`, errorInfo);
+        
+        // If we get an empty error object, provide additional context
+        if (!error || (typeof error === 'object' && Object.keys(error).length === 0)) {
+          console.warn(`⚠️ Received empty error object for document ${artifact.documentId}. This might indicate a network issue or server problem.`);
+        }
       },
       onSuccess: (data) => {
         console.log(`✅ Successfully fetched document ${artifact.documentId}:`, {

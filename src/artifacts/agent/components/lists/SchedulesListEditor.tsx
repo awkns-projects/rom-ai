@@ -435,10 +435,10 @@ export const SchedulesListEditor = memo(({
                     )}
                     <div className="mt-2 flex flex-wrap gap-1">
                       <span className="px-2 py-1 text-xs font-mono bg-purple-500/20 text-purple-300 rounded border border-purple-500/30">
-                        Target: {schedule.results.model || 'Not set'}
+                        Target: {schedule.results?.model || 'Not set'}
                       </span>
                       <span className="px-2 py-1 text-xs font-mono bg-purple-500/20 text-purple-300 rounded border border-purple-500/30">
-                        Source: {schedule.dataSource.type}
+                        Source: {schedule.dataSource?.type || 'Not set'}
                       </span>
                       {/* Readiness indicator */}
                       <span className={`px-2 py-1 text-xs font-mono rounded border ${
