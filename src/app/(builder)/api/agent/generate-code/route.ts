@@ -154,34 +154,61 @@ CODE GENERATION REQUIREMENTS:
    - Anomaly detection: Identify unusual patterns in data
 
 6. EXTERNAL API CALLS:
-   For "call external api" step type, use fetch() with environment variables:
+   For "call external api" step type, use fetch() with proper authentication and environment handling:
    
-   // Shopify API example:
-   const shopifyResponse = await fetch(\`https://\${envVars.SHOPIFY_STORE_NAME}.myshopify.com/admin/api/2023-10/products.json\`, {
-     headers: { 
-       'X-Shopify-Access-Token': envVars.SHOPIFY_ACCESS_TOKEN,
-       'Content-Type': 'application/json'
-     }
-   });
-   const shopifyData = await shopifyResponse.json();
+   // OAuth2 API example with test/live environment support:
+   const isTestMode = envVars.ENVIRONMENT === 'test' || envVars.NODE_ENV === 'development';
+   const baseUrl = isTestMode ? envVars.API_BASE_URL_TEST : envVars.API_BASE_URL;
+   const accessToken = isTestMode ? envVars.OAUTH_ACCESS_TOKEN_TEST : envVars.OAUTH_ACCESS_TOKEN;
    
-   // Stripe API example:
-   const stripeResponse = await fetch('https://api.stripe.com/v1/customers', {
-     headers: { 
-       'Authorization': \`Bearer \${envVars.STRIPE_SECRET_KEY}\`,
-       'Content-Type': 'application/x-www-form-urlencoded'
-     }
-   });
-   
-   // Generic API example:
-   const apiResponse = await fetch(envVars.API_BASE_URL + '/endpoint', {
+   const apiResponse = await fetch(\`\${baseUrl}/endpoint\`, {
      method: 'POST',
      headers: { 
-       'Authorization': \`Bearer \${envVars.API_KEY}\`,
+       'Authorization': \`Bearer \${accessToken}\`,
        'Content-Type': 'application/json'
      },
      body: JSON.stringify(requestData)
    });
+   
+   // Shopify API example with test/live store support:
+   const shopifyStoreName = isTestMode ? envVars.SHOPIFY_STORE_NAME_TEST : envVars.SHOPIFY_STORE_NAME;
+   const shopifyToken = isTestMode ? envVars.SHOPIFY_ACCESS_TOKEN_TEST : envVars.SHOPIFY_ACCESS_TOKEN;
+   
+   const shopifyResponse = await fetch(\`https://\${shopifyStoreName}.myshopify.com/admin/api/2023-10/products.json\`, {
+     headers: { 
+       'X-Shopify-Access-Token': shopifyToken,
+       'Content-Type': 'application/json'
+     }
+   });
+   
+   // Stripe API example with test/live keys:
+   const stripeKey = isTestMode ? envVars.STRIPE_SECRET_KEY_TEST : envVars.STRIPE_SECRET_KEY;
+   
+   const stripeResponse = await fetch('https://api.stripe.com/v1/customers', {
+     headers: { 
+       'Authorization': \`Bearer \${stripeKey}\`,
+       'Content-Type': 'application/x-www-form-urlencoded'
+     }
+   });
+   
+   // Generic API with environment variables:
+   const genericApiKey = isTestMode ? envVars.API_KEY_TEST : envVars.API_KEY;
+   const genericBaseUrl = envVars.API_BASE_URL || (isTestMode ? envVars.API_BASE_URL_TEST : envVars.API_BASE_URL_PROD);
+   
+   const genericResponse = await fetch(\`\${genericBaseUrl}/endpoint\`, {
+     method: 'POST',
+     headers: { 
+       'Authorization': \`Bearer \${genericApiKey}\`,
+       'Content-Type': 'application/json'
+     },
+     body: JSON.stringify(requestData)
+   });
+   
+   // Environment Variables Guide:
+   // For OAuth2: OAUTH_ACCESS_TOKEN, OAUTH_ACCESS_TOKEN_TEST, API_BASE_URL, API_BASE_URL_TEST
+   // For Shopify: SHOPIFY_STORE_NAME, SHOPIFY_STORE_NAME_TEST, SHOPIFY_ACCESS_TOKEN, SHOPIFY_ACCESS_TOKEN_TEST  
+   // For Stripe: STRIPE_SECRET_KEY (sk_live_...), STRIPE_SECRET_KEY_TEST (sk_test_...)
+   // General: ENVIRONMENT ('test'/'production'), NODE_ENV ('development'/'test'/'production')
 
 7. RETURN FORMAT:
    Always return: { success: boolean, data: any, message: string, executionTime: number }

@@ -507,7 +507,7 @@ export const ScheduleMindMapEditor = memo(({
                         <Label className="text-orange-300 font-mono text-xs">Type</Label>
                         <Select
                           value={step.type}
-                          onValueChange={(value) => {
+                          onValueChange={(value: "Database find unique" | "Database find many" | "Database update unique" | "Database update many" | "Database create" | "Database create many" | "Database delete unique" | "Database delete many" | "call external api" | "ai analysis") => {
                             const updatedSteps = schedule.pseudoSteps?.map(s => 
                               s.id === step.id ? { ...s, type: value } : s
                             ) || [];
@@ -598,7 +598,7 @@ export const ScheduleMindMapEditor = memo(({
                 e.stopPropagation();
                 const newStep = {
                   id: generateNewId('step', schedule.pseudoSteps || []),
-                  type: 'Database find many',
+                  type: 'Database find many' as const,
                   description: '',
                   inputFields: [{
                     id: generateNewId('field', []),

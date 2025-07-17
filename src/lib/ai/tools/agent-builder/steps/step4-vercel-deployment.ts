@@ -523,13 +523,13 @@ export class VercelClient {
  */
 function validateAndNormalizeActions(actions: AgentAction[]): AgentAction[] {
   return actions.filter(action => {
-    if (!action.name || !action.type) {
-      console.warn(`⚠️ Skipping invalid action: missing name or type`);
+    if (!action.name || !action.results?.actionType) {
+      console.warn(`⚠️ Skipping invalid action: missing name or actionType`);
       return false;
     }
     
-    if (!['query', 'mutation'].includes(action.type)) {
-      console.warn(`⚠️ Skipping action "${action.name}": invalid type "${action.type}"`);
+    if (!['query', 'mutation'].includes(action.results.actionType)) {
+      console.warn(`⚠️ Skipping action "${action.name}": invalid actionType "${action.results.actionType}"`);
       return false;
     }
     
@@ -537,9 +537,9 @@ function validateAndNormalizeActions(actions: AgentAction[]): AgentAction[] {
   }).map(action => ({
     ...action,
     name: action.name.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase(),
-    description: action.description || `${action.type} action`,
+    description: action.description || `${action.results?.actionType} action`,
     role: action.role || 'member',
-    emoji: action.emoji || (action.type === 'query' ? '🔍' : '✏️'),
+    emoji: action.emoji || (action.results?.actionType === 'query' ? '🔍' : '✏️'),
   }));
 }
 
@@ -794,7 +794,7 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  if (req.method !== '${action.type === 'query' ? 'GET' : 'POST'}') {
+  if (req.method !== '${action.results?.actionType === 'query' ? 'GET' : 'POST'}') {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
@@ -848,7 +848,7 @@ export default async function handler(
 
 function generateActionExecutionCode(action: AgentAction): string {
   // Generate basic execution code based on action type
-  if (action.type === 'query') {
+  if (action.results?.actionType === 'query') {
     return `// Query execution for ${action.name}
     const result = await prisma.$queryRaw\`SELECT 1 as test\`;`;
   } else {
@@ -864,20 +864,145 @@ function generateScheduleExecutionCode(schedule: AgentSchedule): string {
 }
 
 function generateActionUtilities(actions: AgentAction[], models: any[]): string {
-  return `// Action utilities for ${actions.length} actions
+  return `import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+// Action utilities for ${actions.length} actions
 export const actions = ${JSON.stringify(actions, null, 2)};
 
 export function getActionByName(name: string) {
   return actions.find(action => action.name === name);
+}
+
+// Execute action with basic database operations
+export async function executeAction(actionName: string, input: any) {
+  const action = getActionByName(actionName);
+  if (!action) {
+    throw new Error(\`Action '\${actionName}' not found\`);
+  }
+
+  console.log(\`🚀 Executing action: \${actionName}\`);
+  
+  try {
+    // Basic execution without AI SDK dependencies
+    const targetModel = action.results?.model;
+    
+    if (action.results?.actionType === 'query' && targetModel) {
+      const result = await (prisma as any)[targetModel.toLowerCase()].findMany({
+        where: input.filters || {},
+        take: input.limit || 100,
+        skip: input.offset || 0,
+      });
+      return result;
+    } else if (action.results?.actionType === 'mutation' && targetModel) {
+      const result = await (prisma as any)[targetModel.toLowerCase()].create({
+        data: input.data || input,
+      });
+      return result;
+    } else {
+      return { 
+        success: true, 
+        message: \`Action '\${actionName}' executed successfully\`,
+        input,
+        timestamp: new Date().toISOString()
+      };
+    }
+  } catch (error) {
+    console.error(\`❌ Error executing action '\${actionName}':\`, error);
+    throw error;
+  }
+}
+
+// Get available models
+export function getAvailableModels() {
+  return ${JSON.stringify(models.map(m => ({ name: m.name, fields: m.fields || [] })), null, 2)};
+}
+
+// Cleanup function
+export async function cleanup() {
+  await prisma.$disconnect();
 }`;
 }
 
 function generateScheduleUtilities(schedules: AgentSchedule[], models: any[]): string {
-  return `// Schedule utilities for ${schedules.length} schedules
+  return `import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+// Schedule utilities for ${schedules.length} schedules
 export const schedules = ${JSON.stringify(schedules, null, 2)};
 
 export function getScheduleByName(name: string) {
   return schedules.find(schedule => schedule.name === name);
+}
+
+// Execute schedule with basic database operations
+export async function executeSchedule(scheduleName: string) {
+  const schedule = getScheduleByName(scheduleName);
+  if (!schedule) {
+    throw new Error(\`Schedule '\${scheduleName}' not found\`);
+  }
+
+  console.log(\`⏰ Executing scheduled task: \${scheduleName}\`);
+  
+  try {
+    // Basic execution without AI SDK dependencies
+    const targetModel = schedule.results?.model;
+    
+    if (targetModel) {
+      const result = await (prisma as any)[targetModel.toLowerCase()].findMany({
+        take: 100,
+        orderBy: { id: 'desc' }
+      });
+      console.log(\`📊 Schedule '\${scheduleName}' found \${result.length} records\`);
+      return result;
+    } else {
+      const result = { 
+        success: true, 
+        message: \`Schedule '\${scheduleName}' executed successfully\`,
+        executedAt: new Date().toISOString(),
+        scheduleName
+      };
+      console.log(\`✅ Schedule completed:\`, result);
+      return result;
+    }
+  } catch (error) {
+    console.error(\`❌ Error executing schedule '\${scheduleName}':\`, error);
+    throw error;
+  }
+}
+
+// Validate schedule configuration
+export function validateSchedule(scheduleName: string): { valid: boolean; errors: string[] } {
+  const schedule = getScheduleByName(scheduleName);
+  if (!schedule) {
+    return { valid: false, errors: [\`Schedule '\${scheduleName}' not found\`] };
+  }
+
+  const errors: string[] = [];
+
+  // Validate cron pattern
+  if (!schedule.interval?.pattern) {
+    errors.push('Schedule must have a valid cron pattern');
+  } else {
+    const parts = schedule.interval.pattern.split(' ');
+    if (parts.length !== 5) {
+      errors.push('Invalid cron pattern - must have 5 parts');
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// Get available models
+export function getAvailableModels() {
+  return ${JSON.stringify(models.map(m => ({ name: m.name, fields: m.fields || [] })), null, 2)};
+}
+
+// Cleanup function
+export async function cleanup() {
+  await prisma.$disconnect();
 }`;
 }
 

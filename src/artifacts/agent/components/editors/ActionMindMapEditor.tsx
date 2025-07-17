@@ -450,7 +450,7 @@ export const ActionMindMapEditor = memo(({
                       <Label className="text-blue-300 font-mono text-xs">Type</Label>
                       <Select
                         value={step.type}
-                        onValueChange={(value) => {
+                        onValueChange={(value: "Database find unique" | "Database find many" | "Database update unique" | "Database update many" | "Database create" | "Database create many" | "Database delete unique" | "Database delete many" | "call external api" | "ai analysis") => {
                           const updatedSteps = action.pseudoSteps?.map(s => 
                             s.id === step.id ? { ...s, type: value } : s
                           ) || [];
@@ -544,7 +544,7 @@ export const ActionMindMapEditor = memo(({
                 e.stopPropagation();
                 const newStep = {
                   id: generateNewId('step', action.pseudoSteps || []),
-                  type: 'Database find many',
+                  type: 'Database find many' as const,
                   description: '',
                   inputFields: [{
                     id: generateNewId('field', []),
@@ -570,7 +570,7 @@ export const ActionMindMapEditor = memo(({
               }}
               className="btn-matrix w-full text-xs py-2"
             >
-              <PlusIcon size={14} className="mr-1" />
+              <PlusIcon size={14} />
               Add Step
             </Button>
 

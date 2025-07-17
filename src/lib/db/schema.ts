@@ -136,12 +136,45 @@ export const avatar = pgTable('Avatar', {
   connectedWallet: varchar('connectedWallet', { length: 255 }),
   selectedNFT: varchar('selectedNFT', { length: 255 }),
   unicornParts: json('unicornParts'),
+  // OAuth connection data stored as JSON for backward compatibility
+  oauthConnections: json('oauthConnections'), // Array of OAuthConnection objects
+  // Legacy Shopify fields (kept for backward compatibility)
+  shopifyStore: varchar('shopifyStore', { length: 255 }),
+  accessToken: text('accessToken'), // Encrypted access token
   isActive: boolean('isActive').notNull().default(false),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 });
 
 export type Avatar = InferSelectModel<typeof avatar>;
+
+// OAuth connections table for secure token storage
+export const oauthConnection = pgTable('OAuthConnection', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  avatarId: uuid('avatarId')
+    .references(() => avatar.id),
+  provider: varchar('provider', { 
+    enum: ['instagram', 'facebook', 'shopify', 'threads', 'google', 'github-oauth', 'linkedin', 'notion'] 
+  }).notNull(),
+  providerUserId: varchar('providerUserId', { length: 255 }).notNull(),
+  username: varchar('username', { length: 255 }),
+  // Encrypted tokens
+  accessToken: text('accessToken').notNull(), // Encrypted
+  refreshToken: text('refreshToken'), // Encrypted
+  encryptionIv: varchar('encryptionIv', { length: 32 }), // IV for encryption
+  expiresAt: timestamp('expiresAt'),
+  scopes: json('scopes'), // Array of granted scopes
+  // Provider-specific data
+  providerData: json('providerData'), // Store additional provider-specific info
+  isActive: boolean('isActive').notNull().default(true),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type OAuthConnection = InferSelectModel<typeof oauthConnection>;
 
 export type Suggestion = InferSelectModel<typeof suggestion>;
 

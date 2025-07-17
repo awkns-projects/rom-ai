@@ -31,6 +31,18 @@ interface UnicornParts {
   accessory: string
 }
 
+interface OAuthConnection {
+  provider: 'instagram' | 'facebook' | 'shopify' | 'threads' | 'google' | 'github-oauth' | 'linkedin' | 'notion'
+  accessToken: string
+  refreshToken?: string
+  expiresAt?: string
+  userId?: string
+  username?: string
+  storeUrl?: string // For Shopify
+  isActive: boolean
+  connectedAt: string
+}
+
 interface AvatarData {
   accessToken?: string
   isAuthenticated?: boolean
@@ -46,11 +58,87 @@ interface AvatarData {
   connectedWallet?: string
   selectedNFT?: string
   unicornParts?: UnicornParts
+  oauthConnections?: OAuthConnection[]
 }
 
 interface AvatarCreatorProps {
   documentId?: string
 }
+
+const oauthProviders = [
+  {
+    id: 'google',
+    name: 'Google',
+    icon: '📧',
+    color: 'from-red-500 to-orange-500',
+    description: 'Connect Google (Gmail, Drive, Calendar)',
+    scopes: ['email', 'profile', 'drive', 'calendar'],
+    authUrl: 'https://accounts.google.com/o/oauth2/auth'
+  },
+  {
+    id: 'github-oauth',
+    name: 'GitHub',
+    icon: '🐙',
+    color: 'from-gray-700 to-gray-900',
+    description: 'Connect your GitHub repositories',
+    scopes: ['repo', 'user:email', 'read:org'],
+    authUrl: 'https://github.com/login/oauth/authorize'
+  },
+  {
+    id: 'linkedin',
+    name: 'LinkedIn',
+    icon: '💼',
+    color: 'from-blue-600 to-blue-700',
+    description: 'Connect your LinkedIn profile',
+    scopes: ['r_liteprofile', 'r_emailaddress', 'w_member_social'],
+    authUrl: 'https://www.linkedin.com/oauth/v2/authorization'
+  },
+  {
+    id: 'notion',
+    name: 'Notion',
+    icon: '📝',
+    color: 'from-gray-800 to-black',
+    description: 'Connect your Notion workspace',
+    scopes: ['read_content', 'write_content'],
+    authUrl: 'https://api.notion.com/v1/oauth/authorize'
+  },
+  {
+    id: 'instagram',
+    name: 'Instagram',
+    icon: '📷',
+    color: 'from-pink-500 to-purple-600',
+    description: 'Connect your Instagram account',
+    scopes: ['user_profile', 'user_media'],
+    authUrl: 'https://api.instagram.com/oauth/authorize'
+  },
+  {
+    id: 'facebook',
+    name: 'Facebook',
+    icon: '📘',
+    color: 'from-blue-500 to-blue-600',
+    description: 'Connect your Facebook account',
+    scopes: ['public_profile', 'pages_read_engagement'],
+    authUrl: 'https://www.facebook.com/v18.0/dialog/oauth'
+  },
+  {
+    id: 'shopify',
+    name: 'Shopify',
+    icon: '🛍️',
+    color: 'from-green-500 to-emerald-600',
+    description: 'Connect your Shopify store',
+    scopes: ['read_products', 'write_products', 'read_orders'],
+    authUrl: 'https://[shop].myshopify.com/admin/oauth/authorize'
+  },
+  {
+    id: 'threads',
+    name: 'Threads',
+    icon: '🧵',
+    color: 'from-gray-500 to-gray-600',
+    description: 'Connect your Threads account',
+    scopes: ['threads_basic', 'threads_content_publish'],
+    authUrl: 'https://threads.net/oauth/authorize'
+  }
+] as const
 
 const artStyles = [
   { id: "ghibli", name: "Studio Ghibli", description: "Magical anime style" },
@@ -108,6 +196,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
     type: "rom-unicorn",
     romUnicornType: "default",
     customType: "upload",
+    oauthConnections: [],
   })
 
   const [isCreating, setIsCreating] = useState(false)
@@ -178,6 +267,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
       type: "rom-unicorn",
       romUnicornType: "default",
       customType: "upload",
+      oauthConnections: [],
     })
     setStep(1)
     setGeneratedVariations([])
@@ -220,22 +310,144 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
     setAvatarData((prev) => ({ ...prev, accessToken: token }))
   }
 
-  const handleShopifyLogin = async () => {
-    console.log("Initiating Shopify OAuth...")
-    // Simulate OAuth flow
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setAvatarData((prev) => ({
-      ...prev,
-      isAuthenticated: true,
-      shopifyStore: "my-store.myshopify.com",
-      accessToken: "shpat_" + Math.random().toString(36).substring(2, 15),
-    }))
+  // Generate OAuth authorization URL with proper parameters
+  const generateOAuthUrl = (providerId: string): string | null => {
+    const provider = oauthProviders.find(p => p.id === providerId)
+    if (!provider) return null
+
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+    const redirectUri = `${baseUrl}/api/oauth/${providerId}/callback`
+    const state = Math.random().toString(36).substring(2, 15) // Simple state for CSRF protection
+
+    const params = new URLSearchParams({
+      client_id: process.env[`${providerId.toUpperCase()}_CLIENT_ID`] || 'demo-client-id',
+      redirect_uri: redirectUri,
+      scope: provider.scopes.join(','),
+      response_type: 'code',
+      state: state
+    })
+
+    // Store state in session storage for verification
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(`oauth_state_${providerId}`, state)
+    }
+
+    // Handle provider-specific URL patterns
+    switch (providerId) {
+      case 'shopify':
+        // Shopify requires shop domain - we'll prompt for it
+        const shopDomain = prompt('Enter your Shopify store domain (e.g., your-store.myshopify.com):')
+        if (!shopDomain) return null
+        return `https://${shopDomain}/admin/oauth/authorize?${params.toString()}`
+      
+      case 'instagram':
+        return `https://api.instagram.com/oauth/authorize?${params.toString()}`
+      
+      case 'facebook':
+        return `https://www.facebook.com/v18.0/dialog/oauth?${params.toString()}`
+      
+      case 'threads':
+        return `https://threads.net/oauth/authorize?${params.toString()}`
+      
+      default:
+        return `${provider.authUrl}?${params.toString()}`
+    }
   }
+
+  const handleOAuthLogin = async (providerId: string) => {
+    console.log(`Initiating ${providerId} OAuth...`)
+    
+    const authUrl = generateOAuthUrl(providerId)
+    if (!authUrl) {
+      console.error(`Failed to generate OAuth URL for ${providerId}`)
+      return
+    }
+
+    // Store the current avatar ID in session storage for callback
+    if (typeof window !== 'undefined' && documentId) {
+      sessionStorage.setItem('oauth_avatar_document_id', documentId)
+    }
+
+    // Redirect to OAuth provider
+    window.location.href = authUrl
+  }
+
+  // Handle OAuth callback data when returning from provider
+  const handleOAuthCallback = (provider: string, connectionData: string) => {
+    try {
+      const connection = JSON.parse(decodeURIComponent(connectionData)) as OAuthConnection
+      
+      setAvatarData((prev) => {
+        const existingConnections = prev.oauthConnections || []
+        const filteredConnections = existingConnections.filter(conn => conn.provider !== provider)
+        
+        return {
+          ...prev,
+          isAuthenticated: true,
+          oauthConnections: [...filteredConnections, connection],
+          // Keep legacy fields for backward compatibility
+          ...(provider === 'shopify' && {
+            shopifyStore: connection.storeUrl,
+            accessToken: connection.accessToken
+          })
+        }
+      })
+
+      // Show success message
+      console.log(`Successfully connected ${provider} account: ${connection.username}`)
+      
+      // Clear OAuth-related session storage
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(`oauth_state_${provider}`)
+        sessionStorage.removeItem('oauth_avatar_document_id')
+      }
+    } catch (error) {
+      console.error(`Failed to parse OAuth callback data for ${provider}:`, error)
+    }
+  }
+
+  // Check for OAuth callback on component mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const oauthSuccess = urlParams.get('oauth_success')
+      const connectionData = urlParams.get('connection')
+      const oauthError = urlParams.get('oauth_error')
+
+      if (oauthSuccess && connectionData) {
+        handleOAuthCallback(oauthSuccess, connectionData)
+        // Clean up URL parameters
+        window.history.replaceState({}, document.title, window.location.pathname)
+      } else if (oauthError) {
+        console.error('OAuth error:', decodeURIComponent(oauthError))
+        // You could show an error toast here
+        // Clean up URL parameters
+        window.history.replaceState({}, document.title, window.location.pathname)
+      }
+    }
+  }, [])
 
   const handleTokenSubmit = () => {
     if (avatarData.accessToken && avatarData.accessToken.length > 10) {
       setAvatarData((prev) => ({ ...prev, isAuthenticated: true }))
     }
+  }
+
+  const handleOAuthDisconnect = (providerId: string) => {
+    setAvatarData((prev) => {
+      const updatedConnections = (prev.oauthConnections || []).filter(conn => conn.provider !== providerId)
+      
+      return {
+        ...prev,
+        oauthConnections: updatedConnections,
+        isAuthenticated: updatedConnections.length > 0,
+        // Clear legacy fields if disconnecting Shopify
+        ...(providerId === 'shopify' && {
+          shopifyStore: undefined,
+          accessToken: undefined
+        })
+      }
+    })
   }
 
   const handleLogout = () => {
@@ -244,7 +456,16 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
       isAuthenticated: false,
       accessToken: undefined,
       shopifyStore: undefined,
+      oauthConnections: []
     }))
+  }
+
+  const getConnectedProvider = (providerId: string): OAuthConnection | undefined => {
+    return avatarData.oauthConnections?.find(conn => conn.provider === providerId && conn.isActive)
+  }
+
+  const isProviderConnected = (providerId: string): boolean => {
+    return !!getConnectedProvider(providerId)
   }
 
   const handlePersonalityChange = (personality: string) => {
@@ -331,6 +552,9 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
       if (updatedAvatarData.selectedStyle) avatarPayload.selectedStyle = updatedAvatarData.selectedStyle;
       if (updatedAvatarData.connectedWallet) avatarPayload.connectedWallet = updatedAvatarData.connectedWallet;
       if (updatedAvatarData.selectedNFT) avatarPayload.selectedNFT = updatedAvatarData.selectedNFT;
+      if (updatedAvatarData.oauthConnections && updatedAvatarData.oauthConnections.length > 0) {
+        avatarPayload.oauthConnections = updatedAvatarData.oauthConnections;
+      }
       
       console.log("Avatar payload being sent:", JSON.stringify(avatarPayload, null, 2));
       
@@ -370,7 +594,8 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
         connectedWallet: avatar.connectedWallet,
         selectedNFT: avatar.selectedNFT,
         unicornParts: avatar.unicornParts,
-        isAuthenticated: avatarData.isAuthenticated,
+        oauthConnections: (avatar as any).oauthConnections || [],
+        isAuthenticated: (avatar as any).oauthConnections?.length > 0 || avatarData.isAuthenticated,
         accessToken: avatarData.accessToken,
         shopifyStore: avatarData.shopifyStore,
       })
@@ -576,6 +801,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                             type: "rom-unicorn",
                             romUnicornType: "default",
                             customType: "upload",
+                            oauthConnections: avatarData.oauthConnections || [],
                           })
                         }}
                         variant="outline"
@@ -609,6 +835,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                             type: "rom-unicorn",
                             romUnicornType: "default",
                             customType: "upload",
+                            oauthConnections: avatarData.oauthConnections || [],
                           })
                         }}
                         className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 h-10 sm:h-auto"
@@ -861,9 +1088,9 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                   <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
                     <span className="text-blue-400 text-lg sm:text-xl">🔐</span>
                   </div>
-                  <h3 className="text-lg sm:text-xl font-medium text-blue-400 mb-2">Connect to Shopify</h3>
+                  <h3 className="text-lg sm:text-xl font-medium text-blue-400 mb-2">Connect Your Accounts</h3>
                   <p className="text-sm sm:text-base text-gray-400">
-                    Connect to your Shopify store to save and manage your avatars
+                    Connect to your social media and business accounts to enhance your avatar's capabilities
                   </p>
                   <div className="mt-2 p-2 bg-blue-900/10 rounded border border-blue-800/30">
                     <p className="text-xs text-blue-300">💡 Your progress is automatically saved as you work</p>
@@ -872,21 +1099,36 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
 
                 {!avatarData.isAuthenticated ? (
                   <div className="space-y-4 sm:space-y-6">
-                    {/* OAuth Login Option */}
+                    {/* OAuth Login Options */}
                     <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
-                      <div className="text-center">
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-green-500/10 rounded-lg flex items-center justify-center mx-auto mb-4">
-                          <span className="text-green-400 text-2xl sm:text-3xl">🛍️</span>
+                      <div className="text-center mb-6">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-500/10 rounded-lg flex items-center justify-center mx-auto mb-4">
+                          <span className="text-blue-400 text-2xl sm:text-3xl">🔗</span>
                         </div>
-                        <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-2">Shopify OAuth</h4>
-                        <p className="text-sm text-gray-400 mb-4">Securely connect using Shopify's OAuth system</p>
-                        <Button
-                          onClick={handleShopifyLogin}
-                          className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 h-10 sm:h-auto w-full sm:w-auto"
-                        >
-                          <span className="mr-2">🔗</span>
-                          Connect with Shopify
-                        </Button>
+                        <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-2">OAuth Connections</h4>
+                        <p className="text-sm text-gray-400 mb-4">Securely connect your social media and business accounts</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {oauthProviders.map((provider) => (
+                            <Button
+                              key={provider.id}
+                              onClick={() => handleOAuthLogin(provider.id)}
+                              disabled={isProviderConnected(provider.id)}
+                              className={`bg-gradient-to-r ${provider.color} hover:opacity-90 text-white transition-all duration-150 h-12 sm:h-auto relative overflow-hidden ${
+                                isProviderConnected(provider.id) ? 'opacity-50 cursor-not-allowed' : ''
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg">{provider.icon}</span>
+                                <div className="text-left">
+                                  <div className="font-medium text-sm">
+                                    {isProviderConnected(provider.id) ? '✓ Connected' : `Connect ${provider.name}`}
+                                  </div>
+                                  <div className="text-xs opacity-90">{provider.description}</div>
+                                </div>
+                              </div>
+                            </Button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
@@ -972,23 +1214,16 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                   /* Authenticated State */
                   <div className="space-y-4 sm:space-y-6">
                     <div className="p-4 sm:p-6 bg-green-900/20 rounded-lg border border-green-700">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-500 rounded-lg flex items-center justify-center">
                             <span className="text-white text-lg sm:text-xl">✓</span>
                           </div>
                           <div>
-                            <h4 className="text-base sm:text-lg font-medium text-green-400">Connected Successfully</h4>
+                            <h4 className="text-base sm:text-lg font-medium text-green-400">Accounts Connected</h4>
                             <p className="text-sm text-green-200">
-                              {avatarData.shopifyStore
-                                ? `Store: ${avatarData.shopifyStore}`
-                                : "Authentication verified"}
+                              {avatarData.oauthConnections?.length || 0} account(s) connected
                             </p>
-                            {avatarData.accessToken && (
-                              <p className="text-xs text-green-300 font-mono mt-1">
-                                Token: {avatarData.accessToken.substring(0, 12)}...
-                              </p>
-                            )}
                           </div>
                         </div>
                         <Button
@@ -997,9 +1232,68 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                           size="sm"
                           className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 transition-all duration-150 h-8 sm:h-auto"
                         >
-                          Disconnect
+                          Disconnect All
                         </Button>
                       </div>
+                      
+                      {/* Connected Providers List */}
+                      <div className="space-y-3">
+                        {avatarData.oauthConnections?.map((connection) => {
+                          const provider = oauthProviders.find(p => p.id === connection.provider)
+                          if (!provider) return null
+                          
+                          return (
+                            <div key={connection.provider} className="flex items-center justify-between p-3 bg-black/20 rounded-lg border border-green-500/30">
+                              <div className="flex items-center gap-3">
+                                <div className={`w-8 h-8 bg-gradient-to-r ${provider.color} rounded-lg flex items-center justify-center`}>
+                                  <span className="text-white text-sm">{provider.icon}</span>
+                                </div>
+                                <div>
+                                  <div className="text-sm font-medium text-green-300">{provider.name}</div>
+                                  <div className="text-xs text-green-200 flex items-center gap-2">
+                                    <span>@{connection.username}</span>
+                                    {connection.storeUrl && <span>• {connection.storeUrl}</span>}
+                                  </div>
+                                  <div className="text-xs text-green-400 font-mono">
+                                    Connected: {new Date(connection.connectedAt).toLocaleDateString()}
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                onClick={() => handleOAuthDisconnect(connection.provider)}
+                                variant="outline"
+                                size="sm"
+                                className="bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all duration-150 h-7 text-xs"
+                              >
+                                Disconnect
+                              </Button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      
+                      {/* Add More Connections */}
+                      {avatarData.oauthConnections && avatarData.oauthConnections.length < oauthProviders.length && (
+                        <div className="mt-4 p-3 bg-blue-900/10 rounded-lg border border-blue-500/30">
+                          <h5 className="text-sm font-medium text-blue-400 mb-2">Add More Connections</h5>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {oauthProviders
+                              .filter(provider => !isProviderConnected(provider.id))
+                              .map((provider) => (
+                                <Button
+                                  key={provider.id}
+                                  onClick={() => handleOAuthLogin(provider.id)}
+                                  variant="outline"
+                                  size="sm"
+                                  className="bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20 transition-all duration-150 h-8 text-xs justify-start"
+                                >
+                                  <span className="mr-2">{provider.icon}</span>
+                                  Connect {provider.name}
+                                </Button>
+                              ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
@@ -1194,7 +1488,7 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                   disabled={
                     (step === 1 && !avatarData.unicornParts) ||
                     (step === 2 && !avatarData.name) ||
-                    (step === 3 && !avatarData.isAuthenticated)
+                    (step === 3 && !(avatarData.isAuthenticated && avatarData.oauthConnections && avatarData.oauthConnections.length > 0))
                   }
                   className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 disabled:opacity-50 h-10 sm:h-auto"
                 >
