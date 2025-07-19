@@ -122,6 +122,7 @@ class FullOrchestratorTest {
     try {
       const result = await executeStep1DatabaseGeneration({
         step0Analysis: step0Output
+        // Removed targetDatabaseProvider - Step 1 now defaults to SQLite for agent apps
       });
 
       const modelCount = result.models.length;
@@ -209,6 +210,11 @@ class FullOrchestratorTest {
         environmentVariables: {
           OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
           NODE_ENV: 'production'
+        },
+        sqliteOptions: {
+          filename: 'test.db',
+          enableWAL: true,
+          enableForeignKeys: true
         }
       });
 
@@ -571,7 +577,7 @@ class FullOrchestratorTest {
       console.log(`   API Endpoints: ${this.deploymentInfo.apiEndpoints.length}`);
       console.log(`   Cron Jobs: ${this.deploymentInfo.cronJobs.length}`);
       console.log(`   Vercel Project: ${this.deploymentInfo.vercelProjectId}`);
-      console.log(`   Neon Project: ${this.deploymentInfo.neonProjectId}`);
+      console.log(`   SQLite Filename: ${this.deploymentInfo.sqliteFilename}`);
       console.log(`   Database URL: ${this.deploymentInfo.databaseUrl ? '[CONFIGURED]' : '[MISSING]'}`);
       
       console.log(`\n📊 Generated API Endpoints:`);
@@ -614,7 +620,6 @@ class FullOrchestratorTest {
 // Environment validation
 function validateEnvironment(): boolean {
   const requiredEnvVars = [
-    'NEON_API_KEY',
     'VERCEL_TOKEN',
     'OPENAI_API_KEY'
   ];

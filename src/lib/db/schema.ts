@@ -136,11 +136,6 @@ export const avatar = pgTable('Avatar', {
   connectedWallet: varchar('connectedWallet', { length: 255 }),
   selectedNFT: varchar('selectedNFT', { length: 255 }),
   unicornParts: json('unicornParts'),
-  // OAuth connection data stored as JSON for backward compatibility
-  oauthConnections: json('oauthConnections'), // Array of OAuthConnection objects
-  // Legacy Shopify fields (kept for backward compatibility)
-  shopifyStore: varchar('shopifyStore', { length: 255 }),
-  accessToken: text('accessToken'), // Encrypted access token
   isActive: boolean('isActive').notNull().default(false),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),

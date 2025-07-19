@@ -3,12 +3,16 @@ import type { Step1Output } from './step1-database-generation';
 import type { Step2Output } from './step2-action-generation';
 import type { Step3Output } from './step3-schedule-generation';
 import type { AgentAction, AgentSchedule } from '../types';
+import { MobileAppTemplate } from './templates/mobile-app-template';
 
 /**
- * STEP 4: Vercel + Neon Deployment
+ * STEP 4: Vercel + SQLite Deployment
  * 
- * Deploy a complete Next.js project with the generated Prisma schema, API endpoints for actions,
- * and cron jobs for schedules to Vercel with Neon PostgreSQL database.
+ * Deploy a complete Next.js project with the generated Prisma schema using SQLite,
+ * API endpoints for actions, and cron jobs for schedules to Vercel.
+ * 
+ * ⚠️ IMPORTANT: SQLite on Vercel is read-only in production and resets on deployment.
+ * For persistent data, consider using Turso, PlanetScale, or another cloud database.
  */
 
 export interface Step4Input {
@@ -18,272 +22,29 @@ export interface Step4Input {
   projectName: string;
   description?: string;
   environmentVariables?: Record<string, string>;
-  region?: 'aws-us-east-1' | 'aws-us-west-2' | 'aws-eu-west-1' | 'aws-ap-southeast-1' | 'aws-us-east-2' | 'aws-eu-central-1'; // Updated to use Neon's AWS-prefixed format
   vercelTeam?: string;
+  sqliteOptions?: {
+    filename?: string; // Default: 'dev.db'
+    enableWAL?: boolean; // Default: true
+    enableForeignKeys?: boolean; // Default: true
+  };
 }
 
 export interface Step4Output {
   deploymentId: string;
-  projectId: string; // Changed from serviceId to projectId
+  projectId: string;
   deploymentUrl: string;
   status: 'pending' | 'building' | 'ready' | 'error';
   buildLogs?: string[];
   environmentVariables: Record<string, string>;
   prismaSchema: string;
   deploymentNotes: string[];
-  apiEndpoints: string[]; // Generated API endpoints
-  cronJobs: string[]; // Generated cron job patterns
+  apiEndpoints: string[];
+  cronJobs: string[];
   databaseUrl: string;
-  neonProjectId: string;
+  sqliteFilename: string;
   vercelProjectId: string;
-}
-
-/**
- * Neon API client for database operations
- */
-class NeonClient {
-  private apiKey: string;
-  private baseUrl = 'https://console.neon.tech/api/v2';
-  private lastRequestTime = 0;
-  private readonly minRequestInterval = 500; // Minimum 500ms between requests
-
-  constructor(apiKey: string) {
-    this.apiKey = apiKey;
-  }
-
-  private async rateLimit(): Promise<void> {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-    
-    if (timeSinceLastRequest < this.minRequestInterval) {
-      const delay = this.minRequestInterval - timeSinceLastRequest;
-      console.log(`⏳ Rate limiting: waiting ${delay}ms before next Neon API call`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-    
-    this.lastRequestTime = Date.now();
-  }
-
-  private async request(endpoint: string, options: RequestInit = {}, retryCount = 0): Promise<any> {
-    const maxRetries = 3;
-    const baseDelay = 2000;
-    
-    await this.rateLimit();
-    
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      ...options,
-      headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-    });
-
-    if (response.status === 429 && retryCount < maxRetries) {
-      const delay = baseDelay * Math.pow(2, retryCount);
-      console.log(`🔄 Rate limited (429). Retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return this.request(endpoint, options, retryCount + 1);
-    }
-
-    if (!response.ok) {
-      let errorDetails = '';
-      try {
-        const errorResponse = await response.text();
-        errorDetails = errorResponse;
-        
-        try {
-          const errorJson = JSON.parse(errorResponse);
-          errorDetails = JSON.stringify(errorJson, null, 2);
-        } catch {
-          // Keep as text if not valid JSON
-        }
-      } catch {
-        errorDetails = 'Unable to read error response body';
-      }
-
-      const enhancedError = new Error(
-        `Neon API error: ${response.status} ${response.statusText}\n` +
-        `Endpoint: ${endpoint}\n` +
-        `Method: ${options.method || 'GET'}\n` +
-        `Response body: ${errorDetails}`
-      );
-      
-      console.error('🔍 Detailed Neon API Error Information:');
-      console.error(`  Status: ${response.status} ${response.statusText}`);
-      console.error(`  Endpoint: ${this.baseUrl}${endpoint}`);
-      console.error(`  Method: ${options.method || 'GET'}`);
-      console.error(`  Response body:`, errorDetails);
-      
-      throw enhancedError;
-    }
-
-    return response.json();
-  }
-
-  async createProject(name: string, region: string = 'us-east-1') {
-    console.log(`🗄️ Creating Neon project: ${name}`);
-    
-    const project = await this.request('/projects', {
-      method: 'POST',
-      body: JSON.stringify({
-        project: {
-          name: name,
-          region_id: region,
-          pg_version: 16,
-          store_passwords: true
-        }
-      }),
-    });
-
-    console.log(`✅ Neon project created: ${project.project.id}`);
-    return project;
-  }
-
-  async getProject(projectId: string) {
-    return this.request(`/projects/${projectId}`);
-  }
-
-  async createDatabase(projectId: string, name: string) {
-    console.log(`🗄️ Creating database: ${name}`);
-    
-    try {
-      // First get the project to find the main branch
-      const project = await this.getProject(projectId);
-      const branchId = project.project.default_branch_id;
-      
-      if (!branchId) {
-        throw new Error('No default branch found in project');
-      }
-      
-      const database = await this.request(`/projects/${projectId}/branches/${branchId}/databases`, {
-        method: 'POST',
-        body: JSON.stringify({
-          database: {
-            name: name,
-            owner_name: 'neondb_owner'
-          }
-        }),
-      });
-
-      console.log(`✅ Database created: ${database.database.name}`);
-      return database;
-    } catch (error) {
-      console.error(`❌ Failed to create database: ${error}`);
-      throw error;
-    }
-  }
-
-  async getConnectionString(projectId: string, databaseName: string = 'neondb') {
-    console.log(`🔗 Retrieving connection URI for project: ${projectId}`);
-    
-    try {
-      // Ensure the database exists
-      console.log(`🔍 Checking if database ${databaseName} exists...`);
-      
-      try {
-        const project = await this.getProject(projectId);
-        const branchId = project.project.default_branch_id;
-        
-        if (!branchId) {
-          throw new Error('No default branch found in project');
-        }
-        
-        const databases = await this.request(`/projects/${projectId}/branches/${branchId}/databases`);
-        const databaseExists = databases.databases.some((db: any) => db.name === databaseName);
-        
-        if (!databaseExists) {
-          console.log(`🗄️ Database ${databaseName} not found, creating it...`);
-          await this.createDatabase(projectId, databaseName);
-        } else {
-          console.log(`✅ Database ${databaseName} already exists`);
-        }
-      } catch (error) {
-        console.warn(`⚠️ Could not check database existence, attempting to create: ${error}`);
-        try {
-          await this.createDatabase(projectId, databaseName);
-        } catch (createError) {
-          console.warn(`🤷 Database creation failed, continuing with default database: ${createError}`);
-        }
-      }
-      
-      // Get connection URI using the proper API endpoint with database_name parameter
-      const connectionResponse = await this.request(`/projects/${projectId}/connection_uri?database_name=${encodeURIComponent(databaseName)}&role_name=neondb_owner`);
-      let connectionString = connectionResponse.uri;
-      
-      if (!connectionString) {
-        throw new Error('No connection URI returned from API');
-      }
-      
-      // Replace the database name in the connection string if needed
-      if (databaseName !== 'neondb' && connectionString) {
-        // Connection string format: postgresql://user:pass@host:port/dbname?params
-        connectionString = connectionString.replace(/\/[^/?]+(\?|$)/, `/${databaseName}$1`);
-      }
-      
-      console.log(`✅ Connection string retrieved successfully`);
-      return connectionString;
-      
-    } catch (error) {
-      console.error(`❌ Failed to retrieve connection URI via API endpoint: ${error}`);
-      
-      // Fallback: try to construct connection string from project details
-      console.log(`🔄 Attempting fallback: constructing connection string from project details...`);
-      
-      try {
-        const project = await this.getProject(projectId);
-        
-        // Get the default branch endpoints to find connection details
-        const branches = await this.request(`/projects/${projectId}/branches`);
-        const mainBranch = branches.branches.find((branch: any) => branch.name === 'main' || branch.primary || branch.id === project.project.default_branch_id);
-        
-        if (!mainBranch) {
-          throw new Error('No main branch found in project');
-        }
-        
-        // Get branch endpoints 
-        const endpoints = await this.request(`/projects/${projectId}/branches/${mainBranch.id}/endpoints`);
-        const primaryEndpoint = endpoints.endpoints.find((ep: any) => ep.type === 'read_write');
-        
-        if (!primaryEndpoint) {
-          throw new Error('No primary endpoint found for main branch');
-        }
-        
-        // Get roles to find the default role
-        const roles = await this.request(`/projects/${projectId}/branches/${mainBranch.id}/roles`);
-        const defaultRole = roles.roles.find((role: any) => role.name === 'neondb_owner') || roles.roles[0];
-        
-        if (!defaultRole) {
-          throw new Error('No roles found for project');
-        }
-        
-        // Get role password
-        const passwordResponse = await this.request(`/projects/${projectId}/branches/${mainBranch.id}/roles/${defaultRole.name}/reveal_password`, {
-          method: 'GET'
-        });
-        
-        // Construct connection string manually
-        const hostname = primaryEndpoint.host;
-        const username = defaultRole.name;
-        const password = passwordResponse.password;
-        const port = 5432;
-        
-        const connectionString = `postgresql://${username}:${password}@${hostname}:${port}/${databaseName}?sslmode=require&channel_binding=require`;
-        
-        console.log(`✅ Connection string constructed from project details`);
-        return connectionString;
-        
-      } catch (fallbackError) {
-        console.error(`❌ Fallback method also failed: ${fallbackError}`);
-        throw new Error(`Failed to retrieve connection string: ${error}. Fallback also failed: ${fallbackError}`);
-      }
-    }
-  }
-
-  async listProjects() {
-    return this.request('/projects');
-  }
+  warnings: string[];
 }
 
 /**
@@ -569,609 +330,63 @@ function validateAndNormalizeSchedules(schedules: AgentSchedule[]): AgentSchedul
     emoji: schedule.emoji || '⏰',
   }));
 }
-
 /**
- * Generate Next.js project files with Prisma integration
+ * Generate Next.js project files using unified MobileAppTemplate
  */
 export async function generateNextJsProject(
   step1Output: Step1Output, 
   step2Output: Step2Output, 
   step3Output: Step3Output, 
-  projectName: string
+  projectName: string,
+  sqliteOptions?: { filename?: string; enableWAL?: boolean; enableForeignKeys?: boolean; }
 ) {
-  console.log('📁 Generating Next.js project files...');
+  console.log('📁 Generating Vercel-optimized Next.js project files...');
   
   const actions = validateAndNormalizeActions(step2Output.actions);
   const schedules = validateAndNormalizeSchedules(step3Output.schedules);
   const models = step1Output.models;
 
-  const files: Record<string, string> = {};
-
-  // Sanitize project name for package.json
-  const sanitizedProjectName = sanitizeVercelProjectName(projectName);
-
-  // Package.json
-  files['package.json'] = JSON.stringify({
-    name: sanitizedProjectName,
-    version: "1.0.0",
-    private: true,
-    scripts: {
-      dev: "next dev",
-      build: "next build",
-      start: "next start",
-      lint: "next lint",
-      "db:generate": "prisma generate",
-      "db:push": "prisma db push",
-      "db:migrate": "prisma migrate dev",
-      "db:studio": "prisma studio",
-      "db:seed": "tsx prisma/seed.ts",
-      postinstall: "prisma generate"
+  // Use unified mobile app template system with Vercel configuration
+  const mobileTemplate = new MobileAppTemplate({
+    projectName,
+    models,
+    actions,
+    schedules,
+    prismaSchema: step1Output.prismaSchema,
+    sqliteOptions,
+    vercelConfig: {
+      cronJobs: schedules.length > 0,
+      aiSdkEnabled: true, // Enable AI SDK for Vercel deployments
+      buildCommand: "npm run vercel-build"
     },
-    dependencies: {
-      "@prisma/client": "^5.7.1",
-      "@types/node": "^20",
-      "@types/react": "^18",
-      "@types/react-dom": "^18",
-      eslint: "^8",
-      "eslint-config-next": "14.0.4",
-      next: "14.0.4",
-      prisma: "^5.7.1",
-      react: "^18",
-      "react-dom": "^18",
-      tailwindcss: "^3.3.0",
-      typescript: "^5",
-      tsx: "^4.6.2",
-      autoprefixer: "^10.0.1",
-      postcss: "^8",
-      "@tailwindcss/forms": "^0.5.7"
+    environmentVariables: {
+      PRISMA_GENERATE_DATAPROXY: "true"
     }
-  }, null, 2);
-
-  // Next.js config
-  files['next.config.js'] = `/** @type {import('next').NextConfig} */
-const nextConfig = {
-  experimental: {
-    serverComponentsExternalPackages: ['@prisma/client']
-  }
-}
-
-module.exports = nextConfig`;
-
-  // TypeScript config
-  files['tsconfig.json'] = JSON.stringify({
-    compilerOptions: {
-      target: "es5",
-      lib: ["dom", "dom.iterable", "es6"],
-      allowJs: true,
-      skipLibCheck: true,
-      strict: true,
-      noEmit: true,
-      esModuleInterop: true,
-      module: "esnext",
-      moduleResolution: "bundler",
-      resolveJsonModule: true,
-      isolatedModules: true,
-      jsx: "preserve",
-      incremental: true,
-      plugins: [
-        {
-          name: "next"
-        }
-      ],
-      paths: {
-        "@/*": ["./src/*"]
-      }
-    },
-    include: ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-    exclude: ["node_modules"]
-  }, null, 2);
-
-  // Tailwind config
-  files['tailwind.config.js'] = `/** @type {import('tailwindcss').Config} */
-module.exports = {
-  content: [
-    './pages/**/*.{js,ts,jsx,tsx,mdx}',
-    './components/**/*.{js,ts,jsx,tsx,mdx}',
-    './app/**/*.{js,ts,jsx,tsx,mdx}',
-    './src/**/*.{js,ts,jsx,tsx,mdx}',
-  ],
-  theme: {
-    extend: {},
-  },
-  plugins: [require('@tailwindcss/forms')],
-}`;
-
-  // PostCSS config
-  files['postcss.config.js'] = `module.exports = {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-}`;
-
-  // Prisma schema
-  files['prisma/schema.prisma'] = step1Output.prismaSchema;
-
-  // Environment example
-  files['.env.example'] = `# Database
-DATABASE_URL="postgresql://user:password@localhost:5432/database"
-
-# Secrets
-NEXTAUTH_SECRET="your-secret-here"
-NEXTAUTH_URL="http://localhost:3000"
-
-# Optional: Add your custom environment variables here`;
-
-  // Prisma seed file
-  files['prisma/seed.ts'] = generateSeedFile(models);
-
-  // API endpoints for actions
-  const apiEndpoints = generateApiEndpoints(actions, models);
-  Object.entries(apiEndpoints).forEach(([path, content]) => {
-    files[`src/pages/api/${path}`] = content;
   });
+  
+  const files = mobileTemplate.generateAllFiles();
 
-  // Cron scripts for schedules
-  const cronScripts = generateCronScripts(schedules, models);
-  Object.entries(cronScripts).forEach(([path, content]) => {
-    files[`src/pages/api/cron/${path}`] = content;
-  });
-
-  // Utility files
-  files['src/lib/prisma.ts'] = generatePrismaClient();
-  files['src/lib/utils/actions.ts'] = generateActionUtilities(actions, models);
-  files['src/lib/utils/schedules.ts'] = generateScheduleUtilities(schedules, models);
-
-  // Main page with dashboard
-  files['src/pages/index.tsx'] = generateMainPage(projectName, models, actions, schedules);
-  files['src/pages/_app.tsx'] = generateAppPage();
-  files['src/styles/globals.css'] = generateGlobalStyles();
-
-  // Vercel configuration
-  files['vercel.json'] = JSON.stringify({
-    functions: {
-      "src/pages/api/cron/*.ts": {
-        maxDuration: 300
-      }
-    },
-    crons: schedules.map(schedule => ({
-      path: `/api/cron/${schedule.name}`,
-      schedule: schedule.interval.pattern
-    }))
-  }, null, 2);
-
-  // README
-  files['README.md'] = generateReadme(projectName, models, actions, schedules);
-
-  console.log(`✅ Generated ${Object.keys(files).length} project files`);
+  console.log(`✅ Generated ${Object.keys(files).length} project files for Vercel deployment`);
   
   return files;
 }
 
-function generateSeedFile(models: any[]): string {
-  return `import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
-
-async function main() {
-  console.log('🌱 Seeding database...')
-  
-  // Add your seed data here
-  console.log('✅ Database seeded successfully')
-}
-
-main()
-  .catch((e) => {
-    console.error('❌ Error seeding database:', e)
-    process.exit(1)
-  })
-  .finally(async () => {
-    await prisma.$disconnect()
-  })`;
-}
-
-function generatePrismaClient(): string {
-  return `import { PrismaClient } from '@prisma/client'
-
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
-
-export const prisma = globalForPrisma.prisma ?? new PrismaClient()
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma`;
-}
-
-function generateApiEndpoints(actions: AgentAction[], models: any[]): Record<string, string> {
-  const endpoints: Record<string, string> = {};
-  
-  actions.forEach(action => {
-    const fileName = `${action.name}.ts`;
-    endpoints[fileName] = `import type { NextApiRequest, NextApiResponse } from 'next'
-import { prisma } from '@/lib/prisma'
-
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  if (req.method !== '${action.results?.actionType === 'query' ? 'GET' : 'POST'}') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
-
-  try {
-    ${generateActionExecutionCode(action)}
-    
-    res.status(200).json({ success: true, data: result })
-  } catch (error) {
-    console.error('Error in ${action.name}:', error)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-}`;
-  });
-
-  return endpoints;
-}
-
-function generateCronScripts(schedules: AgentSchedule[], models: any[]): Record<string, string> {
-  const scripts: Record<string, string> = {};
-  
-  schedules.forEach(schedule => {
-    const fileName = `${schedule.name}.ts`;
-    scripts[fileName] = `import type { NextApiRequest, NextApiResponse } from 'next'
-import { prisma } from '@/lib/prisma'
-
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  // Verify this is a cron request (optional security check)
-  if (req.headers.authorization !== \`Bearer \${process.env.CRON_SECRET}\` && process.env.NODE_ENV === 'production') {
-    return res.status(401).json({ error: 'Unauthorized' })
-  }
-
-  try {
-    console.log('🕐 Running scheduled task: ${schedule.name}')
-    
-    ${generateScheduleExecutionCode(schedule)}
-    
-    console.log('✅ Scheduled task completed: ${schedule.name}')
-    res.status(200).json({ success: true, message: 'Task completed' })
-  } catch (error) {
-    console.error('❌ Error in scheduled task ${schedule.name}:', error)
-    res.status(500).json({ error: 'Internal server error' })
-  }
-}`;
-  });
-
-  return scripts;
-}
-
-function generateActionExecutionCode(action: AgentAction): string {
-  // Generate basic execution code based on action type
-  if (action.results?.actionType === 'query') {
-    return `// Query execution for ${action.name}
-    const result = await prisma.$queryRaw\`SELECT 1 as test\`;`;
-  } else {
-    return `// Mutation execution for ${action.name}
-    const result = { message: 'Action executed successfully' };`;
-  }
-}
-
-function generateScheduleExecutionCode(schedule: AgentSchedule): string {
-  return `// Schedule execution for ${schedule.name}
-    const result = await prisma.$queryRaw\`SELECT NOW() as current_time\`;
-    console.log('Schedule executed at:', result);`;
-}
-
-function generateActionUtilities(actions: AgentAction[], models: any[]): string {
-  return `import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
-
-// Action utilities for ${actions.length} actions
-export const actions = ${JSON.stringify(actions, null, 2)};
-
-export function getActionByName(name: string) {
-  return actions.find(action => action.name === name);
-}
-
-// Execute action with basic database operations
-export async function executeAction(actionName: string, input: any) {
-  const action = getActionByName(actionName);
-  if (!action) {
-    throw new Error(\`Action '\${actionName}' not found\`);
-  }
-
-  console.log(\`🚀 Executing action: \${actionName}\`);
-  
-  try {
-    // Basic execution without AI SDK dependencies
-    const targetModel = action.results?.model;
-    
-    if (action.results?.actionType === 'query' && targetModel) {
-      const result = await (prisma as any)[targetModel.toLowerCase()].findMany({
-        where: input.filters || {},
-        take: input.limit || 100,
-        skip: input.offset || 0,
-      });
-      return result;
-    } else if (action.results?.actionType === 'mutation' && targetModel) {
-      const result = await (prisma as any)[targetModel.toLowerCase()].create({
-        data: input.data || input,
-      });
-      return result;
-    } else {
-      return { 
-        success: true, 
-        message: \`Action '\${actionName}' executed successfully\`,
-        input,
-        timestamp: new Date().toISOString()
-      };
-    }
-  } catch (error) {
-    console.error(\`❌ Error executing action '\${actionName}':\`, error);
-    throw error;
-  }
-}
-
-// Get available models
-export function getAvailableModels() {
-  return ${JSON.stringify(models.map(m => ({ name: m.name, fields: m.fields || [] })), null, 2)};
-}
-
-// Cleanup function
-export async function cleanup() {
-  await prisma.$disconnect();
-}`;
-}
-
-function generateScheduleUtilities(schedules: AgentSchedule[], models: any[]): string {
-  return `import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
-
-// Schedule utilities for ${schedules.length} schedules
-export const schedules = ${JSON.stringify(schedules, null, 2)};
-
-export function getScheduleByName(name: string) {
-  return schedules.find(schedule => schedule.name === name);
-}
-
-// Execute schedule with basic database operations
-export async function executeSchedule(scheduleName: string) {
-  const schedule = getScheduleByName(scheduleName);
-  if (!schedule) {
-    throw new Error(\`Schedule '\${scheduleName}' not found\`);
-  }
-
-  console.log(\`⏰ Executing scheduled task: \${scheduleName}\`);
-  
-  try {
-    // Basic execution without AI SDK dependencies
-    const targetModel = schedule.results?.model;
-    
-    if (targetModel) {
-      const result = await (prisma as any)[targetModel.toLowerCase()].findMany({
-        take: 100,
-        orderBy: { id: 'desc' }
-      });
-      console.log(\`📊 Schedule '\${scheduleName}' found \${result.length} records\`);
-      return result;
-    } else {
-      const result = { 
-        success: true, 
-        message: \`Schedule '\${scheduleName}' executed successfully\`,
-        executedAt: new Date().toISOString(),
-        scheduleName
-      };
-      console.log(\`✅ Schedule completed:\`, result);
-      return result;
-    }
-  } catch (error) {
-    console.error(\`❌ Error executing schedule '\${scheduleName}':\`, error);
-    throw error;
-  }
-}
-
-// Validate schedule configuration
-export function validateSchedule(scheduleName: string): { valid: boolean; errors: string[] } {
-  const schedule = getScheduleByName(scheduleName);
-  if (!schedule) {
-    return { valid: false, errors: [\`Schedule '\${scheduleName}' not found\`] };
-  }
-
-  const errors: string[] = [];
-
-  // Validate cron pattern
-  if (!schedule.interval?.pattern) {
-    errors.push('Schedule must have a valid cron pattern');
-  } else {
-    const parts = schedule.interval.pattern.split(' ');
-    if (parts.length !== 5) {
-      errors.push('Invalid cron pattern - must have 5 parts');
-    }
-  }
-
-  return { valid: errors.length === 0, errors };
-}
-
-// Get available models
-export function getAvailableModels() {
-  return ${JSON.stringify(models.map(m => ({ name: m.name, fields: m.fields || [] })), null, 2)};
-}
-
-// Cleanup function
-export async function cleanup() {
-  await prisma.$disconnect();
-}`;
-}
-
-function generateMainPage(projectName: string, models: any[], actions: AgentAction[], schedules: AgentSchedule[]): string {
-  return `import Head from 'next/head'
-
-export default function Home() {
-  return (
-    <>
-      <Head>
-        <title>${projectName}</title>
-        <meta name="description" content="Generated by Agent Builder" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
-
-      <main className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <h1 className="text-4xl font-bold text-gray-900 sm:text-5xl">
-              ${projectName}
-            </h1>
-            <p className="mt-4 text-xl text-gray-600">
-              Generated by Agent Builder - Deployed with Vercel & Neon
-            </p>
-          </div>
-
-          <div className="mt-12 grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold text-gray-900">Models</h2>
-              <p className="text-sm text-gray-600 mt-2">${models.length} database models</p>
-              <ul className="mt-4 space-y-2">
-                ${models.map(model => `<li className="text-sm">📋 ${model.name}</li>`).join('\n                ')}
-              </ul>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold text-gray-900">Actions</h2>
-              <p className="text-sm text-gray-600 mt-2">${actions.length} API endpoints</p>
-              <ul className="mt-4 space-y-2">
-                ${actions.map(action => `<li className="text-sm">${action.emoji} ${action.name}</li>`).join('\n                ')}
-              </ul>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold text-gray-900">Schedules</h2>
-              <p className="text-sm text-gray-600 mt-2">${schedules.length} cron jobs</p>
-              <ul className="mt-4 space-y-2">
-                ${schedules.map(schedule => `<li className="text-sm">${schedule.emoji} ${schedule.name}</li>`).join('\n                ')}
-              </ul>
-            </div>
-          </div>
-        </div>
-      </main>
-    </>
-  )
-}`;
-}
-
-function generateAppPage(): string {
-  return `import type { AppProps } from 'next/app'
-import '@/styles/globals.css'
-
-export default function App({ Component, pageProps }: AppProps) {
-  return <Component {...pageProps} />
-}`;
-}
-
-function generateGlobalStyles(): string {
-  return `@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
-    Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
-}
-
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-}
-
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}`;
-}
-
-function generateReadme(projectName: string, models: any[], actions: AgentAction[], schedules: AgentSchedule[]): string {
-  return `# ${projectName}
-
-This project was generated by Agent Builder and deployed with Vercel and Neon PostgreSQL.
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Node.js 18+ 
-- A Neon PostgreSQL database
-- Vercel account for deployment
-
-### Local Development
-
-1. Clone this repository
-2. Install dependencies:
-   \`\`\`bash
-   npm install
-   \`\`\`
-
-3. Set up your environment variables:
-   \`\`\`bash
-   cp .env.example .env.local
-   \`\`\`
-
-4. Update your \`.env.local\` with your database URL and other secrets
-
-5. Push the database schema:
-   \`\`\`bash
-   npm run db:push
-   \`\`\`
-
-6. Start the development server:
-   \`\`\`bash
-   npm run dev
-   \`\`\`
-
-## 📊 Database Models
-
-${models.map(model => `- **${model.name}** ${model.emoji}: ${model.description}`).join('\n')}
-
-## 🔧 API Endpoints
-
-${actions.map(action => `- **${action.name}** ${action.emoji}: ${action.description} (\`${action.type}\`)`).join('\n')}
-
-## ⏰ Scheduled Tasks
-
-${schedules.map(schedule => `- **${schedule.name}** ${schedule.emoji}: ${schedule.description} (\`${schedule.interval.pattern}\`)`).join('\n')}
-
-## 🚀 Deployment
-
-This application is automatically deployed to Vercel with:
-- Next.js optimizations
-- Serverless functions for API routes
-- Cron jobs for scheduled tasks
-- Environment variables for secrets
-
-## 📚 Tech Stack
-
-- **Frontend**: Next.js 14, React, TypeScript, Tailwind CSS
-- **Backend**: Next.js API Routes, Prisma ORM
-- **Database**: Neon PostgreSQL
-- **Deployment**: Vercel
-- **Styling**: Tailwind CSS
-
----
-
-Generated by Agent Builder 🤖`;
-}
+// =============================================================================
+// LEGACY FUNCTIONS REMOVED 
+// All file generation is now handled by MobileAppTemplate.generateAllFiles()
+// =============================================================================
+
+// All the following legacy functions have been removed since they're unused:
+// - generateApiEndpoints, generateCronScripts, generateActionUtilities, etc.
+// MobileAppTemplate.generateAllFiles() now handles everything
 
 /**
  * Main deployment function
  */
 export async function executeStep4VercelDeployment(input: Step4Input, onProgress?: (message: string) => void): Promise<Step4Output> {
-  console.log('🚀 Starting Vercel + Neon deployment...');
+  console.log('🚀 Starting Vercel + SQLite deployment...');
   
-  const { step1Output, step2Output, step3Output, projectName, description, environmentVariables = {}, region = 'aws-us-east-1', vercelTeam } = input; // Updated default region
+  const { step1Output, step2Output, step3Output, projectName, description, environmentVariables = {}, vercelTeam, sqliteOptions } = input;
   
   // Helper function to send progress updates
   const sendProgress = (message: string) => {
@@ -1182,41 +397,33 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
   };
   
   // Validate API keys
-  const neonApiKey = process.env.NEON_API_KEY;
   const vercelApiKey = process.env.VERCEL_TOKEN;
-  
-  if (!neonApiKey) {
-    throw new Error('NEON_API_KEY environment variable is required');
-  }
   
   if (!vercelApiKey) {
     throw new Error('VERCEL_TOKEN environment variable is required');
   }
   
   // Initialize clients
-  const neonClient = new NeonClient(neonApiKey);
   const vercelClient = new VercelClient(vercelApiKey, vercelTeam);
   
   try {
-    // Step 1: Create Neon database project
-    sendProgress('📊 Setting up Neon database...');
-    const neonProject = await neonClient.createProject(`${projectName}-db`, region);
-    const neonProjectId = neonProject.project.id;
+    // Step 1: Setup SQLite configuration (for local development)
+    const sqliteFilename = sqliteOptions?.filename || 'dev.db';
+    const databaseUrl = `file:./${sqliteFilename}`;
     
-    // Step 2: Get database connection string
-    const databaseUrl = await neonClient.getConnectionString(neonProjectId);
-    sendProgress('✅ Database connection string obtained');
+    sendProgress('🗄️ Configuring SQLite for local development...');
+    sendProgress('📝 Note: SQLite database will be created locally, Vercel build will handle Prisma migrations');
     
-    // Step 3: Generate Next.js project files
-    sendProgress('📁 Generating project files...');
-    const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName);
-    
-    // Step 4: Create Vercel project
+    // Step 2: Create Vercel project
     sendProgress('🚀 Creating Vercel project...');
     const vercelProject = await vercelClient.createProject(projectName);
     const vercelProjectId = vercelProject.id;
     
-    // Step 5: Set up environment variables
+    // Step 3: Generate Next.js project files
+    sendProgress('📁 Generating project files...');
+    const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName, sqliteOptions);
+    
+    // Step 4: Set up environment variables
     sendProgress('🔧 Configuring environment variables...');
     const allEnvVars = {
       DATABASE_URL: databaseUrl,
@@ -1229,12 +436,13 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     
     await vercelClient.setEnvironmentVariables(vercelProjectId, allEnvVars);
     
-    // Step 6: Deploy the project
+    // Step 5: Deploy the project
     sendProgress('🚀 Uploading and deploying to Vercel...');
+    sendProgress('📦 Build process will generate Prisma schema and handle migrations automatically');
     const deployment = await vercelClient.deployFromFiles(vercelProjectId, projectFiles, allEnvVars);
     const deploymentId = deployment.id;
     
-    // Step 7: Wait for deployment to complete with progress updates
+    // Step 6: Wait for deployment to complete with progress updates
     let deploymentStatus = 'pending';
     let attempts = 0;
     const maxAttempts = 30; // 5 minutes max
@@ -1271,26 +479,35 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     const apiEndpoints = actions.map(action => `${deploymentUrl}/api/${action.name}`);
     const cronJobs = schedules.map(schedule => `${schedule.interval.pattern} - /api/cron/${schedule.name}`);
     
-    const result: Step4Output = {
-      deploymentId,
-      projectId: vercelProjectId, // Changed from serviceId to projectId
-      deploymentUrl,
-      status: deploymentStatus === 'READY' ? 'ready' : deploymentStatus === 'ERROR' ? 'error' : 'pending',
-      environmentVariables: allEnvVars,
-      prismaSchema: step1Output.prismaSchema,
-      deploymentNotes: [
+         const result: Step4Output = {
+       deploymentId,
+       projectId: vercelProjectId,
+       deploymentUrl,
+       status: deploymentStatus === 'READY' ? 'ready' : deploymentStatus === 'ERROR' ? 'error' : 'pending',
+       environmentVariables: allEnvVars,
+       prismaSchema: step1Output.prismaSchema,
+             deploymentNotes: [
         'Deployed to Vercel with Next.js',
-        'Database hosted on Neon PostgreSQL',
+        'SQLite configured for local development',
+        'Prisma schema and migrations handled by Vercel build process',
         'Environment variables configured',
         'Cron jobs set up for scheduled tasks',
         'API endpoints generated for all actions'
       ],
-      apiEndpoints,
-      cronJobs,
-      databaseUrl,
-      neonProjectId,
-      vercelProjectId
-    };
+       apiEndpoints,
+       cronJobs,
+       databaseUrl,
+       sqliteFilename,
+       vercelProjectId,
+       warnings: [
+         '⚠️ IMPORTANT: SQLite on Vercel is read-only in production and resets on each deployment',
+         '⚠️ Data will not persist between deployments or serverless function invocations',
+         '⚠️ For production use, consider migrating to Turso, PlanetScale, or another cloud database',
+         '⚠️ Local development with SQLite will work normally',
+         '📝 Note: SQLite database file is created locally - Vercel build handles Prisma client generation and schema deployment',
+         '📝 For updates: Only Vercel files are updated, local SQLite file remains unchanged'
+       ]
+     };
     
     // Send final completion status
     sendProgress(`🎉 Deployment completed! Live at: ${deploymentUrl}`);
@@ -1333,16 +550,21 @@ export async function updateExistingDeployment(input: {
     // Get existing project
     const existingProject = await vercelClient.getProject(vercelProjectId);
     
-    // Generate updated project files
-    const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName);
+    console.log('📁 Generating updated project files...');
+    console.log('📝 Note: SQLite database file will not be modified, only Vercel files updated');
+    
+    // Generate updated project files (without modifying SQLite)
+    const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName, undefined);
     
     // Update environment variables if provided
     if (Object.keys(environmentVariables).length > 0) {
+      console.log('🔧 Updating environment variables...');
       await vercelClient.setEnvironmentVariables(vercelProjectId, environmentVariables);
     }
     
     // Deploy updated files
     console.log('🚀 Deploying updates to Vercel...');
+    console.log('📦 Build process will auto-generate new Prisma migrations during deployment');
     const deployment = await vercelClient.deployFromFiles(vercelProjectId, projectFiles, environmentVariables);
     
     const deploymentUrl = deployment.url.startsWith('https://') ? deployment.url : `https://${deployment.url}`;
@@ -1356,7 +578,7 @@ export async function updateExistingDeployment(input: {
     
     const result: Step4Output = {
       deploymentId: deployment.id,
-      projectId: vercelProjectId, // Changed from serviceId to projectId
+      projectId: vercelProjectId,
       deploymentUrl,
       status: 'pending',
       environmentVariables: environmentVariables,
@@ -1364,14 +586,17 @@ export async function updateExistingDeployment(input: {
       deploymentNotes: [
         'Updated existing Vercel deployment',
         'New project files deployed',
+        'SQLite database file unchanged (local only)',
+        'Prisma migrations auto-generated during Vercel build',
         'Environment variables updated',
         'Cron jobs reconfigured'
       ],
       apiEndpoints,
       cronJobs,
-      databaseUrl: environmentVariables.DATABASE_URL || '',
-      neonProjectId: '',
-      vercelProjectId
+      databaseUrl: '', // SQLite is local, no external URL
+      sqliteFilename: '', // No external URL for SQLite
+      vercelProjectId,
+      warnings: []
     };
     
     console.log('✅ Deployment update completed!');
@@ -1433,7 +658,7 @@ export function checkDeploymentUpdateNeeded(
  */
 export function validateStep4Output(output: Step4Output): boolean {
   try {
-    if (!output.deploymentId || !output.projectId) { // Changed from serviceId to projectId
+    if (!output.deploymentId || !output.projectId) {
       console.warn('⚠️ Missing deployment ID or project ID');
       return false;
     }
@@ -1468,36 +693,28 @@ export function validateStep4Output(output: Step4Output): boolean {
 export function extractStep4Insights(output: Step4Output) {
   return {
     deploymentId: output.deploymentId,
-    projectId: output.projectId, // Changed from serviceId to projectId
+    projectId: output.projectId,
     deploymentUrl: output.deploymentUrl,
     status: output.status,
     apiEndpointCount: output.apiEndpoints.length,
     cronJobCount: output.cronJobs.length,
     environmentVariableCount: Object.keys(output.environmentVariables).length,
-    hasDatabase: !!output.databaseUrl,
-    neonProjectId: output.neonProjectId,
+    hasDatabase: !!output.databaseUrl, // SQLite is local, no external URL
+    sqliteFilename: output.sqliteFilename,
     vercelProjectId: output.vercelProjectId,
-    deploymentNotes: output.deploymentNotes
+    deploymentNotes: output.deploymentNotes,
+    warnings: output.warnings
   };
 }
 
 /**
- * Test Vercel and Neon API connection for deployment readiness
+ * Test Vercel deployment readiness (SQLite is local, no external service to test)
  */
 export async function testVercelConnection(): Promise<{ success: boolean; message: string; details?: any }> {
-  console.log('🔍 Testing Vercel + Neon deployment readiness...');
+  console.log('🔍 Testing Vercel deployment readiness...');
   
   try {
-    const neonApiKey = process.env.NEON_API_KEY;
     const vercelApiKey = process.env.VERCEL_TOKEN;
-    
-    if (!neonApiKey) {
-      return {
-        success: false,
-        message: 'NEON_API_KEY environment variable is required',
-        details: { missingEnvVars: ['NEON_API_KEY'] }
-      };
-    }
     
     if (!vercelApiKey) {
       return {
@@ -1507,35 +724,31 @@ export async function testVercelConnection(): Promise<{ success: boolean; messag
       };
     }
     
-    // Test Neon API connection
-    const neonClient = new NeonClient(neonApiKey);
-    const neonProjects = await neonClient.listProjects();
-    
     // Test Vercel API connection
     const vercelClient = new VercelClient(vercelApiKey);
     const vercelProjects = await vercelClient.listProjects();
     
-    console.log('✅ Vercel + Neon deployment is ready!');
+    console.log('✅ Vercel deployment is ready!');
     return {
       success: true,
-      message: 'Vercel + Neon deployment is ready! API keys are valid and connections successful.',
+      message: 'Vercel deployment is ready! API keys are valid and connections successful. SQLite will be used locally.',
       details: {
-        neon: {
-          connected: true,
-          projectCount: neonProjects.projects?.length || 0
-        },
         vercel: {
           connected: true,
           projectCount: vercelProjects.projects?.length || 0
+        },
+        database: {
+          type: 'SQLite',
+          note: 'Local file-based database - will be read-only in production on Vercel'
         }
       }
     };
     
   } catch (error) {
-    console.error('❌ Error testing Vercel + Neon deployment readiness:', error);
+    console.error('❌ Error testing Vercel deployment readiness:', error);
     return {
       success: false,
-      message: `Vercel + Neon deployment not ready: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      message: `Vercel deployment not ready: ${error instanceof Error ? error.message : 'Unknown error'}`,
       details: {
         error: error instanceof Error ? error.message : 'Unknown error'
       }
@@ -1560,5 +773,4 @@ export async function getDeploymentMetadata(documentId: string): Promise<any> {
   return null;
 }
 
-// Export the main function with the original name for backwards compatibility
-export { executeStep4VercelDeployment as executeStep4RenderDeployment }; 
+// Note: Render deployment has been removed - we only support Vercel deployment now 

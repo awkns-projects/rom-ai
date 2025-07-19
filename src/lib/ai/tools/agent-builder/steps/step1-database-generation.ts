@@ -15,6 +15,7 @@ export interface Step1Input {
   existingAgent?: AgentData;
   conversationContext?: string;
   command?: string;
+  // Removed targetDatabaseProvider - agent apps are SQLite-only
 }
 
 export interface Step1Output {
@@ -31,21 +32,20 @@ export interface Step1Output {
 export async function executeStep1DatabaseGeneration(
   input: Step1Input
 ): Promise<Step1Output> {
-  console.log('🗄️ STEP 1: Starting database generation and schema analysis...');
+  console.log('🗄️ STEP 1: Starting SQLite database generation and schema analysis...');
   
   const { step0Analysis, existingAgent, conversationContext, command } = input;
   
   try {
-    // Create minimal prompt understanding with only data needed for database generation
-    // const promptUnderstanding = createDatabasePromptUnderstanding(step0Analysis);
-
-    console.log('🏗️ Generating Prisma database with Step 0 context...');
+    console.log('🏗️ Generating SQLite Prisma database with Step 0 context...');
     console.log(`📊 Step 0 Model Analysis: ${step0Analysis.models.filter(m => m.operation === 'create').length} new models, ${step0Analysis.models.filter(m => m.operation === 'update').length} model updates`);
     console.log(`🔍 Model Details: ${step0Analysis.models.length} total models identified in analysis`);
+    console.log(`🗄️ Target Database: SQLite (agent apps are SQLite-only)`);
 
     const databaseResult = await generatePrismaDatabase({
       existingAgent,
       step0Analysis
+      // Removed targetDatabaseProvider - function now defaults to SQLite internally
     });
 
     const result: Step1Output = {

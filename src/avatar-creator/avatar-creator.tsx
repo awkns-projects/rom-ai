@@ -63,6 +63,13 @@ interface AvatarData {
 
 interface AvatarCreatorProps {
   documentId?: string
+  externalApiMetadata?: {
+    provider: string | null;
+    requiresConnection: boolean;
+    connectionType: 'oauth' | 'api_key' | 'none';
+    primaryUseCase: string;
+    requiredScopes: string[];
+  };
 }
 
 const oauthProviders = [
@@ -140,6 +147,65 @@ const oauthProviders = [
   }
 ] as const
 
+// Mapping between Step 0 analysis provider names and OAuth provider IDs
+const providerMapping: Record<string, string> = {
+  'gmail': 'google',
+  'google': 'google',
+  'google-drive': 'google',
+  'google-calendar': 'google',
+  'github': 'github-oauth',
+  'github-oauth': 'github-oauth',
+  'linkedin': 'linkedin',
+  'notion': 'notion',
+  'instagram': 'instagram',
+  'facebook': 'facebook',
+  'shopify': 'shopify',
+  'threads': 'threads',
+  'slack': 'slack', // Note: Slack is not in the current providers list but could be added
+  'stripe': 'stripe', // Note: Stripe uses API key, not OAuth
+  'salesforce': 'salesforce', // Note: Salesforce is not in current providers list
+};
+
+// Function to get relevant OAuth providers based on external API metadata
+const getRelevantOAuthProviders = (externalApiMetadata?: AvatarCreatorProps['externalApiMetadata']) => {
+  // If no external API metadata or no external API required, show no OAuth providers
+  if (!externalApiMetadata || !externalApiMetadata.requiresConnection || !externalApiMetadata.provider) {
+    console.log('🔍 No external API required or no metadata provided - hiding OAuth providers');
+    return [];
+  }
+
+  // If connection type is not OAuth, don't show OAuth providers
+  if (externalApiMetadata.connectionType !== 'oauth') {
+    console.log(`🔍 External API "${externalApiMetadata.provider}" uses ${externalApiMetadata.connectionType}, not OAuth - hiding OAuth providers`);
+    return [];
+  }
+
+  // Map the Step 0 provider to OAuth provider ID
+  const mappedProviderId = providerMapping[externalApiMetadata.provider.toLowerCase()];
+  
+  if (!mappedProviderId) {
+    console.warn(`⚠️ No OAuth provider mapping found for "${externalApiMetadata.provider}" - hiding OAuth providers`);
+    return [];
+  }
+
+  // Find the OAuth provider that matches
+  const relevantProvider = oauthProviders.find(provider => provider.id === mappedProviderId);
+  
+  if (!relevantProvider) {
+    console.warn(`⚠️ OAuth provider "${mappedProviderId}" not found in available providers - hiding OAuth providers`);
+    return [];
+  }
+
+  console.log(`✅ Found relevant OAuth provider for "${externalApiMetadata.provider}": ${relevantProvider.name}`, {
+    provider: externalApiMetadata.provider,
+    mappedTo: mappedProviderId,
+    oauthProvider: relevantProvider.name,
+    primaryUseCase: externalApiMetadata.primaryUseCase
+  });
+
+  return [relevantProvider];
+};
+
 const artStyles = [
   { id: "ghibli", name: "Studio Ghibli", description: "Magical anime style" },
   { id: "dragonball", name: "Dragon Ball", description: "Bold anime style" },
@@ -188,7 +254,7 @@ const generateRandomUnicorn = (): UnicornParts => {
   }
 }
 
-export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
+export default function AvatarCreator({ documentId, externalApiMetadata }: AvatarCreatorProps = {}) {
   const [step, setStep] = useState(1)
   const [avatarData, setAvatarData] = useState<AvatarData>({
     isAuthenticated: false,
@@ -198,6 +264,18 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
     customType: "upload",
     oauthConnections: [],
   })
+
+  // Get filtered OAuth providers based on external API metadata
+  const relevantOAuthProviders = getRelevantOAuthProviders(externalApiMetadata);
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('🎨 AvatarCreator - External API Metadata:', {
+      externalApiMetadata,
+      relevantProvidersCount: relevantOAuthProviders.length,
+      relevantProviders: relevantOAuthProviders.map(p => p.name)
+    });
+  }, [externalApiMetadata, relevantOAuthProviders]);
 
   const [isCreating, setIsCreating] = useState(false)
   const [creationProgress, setCreationProgress] = useState(0)
@@ -553,7 +631,8 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
       if (updatedAvatarData.connectedWallet) avatarPayload.connectedWallet = updatedAvatarData.connectedWallet;
       if (updatedAvatarData.selectedNFT) avatarPayload.selectedNFT = updatedAvatarData.selectedNFT;
       if (updatedAvatarData.oauthConnections && updatedAvatarData.oauthConnections.length > 0) {
-        avatarPayload.oauthConnections = updatedAvatarData.oauthConnections;
+        // OAuth connections are now stored in a separate table, not in avatar payload
+        // avatarPayload.oauthConnections = updatedAvatarData.oauthConnections;
       }
       
       console.log("Avatar payload being sent:", JSON.stringify(avatarPayload, null, 2));
@@ -1106,9 +1185,15 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                           <span className="text-blue-400 text-2xl sm:text-3xl">🔗</span>
                         </div>
                         <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-2">OAuth Connections</h4>
-                        <p className="text-sm text-gray-400 mb-4">Securely connect your social media and business accounts</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {oauthProviders.map((provider) => (
+                        <p className="text-sm text-gray-400 mb-4">
+                          {relevantOAuthProviders.length > 0 
+                            ? `Connect the required ${relevantOAuthProviders[0].name} account for your agent`
+                            : "No external API connections required for this agent"
+                          }
+                        </p>
+                        {relevantOAuthProviders.length > 0 ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {relevantOAuthProviders.map((provider) => (
                             <Button
                               key={provider.id}
                               onClick={() => handleOAuthLogin(provider.id)}
@@ -1128,7 +1213,19 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                               </div>
                             </Button>
                           ))}
-                        </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-4">
+                            <div className="text-gray-400 text-sm">
+                              This agent doesn't require external API connections.
+                              {externalApiMetadata?.connectionType === 'api_key' && (
+                                <div className="mt-2 text-xs">
+                                  Note: This agent uses API key authentication which will be configured during deployment.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1273,11 +1370,11 @@ export default function AvatarCreator({ documentId }: AvatarCreatorProps = {}) {
                       </div>
                       
                       {/* Add More Connections */}
-                      {avatarData.oauthConnections && avatarData.oauthConnections.length < oauthProviders.length && (
+                      {avatarData.oauthConnections && avatarData.oauthConnections.length < relevantOAuthProviders.length && (
                         <div className="mt-4 p-3 bg-blue-900/10 rounded-lg border border-blue-500/30">
                           <h5 className="text-sm font-medium text-blue-400 mb-2">Add More Connections</h5>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {oauthProviders
+                            {relevantOAuthProviders
                               .filter(provider => !isProviderConnected(provider.id))
                               .map((provider) => (
                                 <Button

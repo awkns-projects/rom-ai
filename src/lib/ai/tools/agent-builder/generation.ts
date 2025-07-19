@@ -3562,16 +3562,20 @@ const prismaSchemaGenerationSchema = z.object({
 });
 
 export async function generatePrismaSchema({
-  step0Analysis,
+  step0Analysis
 }: {
-  step0Analysis?: Step0Output,
+  step0Analysis?: Step0Output
 }): Promise<string> {
-  console.log('🗄️ Starting Prisma schema generation with official Prisma logic...');
+  console.log('🗄️ Starting SQLite Prisma schema generation...');
+  console.log(`📊 Agent apps use SQLite exclusively for mobile compatibility`);
 
   if (!step0Analysis) {
     throw new Error('step0Analysis is required for Prisma schema generation');
   }
 
+  // Agent apps always use SQLite
+  const targetDatabaseProvider = 'sqlite';
+  
   const model = await getAgentBuilderModel();
   
   // Extract business context from Step 0 analysis
@@ -3624,7 +3628,7 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    }
 
    datasource db {
-     provider = "postgresql"
+     provider = "${targetDatabaseProvider}"
      url      = env("DATABASE_URL")
    }
    \`\`\`
@@ -3758,11 +3762,15 @@ export async function generatePrismaDatabase({
   existingAgent?: AgentData,
   step0Analysis?: Step0Output
 }) {
+  // Agent apps always use SQLite
+  const targetDatabaseProvider = 'sqlite';
+  
   // Get the existing Prisma schema if available
   const existingSchema = (existingAgent as any)?.prismaSchema || '';
   const hasExistingSchema = existingSchema.length > 0 || (existingAgent?.models?.length || 0) > 0;
   
-  console.log('🏗️ Prisma Database Generation Strategy:');
+  console.log('🏗️ SQLite Prisma Database Generation Strategy:');
+  console.log('📋 Agent apps use SQLite exclusively for mobile compatibility');
   if (hasExistingSchema) {
     const existingModels = existingAgent?.models || [];
     console.log(`📋 Using existing Prisma schema as foundation (${existingModels.length} existing models)`);
@@ -3808,11 +3816,14 @@ export async function generatePrismaDatabase({
 async function generateIntelligentMergedSchema({
   existingSchema,
   step0Analysis,
+  targetDatabaseProvider = 'postgresql'
 }: {
   existingSchema: string,
   step0Analysis: Step0Output,
+  targetDatabaseProvider?: 'postgresql' | 'sqlite' | 'mysql'
 }): Promise<string> {
   console.log('🤖 Using AI to intelligently merge existing schema with Step 0 analysis...');
+  console.log(`📊 Target Database Provider: ${targetDatabaseProvider}`);
   
   const model = await getAgentBuilderModel();
   
@@ -3892,7 +3903,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "${targetDatabaseProvider}"
   url      = env("DATABASE_URL")
 }
 \`\`\`
