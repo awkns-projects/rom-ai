@@ -410,7 +410,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
       console.log('⚪ Skipping main content update (metadata only)');
     }
     
-    // Always save to database metadata for persistence (lightweight)
+    // Enhanced database save with better error handling
     if (documentId && documentId !== 'init') {
       try {
         console.log('🔍 SAVE DEBUG - Attempting database save:', {
@@ -423,7 +423,11 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
           avatarData: data,
           step: currentStep,
         });
-        console.log('✅ Avatar data saved to database metadata only');
+        console.log('✅ Avatar data saved to database metadata successfully');
+        
+        // Clear any previous error state
+        setHasUnsavedChanges(false);
+        
       } catch (error) {
         console.error("❌ Failed to save to database metadata:", error);
         console.error("🔍 SAVE ERROR DEBUG:", {
@@ -432,23 +436,15 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
           errorType: error instanceof Error ? error.constructor.name : typeof error,
           errorMessage: error instanceof Error ? error.message : String(error),
           endpoint: `/api/document?id=${documentId}`,
-          suggestion: "Check if this documentId exists in the database"
+          suggestion: "The save function now includes retry logic and document creation"
         });
         
-        // Try to get more information about the document
-        if (documentId && documentId !== 'init') {
-          console.log('🔍 Attempting to verify document exists with GET request...');
-          try {
-            const response = await fetch(`/api/document?id=${documentId}`);
-            console.log('🔍 Document verification response:', {
-              status: response.status,
-              statusText: response.statusText,
-              url: response.url
-            });
-          } catch (verifyError) {
-            console.log('🔍 Document verification failed:', verifyError);
-          }
-        }
+        // Don't throw the error - let the user continue working
+        // The retry mechanism in saveAvatarCreatorState will handle most cases
+        console.log('⚠️ Avatar save failed, but user can continue working. Data will be retried automatically.');
+        
+        // Set a flag to indicate unsaved changes
+        setHasUnsavedChanges(true);
       }
     } else {
       console.log('⚪ Skipping database save - no valid document ID yet:', {
@@ -457,13 +453,22 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
         isNull: documentId === null,
         isInit: documentId === 'init',
         isEmpty: documentId === '',
-        actualValue: JSON.stringify(documentId)
+        actualValue: JSON.stringify(documentId),
+        suggestion: "Document might still be initializing - this is normal for new conversations"
       });
-    }
-    
-    setLastSaved(new Date())
-    setHasUnsavedChanges(false)
-  }, [documentId, onAvatarChange])
+      
+      // For missing documentId, still update the main content
+      if (onAvatarChange) {
+        onAvatarChange(agentAvatarData);
+        console.log('✅ Avatar data updated in main content (no database save)');
+      }
+      
+      // Still mark as saved if we updated the main content
+      setHasUnsavedChanges(false);
+         }
+     
+     setLastSaved(new Date())
+   }, [documentId, onAvatarChange])
 
   // Load from database on mount, then merge with agentData if available
   useEffect(() => {
