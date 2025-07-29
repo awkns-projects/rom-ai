@@ -168,6 +168,7 @@ export async function saveAvatarCreatorState(
   state: {
     avatarData?: any;
     step?: number;
+    theme?: string; // ADDED: Support for theme data
   }
 ): Promise<void> {
   try {
@@ -226,6 +227,8 @@ export async function saveAvatarCreatorState(
                   createdAt: new Date().toISOString(),
                   // Include the avatar data in the initial content
                   ...(state.avatarData && { avatar: state.avatarData }),
+                  // Include the theme data in the initial content
+                  ...(state.theme && { theme: state.theme }),
                 }, null, 2),
                 kind: 'agent',
               }),
@@ -293,6 +296,7 @@ export async function loadAvatarCreatorState(
 ): Promise<{
   avatarData?: any;
   step?: number;
+  theme?: string; // ADDED: Support for theme data
 } | null> {
   try {
     console.log('🔍 Loading avatar creator state for document:', documentId);

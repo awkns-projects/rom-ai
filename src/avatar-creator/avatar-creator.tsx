@@ -274,7 +274,16 @@ const generateRandomUnicorn = (): UnicornParts => {
 
 export default function AvatarCreator({ documentId, externalApisMetadata, agentData, onAvatarChange, onThemeChange }: AvatarCreatorProps = {}) {
   const [step, setStep] = useState(1)
-  const [currentTheme, setCurrentTheme] = useState<string>(agentData?.theme || 'green') // ADDED: Track current theme
+  const [currentTheme, setCurrentTheme] = useState<string>(() => {
+    const initialTheme = agentData?.theme || 'green';
+    console.log('🎨 AvatarCreator - Initializing theme state:', {
+      agentDataTheme: agentData?.theme,
+      hasAgentData: !!agentData,
+      initialTheme,
+      fallbackUsed: !agentData?.theme
+    });
+    return initialTheme;
+  }); // ADDED: Track current theme
   const [showMatrixBox, setShowMatrixBox] = useState(false) // ADDED: Explicit Matrix Box control - will be set in useEffect
   // Initialize avatar data - will be updated from database if available
   const [avatarData, setAvatarData] = useState<AvatarData>(() => {
@@ -390,7 +399,11 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
       step: currentStep,
       type: data.type,
       hasConnections: data.oauthConnections?.length || 0,
-      updateContent // ADDED: Flag to control whether to update main content
+      updateContent, // ADDED: Flag to control whether to update main content
+      // ADDED: Theme debugging
+      currentTheme,
+      themeToSave: currentTheme,
+      themeType: typeof currentTheme
     });
     
     // Convert avatar data to agent avatar format
@@ -422,8 +435,13 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
         await saveAvatarCreatorState(documentId, {
           avatarData: data,
           step: currentStep,
+          // CRITICAL FIX: Include theme data in database save
+          theme: currentTheme,
         });
-        console.log('✅ Avatar data saved to database metadata successfully');
+        console.log('✅ Avatar data and theme saved to database metadata successfully:', {
+          hasTheme: !!currentTheme,
+          theme: currentTheme
+        });
         
         // Clear any previous error state
         setHasUnsavedChanges(false);
@@ -468,7 +486,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
          }
      
      setLastSaved(new Date())
-   }, [documentId, onAvatarChange])
+   }, [documentId, onAvatarChange, currentTheme])
 
   // Load from database on mount, then merge with agentData if available
   useEffect(() => {
@@ -519,6 +537,31 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
         }
         
         setAvatarData(finalAvatarData);
+        
+        // CRITICAL FIX: Restore theme from saved state or agentData
+        if (savedState?.theme) {
+          console.log("🎨 Restoring theme from database:", {
+            savedTheme: savedState.theme,
+            savedThemeType: typeof savedState.theme,
+            currentTheme,
+            willChangeTheme: savedState.theme !== currentTheme
+          });
+          setCurrentTheme(savedState.theme);
+        } else if (agentData?.theme) {
+          console.log("🎨 Loading theme from agentData:", {
+            agentTheme: agentData.theme,
+            agentThemeType: typeof agentData.theme,
+            currentTheme,
+            willChangeTheme: agentData.theme !== currentTheme
+          });
+          setCurrentTheme(agentData.theme);
+        } else {
+          console.log("🎨 No saved theme found, using default:", {
+            currentTheme,
+            defaultTheme: 'green'
+          });
+        }
+        
         setHasLoadedFromDatabase(true);
         setLastSaved(new Date());
         
@@ -1034,6 +1077,31 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
       return <span className="text-4xl text-gray-400">🦄</span>
     }
   }
+
+  // Theme selection handler with immediate save
+  const handleThemeSelect = useCallback((theme: string) => {
+    console.log('🎨 Theme selected:', theme);
+    console.log('🎨 Theme selection debug:', {
+      receivedTheme: theme,
+      themeType: typeof theme,
+      currentTheme,
+      previousTheme: currentTheme
+    });
+    
+    setCurrentTheme(theme);
+    
+    // Immediately sync theme to main content to trigger preservation logic
+    if (syncThemeToMainContent(theme)) {
+      console.log('✅ Theme synced to main content immediately');
+      
+      // Also save to database metadata immediately
+      if (documentId && documentId !== 'init') {
+        saveToDatabase(avatarData, step, false).catch(error => {
+          console.error('❌ Failed to save theme to database:', error);
+        });
+      }
+    }
+  }, [syncThemeToMainContent, documentId, avatarData, step, saveToDatabase, currentTheme]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-100 p-3 sm:p-6 font-mono">
@@ -1844,21 +1912,19 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
                           ]
                         } as any)}
                         onThemeChange={(theme) => {
-                          // FIXED: Properly track and save theme changes
+                          // FIXED: Use the new handler that includes immediate saving
                           console.log("🎨 Avatar Creator - Theme changed to:", theme);
                           console.log("🎨 Previous theme:", currentTheme);
+                          console.log("🎨 Theme change flow debug:", {
+                            receivedFromMobileDemo: theme,
+                            receivedType: typeof theme,
+                            currentAvatarCreatorTheme: currentTheme,
+                            isNewTheme: theme !== currentTheme,
+                            agentDataTheme: agentData?.theme
+                          });
                           
-                          // Update local theme state
-                          setCurrentTheme(theme);
-                          
-                          // Immediately sync theme to main content for better UX
-                          if (onThemeChange) {
-                            console.log("🎨 Calling onThemeChange callback with:", theme);
-                            onThemeChange(theme);
-                            console.log("✅ Theme change propagated to main agent data");
-                          } else {
-                            console.warn("⚠️ onThemeChange callback not available");
-                          }
+                          // Use the comprehensive theme handler
+                          handleThemeSelect(theme);
                         }}
                         onDataChange={(updatedAgentData) => {
                           // FIXED: Handle other data changes if needed
