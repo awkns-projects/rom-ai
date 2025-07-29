@@ -122,6 +122,87 @@ export const prismaActionsSchema = z.object({
     description: z.string().describe('Detailed description of what this action does and its business purpose'),
     type: z.enum(['query', 'mutation']).describe('Action type - query for reading data, mutation for writing data'),
     role: z.enum(['admin', 'member']).describe('Role required to execute this action'),
+    
+    // Mindmap Editor Fields
+    pseudoSteps: z.array(z.object({
+      id: z.string().describe('Unique identifier for the step'),
+      inputFields: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+        type: z.string(),
+        kind: z.enum(['scalar', 'object', 'enum']),
+        required: z.boolean(),
+        list: z.boolean(),
+        relationModel: z.string().optional(),
+        description: z.string().optional(),
+        defaultValue: z.string().optional()
+      })).describe('Input fields required for this step'),
+      outputFields: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+        type: z.string(),
+        kind: z.enum(['scalar', 'object', 'enum']),
+        required: z.boolean(),
+        list: z.boolean(),
+        relationModel: z.string().optional(),
+        description: z.string().optional(),
+        defaultValue: z.string().optional()
+      })).describe('Output fields produced by this step'),
+      description: z.string().describe('Clear description of what this step does'),
+      type: z.enum(['Database find unique', 'Database find many', 'Database update unique', 'Database update many', 'Database create', 'Database create many', 'Database delete unique', 'Database delete many', 'call external api', 'ai analysis']).describe('Type of operation this step performs')
+    })).optional().describe('Step-by-step breakdown of the action logic for mindmap visualization'),
+    
+    uiComponentsDesign: z.array(z.object({
+      id: z.string().describe('Unique identifier for the UI component'),
+      stepNumber: z.number().describe('Which step this component belongs to'),
+      type: z.enum(['input', 'select', 'textarea', 'checkbox', 'date', 'number', 'email', 'phone']).describe('Type of input component'),
+      label: z.string().describe('User-friendly label for the input'),
+      name: z.string().describe('Field name for form submission'),
+      description: z.string().describe('Help text explaining what this field is for'),
+      required: z.boolean().describe('Whether this field is required'),
+      placeholder: z.string().optional().describe('Placeholder text for the input'),
+      options: z.array(z.object({
+        value: z.string(),
+        label: z.string(),
+        description: z.string().optional()
+      })).optional().describe('Options for select/radio components'),
+      validation: z.object({
+        minLength: z.number().optional(),
+        maxLength: z.number().optional(),
+        pattern: z.string().optional(),
+        min: z.number().optional(),
+        max: z.number().optional()
+      }).optional().describe('Validation rules for the input'),
+      defaultValue: z.string().optional().describe('Default value for the input')
+    })).optional().describe('UI form components needed to collect user input for this action'),
+    
+    testCases: z.array(z.object({
+      id: z.string().describe('Unique identifier for the test case'),
+      description: z.string().describe('Description of what this test case validates'),
+      inputFields: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+        type: z.string(),
+        kind: z.enum(['scalar', 'object', 'enum']),
+        required: z.boolean(),
+        list: z.boolean(),
+        relationModel: z.string().optional(),
+        description: z.string().optional(),
+        defaultValue: z.string().optional()
+      })).describe('Test input data'),
+      expectedOutputFields: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+        type: z.string(),
+        kind: z.enum(['scalar', 'object', 'enum']),
+        required: z.boolean(),
+        list: z.boolean(),
+        relationModel: z.string().optional(),
+        description: z.string().optional(),
+        defaultValue: z.string().optional()
+      })).describe('Expected output data')
+    })).optional().describe('Test cases to validate the action behavior'),
+    
     dataSource: z.object({
       type: z.enum(['custom', 'database']).describe('Data source type'),
       customFunction: z.object({
@@ -338,69 +419,76 @@ export const promptUnderstandingSchema = z.object({
   })
 });
 
-// Schema for schedules
+// Schema for schedules - Mindmap Editor Compatible
 export const unifiedSchedulesSchema = z.object({
   schedules: z.array(z.object({
     id: z.string().describe('Unique identifier for the schedule'),
     name: z.string().describe('Name of the schedule'),
     emoji: z.string().optional().describe('Single emoji that visually represents this schedule (e.g., ⏰ for daily tasks, 📊 for reports, 🔄 for sync)'),
     description: z.string().describe('Detailed description of what this schedule does and its business purpose'),
-    type: z.enum(['query', 'mutation']).describe('Schedule type - query for reading data, mutation for writing data'),
     role: z.enum(['admin', 'member']).describe('Role required to execute this schedule'),
-    interval: z.object({
-      pattern: z.string().describe('Cron pattern or human-readable schedule (e.g., "daily", "weekly", "0 9 * * *")'),
-      timezone: z.string().optional().describe('Timezone for the schedule'),
-      active: z.boolean().optional().describe('Whether the schedule is active')
-    }).describe('Scheduling configuration'),
-    dataSource: z.object({
-      type: z.enum(['custom', 'database']).describe('Data source type'),
-      customFunction: z.object({
-        code: z.string().describe('JavaScript code for custom data fetching'),
-        envVars: z.array(z.object({
-          name: z.string(),
-          description: z.string(),
-          required: z.boolean(),
-          sensitive: z.boolean()
-        })).optional().describe('Environment variables needed for the custom function')
-      }).nullable().optional().describe('Custom function configuration if type is custom'),
-      database: z.object({
-        models: z.array(z.object({
-          id: z.string(),
-          name: z.string(),
-          fields: z.array(z.object({
-            id: z.string(),
-            name: z.string()
-          })),
-          where: z.record(z.any()).optional(),
-          limit: z.number().optional()
-        }))
-      }).nullable().optional().describe('Database models configuration if type is database')
-    }).describe('Configuration for how data is sourced'),
-    execute: z.object({
-      type: z.enum(['code', 'prompt']).describe('Execution type - code or AI prompt'),
-      code: z.object({
-        script: z.string().describe('JavaScript code to execute'),
-        envVars: z.array(z.object({
-          name: z.string(),
-          description: z.string(),
-          required: z.boolean(),
-          sensitive: z.boolean()
-        })).optional().describe('Environment variables needed for the script')
-      }).optional().describe('Code execution configuration if type is code'),
-      prompt: z.object({
-        template: z.string().describe('AI prompt template'),
-        model: z.string().optional().describe('AI model to use'),
-        temperature: z.number().optional().describe('Temperature for AI generation'),
-        maxTokens: z.number().optional().describe('Maximum tokens for AI response')
-      }).nullable().optional().describe('AI prompt configuration if type is prompt')
-    }).optional().describe('Configuration for how the schedule is executed'),
-    results: z.object({
-      actionType: z.enum(['query', 'mutation']).describe('Type of action result'),
-      model: z.string().describe('Target model for the results'),
-      identifierIds: z.array(z.string()).optional().describe('Fields that identify existing records for updates'),
-      fields: z.record(z.any()).optional().describe('Fields to set for Create actions'),
-      fieldsToUpdate: z.record(z.any()).optional().describe('Fields to update for Update actions')
-    }).optional().describe('Configuration for how results are processed')
+    
+    // Mindmap Editor Trigger Configuration
+    trigger: z.object({
+      type: z.enum(['cron', 'interval', 'date', 'manual']).describe('Type of trigger for the schedule'),
+      pattern: z.string().optional().describe('Cron expression for cron type (e.g., "0 9 * * *" for 9 AM daily)'),
+      interval: z.object({
+        value: z.number().describe('Interval value (e.g., 30 for every 30 minutes)'),
+        unit: z.enum(['minutes', 'hours', 'days', 'weeks']).describe('Interval unit')
+      }).optional().describe('Interval configuration for interval type'),
+      date: z.string().optional().describe('ISO date string for one-time execution'),
+      timezone: z.string().optional().describe('Timezone for the schedule (default: UTC)'),
+      active: z.boolean().optional().describe('Whether the schedule is active (default: false)')
+    }).describe('Trigger configuration defining when the schedule runs'),
+    
+    // Action Chain Steps (references to existing actions)
+    steps: z.array(z.object({
+      id: z.string().describe('Unique identifier for this step'),
+      actionId: z.string().describe('ID of the existing action to execute in this step'),
+      name: z.string().describe('Display name for this step'),
+      description: z.string().optional().describe('Description of what this step does'),
+      delay: z.object({
+        duration: z.number().describe('Delay duration in milliseconds'),
+        unit: z.enum(['seconds', 'minutes', 'hours']).describe('Unit for display purposes')
+      }).optional().describe('Delay before executing this step'),
+      inputMapping: z.record(z.any()).optional().describe('How to map inputs to this action from previous steps'),
+      condition: z.object({
+        type: z.enum(['always', 'if', 'unless']).describe('Condition type for executing this step'),
+        expression: z.string().optional().describe('Conditional expression (future feature)')
+      }).optional().describe('Conditions for executing this step'),
+      onError: z.object({
+        action: z.enum(['stop', 'continue', 'retry']).describe('What to do if this step fails'),
+        retryCount: z.number().optional().describe('Number of retries if action is retry'),
+        retryDelay: z.number().optional().describe('Delay between retries in milliseconds')
+      }).optional().describe('Error handling configuration for this step')
+    })).describe('Chain of action steps to execute in order'),
+    
+    // Global configuration for the entire chain
+    globalInputs: z.record(z.any()).optional().describe('Global inputs available to all steps in the chain'),
+    environment: z.object({
+      envVars: z.array(z.object({
+        name: z.string(),
+        description: z.string(),
+        required: z.boolean(),
+        sensitive: z.boolean()
+      }))
+    }).optional().describe('Environment variables for the entire schedule chain'),
+    
+    // Execution history and results (will be populated at runtime)
+    lastExecution: z.object({
+      timestamp: z.string(),
+      success: z.boolean(),
+      duration: z.number(),
+      stepsCompleted: z.number(),
+      totalSteps: z.number(),
+      error: z.string().optional(),
+      results: z.record(z.any()).optional()
+    }).optional().describe('Last execution results (populated at runtime)'),
+    
+    // Metadata
+    createdAt: z.string().optional().describe('Creation timestamp'),
+    updatedAt: z.string().optional().describe('Last update timestamp'),
+    version: z.number().optional().describe('Version number for change tracking')
   }))
 });
 

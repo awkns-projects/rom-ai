@@ -23,6 +23,7 @@ import type { UseChatHelpers } from '@ai-sdk/react';
 import { useArtifact } from '@/hooks/use-artifact';
 import useSWR from 'swr';
 import { LoaderIcon } from './icons';
+import { MobileAppDemo } from '@/artifacts/agent/components/MobileAppDemo';
 
 // Agent Builder Loading Component
 const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persistedMetadata }: { 
@@ -578,8 +579,8 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
         boundingBox: {
           top: 0,
           left: 0,
-          width: 0,
-          height: 0,
+          width: typeof window !== 'undefined' ? window.innerWidth : 1920,
+          height: typeof window !== 'undefined' ? window.innerHeight : 1080,
         },
       });
     }
@@ -765,7 +766,22 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
             </div>
           )}
 
-          {/* Success Message - Removed: raw JSON was confusing to users */}
+          {/* App Preview */}
+          <div className="space-y-3">
+            <h4 className="font-semibold text-green-100 text-sm font-mono">📱 APP PREVIEW</h4>
+            <div className="bg-zinc-900/30 border border-green-500/10 rounded-xl p-4">
+              <p className="text-green-200/70 text-xs font-mono mb-4 text-center">
+                Interactive preview of your deployed application
+              </p>
+              <div className="flex justify-center">
+                <MobileAppDemo 
+                  agentData={agentData} 
+                  currentTheme="green" 
+                  viewMode="mobile"
+                />
+              </div>
+            </div>
+          </div>
 
           {/* Action Buttons */}
           <div className="flex flex-col sm:flex-row gap-3">

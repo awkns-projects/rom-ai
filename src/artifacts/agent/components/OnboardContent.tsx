@@ -24,37 +24,57 @@ const DemoWithTab = memo(({ agentData, currentTheme, viewMode, targetTab, onData
 }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [key, setKey] = useState(0);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   // Force re-render when targetTab changes to reset the component state
   useEffect(() => {
     setKey(prev => prev + 1);
+    setHasInitialized(false);
   }, [targetTab]);
 
-  // Set the correct tab after component mounts
+  // Set the correct tab after component mounts - but only once and more safely
   useEffect(() => {
+    if (hasInitialized) return;
+    
     const timer = setTimeout(() => {
       if (containerRef.current) {
-        // Look for tab buttons within this specific demo instance
-        const tabButtons = containerRef.current.querySelectorAll('button');
-        // Find the tab button by looking for the one that contains the tab content we want
-        const targetButton = Array.from(tabButtons).find((button, index) => {
-          // The tab buttons are typically in a specific order: Dashboard(0), Models(1), Schedules(2), Chat(3)
-          const buttonText = button.textContent?.toLowerCase() || '';
-          if (targetTab === 0 && buttonText.includes('dashboard')) return true;
-          if (targetTab === 1 && buttonText.includes('models')) return true;
-          if (targetTab === 2 && buttonText.includes('schedules')) return true;
-          if (targetTab === 3 && buttonText.includes('chat')) return true;
-          return false;
-        });
+        // Look for tab buttons ONLY within the MobileAppDemo component
+        // Use a more specific selector to avoid affecting main app tabs
+        let demoContainer = containerRef.current.querySelector('[data-mobile-demo]');
         
-        if (targetButton) {
-          targetButton.click();
+        // Fallback: if no data-mobile-demo found, look for the demo container by class patterns
+        if (!demoContainer) {
+          demoContainer = containerRef.current.querySelector('.relative.bg-gradient-to-br, .bg-gradient-to-br');
+        }
+        
+        if (!demoContainer) return;
+        
+        const tabButtons = demoContainer.querySelectorAll('button[role="tab"], button[data-tab]');
+        if (tabButtons.length === 0) {
+          // Fallback: look for buttons that look like tabs within the demo
+          const allButtons = demoContainer.querySelectorAll('button');
+          const tabLikeButtons = Array.from(allButtons).filter(button => {
+            const text = button.textContent?.toLowerCase() || '';
+            return text.includes('dashboard') || text.includes('models') || 
+                   text.includes('schedules') || text.includes('chat');
+          });
+          
+          if (tabLikeButtons.length > targetTab) {
+            (tabLikeButtons[targetTab] as HTMLButtonElement).click();
+            setHasInitialized(true);
+          }
+        } else {
+          // Use the role-based tab buttons
+          if (tabButtons.length > targetTab) {
+            (tabButtons[targetTab] as HTMLButtonElement).click();
+            setHasInitialized(true);
+          }
         }
       }
-    }, 200);
+    }, 300); // Slightly longer delay to ensure demo is fully rendered
 
     return () => clearTimeout(timer);
-  }, [targetTab, key]);
+  }, [targetTab, key, hasInitialized]);
 
   return (
     <div ref={containerRef} key={`${key}-${targetTab}`}>
@@ -478,35 +498,46 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
                   agentDataExists: !!agentData,
                   agentDataName: agentData?.name || 'none',
                   agentDataDomain: agentData?.domain || 'none',
-                  externalApiMetadata: agentData?.externalApi,
-                  hasExternalApi: !!agentData?.externalApi,
-                  provider: agentData?.externalApi?.provider,
-                  requiresConnection: agentData?.externalApi?.requiresConnection,
+                  externalApisMetadata: agentData?.externalApis,
+                  hasExternalApis: !!(agentData?.externalApis?.length),
+                  providers: agentData?.externalApis?.map((api: any) => api.provider).join(', ') || 'none',
+                  requiresConnection: agentData?.externalApis?.some((api: any) => api.requiresConnection) || false,
                   agentDataKeys: agentData ? Object.keys(agentData) : [],
                   fullAgentData: agentData ? {
                     name: agentData.name,
                     domain: agentData.domain,
-                    hasExternalApi: !!agentData.externalApi,
-                    externalApiProvider: agentData.externalApi?.provider || 'none'
+                    hasExternalApis: !!(agentData.externalApis?.length),
+                    externalApiProviders: agentData.externalApis?.map((api: any) => api.provider).join(', ') || 'none'
                   } : null,
                   // Raw debugging
                   rawAgentData: agentData
                 });
 
                 // Additional check for debugging
-                if (!agentData?.externalApi && agentData?.name && agentData.name.toLowerCase().includes('instagram')) {
-                  console.warn('🚨 ISSUE DETECTED: Agent name suggests Instagram but no externalApi metadata found!', {
+                if (!(agentData?.externalApis?.length) && agentData?.name && agentData.name.toLowerCase().includes('instagram')) {
+                  console.warn('🚨 ISSUE DETECTED: Agent name suggests Instagram but no externalApis metadata found!', {
                     agentName: agentData.name,
                     agentDescription: agentData.description,
                     agentDomain: agentData.domain,
-                    allKeys: Object.keys(agentData)
+                    allKeys: Object.keys(agentData),
+                    externalApis: agentData.externalApis
                   });
                 }
 
                 return (
                   <AvatarCreator 
                     documentId={documentId} 
-                    externalApiMetadata={agentData?.externalApi} 
+                    externalApisMetadata={agentData?.externalApis || []}
+                    agentData={agentData}
+                    onAvatarChange={(avatarData: any) => {
+                      if (onDataChange && agentData) {
+                        const updatedAgent = {
+                          ...agentData,
+                          avatar: avatarData
+                        };
+                        onDataChange(updatedAgent);
+                      }
+                    }}
                   />
                 );
               })()}

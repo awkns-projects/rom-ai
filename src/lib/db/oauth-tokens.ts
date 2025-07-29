@@ -50,7 +50,7 @@ export interface OAuthConnectionData {
   scope?: string;
   providerData?: any;
   profileData?: any;
-  avatarId?: string;
+  documentId?: string; // Changed from avatarId to documentId
 }
 
 // Save OAuth connection
@@ -90,7 +90,7 @@ export async function saveOAuthConnection(
           scopes: connectionData.scopes,
           providerData: connectionData.providerData,
           username: connectionData.username,
-          avatarId: connectionData.avatarId,
+          documentId: connectionData.documentId,
           isActive: true,
           updatedAt: new Date()
         })
@@ -104,7 +104,7 @@ export async function saveOAuthConnection(
         .insert(oauthConnection)
         .values({
           userId,
-          avatarId: connectionData.avatarId,
+          documentId: connectionData.documentId,
           provider: connectionData.provider,
           providerUserId: connectionData.providerUserId,
           username: connectionData.username,
@@ -129,11 +129,11 @@ export async function saveOAuthConnection(
   }
 }
 
-// Get OAuth connections for a user
+// Get OAuth connections for a user and/or document
 export async function getOAuthConnections(
   userId: string,
   provider?: 'instagram' | 'facebook' | 'shopify' | 'threads',
-  avatarId?: string
+  documentId?: string
 ): Promise<{
   success: boolean;
   connections?: Array<{
@@ -164,9 +164,9 @@ export async function getOAuthConnections(
       whereConditions.push(eq(oauthConnection.provider, provider));
     }
 
-    // Add avatar filter if specified
-    if (avatarId) {
-      whereConditions.push(eq(oauthConnection.avatarId, avatarId));
+    // Add document filter if specified
+    if (documentId) {
+      whereConditions.push(eq(oauthConnection.documentId, documentId));
     }
 
     const connections = await db
@@ -279,26 +279,5 @@ export function needsTokenRefresh(expiresAt?: Date): boolean {
   return expiresAt <= fiveMinutesFromNow;
 }
 
-// Legacy function to save OAuth connections to avatar table (for backward compatibility)
-export async function saveOAuthConnectionToAvatar(
-  avatarId: string,
-  oauthConnections: any[]
-): Promise<{ success: boolean; error?: string }> {
-  try {
-    await db
-      .update(avatar)
-      .set({
-        oauthConnections,
-        updatedAt: new Date()
-      })
-      .where(eq(avatar.id, avatarId));
-
-    return { success: true };
-  } catch (error) {
-    console.error('Error saving OAuth connections to avatar:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
-    };
-  }
-} 
+// Note: OAuth connections are now stored at document level in OAuthConnection table
+// This legacy function has been removed as connections are no longer stored in avatar table 

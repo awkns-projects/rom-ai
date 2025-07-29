@@ -9,13 +9,14 @@ import { CrossIcon, PlusIcon } from '@/components/icons';
 import { StepFieldEditor } from './StepFieldEditor';
 import { ModelExecutionChangesViewer } from './ModelExecutionChangesViewer';
 import { ScheduleMindMapEditor } from './ScheduleMindMapEditor';
-import type { AgentSchedule, EnvVar, PseudoCodeStep, StepField, AgentModel } from '../../types';
+import type { AgentSchedule, AgentAction, EnvVar, PseudoCodeStep, StepField, AgentModel } from '../../types';
 import { generateNewId } from '../../utils';
 
 interface ScheduleEditorProps {
   schedule: AgentSchedule;
   onUpdate: (schedule: AgentSchedule) => void;
   onDelete: () => void;
+  availableActions?: AgentAction[];
   allModels?: AgentModel[];
   documentId?: string;
 }
@@ -51,6 +52,7 @@ export const ScheduleEditor = memo(({
   schedule,
   onUpdate,
   onDelete,
+  availableActions = [],
   allModels = [],
   documentId
 }: ScheduleEditorProps) => {
@@ -911,6 +913,7 @@ export const ScheduleEditor = memo(({
             schedule={schedule}
             onUpdate={onUpdate}
             onDelete={onDelete}
+            availableActions={availableActions}
             allModels={allModels}
             documentId={documentId}
           />

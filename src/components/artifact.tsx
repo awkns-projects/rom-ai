@@ -339,6 +339,12 @@ function PureArtifact({
       if (document && updatedContent !== document.content) {
         setIsContentDirty(true);
         handleContentChange(updatedContent);
+        
+        // Auto-clear dirty state after 3 seconds if it's still dirty
+        // This prevents the "Saving changes..." from showing indefinitely
+        setTimeout(() => {
+          setIsContentDirty(false);
+        }, 3000);
       }
     }
 
@@ -380,6 +386,14 @@ function PureArtifact({
 
   const { width: windowWidth, height: windowHeight } = useWindowSize();
   const isMobile = windowWidth ? windowWidth < 768 : false;
+  
+  // Agent artifacts are always full screen for simplicity
+  const isAgentArtifact = artifact.kind === 'agent';
+  // For agent artifacts, always force full screen regardless of bounding box
+  const isFullScreen = isAgentArtifact || artifact.boundingBox.width >= (windowWidth || 0);
+  
+  // Hide left sidebar for agent artifacts (like avatar creation)
+  const shouldHideLeftSidebar = isAgentArtifact;
 
   const artifactDefinition = artifactDefinitions.find(
     (definition) => definition.kind === artifact.kind,
@@ -410,7 +424,7 @@ function PureArtifact({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0, transition: { delay: 0.4 } }}
         >
-          {!isMobile && (
+          {!isAgentArtifact && !isMobile && !isFullScreen && !shouldHideLeftSidebar && (
             <motion.div
               className="fixed bg-background h-dvh"
               initial={{
@@ -425,7 +439,7 @@ function PureArtifact({
             />
           )}
 
-          {!isMobile && (
+          {!isAgentArtifact && !isMobile && !isFullScreen && !shouldHideLeftSidebar && (
             <motion.div
               className="relative w-[400px] bg-black border-r border-green-500/20 h-dvh shrink-0"
               initial={{ opacity: 0, x: 10, scale: 1 }}
@@ -494,7 +508,17 @@ function PureArtifact({
           <motion.div
             className="fixed bg-black h-dvh flex flex-col overflow-y-scroll md:border-l border-green-500/20"
             initial={
-              isMobile
+              isAgentArtifact
+                ? {
+                    // Agent artifacts: simple fade in, full screen immediately
+                    opacity: 0,
+                    x: 0,
+                    y: 0,
+                    height: windowHeight,
+                    width: windowWidth ? windowWidth : 'calc(100dvw)',
+                    borderRadius: 0,
+                  }
+                : isMobile
                 ? {
                     opacity: 1,
                     x: artifact.boundingBox.left,
@@ -513,7 +537,16 @@ function PureArtifact({
                   }
             }
             animate={
-              isMobile
+              isAgentArtifact
+                ? {
+                    // Agent artifacts: simple fade in
+                    opacity: 1,
+                    transition: {
+                      duration: 0.3,
+                      ease: "easeOut",
+                    },
+                  }
+                : isMobile || isFullScreen
                 ? {
                     opacity: 1,
                     x: 0,
@@ -547,16 +580,27 @@ function PureArtifact({
                     },
                   }
             }
-            exit={{
-              opacity: 0,
-              scale: 0.5,
-              transition: {
-                delay: 0.1,
-                type: 'spring',
-                stiffness: 600,
-                damping: 30,
-              },
-            }}
+            exit={
+              isAgentArtifact
+                ? {
+                    // Simple fade out for agent artifacts
+                    opacity: 0,
+                    transition: {
+                      duration: 0.2,
+                      ease: "easeIn",
+                    },
+                  }
+                : {
+                    opacity: 0,
+                    scale: 0.5,
+                    transition: {
+                      delay: 0.1,
+                      type: 'spring',
+                      stiffness: 600,
+                      damping: 30,
+                    },
+                  }
+            }
           >
             <div className="p-2 flex flex-row justify-between items-start">
               <div className="flex flex-row gap-4 items-start">

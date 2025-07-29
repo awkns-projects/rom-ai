@@ -186,12 +186,24 @@ interface AgentData {
   schedules: AgentSchedule[];
   createdAt: string;
   theme?: string; // Stored theme selection for the agent
-  externalApi?: {
-    provider: string | null;
+  externalApis?: Array<{
+    provider: string;
     requiresConnection: boolean;
     connectionType: 'oauth' | 'api_key' | 'none';
     primaryUseCase: string;
     requiredScopes: string[];
+    priority: 'primary' | 'secondary';
+  }>;
+  deployment?: {
+    deploymentId: string;
+    projectId: string;
+    deploymentUrl: string;
+    status: 'pending' | 'building' | 'ready' | 'error';
+    apiEndpoints: string[];
+    vercelProjectId: string;
+    deployedAt: string;
+    warnings: string[];
+    deploymentNotes: string[];
   };
   metadata?: {
     createdAt: string;
@@ -384,7 +396,9 @@ const useAgentData = (content: string) => {
           schedules,
           createdAt: parsed.createdAt || new Date().toISOString(),
           theme: parsed.theme, // Preserve theme selection
-          externalApi: parsed.externalApi, // Preserve external API metadata
+          avatar: parsed.avatar, // Include avatar data
+          externalApis: parsed.externalApis, // Preserve external API metadata
+          deployment: parsed.deployment, // Include deployment information
           metadata: parsed.metadata // Keep metadata if it exists (from orchestrator)
         };
 
@@ -395,9 +409,9 @@ const useAgentData = (content: string) => {
           actionCount: initialData.actions.length,
           scheduleCount: initialData.schedules.length,
           hasMetadata: !!initialData.metadata,
-          hasExternalApi: !!initialData.externalApi,
-          externalApiProvider: initialData.externalApi?.provider || 'none',
-          externalApiRequiresConnection: initialData.externalApi?.requiresConnection || false
+          hasExternalApis: !!initialData.externalApis?.length,
+          externalApiProviders: initialData.externalApis?.map(api => api.provider).join(', ') || 'none',
+          externalApiRequiresConnection: initialData.externalApis?.some(api => api.requiresConnection) || false
         });
 
         return initialData;
@@ -757,6 +771,9 @@ const AgentBuilderContent = memo(({
   const documentId = artifact?.documentId;
   const chatId = params.id as string;
 
+  // Extract deployment information from agent data
+  const deploymentInfo = agentData.deployment;
+
   // Update metadata safely
   const updateMetadata = useCallback((updates: Partial<AgentArtifactMetadata>) => {
     if (setMetadata) {
@@ -771,12 +788,12 @@ const AgentBuilderContent = memo(({
       currentActions: agentData.actions?.length || 0,
       currentSchedules: agentData.schedules?.length || 0,
       currentTheme: agentData.theme,
-      currentExternalApi: agentData.externalApi?.provider || 'none',
+      currentExternalApis: agentData.externalApis?.map(api => api.provider).join(', ') || 'none',
       newModels: newData.models?.length || 0,
       newActions: newData.actions?.length || 0,
       newSchedules: newData.schedules?.length || 0,
       newTheme: newData.theme,
-      newExternalApi: newData.externalApi?.provider || 'none',
+      newExternalApis: newData.externalApis?.map(api => api.provider).join(', ') || 'none',
       currentModelNames: (agentData.models || []).map((m: AgentModel) => m.name),
       newModelNames: (newData.models || []).map((m: AgentModel) => m.name),
       currentActionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
@@ -793,11 +810,26 @@ const AgentBuilderContent = memo(({
   const saveAgentToConversation = useCallback(async () => {
     setIsSaving(true);
     try {
+      console.log('💾 Saving agent data:', {
+        hasAvatar: !!agentData.avatar,
+        avatarType: agentData.avatar?.type,
+        hasTheme: !!agentData.theme,
+        hasExternalApis: !!agentData.externalApis?.length,
+        modelCount: agentData.models?.length || 0,
+        actionCount: agentData.actions?.length || 0,
+        scheduleCount: agentData.schedules?.length || 0,
+      });
+      
       const agentContent = JSON.stringify(agentData, null, 2);
       onSaveContent(agentContent, true);
       
       setHasUnsavedChanges(false);
       console.log('✅ Agent data saved through standard document mechanism');
+      console.log('📄 Saved content includes:', {
+        avatarData: !!agentData.avatar,
+        themeData: !!agentData.theme,
+        externalApiData: !!agentData.externalApis
+      });
       
       setShowDeploymentModal(true);
     } catch (error) {
@@ -867,15 +899,17 @@ const AgentBuilderContent = memo(({
           schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
           createdAt: parsed.createdAt || new Date().toISOString(),
           theme: parsed.theme, // Preserve theme selection
-          externalApi: parsed.externalApi, // Preserve external API metadata
+          avatar: parsed.avatar, // Include avatar data
+          externalApis: parsed.externalApis, // Preserve external API metadata
+          deployment: parsed.deployment, // Include deployment information
           metadata: parsed.metadata
         };
         
-        console.log('🔄 Content update with external API:', {
-          hasExternalApi: !!updatedData.externalApi,
-          provider: updatedData.externalApi?.provider || 'none',
-          requiresConnection: updatedData.externalApi?.requiresConnection || false,
-          fullExternalApi: updatedData.externalApi
+        console.log('🔄 Content update with external APIs:', {
+          hasExternalApis: !!updatedData.externalApis?.length,
+          providers: updatedData.externalApis?.map((api: any) => api.provider).join(', ') || 'none',
+          requiresConnection: updatedData.externalApis?.some((api: any) => api.requiresConnection) || false,
+          hasDeployment: !!updatedData.deployment
         });
         
         // Use a more stable comparison approach - FIXED: Include externalApi in comparison
@@ -888,7 +922,7 @@ const AgentBuilderContent = memo(({
             actions: prevData.actions,
             schedules: prevData.schedules,
             theme: prevData.theme,
-            externalApi: prevData.externalApi // FIXED: Include externalApi in comparison
+            externalApis: prevData.externalApis // FIXED: Include externalApis in comparison
           });
           const newDataString = JSON.stringify({
             name: updatedData.name,
@@ -898,14 +932,14 @@ const AgentBuilderContent = memo(({
             actions: updatedData.actions,
             schedules: updatedData.schedules,
             theme: updatedData.theme,
-            externalApi: updatedData.externalApi // FIXED: Include externalApi in comparison
+            externalApis: updatedData.externalApis // FIXED: Include externalApis in comparison
           });
           
           // Only update if data has actually changed
           if (currentDataString !== newDataString) {
             console.log('📥 Updating agent data from content change:', {
-              previousExternalApi: prevData.externalApi?.provider || 'none',
-              newExternalApi: updatedData.externalApi?.provider || 'none',
+              previousExternalApis: prevData.externalApis?.map(api => api.provider).join(', ') || 'none',
+              newExternalApis: updatedData.externalApis?.map(api => api.provider).join(', ') || 'none',
               dataChanged: true
             });
             return updatedData;
@@ -975,6 +1009,19 @@ const AgentBuilderContent = memo(({
                 </span>
               </div>
               
+              {/* Deployment Button */}
+              {deploymentInfo && deploymentInfo.deploymentUrl && (
+                <Button
+                  onClick={() => window.open(deploymentInfo.deploymentUrl, '_blank')}
+                  className="px-4 sm:px-6 py-2.5 text-sm font-medium font-mono transition-all duration-200 btn-matrix bg-blue-600 hover:bg-blue-700 text-white border-blue-500/50"
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <div className="w-4 h-4">🌐</div>
+                    <span>View Live App</span>
+                  </div>
+                </Button>
+              )}
+
               {/* Save Button */}
               <Button
                 onClick={saveAgentToConversation}
@@ -1535,6 +1582,7 @@ const AgentBuilderContent = memo(({
                     <SchedulesListEditor
                       schedules={agentData.schedules || []}
                       onUpdate={(schedules) => updateAgentData({ ...agentData, schedules })}
+                      availableActions={agentData.actions || []}
                       allModels={agentData.models || []}
                       documentId={documentId}
                     />
@@ -1600,7 +1648,7 @@ const AgentBuilderContent = memo(({
               className="btn-matrix bg-green-600 hover:bg-green-700 text-black font-bold"
             >
               <div className="flex items-center gap-2">
-                <span className="font-mono">Deploy Agent</span>
+                <span className="font-mono">Publish Agent</span>
                 <span>🚀</span>
               </div>
             </Button>

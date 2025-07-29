@@ -44,7 +44,7 @@ export const ScheduleMindMapEditor = memo(({
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState<any>(null);
   const [expandedCard, setExpandedCard] = useState<string | null>('setup');
-  const [isMobile, setIsMobile] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
 
   // Ensure schedule is properly initialized
   useEffect(() => {
@@ -170,7 +170,7 @@ export const ScheduleMindMapEditor = memo(({
       case 'complete':
         return <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white">✓</div>;
       case 'ready':
-        return <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white">⚡</div>;
+        return <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white">⚡</div>;
       case 'active':
         return <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white animate-pulse">▶</div>;
       default:
@@ -211,7 +211,7 @@ export const ScheduleMindMapEditor = memo(({
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-4">
               <div className="space-y-2">
-                <Label className="text-blue-300 font-mono text-sm">✨ Schedule Name</Label>
+                <Label className="text-orange-300 font-mono text-sm">✨ Schedule Name</Label>
                 <Input
                   value={schedule.name || ''}
                   onChange={(e) => onUpdate({ ...schedule, name: e.target.value })}
@@ -221,7 +221,7 @@ export const ScheduleMindMapEditor = memo(({
               </div>
 
               <div className="space-y-2">
-                <Label className="text-blue-300 font-mono text-sm">📝 Vision & Purpose</Label>
+                <Label className="text-orange-300 font-mono text-sm">📝 Vision & Purpose</Label>
                 <Textarea
                   value={schedule.description || ''}
                   onChange={(e) => onUpdate({ ...schedule, description: e.target.value })}
@@ -231,7 +231,7 @@ export const ScheduleMindMapEditor = memo(({
               </div>
 
               <div className="space-y-2">
-                <Label className="text-blue-300 font-mono text-sm">⏰ Trigger Type</Label>
+                <Label className="text-orange-300 font-mono text-sm">⏰ Trigger Type</Label>
                 <Select
                   value={schedule.trigger?.type || 'cron'}
                   onValueChange={(value: 'cron' | 'interval' | 'date' | 'manual') => onUpdate({
@@ -253,7 +253,7 @@ export const ScheduleMindMapEditor = memo(({
 
               {schedule.trigger?.type === 'cron' && (
                 <div className="space-y-2">
-                  <Label className="text-blue-300 font-mono text-sm">Pattern</Label>
+                  <Label className="text-orange-300 font-mono text-sm">Pattern</Label>
                   <Select
                     value={schedule.trigger?.pattern || '0 0 * * *'}
                     onValueChange={(value) => onUpdate({
@@ -278,7 +278,7 @@ export const ScheduleMindMapEditor = memo(({
               {schedule.trigger?.type === 'interval' && (
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-2">
-                    <Label className="text-blue-300 font-mono text-sm">Every</Label>
+                    <Label className="text-orange-300 font-mono text-sm">Every</Label>
                     <Input
                       type="number"
                       value={schedule.trigger?.interval?.value || 1}
@@ -296,7 +296,7 @@ export const ScheduleMindMapEditor = memo(({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-blue-300 font-mono text-sm">Unit</Label>
+                    <Label className="text-orange-300 font-mono text-sm">Unit</Label>
                     <Select
                       value={schedule.trigger?.interval?.unit || 'hours'}
                       onValueChange={(value: 'minutes' | 'hours' | 'days' | 'weeks') => onUpdate({
@@ -340,7 +340,7 @@ export const ScheduleMindMapEditor = memo(({
             }}
             className={`w-full font-mono py-3 rounded-lg ${
               getBasicSetupStatus() === 'ready'
-                ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white'
+                ? 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white'
                 : 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white'
             }`}
           >
@@ -361,7 +361,7 @@ export const ScheduleMindMapEditor = memo(({
                 addNewAction();
               }}
               variant="outline"
-              className="w-full font-mono py-2 text-blue-300 border-blue-500/30 hover:bg-blue-500/10"
+              className="w-full font-mono py-2 text-orange-300 border-orange-500/30 hover:bg-orange-500/10"
             >
               <div className="flex items-center gap-2">
                 <PlusIcon size={16} />
@@ -401,7 +401,7 @@ export const ScheduleMindMapEditor = memo(({
           : (
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label className="text-blue-300 font-mono text-sm">🎯 Select Action</Label>
+                <Label className="text-orange-300 font-mono text-sm">🎯 Select Action</Label>
                 <Select
                   value={step.actionId}
                   onValueChange={(actionId: string) => {
@@ -417,21 +417,48 @@ export const ScheduleMindMapEditor = memo(({
                   }}
                 >
                   <SelectTrigger className="bg-slate-800 border-slate-600 text-white font-mono">
-                    <SelectValue placeholder="Choose an action..." />
+                    <SelectValue placeholder={
+                      availableActions.length === 0 
+                        ? "No actions available" 
+                        : "Choose an action..."
+                    } />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-600">
-                    {availableActions.map(action => (
-                      <SelectItem key={action.id} value={action.id} className="text-white font-mono">
-                        {action.emoji} {action.name}
-                      </SelectItem>
-                    ))}
+                  <SelectContent className="bg-slate-800 border-slate-600 max-h-60 overflow-y-auto">
+                    {availableActions.length === 0 ? (
+                      <div className="p-4 text-slate-400 text-sm font-mono text-center">
+                        <div className="mb-2">🔧 No actions available</div>
+                        <div className="text-xs">
+                          Create actions first in the main builder to use them in schedules.
+                        </div>
+                      </div>
+                    ) : (
+                      availableActions.map(action => (
+                        <SelectItem 
+                          key={action.id} 
+                          value={action.id} 
+                          className="text-white font-mono hover:bg-slate-700 focus:bg-slate-700"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span>{action.emoji || '🔧'}</span>
+                            <div>
+                              <div>{action.name}</div>
+                              {action.description && (
+                                <div className="text-xs text-slate-400 truncate max-w-[200px]">
+                                  {action.description}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
 
               {action && (
-                <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
-                  <div className="text-blue-300 font-mono text-sm font-medium mb-1">Selected Action</div>
+                <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                  <div className="text-orange-300 font-mono text-sm font-medium mb-1">Selected Action</div>
                   <div className="text-white font-mono text-sm">{action.description}</div>
                   <div className="text-slate-400 font-mono text-xs mt-1">
                     {action.role} • {action.execute?.type}
@@ -441,7 +468,7 @@ export const ScheduleMindMapEditor = memo(({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label className="text-blue-300 font-mono text-sm">⏱️ Delay (seconds)</Label>
+                  <Label className="text-orange-300 font-mono text-sm">⏱️ Delay (seconds)</Label>
                   <Input
                     type="number"
                     value={step.delay?.duration ? step.delay.duration / 1000 : 0}
@@ -460,7 +487,7 @@ export const ScheduleMindMapEditor = memo(({
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-blue-300 font-mono text-sm">🚨 On Error</Label>
+                  <Label className="text-orange-300 font-mono text-sm">🚨 On Error</Label>
                   <Select
                     value={step.onError?.action || 'stop'}
                     onValueChange={(value: 'stop' | 'continue' | 'retry') => {
@@ -535,7 +562,7 @@ export const ScheduleMindMapEditor = memo(({
                 e.stopPropagation();
                 addNewAction();
               }}
-              className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-mono py-3 rounded-lg"
+              className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-mono py-3 rounded-lg"
             >
               <div className="flex items-center gap-2">
                 <PlusIcon size={16} />
@@ -584,7 +611,7 @@ export const ScheduleMindMapEditor = memo(({
               e.stopPropagation();
               addNewAction();
             }}
-            className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-mono py-3 rounded-lg"
+            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-mono py-3 rounded-lg"
           >
             <div className="flex items-center gap-2">
               <PlusIcon size={16} />
@@ -613,7 +640,7 @@ export const ScheduleMindMapEditor = memo(({
             
             {/* Chain Summary */}
             <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-600">
-              <div className="text-blue-300 font-mono text-xs font-medium mb-2">Action Chain Summary:</div>
+              <div className="text-orange-300 font-mono text-xs font-medium mb-2">Action Chain Summary:</div>
               <div className="space-y-1">
                 {schedule.steps?.map((step, index) => {
                   const action = availableActions.find(a => a.id === step.actionId);
@@ -660,7 +687,7 @@ export const ScheduleMindMapEditor = memo(({
                   executeSchedule();
                 }}
                 disabled={isExecuting}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-mono py-2"
+                className="bg-orange-600 hover:bg-orange-700 text-white font-mono py-2"
               >
                 {isExecuting ? '🧪 Testing...' : '🧪 Test Chain'}
               </Button>
@@ -688,7 +715,7 @@ export const ScheduleMindMapEditor = memo(({
 
             {executionResult && (
               <div className="p-3 rounded-lg bg-slate-800 border border-slate-600">
-                <div className="text-blue-300 font-mono text-sm font-medium mb-1">Test Result</div>
+                <div className="text-orange-300 font-mono text-sm font-medium mb-1">Test Result</div>
                 <div className={`text-sm font-mono ${executionResult.success ? 'text-green-300' : 'text-red-300'}`}>
                   {executionResult.success ? `✅ Success (${executionResult.duration}ms)` : `❌ Failed`}
                 </div>
@@ -757,8 +784,8 @@ export const ScheduleMindMapEditor = memo(({
         <div
           className={`p-3 md:p-4 rounded-xl border transition-all duration-300 ${
             isExpanded
-              ? 'bg-blue-500/20 border-blue-400/60 shadow-xl shadow-blue-500/20'
-              : 'bg-slate-900/60 border-slate-600/50 hover:border-blue-400/40'
+              ? 'bg-orange-500/10 border-orange-400/50 shadow-xl shadow-orange-500/20'
+              : 'bg-slate-900/80 border-slate-600/50 hover:border-orange-400/40 hover:bg-slate-900/90'
           } ${
             card.status === 'complete' ? 'ring-2 ring-emerald-400/50' :
             card.status === 'active' ? 'ring-2 ring-green-400/50' : ''
@@ -767,7 +794,7 @@ export const ScheduleMindMapEditor = memo(({
             backdropFilter: 'blur(8px)',
             minHeight: isExpanded ? '400px' : '200px',
             ...(isExpanded && {
-              boxShadow: '0 0 30px rgba(59, 130, 246, 0.3), inset 0 0 20px rgba(59, 130, 246, 0.1)'
+              boxShadow: '0 0 30px rgba(251, 146, 60, 0.2), inset 0 0 20px rgba(251, 146, 60, 0.05)'
             })
           }}
         >
@@ -814,17 +841,17 @@ export const ScheduleMindMapEditor = memo(({
   };
 
   return (
-    <div className="min-h-[600px] flex flex-col bg-slate-950">
+    <div className="min-h-[600px] flex flex-col bg-orange-950/40">
       {/* Header */}
-      <div className="p-4 md:p-6 border-b border-slate-700">
+      <div className="p-4 md:p-6 border-b border-orange-700/30 bg-orange-950/20">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 md:gap-3">
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
-              <span className="text-blue-400 text-lg md:text-xl">🔗</span>
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
+              <span className="text-orange-400 text-lg md:text-xl">🔗</span>
             </div>
             <div>
               <h3 className="text-lg md:text-xl font-bold text-white font-mono">Schedule Builder</h3>
-              <p className="text-slate-400 text-xs md:text-sm font-mono">
+              <p className="text-orange-200 text-xs md:text-sm font-mono">
                 {isMobile ? 'Setup → Chain → Activate' : 'Build automated action chains with timing'}
               </p>
             </div>
@@ -845,13 +872,13 @@ export const ScheduleMindMapEditor = memo(({
 
       {/* Schedule Overview */}
       {(schedule.steps?.length > 0 || schedule.name) && (
-        <div className="p-4 md:p-6 border-b border-slate-700 bg-slate-900/30">
+        <div className="p-4 md:p-6 border-b border-orange-700/30 bg-orange-950/10">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-white font-mono font-medium">
                 {schedule.name || 'Unnamed Schedule'}
               </div>
-              <div className="text-slate-400 text-sm font-mono">
+              <div className="text-orange-300 text-sm font-mono">
                 {schedule.steps?.length || 0} action{schedule.steps?.length === 1 ? '' : 's'} • 
                 {schedule.trigger?.active ? ' 🟢 Active' : ' 🔴 Inactive'}
               </div>
@@ -860,7 +887,7 @@ export const ScheduleMindMapEditor = memo(({
               {schedule.steps?.length === 0 && schedule.name?.trim() && (
                 <Button
                   onClick={addNewAction}
-                  className="bg-green-600 hover:bg-green-700 text-white font-mono text-sm px-4 py-2"
+                  className="bg-orange-600 hover:bg-orange-700 text-white font-mono text-sm px-4 py-2"
                 >
                   <div className="flex items-center gap-2">
                     <PlusIcon size={16} />
@@ -871,7 +898,7 @@ export const ScheduleMindMapEditor = memo(({
               {schedule.steps?.length > 0 && (
                 <Button
                   onClick={() => setExpandedCard('execute')}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-mono text-sm px-4 py-2"
+                  className="bg-orange-600 hover:bg-orange-700 text-white font-mono text-sm px-4 py-2"
                 >
                   {schedule.trigger?.active ? '⏸️ Manage' : '▶️ Activate'}
                 </Button>
@@ -884,7 +911,7 @@ export const ScheduleMindMapEditor = memo(({
       {/* Card Flow Container */}
       <div className="flex-1 relative min-h-[500px] overflow-auto">
         <div 
-          className="relative bg-gradient-to-br from-blue-950/20 via-purple-950/20 to-blue-950/20"
+          className="relative bg-gradient-to-br from-orange-950/30 via-orange-900/10 to-orange-950/30"
           style={{ 
             minHeight: isMobile ? (cards.length * 320) + 100 : '600px', 
             minWidth: isMobile ? '320px' : (cards.length * 420) + 100,
@@ -904,7 +931,7 @@ export const ScheduleMindMapEditor = memo(({
                 <path
                   key={`connection-${card.id}-${nextCard.id}`}
                   d={getConnectionPath(card, nextCard)}
-                  stroke="#60A5FA"
+                  stroke="#FB923C"
                   strokeWidth={2}
                   fill="none"
                   strokeDasharray="5,5"
@@ -924,14 +951,14 @@ export const ScheduleMindMapEditor = memo(({
             }`}>
               <Button
                 onClick={() => setExpandedCard('setup')}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 font-mono"
+                className="bg-orange-600 hover:bg-orange-700 text-white text-xs px-3 py-2 font-mono"
               >
                 🎯 Setup
               </Button>
               {schedule.steps?.length === 0 && getBasicSetupStatus() === 'ready' && (
                 <Button
                   onClick={addNewAction}
-                  className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-2 font-mono"
+                  className="bg-orange-600 hover:bg-orange-700 text-white text-xs px-3 py-2 font-mono"
                 >
                   ✨ Add Action
                 </Button>

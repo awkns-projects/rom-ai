@@ -83,11 +83,12 @@ export async function executeStep3ScheduleGeneration(
     console.log(`⏱️ Schedule Details: ${step0Analysis.schedules.length} total schedules identified in analysis`);
 
     // Note: generateSchedules gets actual schedule requirements from Step 0 analysis 
-    // The promptUnderstanding only provides minimal business context
+    // and uses actions from Step 2 to create action chains
     const schedulesResult = await generateSchedules({
-        step0Analysis,
-      existingAgent
-   } );
+      step0Analysis,
+      existingAgent,
+      availableActions: actionGeneration.actions || []
+    });
 
     const result: Step3Output = {
       schedules: schedulesResult.schedules

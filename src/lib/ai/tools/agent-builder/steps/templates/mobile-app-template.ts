@@ -412,12 +412,21 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import MobileNav from './MobileNav';
 import { themes } from '@/lib/theme';
+import api from '@/lib/api';
 
 interface LayoutProps {
   children: ReactNode;
   title?: string;
   agentName?: string;
   theme?: keyof typeof themes;
+}
+
+interface AgentConfig {
+  avatar?: any;
+  theme?: string;
+  name?: string;
+  description?: string;
+  domain?: string;
 }
 
 export default function Layout({ 
@@ -427,14 +436,42 @@ export default function Layout({
   theme = 'green' 
 }: LayoutProps) {
   const [isMobile, setIsMobile] = useState(true);
+  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const router = useRouter();
-  const currentTheme = themes[theme];
+  
+  // Use agent config theme if available, fallback to props
+  const selectedTheme = agentConfig?.theme || theme;
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+  const displayName = agentConfig?.name || agentName;
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Fetch agent configuration from main app
+  useEffect(() => {
+    const fetchAgentConfig = async () => {
+      try {
+        const config = await api.getAgentConfiguration();
+        if (config) {
+          setAgentConfig(config);
+          
+          // Fetch avatar image URL
+          const avatarImageUrl = await api.getAvatarImageUrl();
+          if (avatarImageUrl) {
+            setAvatarUrl(avatarImageUrl);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load agent configuration:', error);
+      }
+    };
+
+    fetchAgentConfig();
   }, []);
 
   return (
@@ -446,10 +483,15 @@ export default function Layout({
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <div className={\`min-h-screen bg-gradient-to-br \${currentTheme.gradient} relative\`}>
+      <div className={\`min-h-screen \${currentTheme.bgGradient || 'bg-gradient-to-br from-black via-green-950/30 to-emerald-950/20'} relative\`}>
         {/* Background Pattern */}
-        <div className="fixed inset-0 opacity-5">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_500px_at_50%_200px,#34d399,transparent)]"></div>
+        <div className="fixed inset-0 opacity-10">
+          <div className={\`absolute inset-0 bg-[radial-gradient(circle_500px_at_50%_200px,\${currentTheme.foreground || '#22c55e'},transparent)]\`}></div>
+        </div>
+        
+        {/* Matrix-style animated background */}
+        <div className="fixed inset-0 opacity-5 pointer-events-none">
+          <div className={\`absolute inset-0 bg-[linear-gradient(90deg,transparent_24%,\${currentTheme.foreground || '#22c55e'}15_25%,transparent_26%,transparent_74%,\${currentTheme.foreground || '#22c55e'}15_75%,transparent_76%),linear-gradient(transparent_24%,\${currentTheme.foreground || '#22c55e'}15_25%,transparent_26%,transparent_74%,\${currentTheme.foreground || '#22c55e'}15_75%,transparent_76%)] bg-[size:50px_50px]\`}></div>
         </div>
 
         {/* Main Content */}
@@ -460,8 +502,21 @@ export default function Layout({
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between items-center h-16">
                   <div className="flex items-center gap-3">
-                    <div className={\`w-8 h-8 rounded-lg bg-gradient-to-br \${currentTheme.gradient} border \${currentTheme.border}\`}></div>
-                    <h1 className={\`font-mono font-bold text-lg \${currentTheme.light}\`}>{agentName}</h1>
+                    {avatarUrl ? (
+                      <img 
+                        src={avatarUrl} 
+                        alt="Agent Avatar" 
+                        className="w-8 h-8 rounded-lg object-cover"
+                        onError={(e) => {
+                          // Fallback to theme gradient if image fails to load
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          target.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <div className={\`w-8 h-8 rounded-lg bg-gradient-to-br \${currentTheme.gradient} border \${currentTheme.border} \${avatarUrl ? 'hidden' : ''}\`}></div>
+                    <h1 className={\`font-mono font-bold text-lg \${currentTheme.light}\`}>{displayName}</h1>
                   </div>
                   <nav className="flex items-center gap-6">
                     {[
@@ -694,8 +749,16 @@ export default function App({ Component, pageProps }: AppProps) {
   private generateApiClient(): string {
     return `// API client for mobile app
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
 
 class ApiClient {
+  private cachedCredentials: any = null;
+  private cachedAgentConfig: any = null;
+  private credentialsLastFetch: number = 0;
+  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
   async request(endpoint: string, options: RequestInit = {}) {
     const url = endpoint.startsWith('http') ? endpoint : \`\${API_BASE_URL}\${endpoint}\`;
     
@@ -714,6 +777,68 @@ class ApiClient {
     return response.json();
   }
 
+  // Fetch credentials and agent config from main app
+  async getCredentialsAndConfig() {
+    const now = Date.now();
+    
+    // Return cached data if still valid
+    if (this.cachedCredentials && this.cachedAgentConfig && 
+        (now - this.credentialsLastFetch) < this.CACHE_DURATION) {
+      return {
+        credentials: this.cachedCredentials,
+        agentConfig: this.cachedAgentConfig
+      };
+    }
+
+    try {
+      if (!DOCUMENT_ID) {
+        console.warn('No document ID provided for agent credentials');
+        return { credentials: {}, agentConfig: {} };
+      }
+
+      // Try public endpoint first for deployed agents, fallback to authenticated endpoint
+      let response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}&agentKey=\${AGENT_KEY}\`, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      // If public endpoint fails, try the authenticated one
+      if (!response.ok) {
+        console.log('Public endpoint failed, trying authenticated endpoint...');
+        response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials?documentId=\${DOCUMENT_ID}&agentKey=\${AGENT_KEY}\`, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+      }
+
+      if (!response.ok) {
+        console.error('Failed to fetch agent credentials:', response.status);
+        return { credentials: {}, agentConfig: {} };
+      }
+
+      const data = await response.json();
+      
+      if (data.success) {
+        this.cachedCredentials = data.credentials || {};
+        this.cachedAgentConfig = data.agentConfig || {};
+        this.credentialsLastFetch = now;
+        
+        return {
+          credentials: this.cachedCredentials,
+          agentConfig: this.cachedAgentConfig
+        };
+      } else {
+        console.error('Failed to get credentials:', data.error);
+        return { credentials: {}, agentConfig: {} };
+      }
+    } catch (error) {
+      console.error('Error fetching credentials and config:', error);
+      return { credentials: {}, agentConfig: {} };
+    }
+  }
+
   async getStats() {
     return this.request('/api/stats');
   }
@@ -723,14 +848,54 @@ class ApiClient {
   }
 
   async executeAction(actionName: string, input: any) {
+    // Get fresh credentials for action execution
+    const { credentials } = await this.getCredentialsAndConfig();
+    
     return this.request(\`/api/\${actionName}\`, {
       method: 'POST',
-      body: JSON.stringify({ input }),
+      body: JSON.stringify({ 
+        input,
+        credentials // Pass credentials to action
+      }),
     });
   }
 
   async getHealth() {
     return this.request('/api/health');
+  }
+
+  // Call back to main app for agent configuration (using the new API)
+  async getAgentConfiguration() {
+    try {
+      const { agentConfig } = await this.getCredentialsAndConfig();
+      return agentConfig || null;
+    } catch (error) {
+      console.error('Error fetching agent configuration:', error);
+      return null;
+    }
+  }
+
+  // Call back to main app for avatar image
+  async getAvatarImageUrl() {
+    try {
+      const config = await this.getAgentConfiguration();
+      if (!config?.avatar) return null;
+
+      const { avatar } = config;
+      
+      if (avatar.type === 'custom' && avatar.uploadedImage) {
+        return avatar.uploadedImage;
+      } else if (avatar.type === 'rom-unicorn' && avatar.unicornParts) {
+        // Build unicorn avatar URL from main app
+        const parts = avatar.unicornParts;
+        return \`\${MAIN_APP_URL}/api/avatar/generate?body=\${parts.body}&hair=\${parts.hair}&eyes=\${parts.eyes}&mouth=\${parts.mouth}&accessory=\${parts.accessory}\`;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error fetching avatar image:', error);
+      return null;
+    }
   }
 }
 
@@ -744,6 +909,7 @@ export default api;`;
     name: 'Matrix',
     primary: 'green',
     gradient: 'from-green-400/20 via-green-500/15 to-emerald-400/20',
+    bgGradient: 'bg-gradient-to-br from-black via-green-950/30 to-emerald-950/20',
     border: 'border-green-400/30',
     accent: 'text-green-400',
     light: 'text-green-200',
@@ -751,12 +917,15 @@ export default api;`;
     bg: 'bg-green-500/15',
     bgHover: 'hover:bg-green-500/25',
     borderActive: 'border-green-400/50',
-    bgActive: 'bg-green-500/25'
+    bgActive: 'bg-green-500/25',
+    background: '#0a0f0a',
+    foreground: '#22c55e'
   },
   blue: {
     name: 'Ocean',
     primary: 'blue',
     gradient: 'from-blue-400/20 via-sky-500/15 to-cyan-400/20',
+    bgGradient: 'bg-gradient-to-br from-black via-blue-950/30 to-cyan-950/20',
     border: 'border-blue-400/30',
     accent: 'text-blue-400',
     light: 'text-blue-200',
@@ -764,7 +933,41 @@ export default api;`;
     bg: 'bg-blue-500/15',
     bgHover: 'hover:bg-blue-500/25',
     borderActive: 'border-blue-400/50',
-    bgActive: 'bg-blue-500/25'
+    bgActive: 'bg-blue-500/25',
+    background: '#0a0f1a',
+    foreground: '#3b82f6'
+  },
+  purple: {
+    name: 'Cosmic',
+    primary: 'purple',
+    gradient: 'from-purple-400/20 via-violet-500/15 to-indigo-400/20',
+    bgGradient: 'bg-gradient-to-br from-black via-purple-950/30 to-indigo-950/20',
+    border: 'border-purple-400/30',
+    accent: 'text-purple-400',
+    light: 'text-purple-200',
+    dim: 'text-purple-300/70',
+    bg: 'bg-purple-500/15',
+    bgHover: 'hover:bg-purple-500/25',
+    borderActive: 'border-purple-400/50',
+    bgActive: 'bg-purple-500/25',
+    background: '#0f0a1a',
+    foreground: '#a855f7'
+  },
+  orange: {
+    name: 'Sunset',
+    primary: 'orange',
+    gradient: 'from-orange-400/20 via-amber-500/15 to-yellow-400/20',
+    bgGradient: 'bg-gradient-to-br from-black via-orange-950/30 to-amber-950/20',
+    border: 'border-orange-400/30',
+    accent: 'text-orange-400',
+    light: 'text-orange-200',
+    dim: 'text-orange-300/70',
+    bg: 'bg-orange-500/15',
+    bgHover: 'hover:bg-orange-500/25',
+    borderActive: 'border-orange-400/50',
+    bgActive: 'bg-orange-500/25',
+    background: '#1a0f0a',
+    foreground: '#f97316'
   }
 };
 
@@ -1878,6 +2081,40 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     console.log('🚀 Executing action: ${action.name}');
     
+    // Extract input and credentials from request
+    const { input, credentials = {} } = req.body || {};
+    
+    // Initialize external API credentials for action execution
+    const externalApiCredentials = credentials;
+    console.log('🔑 Using credentials for external APIs:', Object.keys(externalApiCredentials));
+    
+    // Mock member object for action execution
+    const member = {
+      id: 'demo-user',
+      role: 'admin', // Default to admin for deployed apps
+      email: 'demo@example.com'
+    };
+    
+    // Mock AI object for action execution
+    const ai = {
+      generateText: async (prompt: string) => {
+        return { text: \`Mock AI response for: \${prompt}\` };
+      }
+    };
+    
+    ${action.execute?.code?.script ? `
+    // Execute the generated action code
+    const actionCode = \`${action.execute.code.script.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
+    const envVars = { ...externalApiCredentials, ...process.env };
+    
+    // Create function from action code and execute it
+    const actionFunction = new Function('database', 'input', 'member', 'ai', 'envVars', \`
+      \${actionCode}
+      return executeAction(database, input, member, ai, envVars);
+    \`);
+    
+    const result = await actionFunction(prisma, input, member, ai, envVars);
+    ` : `
     // Basic action execution logic
     ${action.type === 'query' ? `
     // Query action - get data
@@ -1886,19 +2123,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       type: 'query',
       description: '${action.description || 'Query action'}',
       data: [], // Replace with actual query logic
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      usedCredentials: Object.keys(externalApiCredentials)
     };` : `
     // Mutation action - modify data  
-    const { input } = req.body || {};
-    
     const result = {
       actionName: '${action.name}',
       type: 'mutation',
       description: '${action.description || 'Mutation action'}',
       input: input,
       success: true,
-      timestamp: new Date().toISOString()
-    };`}
+      timestamp: new Date().toISOString(),
+      usedCredentials: Object.keys(externalApiCredentials)
+    };`}`}
     
     console.log(\`✅ Action '\${action.name}' completed successfully\`);
     res.status(200).json({ success: true, data: result });
@@ -1907,7 +2144,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error(\`❌ Error executing action '\${action.name}':\`, error);
     res.status(500).json({ 
       success: false, 
-      error: 'Internal server error',
+      error: error instanceof Error ? error.message : 'Internal server error',
       actionName: '${action.name}'
     });
   }
@@ -1915,8 +2152,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   private generateCronEndpoint(schedule: AgentSchedule): string {
+    // Handle both old and new schedule formats
+    const scheduleData = schedule as any; // Cast to access new properties
+    const steps = scheduleData.steps || [];
+    const triggerPattern = scheduleData.trigger?.pattern || schedule.interval?.pattern || '* * * * *';
+    
     return `import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '@/lib/prisma'
+
+// Fetch credentials from main app
+async function getCredentials() {
+  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+  const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+  const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
+
+  try {
+    // Try public endpoint first for deployed agents
+    let response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}&agentKey=\${AGENT_KEY}\`);
+    
+    // If public endpoint fails, try the authenticated one
+    if (!response.ok) {
+      console.log('Public endpoint failed, trying authenticated endpoint...');
+      response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials?documentId=\${DOCUMENT_ID}&agentKey=\${AGENT_KEY}\`);
+    }
+    
+    if (response.ok) {
+      const data = await response.json();
+      return data.success ? data.credentials : {};
+    } else {
+      console.error('Failed to fetch credentials:', response.status);
+    }
+  } catch (error) {
+    console.error('Failed to fetch credentials for cron job:', error);
+  }
+  return {};
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Verify this is a cron request (optional security check)
@@ -1931,15 +2201,75 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     console.log('🕐 Running scheduled task: ${schedule.name}');
     
-    // Basic schedule execution logic
-    const result = {
-      scheduleName: '${schedule.name}',
-      description: '${schedule.description || 'Scheduled task'}',
-      pattern: '${schedule.interval?.pattern || '* * * * *'}',
-      executedAt: new Date().toISOString(),
-      success: true,
-      data: [] // Replace with actual scheduled task logic
-    };
+    // Get credentials for external API calls
+    const credentials = await getCredentials();
+    console.log('🔑 Retrieved credentials for schedule:', Object.keys(credentials));
+    
+         ${steps?.length ? `
+     // Execute schedule steps in sequence
+     const stepResults = [];
+     
+     ${steps.map((step: any, index: number) => `
+    // Execute Step ${index + 1}: ${step.name || `Step ${index + 1}`}
+    try {
+      console.log('Executing step ${index + 1}: ${step.description || step.name}');
+      
+      // Call the associated action with credentials
+      const actionResponse = await fetch(\`\${process.env.VERCEL_URL || 'http://localhost:3000'}/api/${step.actionId}\`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          input: {}, // Add any step-specific input here
+          credentials: credentials
+        }),
+      });
+      
+      const actionResult = await actionResponse.json();
+      stepResults.push({
+        step: ${index + 1},
+        actionId: '${step.actionId}',
+        success: actionResult.success,
+        result: actionResult.data
+      });
+      
+      // Add delay if specified
+      ${step.delay?.duration ? `await new Promise(resolve => setTimeout(resolve, ${step.delay.duration}));` : ''}
+      
+    } catch (stepError) {
+      console.error(\`Error in step ${index + 1}:\`, stepError);
+      stepResults.push({
+        step: ${index + 1},
+        actionId: '${step.actionId}',
+        success: false,
+        error: stepError.message
+      });
+      
+      ${step.onError?.action === 'stop' ? `throw stepError;` : '// Continue to next step'}
+    }`).join('\n    ')}
+    
+         const result = {
+       scheduleName: '${schedule.name}',
+       description: '${schedule.description || 'Scheduled task'}',
+       pattern: '${triggerPattern}',
+       executedAt: new Date().toISOString(),
+       success: true,
+       stepResults: stepResults,
+       totalSteps: ${steps.length},
+       completedSteps: stepResults.filter(r => r.success).length
+     };
+    ` : `
+         // Basic schedule execution logic (no steps defined)
+     const result = {
+       scheduleName: '${schedule.name}',
+       description: '${schedule.description || 'Scheduled task'}',
+       pattern: '${triggerPattern}',
+       executedAt: new Date().toISOString(),
+       success: true,
+       data: [], // Replace with actual scheduled task logic
+       usedCredentials: Object.keys(credentials)
+     };`}
     
     console.log(\`✅ Scheduled task completed: \${schedule.name}\`);
     res.status(200).json({ success: true, data: result });
@@ -1948,7 +2278,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.error(\`❌ Error in scheduled task \${schedule.name}:\`, error);
     res.status(500).json({ 
       success: false, 
-      error: 'Internal server error',
+      error: error instanceof Error ? error.message : 'Internal server error',
       scheduleName: '${schedule.name}'
     });
   }
@@ -2160,7 +2490,7 @@ A mobile-first AI agent application with **real AI chat functionality** powered 
 
 ## ✨ Key Features
 
-- **🤖 AI-Powered Chat**: Real conversational AI using OpenAI GPT-4 or Anthropic Claude
+- **🤖 AI-Powered Chat**: Real conversational AI using OpenAI GPT-4 or Anthropic Claude－ 
 - **📱 Mobile-First Design**: Bottom navigation, touch-friendly interface
 - **🗃️ Data Management**: Interactive data models with CRUD operations
 - **⚡ Smart Actions**: Execute agent actions with real-time feedback

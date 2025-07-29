@@ -1304,7 +1304,9 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
   if (viewMode === 'desktop') {
     return (
       <>
-        <div className={`relative bg-gradient-to-br ${theme.gradient} border ${theme.border} rounded-3xl backdrop-blur-sm shadow-2xl overflow-hidden mx-auto flex`} 
+        <div 
+          data-mobile-demo
+          className={`relative bg-gradient-to-br ${theme.gradient} border ${theme.border} rounded-3xl backdrop-blur-sm shadow-2xl overflow-hidden mx-auto flex`} 
              style={{ 
                height: 'min(700px, 80vh)',
                width: 'min(900px, calc(100vw - 2rem))', // Fixed width for desktop
@@ -1352,7 +1354,9 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
   // Mobile Mode (existing code)
   return (
     <>
-      <div className={`relative bg-gradient-to-br ${theme.gradient} border ${theme.border} rounded-3xl backdrop-blur-sm shadow-2xl overflow-hidden w-full max-w-sm mx-auto flex flex-col`} style={{ height: 'min(700px, 80vh)', maxWidth: 'min(350px, calc(100vw - 2rem))' }}>
+      <div 
+        data-mobile-demo
+        className={`relative bg-gradient-to-br ${theme.gradient} border ${theme.border} rounded-3xl backdrop-blur-sm shadow-2xl overflow-hidden w-full max-w-sm mx-auto flex flex-col`} style={{ height: 'min(700px, 80vh)', maxWidth: 'min(350px, calc(100vw - 2rem))' }}>
         {/* Mobile App Header */}
         <div className={`bg-black/40 border-b ${theme.border} p-4 flex-shrink-0`}>
           <div className="flex items-center justify-between">

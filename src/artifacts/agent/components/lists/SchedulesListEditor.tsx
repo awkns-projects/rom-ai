@@ -6,12 +6,13 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlusIcon, PencilEditIcon } from '@/components/icons';
 import { ScheduleEditor } from '../editors/ScheduleEditor';
-import type { AgentSchedule, AgentModel, EnvVar } from '../../types';
+import type { AgentSchedule, AgentAction, AgentModel, EnvVar } from '../../types';
 import { generateNewId } from '../../utils';
 
 interface SchedulesListEditorProps {
   schedules: AgentSchedule[];
   onUpdate: (schedules: AgentSchedule[]) => void;
+  availableActions?: AgentAction[];
   allModels?: AgentModel[];
   documentId?: string;
 }
@@ -30,6 +31,7 @@ interface InputParameter {
 export const SchedulesListEditor = memo(({
   schedules,
   onUpdate,
+  availableActions = [],
   allModels = [],
   documentId
 }: SchedulesListEditorProps) => {
@@ -366,6 +368,7 @@ export const SchedulesListEditor = memo(({
           schedule={editingSchedule}
           onUpdate={(updatedSchedule) => updateSchedule(editingSchedule.id, updatedSchedule)}
           onDelete={() => deleteSchedule(editingSchedule.id)}
+          availableActions={availableActions}
           allModels={allModels}
           documentId={documentId}
         />

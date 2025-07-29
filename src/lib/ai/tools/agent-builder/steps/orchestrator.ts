@@ -3,7 +3,7 @@ import { executeStep0ComprehensiveAnalysis, validateStep0Output, extractStep0Ins
 import { executeStep1DatabaseGeneration, validateStep1Output, extractModelInsights, type Step1Output } from './step1-database-generation';
 import { executeStep2ActionGeneration, validateStep2Output, extractActionInsights, type Step2Output } from './step2-action-generation';
 import { executeStep3ScheduleGeneration, validateStep3Output, extractScheduleInsights, type Step3Output } from './step3-schedule-generation';
-import { executeStep4VercelDeployment, validateStep4Output, extractStep4Insights, testVercelConnection, persistDeploymentMetadata, getDeploymentMetadata, updateExistingDeployment, checkDeploymentUpdateNeeded, type Step4Output, type Step4Input } from './step4-vercel-deployment';
+import { executeStep4VercelDeployment, validateStep4Output, extractStep4Insights, testVercelConnection, updateExistingDeployment, checkDeploymentUpdateNeeded, type Step4Output, type Step4Input } from './step4-vercel-deployment';
 import { performDeepMerge } from '../merging';
 
 /**
@@ -40,14 +40,15 @@ export interface OrchestratorConfig {
   dataStream?: any;
   documentId?: string;
   session?: any;
-  // External API metadata
-  externalApiMetadata?: {
-    provider: string | null;
+  // External APIs metadata (supports multiple APIs)
+  externalApisMetadata?: Array<{
+    provider: string;
     requiresConnection: boolean;
     connectionType: 'oauth' | 'api_key' | 'none';
     primaryUseCase: string;
     requiredScopes: string[];
-  };
+    priority: 'primary' | 'secondary';
+  }>;
 }
 
 export interface OrchestratorResult {
@@ -156,22 +157,19 @@ export async function executeAgentGeneration(
       result.insights.comprehensive = extractStep0Insights(step0Result);
     }
 
-    // Extract external API metadata for avatar creator
-    if (step0Result.externalApi) {
-      console.log('🔍 Step 0 detected external API:', {
-        provider: step0Result.externalApi.provider,
-        requiresConnection: step0Result.externalApi.requiresConnection,
-        connectionType: step0Result.externalApi.connectionType,
-        primaryUseCase: step0Result.externalApi.primaryUseCase
+    // Extract external APIs metadata for avatar creator
+    if (step0Result.externalApis && step0Result.externalApis.length > 0) {
+      console.log('🔍 Step 0 detected external APIs:', {
+        count: step0Result.externalApis.length,
+        apis: step0Result.externalApis.map(api => ({
+          provider: api.provider,
+          priority: api.priority,
+          requiresConnection: api.requiresConnection,
+          connectionType: api.connectionType
+        }))
       });
 
-      config.externalApiMetadata = {
-        provider: step0Result.externalApi.provider,
-        requiresConnection: step0Result.externalApi.requiresConnection,
-        connectionType: step0Result.externalApi.connectionType,
-        primaryUseCase: step0Result.externalApi.primaryUseCase,
-        requiredScopes: step0Result.externalApi.requiredScopes
-      };
+      config.externalApisMetadata = step0Result.externalApis;
 
       // IMMEDIATE FIX: Stream partial agent data with external API metadata
       // This allows AvatarCreator to show correct connection UI right away
@@ -185,20 +183,14 @@ export async function executeAgentGeneration(
           actions: [],
           schedules: [],
           createdAt: config.existingAgent?.createdAt || new Date().toISOString(),
-          externalApi: {
-            provider: step0Result.externalApi.provider,
-            requiresConnection: step0Result.externalApi.requiresConnection,
-            connectionType: step0Result.externalApi.connectionType,
-            primaryUseCase: step0Result.externalApi.primaryUseCase,
-            requiredScopes: step0Result.externalApi.requiredScopes
-          }
+          externalApis: step0Result.externalApis || []
         };
 
         // Only stream if we have a valid dataStream and the agent data is meaningful
         if (config.dataStream && partialAgentData.name && partialAgentData.name !== 'Generated Agent') {
-          console.log('🔄 Streaming partial agent data with external API metadata after Step 0:', {
-            provider: partialAgentData.externalApi.provider,
-            requiresConnection: partialAgentData.externalApi.requiresConnection,
+          console.log('🔄 Streaming partial agent data with external APIs metadata after Step 0:', {
+            apisCount: partialAgentData.externalApis.length,
+            primaryApis: partialAgentData.externalApis.filter(api => api.priority === 'primary'),
             agentName: partialAgentData.name
           });
           
@@ -353,11 +345,9 @@ export async function executeAgentGeneration(
         console.warn('⚠️ Skipping deployment - Project name not provided');
         sendStepUpdate(config, 'step4', 'complete', 'Deployment skipped - missing project name');
       } else {
-        // Check for existing deployment metadata
+        // Check for existing deployment metadata (now stored in agent JSON)
         let existingDeployment: any = null;
-        if (config.documentId) {
-          existingDeployment = await getDeploymentMetadata(config.documentId);
-        }
+        // Note: Deployment metadata is now included in the agent JSON data
 
         let step4Result: Step4Output;
 
@@ -410,8 +400,9 @@ export async function executeAgentGeneration(
               apiEndpoints: existingDeployment.apiEndpoints || [],
               cronJobs: existingDeployment.cronJobs || [],
               databaseUrl: existingDeployment.databaseUrl || '',
-              neonProjectId: existingDeployment.neonProjectId || '',
-              vercelProjectId: existingDeployment.vercelProjectId || existingDeployment.projectId // Changed from serviceId to projectId
+              sqliteFilename: existingDeployment.sqliteFilename || 'dev.db',
+              vercelProjectId: existingDeployment.vercelProjectId || existingDeployment.projectId, // Changed from serviceId to projectId
+              warnings: existingDeployment.warnings || []
             };
           }
         } else {
@@ -426,8 +417,8 @@ export async function executeAgentGeneration(
             projectName: deploymentConfig.projectName || step0Result.agentName || 'Generated Agent',
             description: deploymentConfig.description || step0Result.agentDescription,
             environmentVariables: deploymentConfig.environmentVariables || {},
-            region: deploymentConfig.region,
-            vercelTeam: deploymentConfig.vercelTeam
+            vercelTeam: deploymentConfig.vercelTeam,
+            documentId: config.documentId
           };
 
           const newDeployResult = await executeStepWithRetry(
@@ -473,10 +464,8 @@ export async function executeAgentGeneration(
           : `Deployment submitted but may still be building: ${step4Result.deploymentUrl}`;
         sendStepUpdate(config, 'step4', finalStatus, finalMessage);
 
-        // Persist deployment metadata
-        if (config.dataStream && config.documentId && config.session) {
-          await persistDeploymentMetadata(config.documentId, step4Result, config.session);
-        }
+        // Deployment metadata is now persisted in agent JSON (handled by assembleCompleteAgent)
+        // No separate database storage needed
       }
     }
 
@@ -731,12 +720,17 @@ function assembleCompleteAgent(
     schedules: step3.schedules,
     prismaSchema: step1.prismaSchema, // Not needed for UI
     createdAt: config.existingAgent?.createdAt || now,
-    externalApi: step0.externalApi ? {
-      provider: step0.externalApi.provider,
-      requiresConnection: step0.externalApi.requiresConnection,
-      connectionType: step0.externalApi.connectionType,
-      primaryUseCase: step0.externalApi.primaryUseCase,
-      requiredScopes: step0.externalApi.requiredScopes
+    externalApis: step0.externalApis || [],
+    deployment: step4 ? {
+      deploymentId: step4.deploymentId,
+      projectId: step4.projectId,
+      deploymentUrl: step4.deploymentUrl,
+      status: step4.status,
+      apiEndpoints: step4.apiEndpoints,
+      vercelProjectId: step4.vercelProjectId,
+      deployedAt: now,
+      warnings: step4.warnings,
+      deploymentNotes: step4.deploymentNotes
     } : undefined,
     metadata: {
       createdAt: config.existingAgent?.metadata?.createdAt || now,
@@ -748,7 +742,7 @@ function assembleCompleteAgent(
         step0.domain || 'general',
         step0.agentName || 'agent'
       ],
-      status: 'generated'
+      status: step4 ? 'deployed' : 'generated'
     }
   };
 

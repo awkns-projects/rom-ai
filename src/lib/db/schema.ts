@@ -149,8 +149,8 @@ export const oauthConnection = pgTable('OAuthConnection', {
   userId: uuid('userId')
     .notNull()
     .references(() => user.id),
-  avatarId: uuid('avatarId')
-    .references(() => avatar.id),
+  documentId: uuid('documentId')
+    .references(() => document.id),
   provider: varchar('provider', { 
     enum: ['instagram', 'facebook', 'shopify', 'threads', 'google', 'github-oauth', 'linkedin', 'notion'] 
   }).notNull(),

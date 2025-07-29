@@ -47,17 +47,28 @@ export function DocumentPreview({
     const boundingBox = hitboxRef.current?.getBoundingClientRect();
 
     if (artifact.documentId && boundingBox) {
+      // Agent artifacts should always use full screen dimensions
+      const isAgentArtifact = artifact.kind === 'agent';
+      const artifactBoundingBox = isAgentArtifact 
+        ? {
+            left: 0,
+            top: 0,
+            width: typeof window !== 'undefined' ? window.innerWidth : 1920,
+            height: typeof window !== 'undefined' ? window.innerHeight : 1080,
+          }
+        : {
+            left: boundingBox.x,
+            top: boundingBox.y,
+            width: boundingBox.width,
+            height: boundingBox.height,
+          };
+      
       setArtifact((artifact) => ({
         ...artifact,
-        boundingBox: {
-          left: boundingBox.x,
-          top: boundingBox.y,
-          width: boundingBox.width,
-          height: boundingBox.height,
-        },
+        boundingBox: artifactBoundingBox,
       }));
     }
-  }, [artifact.documentId, setArtifact]);
+  }, [artifact.documentId, artifact.kind, setArtifact]);
 
   if (artifact.isVisible) {
     if (result) {
@@ -157,6 +168,22 @@ const PureHitboxLayer = ({
   const handleClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
       const boundingBox = event.currentTarget.getBoundingClientRect();
+      
+      // Agent artifacts should always start with full screen dimensions to prevent glitches
+      const isAgentArtifact = result.kind === 'agent';
+      const artifactBoundingBox = isAgentArtifact 
+        ? {
+            left: 0,
+            top: 0,
+            width: typeof window !== 'undefined' ? window.innerWidth : 1920,
+            height: typeof window !== 'undefined' ? window.innerHeight : 1080,
+          }
+        : {
+            left: boundingBox.x,
+            top: boundingBox.y,
+            width: boundingBox.width,
+            height: boundingBox.height,
+          };
 
       setArtifact((artifact) =>
         artifact.status === 'streaming'
@@ -167,12 +194,7 @@ const PureHitboxLayer = ({
               documentId: result.id,
               kind: result.kind,
               isVisible: true,
-              boundingBox: {
-                left: boundingBox.x,
-                top: boundingBox.y,
-                width: boundingBox.width,
-                height: boundingBox.height,
-              },
+              boundingBox: artifactBoundingBox,
             },
       );
     },

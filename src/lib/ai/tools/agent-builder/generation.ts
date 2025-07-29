@@ -1072,7 +1072,44 @@ CRITICAL INSTRUCTIONS:
 - Include proper error handling and validation
 - MUST generate at least ${expectedActionCount > 0 ? expectedActionCount : '2'} actions
 
-Generate ${expectedActionCount > 0 ? `exactly ${expectedActionCount}` : 'at least 2-3'} actions that solve real business problems.`;
+MINDMAP EDITOR REQUIREMENTS - MUST INCLUDE:
+1. pseudoSteps: Break down each action into 2-4 clear steps showing the logical flow:
+   - Each step should have clear input/output fields with proper metadata
+   - Use appropriate step types (Database find unique, Database create, call external api, etc.)
+   - Steps should connect logically (output of step 1 feeds into input of step 2)
+   - **CRITICAL**: For ID fields (customerId, productId, etc.), set relationModel to enable dropdown generation
+   
+2. uiComponentsDesign: Design 3-5 UI form components for user input:
+   - **CRITICAL**: For ID fields (customerId, productId, etc.), use "select" type with realistic options
+   - Include appropriate input types (input, select, textarea, etc.)
+   - Add validation rules and helpful descriptions
+   - Map components to the action's input requirements
+   - Generate 3-7 realistic options for any select components
+   
+3. testCases: Create 2-3 test cases to validate the action:
+   - Include realistic test data with proper IDs
+   - Cover success and edge cases
+   - Show expected inputs and outputs
+
+FIELD NAMING CONVENTIONS FOR UI GENERATION:
+- Fields ending in "Id" should have relationModel set and generate as dropdowns
+- Examples: customerId → relationModel: "Customer", productId → relationModel: "Product"
+- This enables automatic dropdown generation with realistic data
+
+EXAMPLE MINDMAP STRUCTURE:
+For a "Create Order" action:
+- pseudoSteps: 
+  1. Validate Input (customerId: String -> Customer, productId: String -> Product)
+  2. Check Inventory (productId input → available quantity output)
+  3. Create Order Record (customerId, productId inputs → orderId output)
+  4. Send Confirmation (orderId input → confirmation sent)
+- uiComponentsDesign: 
+  - Customer Select (type: "select", options: realistic customer data)
+  - Product Select (type: "select", options: realistic product data)  
+  - Quantity Input (type: "number", validation rules)
+- testCases: [Valid Order, Out of Stock, Invalid Customer]
+
+Generate ${expectedActionCount > 0 ? `exactly ${expectedActionCount}` : 'at least 2-3'} actions that solve real business problems with complete mindmap data and proper field metadata for intuitive UI generation.`;
 
 
   // Generate with manual post-processing to fix envVars
@@ -1187,10 +1224,12 @@ export async function generateActionsWithEnhancedAnalysis(
  */
 export async function generateSchedules({
   step0Analysis,
-  existingAgent
+  existingAgent,
+  availableActions
 }: {
   step0Analysis: any,
   existingAgent?: AgentData,
+  availableActions?: AgentAction[]
 }): Promise<{ schedules: AgentSchedule[] }> {
   console.log('🕒 Starting schedules generation with real AI...');
   
@@ -1252,8 +1291,11 @@ ${automationNeeds.map((need: any) => `
 BUSINESS REQUIREMENTS:
 ${JSON.stringify(step0Analysis, null, 2)}
 
-AVAILABLE ACTIONS:
-${(step0Analysis.actions || []).map((action: any) => `- ${action.name}: ${action.purpose} (${action.type})`).join('\n') || 'No actions available'}
+AVAILABLE ACTIONS FROM STEP 2 (use these actionIds in steps):
+${(availableActions || []).map((action: any) => `- ID: "${action.id}", Name: "${action.name}", Type: ${action.type}, Purpose: ${action.description}`).join('\n') || 'No actions available'}
+
+STEP 0 ACTION REQUIREMENTS:
+${(step0Analysis.actions || []).map((action: any) => `- ${action.name}: ${action.purpose} (${action.type})`).join('\n') || 'No action requirements'}
 
 AVAILABLE DATA MODELS:
 ${(step0Analysis.models || []).map((model: any) => `- ${model.name}: ${model.purpose}`).join('\n') || 'No models available'}
@@ -1287,14 +1329,63 @@ FOR NEW SYSTEM:
 
 CRITICAL INSTRUCTIONS:
 - Generate schedules that match the Step 0 analysis specifications exactly
-- Use the 'type' field to distinguish between queries (read data) and mutations (write/modify data)
-- Use the 'frequency' field for proper scheduling (hourly, daily, weekly, monthly)
 - Include proper role-based access control (admin vs member)
 - Each schedule should have practical business value
 - Use the existing Prisma schema and actions for data operations
 - Include proper error handling and validation
 
-Generate exactly ${expectedScheduleCount} schedules that solve real business automation needs.`;
+MINDMAP EDITOR REQUIREMENTS - MUST INCLUDE:
+1. trigger: Configure timing with appropriate type:
+   - Use 'cron' for specific times (e.g., daily at 9 AM: "0 9 * * *")
+   - Use 'interval' for recurring periods (e.g., every 30 minutes)
+   - Use 'manual' for user-triggered schedules
+   - Set 'active: false' by default (user can activate later)
+   
+2. steps: Create 2-4 action chain steps that reference ACTUAL existing actions:
+   - Each step MUST reference a real actionId from the "AVAILABLE ACTIONS FROM STEP 2" list above
+   - Each step should have a unique ID (step_1, step_2, etc.)
+   - Include meaningful delays between steps (1-5 seconds: 1000-5000 milliseconds)
+   - Add error handling (stop, continue, or retry)
+   - Steps should logically connect to create a workflow
+   - DO NOT create placeholder or fake action IDs - only use real ones
+   
+3. Include helpful defaults:
+   - Set condition.type to 'always' for most steps
+   - Add delays of 1-5 seconds between steps
+   - Use 'stop' for error handling unless continuation makes sense
+
+EXAMPLE MINDMAP STRUCTURE:
+For a "Daily Customer Report" schedule (using real action IDs):
+- trigger: { type: 'cron', pattern: '0 9 * * *', timezone: 'UTC', active: false }
+- steps: [
+    { 
+      id: 'step_1', 
+      actionId: '[USE REAL ACTION ID FROM STEP 2 LIST]', 
+      name: 'Fetch Customer Data',
+      delay: { duration: 0, unit: 'seconds' },
+      condition: { type: 'always' }
+    },
+    { 
+      id: 'step_2', 
+      actionId: '[USE REAL ACTION ID FROM STEP 2 LIST]', 
+      name: 'Generate Report',
+      delay: { duration: 2000, unit: 'seconds' }, 
+      onError: { action: 'stop' },
+      condition: { type: 'always' }
+    },
+    { 
+      id: 'step_3', 
+      actionId: '[USE REAL ACTION ID FROM STEP 2 LIST]', 
+      name: 'Send Email Report',
+      delay: { duration: 1000, unit: 'seconds' }, 
+      onError: { action: 'continue' },
+      condition: { type: 'always' }
+    }
+  ]
+
+CRITICAL: Steps MUST reference actionId fields that correspond to ACTUAL existing actions generated in Step 2. Do NOT create placeholder or fake action IDs. Only use the real action IDs provided in the "AVAILABLE ACTIONS FROM STEP 2" list. If no actions are available, the schedule should have minimal steps but still use proper structure.
+
+Generate exactly ${expectedScheduleCount} schedules that solve real business automation needs with complete mindmap data.`;
 
   try {
   const result = await generateObject({
@@ -3589,30 +3680,45 @@ ${availableModels.map(model => `
 
 ${businessContext ? `BUSINESS CONTEXT: ${businessContext}` : ''}
 
-Create user-friendly interactive components that allow users to test this action flow. Focus on:
+Create user-friendly interactive components for testing this action. **CRITICAL REQUIREMENT**: Make inputs intuitive by using dropdowns instead of text fields for IDs and relations.
 
-1. **Smart Input Types**: 
-   - For model relations (like CustomerId, ProductId), create dropdowns with realistic mock data
-   - For strings, use appropriate input types (email, phone, etc.)
-   - For numbers, use number inputs with realistic ranges
-   - For dates, use date pickers
+**MANDATORY UI RULES**:
 
-2. **Realistic Mock Data**:
-   - Generate 3-5 realistic options for each dropdown
-   - Use business-appropriate names, emails, products, etc.
-   - Make data feel authentic to the business context
+1. **ID Fields = Dropdowns (NOT text inputs)**:
+   - ANY field ending in "Id" (productId, customerId, userId, etc.) → MUST be "select" type
+   - ANY field with relationModel → MUST be "select" type  
+   - Generate 3-7 realistic options with proper IDs (e.g., "cust-001", "prod-abc-123")
+   - Include descriptive labels for each option
 
-3. **Progressive Flow**:
-   - Start with inputs needed for the first step
-   - Group related inputs logically
-   - Use clear labels and descriptions
+2. **Smart Input Types**:
+   - Email fields → "email" type
+   - Phone fields → "phone" type  
+   - Dates → "date" type
+   - Numbers → "number" type with realistic ranges
+   - Long descriptions → "textarea" type
+   - Simple text → "input" type
+   - Booleans → "checkbox" type
 
-4. **Validation**:
-   - Mark required fields clearly
-   - Include helpful placeholder text
-   - Show field descriptions
+3. **Realistic Mock Data for Dropdowns**:
+   - Customer IDs: "cust-001", "cust-002", etc. with names like "Acme Corp", "TechCorp Inc"
+   - Product IDs: "prod-abc-123", "prod-xyz-456" with names like "Premium Widget", "Starter Package"
+   - User IDs: "user-admin-001", "user-sales-002" with names like "John Smith (Admin)", "Sarah Wilson (Sales)"
+   - Order IDs: "ord-2024-001", "ord-2024-002" 
+   - Use business-appropriate naming that matches the domain context
 
-Generate components that make it easy to test the action flow with realistic data.`;
+4. **User Experience**:
+   - Clear, descriptive labels (not just field names)
+   - Helpful descriptions explaining what each field does
+   - Logical grouping and ordering of fields
+   - Required field indicators
+
+**EXAMPLES**:
+- Field "customerId" → type: "select", options: [{"value": "cust-001", "label": "Acme Corp", "description": "Enterprise customer since 2020"}]
+- Field "productId" → type: "select", options: [{"value": "prod-wid-001", "label": "Premium Widget Pro", "description": "$299.99 - Best selling widget"}]
+- Field "email" → type: "email", placeholder: "user@company.com"
+- Field "description" → type: "textarea", placeholder: "Enter detailed description..."
+
+Remember: Users should NEVER have to type random IDs. Always provide them as dropdown selections with meaningful labels.`;
 
   const uiComponentsSchema = z.object({
     components: z.array(z.object({
@@ -3650,7 +3756,13 @@ Generate components that make it easy to test the action flow with realistic dat
       },
       {
         role: 'user',
-        content: `Generate interactive UI components for testing "${name}". Focus on the first step inputs: ${pseudoSteps[0]?.inputFields?.map(f => f.name).join(', ')}. Create realistic dropdowns for any model relations and appropriate input types for other fields.`
+        content: `Generate interactive UI components for testing "${name}".
+
+INPUTS TO HANDLE: ${pseudoSteps[0]?.inputFields?.map(f => `${f.name} (${f.type}${f.relationModel ? ` -> ${f.relationModel}` : ''})`).join(', ')}
+
+CRITICAL: For ANY field ending in "Id" or having a relationModel, use "select" type with realistic dropdown options. Users should NEVER type IDs manually - always provide them as dropdowns with meaningful labels.
+
+Generate business-appropriate mock data for all dropdown options.`
       }
     ],
     temperature: 0.3,
@@ -4544,6 +4656,24 @@ async function executeAction(database, input, member, ai, envVars = {}) {
     if (member.role !== '${actionAnalysis.role}' && '${actionAnalysis.role}' === 'admin') {
       throw new Error('Admin access required');
     }
+    
+    // Initialize external API credentials from environment variables
+    const externalApiCredentials = {
+      ${actionAnalysis.externalAPIs?.map((api: any) => 
+        api.requiredKeys?.map((key: any) => 
+          `${key.keyName}: envVars.${key.keyName} || process.env.${key.keyName}`
+        ).join(',\n      ')
+      ).join(',\n      ') || ''}
+    };
+    
+    // Validate required external API credentials
+    ${actionAnalysis.externalAPIs?.flatMap((api: any) => 
+      api.requiredKeys?.filter((key: any) => key.required).map((key: any) => 
+        `if (!externalApiCredentials.${key.keyName}) {
+      throw new Error('Required API credential ${key.keyName} is missing for ${api.provider}');
+    }`
+      ) || []
+    ).join('\n    ') || ''}
     
     let previousStepOutputs = {};
     let finalResult = null;

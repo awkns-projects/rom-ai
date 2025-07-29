@@ -23,6 +23,7 @@ export interface Step4Input {
   description?: string;
   environmentVariables?: Record<string, string>;
   vercelTeam?: string;
+  documentId?: string; // Document ID for main app callback
   sqliteOptions?: {
     filename?: string; // Default: 'dev.db'
     enableWAL?: boolean; // Default: true
@@ -425,12 +426,17 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     
     // Step 4: Set up environment variables
     sendProgress('🔧 Configuring environment variables...');
+    const agentKey = generateRandomSecret(); // Generate unique key for this agent
     const allEnvVars = {
       DATABASE_URL: databaseUrl,
       NEXTAUTH_SECRET: generateRandomSecret(),
       NEXTAUTH_URL: `https://${vercelProject.name}.vercel.app`,
       NODE_ENV: 'production',
       CRON_SECRET: generateRandomSecret(),
+      // Configuration for calling back to main app
+      NEXT_PUBLIC_MAIN_APP_URL: process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://rewrite-complete.vercel.app',
+      NEXT_PUBLIC_DOCUMENT_ID: input.documentId || '',
+      NEXT_PUBLIC_AGENT_KEY: agentKey,
       ...environmentVariables
     };
     
@@ -756,21 +762,6 @@ export async function testVercelConnection(): Promise<{ success: boolean; messag
   }
 }
 
-/**
- * Persist deployment metadata (placeholder function for compatibility)
- */
-export async function persistDeploymentMetadata(documentId: string, deployment: Step4Output, session: any): Promise<void> {
-  console.log(`💾 Persisting deployment metadata for document ${documentId}`);
-  // Implementation would go here - for now it's a placeholder
-}
-
-/**
- * Get deployment metadata (placeholder function for compatibility)
- */
-export async function getDeploymentMetadata(documentId: string): Promise<any> {
-  console.log(`📋 Getting deployment metadata for document ${documentId}`);
-  // Implementation would go here - for now returns null
-  return null;
-}
+// Deployment metadata functions removed - deployment info is now stored in agent JSON
 
 // Note: Render deployment has been removed - we only support Vercel deployment now 

@@ -25,6 +25,25 @@ export interface AgentData {
     uploadedImage?: string;
     selectedNFT?: string;
   };
+  externalApis?: Array<{
+    provider: string;
+    requiresConnection: boolean;
+    connectionType: 'oauth' | 'api_key' | 'none';
+    primaryUseCase: string;
+    requiredScopes: string[];
+    priority: 'primary' | 'secondary';
+  }>;
+  deployment?: {
+    deploymentId: string;
+    projectId: string;
+    deploymentUrl: string;
+    status: 'pending' | 'building' | 'ready' | 'error';
+    apiEndpoints: string[];
+    vercelProjectId: string;
+    deployedAt: string;
+    warnings: string[];
+    deploymentNotes: string[];
+  };
   metadata?: {
     createdAt: string;
     updatedAt: string;

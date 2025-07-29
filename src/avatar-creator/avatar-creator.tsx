@@ -18,6 +18,7 @@ import { AvatarList } from "@/components/avatar-list"
 import { useAvatars, type Avatar } from "@/hooks/use-avatar"
 import { OnboardContent } from "@/artifacts/agent/components/OnboardContent"
 import { MobileAppDemoWrapper } from "@/artifacts/agent/components/MobileAppDemo"
+import { saveAvatarCreatorState, loadAvatarCreatorState, createDebouncedSaver } from "@/artifacts/agent/utils/mindmap-persistence"
 
 type AvatarType = "rom-unicorn" | "custom"
 type RomUnicornType = "default" | "random"
@@ -63,13 +64,16 @@ interface AvatarData {
 
 interface AvatarCreatorProps {
   documentId?: string
-  externalApiMetadata?: {
-    provider: string | null;
+  externalApisMetadata?: Array<{
+    provider: string;
     requiresConnection: boolean;
     connectionType: 'oauth' | 'api_key' | 'none';
     primaryUseCase: string;
     requiredScopes: string[];
-  };
+    priority: 'primary' | 'secondary';
+  }>;
+  agentData?: any;
+  onAvatarChange?: (avatarData: any) => void;
 }
 
 const oauthProviders = [
@@ -166,44 +170,57 @@ const providerMapping: Record<string, string> = {
   'salesforce': 'salesforce', // Note: Salesforce is not in current providers list
 };
 
-// Function to get relevant OAuth providers based on external API metadata
-const getRelevantOAuthProviders = (externalApiMetadata?: AvatarCreatorProps['externalApiMetadata']) => {
-  // If no external API metadata or no external API required, show no OAuth providers
-  if (!externalApiMetadata || !externalApiMetadata.requiresConnection || !externalApiMetadata.provider) {
-    console.log('🔍 No external API required or no metadata provided - hiding OAuth providers');
+// Function to get relevant OAuth providers based on external APIs metadata
+const getRelevantOAuthProviders = (externalApisMetadata?: AvatarCreatorProps['externalApisMetadata']) => {
+  // If no external APIs metadata or empty array, show no OAuth providers
+  if (!externalApisMetadata || externalApisMetadata.length === 0) {
+    console.log('🔍 No external APIs required or no metadata provided - hiding OAuth providers');
     return [];
   }
 
-  // If connection type is not OAuth, don't show OAuth providers
-  if (externalApiMetadata.connectionType !== 'oauth') {
-    console.log(`🔍 External API "${externalApiMetadata.provider}" uses ${externalApiMetadata.connectionType}, not OAuth - hiding OAuth providers`);
-    return [];
-  }
-
-  // Map the Step 0 provider to OAuth provider ID
-  const mappedProviderId = providerMapping[externalApiMetadata.provider.toLowerCase()];
+  const relevantProviders: any[] = [];
   
-  if (!mappedProviderId) {
-    console.warn(`⚠️ No OAuth provider mapping found for "${externalApiMetadata.provider}" - hiding OAuth providers`);
-    return [];
+  // Process each external API
+  for (const apiMetadata of externalApisMetadata) {
+    // Skip if API doesn't require connection or doesn't use OAuth
+    if (!apiMetadata.requiresConnection || apiMetadata.connectionType !== 'oauth') {
+      console.log(`🔍 External API "${apiMetadata.provider}" uses ${apiMetadata.connectionType} or doesn't require connection - skipping OAuth`);
+      continue;
+    }
+
+    // Map external API provider to OAuth provider
+    const mappedProviderId = providerMapping[apiMetadata.provider.toLowerCase()];
+    
+    if (!mappedProviderId) {
+      console.warn(`⚠️ No OAuth provider mapping found for "${apiMetadata.provider}" - skipping`);
+      continue;
+    }
+
+    // Find the relevant OAuth provider
+    const relevantProvider = oauthProviders.find(provider => 
+      provider.id === mappedProviderId
+    );
+
+    if (!relevantProvider) {
+      console.warn(`⚠️ OAuth provider "${mappedProviderId}" not found in available providers`);
+      continue;
+    }
+
+    // Avoid duplicates
+    if (!relevantProviders.find(p => p.id === relevantProvider.id)) {
+      console.log(`✅ Found relevant OAuth provider for "${apiMetadata.provider}": ${relevantProvider.name}`, {
+        provider: apiMetadata.provider,
+        priority: apiMetadata.priority,
+        mappedTo: mappedProviderId,
+        providerName: relevantProvider.name,
+        primaryUseCase: apiMetadata.primaryUseCase
+      });
+      
+      relevantProviders.push(relevantProvider);
+    }
   }
 
-  // Find the OAuth provider that matches
-  const relevantProvider = oauthProviders.find(provider => provider.id === mappedProviderId);
-  
-  if (!relevantProvider) {
-    console.warn(`⚠️ OAuth provider "${mappedProviderId}" not found in available providers - hiding OAuth providers`);
-    return [];
-  }
-
-  console.log(`✅ Found relevant OAuth provider for "${externalApiMetadata.provider}": ${relevantProvider.name}`, {
-    provider: externalApiMetadata.provider,
-    mappedTo: mappedProviderId,
-    oauthProvider: relevantProvider.name,
-    primaryUseCase: externalApiMetadata.primaryUseCase
-  });
-
-  return [relevantProvider];
+  return relevantProviders;
 };
 
 const artStyles = [
@@ -254,28 +271,34 @@ const generateRandomUnicorn = (): UnicornParts => {
   }
 }
 
-export default function AvatarCreator({ documentId, externalApiMetadata }: AvatarCreatorProps = {}) {
+export default function AvatarCreator({ documentId, externalApisMetadata, agentData, onAvatarChange }: AvatarCreatorProps = {}) {
   const [step, setStep] = useState(1)
-  const [avatarData, setAvatarData] = useState<AvatarData>({
-    isAuthenticated: false,
-    name: "",
-    type: "rom-unicorn",
-    romUnicornType: "default",
-    customType: "upload",
-    oauthConnections: [],
+  // Initialize avatar data - will be updated from database if available
+  const [avatarData, setAvatarData] = useState<AvatarData>(() => {
+    return {
+      isAuthenticated: false,
+      name: agentData?.name || "",
+      type: "rom-unicorn",
+      romUnicornType: "default",
+      customType: "upload",
+      oauthConnections: [],
+    };
   })
+  
+  // Track if we've loaded from database
+  const [hasLoadedFromDatabase, setHasLoadedFromDatabase] = useState(false)
 
-  // Get filtered OAuth providers based on external API metadata
-  const relevantOAuthProviders = getRelevantOAuthProviders(externalApiMetadata);
+  // Get filtered OAuth providers based on external APIs metadata
+  const relevantOAuthProviders = getRelevantOAuthProviders(externalApisMetadata);
   
   // Debug logging
   useEffect(() => {
-    console.log('🎨 AvatarCreator - External API Metadata:', {
-      externalApiMetadata,
+    console.log('🎨 AvatarCreator - External APIs Metadata:', {
+      externalApisMetadata,
       relevantProvidersCount: relevantOAuthProviders.length,
       relevantProviders: relevantOAuthProviders.map(p => p.name)
     });
-  }, [externalApiMetadata, relevantOAuthProviders]);
+  }, [externalApisMetadata, relevantOAuthProviders]);
 
   const [isCreating, setIsCreating] = useState(false)
   const [creationProgress, setCreationProgress] = useState(0)
@@ -288,54 +311,183 @@ export default function AvatarCreator({ documentId, externalApiMetadata }: Avata
   // Avatar management hooks
   const { avatars, createAvatar: createAvatarInDB, setActiveAvatar } = useAvatars(documentId)
 
-  // Auto-save functionality
-  const saveToLocalStorage = useCallback((data: AvatarData, currentStep: number) => {
-    try {
-      const saveData = {
-        avatarData: data,
-        step: currentStep,
-        timestamp: new Date().toISOString(),
-        version: "1.0",
+  // Auto-save functionality - now saves to both database and agent data
+  const saveToDatabase = useCallback(async (data: AvatarData, currentStep: number) => {
+    console.log('💾 Saving avatar data:', { 
+      hasDocumentId: !!documentId,
+      hasOnAvatarChange: !!onAvatarChange,
+      avatarName: data.name, 
+      step: currentStep,
+      type: data.type,
+      hasConnections: data.oauthConnections?.length || 0
+    });
+    
+    // Convert avatar data to agent avatar format
+    const agentAvatarData = {
+      type: data.type,
+      unicornParts: data.unicornParts,
+      customType: data.customType,
+      uploadedImage: data.uploadedImage,
+      selectedNFT: data.selectedNFT,
+    };
+    
+    // Update the main agent data through the callback
+    if (onAvatarChange) {
+      onAvatarChange(agentAvatarData);
+      console.log('✅ Avatar data updated in agent');
+    }
+    
+    // Also save to database metadata for persistence (fallback)
+    if (documentId) {
+      try {
+        await saveAvatarCreatorState(documentId, {
+          avatarData: data,
+          step: currentStep,
+        });
+        console.log('✅ Avatar data saved to database metadata');
+      } catch (error) {
+        console.error("❌ Failed to save to database metadata:", error)
       }
-      localStorage.setItem("avatar-creator-progress", JSON.stringify(saveData))
-      setLastSaved(new Date())
-      setHasUnsavedChanges(false)
-    } catch (error) {
-      console.error("Failed to save progress:", error)
     }
-  }, [])
+    
+    setLastSaved(new Date())
+    setHasUnsavedChanges(false)
+  }, [documentId, onAvatarChange])
 
-  // Load from localStorage on mount
+  // Load from database on mount, then merge with agentData if available
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem("avatar-creator-progress")
-      if (saved) {
-        const { avatarData: savedData, step: savedStep, timestamp } = JSON.parse(saved)
-        setAvatarData(savedData)
-        setStep(savedStep)
-        setLastSaved(new Date(timestamp))
-        console.log("Restored previous session from", timestamp)
+    if (!documentId) return;
+    
+    const loadSavedData = async () => {
+      try {
+        const savedState = await loadAvatarCreatorState(documentId);
+        
+        // Start with default data
+        let finalAvatarData: AvatarData = {
+          isAuthenticated: false,
+          name: agentData?.name || "",
+          type: "rom-unicorn",
+          romUnicornType: "default",
+          customType: "upload",
+          oauthConnections: [],
+        };
+        
+        // If we have saved state, use it
+        if (savedState?.avatarData) {
+          finalAvatarData = { ...finalAvatarData, ...savedState.avatarData };
+          setStep(savedState.step || 1);
+          console.log("✅ Restored avatar from database:", {
+            type: finalAvatarData.type,
+            hasUnicornParts: !!finalAvatarData.unicornParts,
+            hasUploadedImage: !!finalAvatarData.uploadedImage
+          });
+        }
+        // If no saved state but we have agentData with avatar, use that
+        else if (agentData?.avatar) {
+          finalAvatarData = {
+            ...finalAvatarData,
+            name: agentData.name || "",
+            type: agentData.avatar.type || "rom-unicorn",
+            romUnicornType: (agentData.avatar.type === "rom-unicorn" ? "default" : finalAvatarData.romUnicornType),
+            customType: agentData.avatar.customType || "upload",
+            uploadedImage: agentData.avatar.uploadedImage,
+            selectedNFT: agentData.avatar.selectedNFT,
+            unicornParts: agentData.avatar.unicornParts,
+          };
+          console.log("✅ Loaded avatar from agentData:", {
+            type: finalAvatarData.type,
+            hasUnicornParts: !!finalAvatarData.unicornParts,
+            hasUploadedImage: !!finalAvatarData.uploadedImage
+          });
+        }
+        
+        setAvatarData(finalAvatarData);
+        setHasLoadedFromDatabase(true);
+        setLastSaved(new Date());
+        
+      } catch (error) {
+        console.error("Failed to load saved progress:", error);
+        setHasLoadedFromDatabase(true);
       }
-    } catch (error) {
-      console.error("Failed to load saved progress:", error)
-    }
-  }, [])
+    };
+    
+    loadSavedData();
+  }, [documentId, agentData?.avatar])
 
-  // Auto-save when data changes
+  // Monitor agentData changes after initial load and update avatar if needed
   useEffect(() => {
-    if (lastSaved !== null) {
-      // Don't save on initial load
-      const timeoutId = setTimeout(() => {
-        saveToLocalStorage(avatarData, step)
-      }, 1000) // Debounce saves by 1 second
-
-      setHasUnsavedChanges(true)
-      return () => clearTimeout(timeoutId)
+    if (!hasLoadedFromDatabase || !agentData?.avatar) return;
+    
+    // Only update if agentData has newer avatar information
+    const agentAvatar = agentData.avatar;
+    if (agentAvatar && (
+      agentAvatar.type !== avatarData.type ||
+      JSON.stringify(agentAvatar.unicornParts) !== JSON.stringify(avatarData.unicornParts) ||
+      agentAvatar.uploadedImage !== avatarData.uploadedImage
+    )) {
+      console.log('🔄 Updating avatar from agentData changes:', {
+        oldType: avatarData.type,
+        newType: agentAvatar.type,
+        hasUnicornParts: !!agentAvatar.unicornParts,
+        hasUploadedImage: !!agentAvatar.uploadedImage
+      });
+      
+      setAvatarData(prev => ({
+        ...prev,
+        type: agentAvatar.type || prev.type,
+        unicornParts: agentAvatar.unicornParts || prev.unicornParts,
+        uploadedImage: agentAvatar.uploadedImage || prev.uploadedImage,
+        selectedNFT: agentAvatar.selectedNFT || prev.selectedNFT,
+        customType: agentAvatar.customType || prev.customType,
+      }));
     }
-  }, [avatarData, step, saveToLocalStorage, lastSaved])
+  }, [agentData?.avatar, avatarData.type, avatarData.unicornParts, avatarData.uploadedImage, hasLoadedFromDatabase]);
 
-  const clearSavedData = () => {
-    localStorage.removeItem("avatar-creator-progress")
+  // Auto-save when data changes (with proper debouncing) - DISABLED
+  // useEffect(() => {
+  //   if (lastSaved !== null && hasLoadedFromDatabase) {
+  //     // Don't save on initial load or before database load is complete
+  //     const timeoutId = setTimeout(async () => {
+  //       setHasUnsavedChanges(true) // Show saving only when actually saving
+  //       await saveToDatabase(avatarData, step)
+  //       setHasUnsavedChanges(false)
+  //     }, 2000) // Reduced to 2 seconds for better UX
+
+  //     return () => clearTimeout(timeoutId)
+  //   }
+  // }, [
+  //   avatarData.name, 
+  //   avatarData.type, 
+  //   avatarData.romUnicornType, 
+  //   avatarData.customType, 
+  //   avatarData.uploadedImage,
+  //   JSON.stringify(avatarData.unicornParts),
+  //   step, 
+  //   saveToDatabase, 
+  //   lastSaved, 
+  //   hasLoadedFromDatabase
+  // ])
+
+  const clearSavedData = async () => {
+    // Clear database state instead of localStorage
+    if (documentId) {
+      try {
+        await saveAvatarCreatorState(documentId, {
+          avatarData: {
+            isAuthenticated: false,
+            name: "",
+            type: "rom-unicorn",
+            romUnicornType: "default",
+            customType: "upload",
+            oauthConnections: [],
+          },
+          step: 1,
+        });
+      } catch (error) {
+        console.error("Failed to clear saved data:", error);
+      }
+    }
+    
     setLastSaved(null)
     setHasUnsavedChanges(false)
     // Reset to initial state
@@ -354,19 +506,27 @@ export default function AvatarCreator({ documentId, externalApiMetadata }: Avata
   }
 
   const handleNameChange = (name: string) => {
-    setAvatarData((prev) => ({ ...prev, name }))
+    const updatedData = { ...avatarData, name };
+    setAvatarData(updatedData);
+    // Let auto-save handle the saving with debouncing
   }
 
   const handleTypeChange = (type: AvatarType) => {
-    setAvatarData((prev) => ({ ...prev, type }))
+    const updatedData = { ...avatarData, type };
+    setAvatarData(updatedData);
+    // Let auto-save handle the saving with debouncing
   }
 
   const handleRomUnicornTypeChange = (romUnicornType: RomUnicornType) => {
-    setAvatarData((prev) => ({ ...prev, romUnicornType }))
+    const updatedData = { ...avatarData, romUnicornType };
+    setAvatarData(updatedData);
+    // Let auto-save handle the saving with debouncing
   }
 
   const handleCustomTypeChange = (customType: CustomType) => {
-    setAvatarData((prev) => ({ ...prev, customType }))
+    const updatedData = { ...avatarData, customType };
+    setAvatarData(updatedData);
+    // Let auto-save handle the saving with debouncing
   }
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -611,48 +771,53 @@ export default function AvatarCreator({ documentId, externalApiMetadata }: Avata
     
     setAvatarData(updatedAvatarData)
     
-    try {
-      // Automatically save to database immediately after generation
-      const avatarPayload: any = {
-        name: updatedAvatarData.name,
-        type: updatedAvatarData.type,
-        romUnicornType: updatedAvatarData.romUnicornType,
-        unicornParts: updatedAvatarData.unicornParts,
-        isActive: false,
-      };
-      
-      // Only include optional fields if they have values
-      if (documentId) avatarPayload.documentId = documentId;
-      if (updatedAvatarData.personality) avatarPayload.personality = updatedAvatarData.personality;
-      if (updatedAvatarData.characterNames) avatarPayload.characterNames = updatedAvatarData.characterNames;
-      if (updatedAvatarData.customType) avatarPayload.customType = updatedAvatarData.customType;
-      if (updatedAvatarData.uploadedImage) avatarPayload.uploadedImage = updatedAvatarData.uploadedImage;
-      if (updatedAvatarData.selectedStyle) avatarPayload.selectedStyle = updatedAvatarData.selectedStyle;
-      if (updatedAvatarData.connectedWallet) avatarPayload.connectedWallet = updatedAvatarData.connectedWallet;
-      if (updatedAvatarData.selectedNFT) avatarPayload.selectedNFT = updatedAvatarData.selectedNFT;
-      if (updatedAvatarData.oauthConnections && updatedAvatarData.oauthConnections.length > 0) {
-        // OAuth connections are now stored in a separate table, not in avatar payload
-        // avatarPayload.oauthConnections = updatedAvatarData.oauthConnections;
-      }
-      
-      console.log("Avatar payload being sent:", JSON.stringify(avatarPayload, null, 2));
-      
-      const newAvatar = await createAvatarInDB(avatarPayload)
-      
-      // Auto-select the newly created avatar
-      if (newAvatar) {
-        await setActiveAvatar(newAvatar.id)
-      }
-      
-      console.log("Avatar automatically saved after lootbox generation:", newAvatar)
-    } catch (error) {
-      console.error("Failed to auto-save avatar:", error)
-      // Show error to user
-      alert("Failed to save avatar. Please try again.")
-    } finally {
-      setIsSaving(false)
-      isProcessingRef.current = false
-    }
+    // DISABLED: Automatic save to database after generation
+    // try {
+    //   // Automatically save to database immediately after generation
+    //   const avatarPayload: any = {
+    //     name: updatedAvatarData.name,
+    //     type: updatedAvatarData.type,
+    //     romUnicornType: updatedAvatarData.romUnicornType,
+    //     unicornParts: updatedAvatarData.unicornParts,
+    //     isActive: false,
+    //   };
+    //   
+    //   // Only include optional fields if they have values
+    //   if (documentId) avatarPayload.documentId = documentId;
+    //   if (updatedAvatarData.personality) avatarPayload.personality = updatedAvatarData.personality;
+    //   if (updatedAvatarData.characterNames) avatarPayload.characterNames = updatedAvatarData.characterNames;
+    //   if (updatedAvatarData.customType) avatarPayload.customType = updatedAvatarData.customType;
+    //   if (updatedAvatarData.uploadedImage) avatarPayload.uploadedImage = updatedAvatarData.uploadedImage;
+    //   if (updatedAvatarData.selectedStyle) avatarPayload.selectedStyle = updatedAvatarData.selectedStyle;
+    //   if (updatedAvatarData.connectedWallet) avatarPayload.connectedWallet = updatedAvatarData.connectedWallet;
+    //   if (updatedAvatarData.selectedNFT) avatarPayload.selectedNFT = updatedAvatarData.selectedNFT;
+    //   if (updatedAvatarData.oauthConnections && updatedAvatarData.oauthConnections.length > 0) {
+    //     // OAuth connections are now stored in a separate table, not in avatar payload
+    //     // avatarPayload.oauthConnections = updatedAvatarData.oauthConnections;
+    //   }
+    //   
+    //   console.log("Avatar payload being sent:", JSON.stringify(avatarPayload, null, 2));
+    //   
+    //   const newAvatar = await createAvatarInDB(avatarPayload)
+    //   
+    //   // Auto-select the newly created avatar
+    //   if (newAvatar) {
+    //     await setActiveAvatar(newAvatar.id)
+    //   }
+    //   
+    //   console.log("Avatar automatically saved after lootbox generation:", newAvatar)
+    // } catch (error) {
+    //   console.error("Failed to auto-save avatar:", error)
+    //   // Show error to user
+    //   alert("Failed to save avatar. Please try again.")
+    // } finally {
+    //   setIsSaving(false)
+    //   isProcessingRef.current = false
+    // }
+    
+    // Clean up state since auto-save is disabled
+    setIsSaving(false)
+    isProcessingRef.current = false
   }, [avatarData, createAvatarInDB, setActiveAvatar, documentId])
 
   const handleSelectAvatar = async (avatar: Avatar) => {
@@ -734,36 +899,7 @@ export default function AvatarCreator({ documentId, externalApiMetadata }: Avata
             </div>
 
             {/* Save Status & Actions */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              {lastSaved && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      <div className="flex items-center gap-1 text-xs text-gray-400">
-                        <div
-                          className={`w-2 h-2 rounded-full ${hasUnsavedChanges ? "bg-yellow-500" : "bg-green-500"}`}
-                        ></div>
-                        <span className="hidden sm:inline">{hasUnsavedChanges ? "Saving..." : "Saved"}</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Last saved: {lastSaved.toLocaleTimeString()}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-
-              {lastSaved && (
-                <Button
-                  onClick={clearSavedData}
-                  variant="outline"
-                  size="sm"
-                  className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 text-xs h-7"
-                >
-                  Clear Progress
-                </Button>
-              )}
-            </div>
+            
           </div>
 
           {/* Progress restoration notice */}
@@ -1217,12 +1353,12 @@ export default function AvatarCreator({ documentId, externalApiMetadata }: Avata
                         ) : (
                           <div className="text-center py-4">
                             <div className="text-gray-400 text-sm">
-                              This agent doesn't require external API connections.
-                              {externalApiMetadata?.connectionType === 'api_key' && (
-                                <div className="mt-2 text-xs">
-                                  Note: This agent uses API key authentication which will be configured during deployment.
-                                </div>
-                              )}
+                                                          This agent doesn't require external API connections.
+                            {externalApisMetadata?.some(api => api.connectionType === 'api_key') && (
+                              <div className="mt-2 text-xs">
+                                Note: This agent uses API key authentication which will be configured during deployment.
+                              </div>
+                            )}
                             </div>
                           </div>
                         )}

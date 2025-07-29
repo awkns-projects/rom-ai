@@ -219,12 +219,24 @@ export interface AgentData {
   createdAt: string;
   metadata: AgentMetadata;
   prismaSchema: string;
-  externalApi?: {
-    provider: string | null;
+  externalApis?: Array<{
+    provider: string;
     requiresConnection: boolean;
     connectionType: 'oauth' | 'api_key' | 'none';
     primaryUseCase: string;
     requiredScopes: string[];
+    priority: 'primary' | 'secondary';
+  }>;
+  deployment?: {
+    deploymentId: string;
+    projectId: string;
+    deploymentUrl: string;
+    status: 'pending' | 'building' | 'ready' | 'error';
+    apiEndpoints: string[];
+    vercelProjectId: string;
+    deployedAt: string;
+    warnings: string[];
+    deploymentNotes: string[];
   };
 }
 
