@@ -797,30 +797,32 @@ const AgentBuilderContent = memo(({
           prismaSchema: parsed.prismaSchema || agentData?.prismaSchema || '', // Preserve generated schema
           createdAt: parsed.createdAt || new Date().toISOString(),
           // PRESERVE USER-CONFIGURED DATA: Only use external data if user hasn't configured these
-          theme: parsed.theme || agentData?.theme, // Preserve user's theme selection
-          avatar: parsed.avatar || agentData?.avatar, // Preserve user's avatar data
-          externalApis: parsed.externalApis || agentData?.externalApis, // Preserve external API metadata
-          deployment: parsed.deployment || agentData?.deployment, // Include deployment information
-          metadata: parsed.metadata || agentData.metadata, // Include metadata
-          oauthTokens: parsed.oauthTokens || agentData.oauthTokens, // Preserve OAuth tokens
-          apiKeys: parsed.apiKeys || agentData.apiKeys, // Preserve API keys
-          credentials: parsed.credentials || agentData.credentials, // Preserve credentials
-          authConfig: parsed.authConfig || agentData.authConfig, // Preserve auth configuration
-          integrations: parsed.integrations || agentData.integrations, // Preserve integrations
-          settings: parsed.settings || agentData.settings // Preserve any additional settings
+          theme: agentData?.theme || parsed.theme, // Preserve user's theme selection (user takes priority)
+          avatar: agentData?.avatar || parsed.avatar, // Preserve user's avatar data (user takes priority)
+          externalApis: agentData?.externalApis || parsed.externalApis, // Preserve external API metadata (user takes priority)
+          deployment: agentData?.deployment || parsed.deployment, // Include deployment information (user takes priority)
+          metadata: agentData?.metadata || parsed.metadata, // Include metadata (user takes priority)
+          oauthTokens: agentData?.oauthTokens || parsed.oauthTokens, // Preserve OAuth tokens (user takes priority)
+          apiKeys: agentData?.apiKeys || parsed.apiKeys, // Preserve API keys (user takes priority)
+          credentials: agentData?.credentials || parsed.credentials, // Preserve credentials (user takes priority)
+          authConfig: agentData?.authConfig || parsed.authConfig, // Preserve auth configuration (user takes priority)
+          integrations: agentData?.integrations || parsed.integrations, // Preserve integrations (user takes priority)
+          settings: agentData?.settings || parsed.settings // Preserve any additional settings (user takes priority)
         };
         
         console.log('🔄 Content update with intelligent merge:', {
-          preservedTheme: updatedData.theme === agentData.theme ? 'user' : 'external',
-          preservedAvatar: updatedData.avatar === agentData.avatar ? 'user' : 'external',
-          preservedOAuth: updatedData.oauthTokens === agentData.oauthTokens ? 'user' : 'external',
-          preservedApiKeys: updatedData.apiKeys === agentData.apiKeys ? 'user' : 'external',
+          preservedTheme: updatedData.theme === agentData?.theme ? 'user-priority' : 'orchestrator',
+          preservedAvatar: updatedData.avatar === agentData?.avatar ? 'user-priority' : 'orchestrator',
+          preservedOAuth: updatedData.oauthTokens === agentData?.oauthTokens ? 'user-priority' : 'orchestrator',
+          preservedApiKeys: updatedData.apiKeys === agentData?.apiKeys ? 'user-priority' : 'orchestrator',
           hasExternalApis: !!updatedData.externalApis?.length,
           providers: updatedData.externalApis?.map((api: any) => api.provider).join(', ') || 'none',
           requiresConnection: updatedData.externalApis?.some((api: any) => api.requiresConnection) || false,
           hasDeployment: !!updatedData.deployment,
           finalTheme: updatedData.theme,
-          hasAvatar: !!updatedData.avatar
+          hasAvatar: !!updatedData.avatar,
+          hasPrismaSchema: !!updatedData.prismaSchema,
+          hasEnums: !!updatedData.enums?.length
         });
         
         // Use a more stable comparison approach - Include all relevant properties
@@ -867,11 +869,14 @@ const AgentBuilderContent = memo(({
           // Only update if data has actually changed
           if (currentDataString !== newDataString) {
             console.log('📥 Updating agent data from content change with preservation:', {
-              preservedUserTheme: updatedData.theme === prevData.theme,
-              preservedUserAvatar: updatedData.avatar === prevData.avatar,
-              preservedUserAuth: updatedData.oauthTokens === prevData.oauthTokens,
-              previousExternalApis: prevData.externalApis?.map((api: any) => api.provider).join(', ') || 'none',
+              preservedUserTheme: updatedData.theme === agentData?.theme,
+              preservedUserAvatar: updatedData.avatar === agentData?.avatar,
+              preservedUserAuth: updatedData.oauthTokens === agentData?.oauthTokens,
+              preservedUserApiKeys: updatedData.apiKeys === agentData?.apiKeys,
+              previousExternalApis: agentData?.externalApis?.map((api: any) => api.provider).join(', ') || 'none',
               newExternalApis: updatedData.externalApis?.map((api: any) => api.provider).join(', ') || 'none',
+              hasPrismaSchema: !!updatedData.prismaSchema,
+              hasEnums: !!updatedData.enums?.length,
               dataChanged: true
             });
             
@@ -891,7 +896,7 @@ const AgentBuilderContent = memo(({
       console.warn('❌ Failed to parse updated content:', e);
       console.warn('📄 Problematic content (first 200 chars):', content ? content.substring(0, 200) : 'none');
     }
-  }, [content, agentData?.name, agentData?.description, agentData?.theme, agentData?.avatar, agentData?.externalApis, agentData?.oauthTokens, agentData?.apiKeys]); // Remove agentData dependency to prevent infinite loop
+  }, [content]); // Only depend on content to prevent infinite loops - preservation logic handles user data correctly
 
   // NOW ALL HOOKS ARE DECLARED - we can safely do early returns
   if (isLoading) {
