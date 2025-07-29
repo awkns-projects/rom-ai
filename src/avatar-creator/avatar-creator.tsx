@@ -1090,23 +1090,31 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
     
     setCurrentTheme(theme);
     
-    // CRITICAL FIX: Update avatarData state with theme (same pattern as name changes)
-    const updatedAvatarData = { ...avatarData, theme };
-    setAvatarData(updatedAvatarData);
-    
     // CRITICAL FIX: Immediately sync theme to main content (where orchestrator reads from)
     if (onThemeChange) {
       console.log('🎨 IMMEDIATE SYNC: Calling onThemeChange with theme:', theme);
       onThemeChange(theme);
     }
     
-    // ALSO save to database metadata for persistence across reloads (now with updated data)
+    // CRITICAL FIX: Save with new theme immediately (don't wait for state update)
     if (documentId && documentId !== 'init') {
-      saveToDatabase(updatedAvatarData, step, false).catch(error => {
-        console.error('❌ Failed to save theme to database metadata:', error);
-      });
+      // Create a custom save call with the new theme
+      const saveWithNewTheme = async () => {
+        try {
+          await saveAvatarCreatorState(documentId, {
+            avatarData,
+            step,
+            theme: theme, // Use the new theme directly, not currentTheme state
+          });
+          console.log('✅ Avatar data and theme saved with new theme:', theme);
+        } catch (error) {
+          console.error('❌ Failed to save theme to database metadata:', error);
+        }
+      };
+      
+      saveWithNewTheme();
     }
-  }, [onThemeChange, documentId, avatarData, step, saveToDatabase]);
+  }, [onThemeChange, documentId, avatarData, step]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-100 p-3 sm:p-6 font-mono">
