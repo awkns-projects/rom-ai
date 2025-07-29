@@ -442,7 +442,7 @@ interface ActionMindMapEditorProps {
 
 interface MindMapNode {
   id: string;
-  type: 'description' | 'step' | 'ui-components';
+  type: 'description' | 'step' | 'ui-components' | 'add-step';
   title: string;
   content: string;
   status: 'empty' | 'processing' | 'complete' | 'ready';
@@ -500,83 +500,62 @@ export const ActionMindMapEditor = memo(({
     return () => window.removeEventListener('resize', checkIsMobile);
   }, []);
 
-  // Initialize mind map nodes with responsive positioning
-  const [nodes, setNodes] = useState<MindMapNode[]>(() => [
-    {
-      id: 'description',
-      type: 'description',
-      title: '💡 Action Idea',
-      content: action.description || 'Your creative spark starts here',
-      status: action.description ? 'complete' : 'empty',
-      position: { 
-        desktop: { x: 50, y: 200 },
-        mobile: { x: 20, y: 50 }
-      },
-      connections: ['steps'],
-      data: { name: action.name, description: action.description }
-    },
-    {
-      id: 'steps',
-      type: 'step',
-      title: '🔄 Smart Steps',
-      content: action.pseudoSteps?.length ? `${action.pseudoSteps.length} AI-crafted steps` : 'Intelligent workflow will emerge',
-      status: action.pseudoSteps?.length ? 'complete' : 'empty',
-      position: { 
-        desktop: { x: 380, y: 200 },
-        mobile: { x: 20, y: 220 }
-      },
-      connections: ['ui-components'],
-      data: action.pseudoSteps
-    },
-    {
-      id: 'ui-components',
-      type: 'ui-components',
-      title: '🎨 UI Components',
-      content: 'Design the user interface',
-              status: action.uiComponentsDesign?.length ? 'complete' : 'empty',
-        position: { 
-          desktop: { x: 710, y: 200 },
-          mobile: { x: 20, y: 390 }
-        },
-        connections: [],
-        data: action.uiComponentsDesign
+  // Pure steps chain only (mind map shows only after idea is complete)
+  const generateNodes = (): MindMapNode[] => {
+    const nodes: MindMapNode[] = [];
+    
+    // Only show steps chain in mind map (after idea is submitted)
+    if (action.pseudoSteps && action.pseudoSteps.length > 0) {
+      action.pseudoSteps.forEach((step, index) => {
+        const nextStepId = index < action.pseudoSteps!.length - 1 
+          ? `step-${action.pseudoSteps![index + 1].id}` 
+          : null;
+        
+        nodes.push({
+          id: `step-${step.id}`,
+          type: 'step',
+          title: `Step ${index + 1}`,
+          content: step.description || step.type,
+          status: step.description ? 'complete' : 'empty',
+          position: {
+            desktop: { x: 50 + (index * 320), y: 50 },
+            mobile: { x: 20, y: 50 + (index * 280) }
+          },
+          connections: nextStepId ? [nextStepId] : [],
+          data: { step, index }
+        });
+      });
     }
-  ]);
 
-  // Initialize connections
-  const [connections] = useState<MindMapConnection[]>([
-    { id: 'desc-to-steps', from: 'description', to: 'steps', status: 'inactive' },
-    { id: 'steps-to-ui', from: 'steps', to: 'ui-components', status: 'inactive' }
-  ]);
+    return nodes;
+  };
 
-  // Update node status based on action changes
+  const [nodes, setNodes] = useState<MindMapNode[]>(() => generateNodes());
+
+  // Generate connections dynamically based on nodes
+  const generateConnections = (nodeList: MindMapNode[]): MindMapConnection[] => {
+    const connections: MindMapConnection[] = [];
+    
+    nodeList.forEach(node => {
+      node.connections.forEach(targetId => {
+        const targetNode = nodeList.find(n => n.id === targetId);
+        if (targetNode) {
+          connections.push({
+            id: `${node.id}-to-${targetId}`,
+            from: node.id,
+            to: targetId,
+            status: 'inactive'
+          });
+        }
+      });
+    });
+    
+    return connections;
+  };
+
+  // Update nodes when action changes
   useEffect(() => {
-    setNodes(prevNodes => prevNodes.map(node => {
-      switch (node.id) {
-        case 'description':
-          return {
-            ...node,
-            status: action.name && action.description ? 'complete' : 'empty',
-            data: { name: action.name, description: action.description }
-          };
-        case 'steps':
-          return {
-            ...node,
-            status: action.pseudoSteps?.length ? 'complete' : 'empty',
-            content: action.pseudoSteps?.length ? `${action.pseudoSteps.length} steps defined` : 'Steps will appear here',
-            data: action.pseudoSteps
-          };
-        case 'ui-components':
-          return {
-            ...node,
-            status: action.uiComponentsDesign?.length ? 'complete' : 'empty',
-            content: action.uiComponentsDesign?.length ? `${action.uiComponentsDesign.length} UI components designed` : 'UI components will be designed',
-            data: action.uiComponentsDesign
-          };
-        default:
-          return node;
-      }
-    }));
+    setNodes(generateNodes());
   }, [action]);
 
   // Keyboard shortcut for details modal
@@ -913,19 +892,23 @@ export const ActionMindMapEditor = memo(({
     const nodeWidth = isMobile ? 280 : 300;
     const nodeHeight = 120;
     
-    const startX = from.position[currentPosition].x + (isMobile ? nodeWidth / 2 : nodeWidth);
-    const startY = from.position[currentPosition].y + nodeHeight / 2;
-    const endX = to.position[currentPosition].x + (isMobile ? nodeWidth / 2 : 0);
-    const endY = to.position[currentPosition].y + nodeHeight / 2;
-    
+    // Only step-to-step connections now (within the chain)
     if (isMobile) {
-      // Vertical connections for mobile
-      const midY = (startY + endY) / 2;
-      return `M ${startX} ${startY} Q ${startX} ${midY} ${endX} ${endY}`;
+      // Mobile: Vertical connections between steps
+      const fromX = from.position[currentPosition].x + nodeWidth / 2;
+      const fromY = from.position[currentPosition].y + nodeHeight;
+      const toX = to.position[currentPosition].x + nodeWidth / 2;
+      const toY = to.position[currentPosition].y;
+      
+      return `M ${fromX} ${fromY} L ${toX} ${toY}`;
     } else {
-      // Horizontal curved connections for desktop
-      const midX = (startX + endX) / 2;
-      return `M ${startX} ${startY} Q ${midX} ${startY} ${endX} ${endY}`;
+      // Desktop: Horizontal connections between steps in chain
+      const fromX = from.position[currentPosition].x + nodeWidth;
+      const fromY = from.position[currentPosition].y + nodeHeight / 2;
+      const toX = to.position[currentPosition].x;
+      const toY = to.position[currentPosition].y + nodeHeight / 2;
+      
+      return `M ${fromX} ${fromY} L ${toX} ${toY}`;
     }
   };
 
@@ -974,129 +957,105 @@ export const ActionMindMapEditor = memo(({
         );
 
       case 'step':
+        const stepData = node.data;
+        if (!stepData?.step) return null;
+        
+        const { step, index } = stepData;
+        
         return (
-          <div className="mt-6 space-y-6" onClick={(e) => e.stopPropagation()}>
-            {/* Clean Steps List */}
-            <div className="max-h-80 overflow-y-auto space-y-4">
-              {action.pseudoSteps?.map((step, index) => (
-                <div key={step.id} className="group p-4 rounded-lg bg-black/20 border border-blue-500/20 hover:border-blue-500/40 transition-all cursor-pointer">
-                  {/* Header Row: Title + Buttons */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="text-blue-300 font-mono font-semibold">
-                        Step {index + 1}
-                      </div>
-                      <div className="px-2 py-1 rounded text-xs font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                        {step.type}
-                      </div>
-                    </div>
-                    
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingStep({ step, index });
-                        }}
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
-                      >
-                        <span className="text-xs">✏️</span>
-                      </Button>
-                      <Button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const updatedSteps = action.pseudoSteps?.filter(s => s.id !== step.id) || [];
-                          onUpdate({ ...action, pseudoSteps: updatedSteps });
-                        }}
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                      >
-                        <CrossIcon size={10} />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Description Row */}
-                  <div 
-                    className="text-blue-200 text-sm font-mono leading-relaxed mb-3 cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingStep({ step, index });
-                    }}
-                  >
-                    {step.description || 'Click to add description...'}
-                  </div>
-
-                  {/* Input/Output Row */}
-                  {(step.inputFields?.length || step.outputFields?.length) ? (
-                    <div className="flex items-center gap-4 text-xs text-blue-400/70">
-                      {step.inputFields?.length > 0 && (
-                        <span className="flex items-center gap-1">
-                          <span>📥</span>
-                          <span>{step.inputFields.length} input{step.inputFields.length > 1 ? 's' : ''}</span>
-                        </span>
-                      )}
-                      {step.outputFields?.length > 0 && (
-                        <span className="flex items-center gap-1">
-                          <span>📤</span>
-                          <span>{step.outputFields.length} output{step.outputFields.length > 1 ? 's' : ''}</span>
-                        </span>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
+          <div className="mt-4 space-y-4" onClick={(e) => e.stopPropagation()}>
+            {/* Step Type Badge */}
+            <div className="px-3 py-1.5 rounded-lg text-sm font-mono bg-blue-500/30 text-blue-200 border border-blue-500/40 font-semibold w-fit">
+              {step.type}
+            </div>
+            
+            {/* Description */}
+            <div 
+              className="p-4 rounded-xl bg-slate-800/50 border border-slate-600/30 cursor-pointer hover:bg-slate-800/70 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingStep({ step, index });
+              }}
+            >
+              <div className="text-slate-300 text-sm font-mono leading-relaxed">
+                {step.description || (
+                  <span className="text-slate-500 italic">Click to add description...</span>
+                )}
+              </div>
             </div>
 
-            {/* Add Step Button */}
+            {/* Input/Output Info */}
+            {(step.inputFields?.length || step.outputFields?.length) && (
+              <div className="flex items-center justify-center gap-6 py-3 bg-slate-800/30 rounded-xl border border-slate-600/20">
+                {step.inputFields?.length > 0 && (
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <div className="w-6 h-6 bg-green-500/20 rounded-lg flex items-center justify-center">
+                      <span className="text-sm">📥</span>
+                    </div>
+                    <div>
+                      <div className="font-semibold text-xs">{step.inputFields.length}</div>
+                      <div className="text-xs text-slate-400">Input{step.inputFields.length > 1 ? 's' : ''}</div>
+                    </div>
+                  </div>
+                )}
+                {step.outputFields?.length > 0 && (
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <div className="w-6 h-6 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                      <span className="text-sm">📤</span>
+                    </div>
+                    <div>
+                      <div className="font-semibold text-xs">{step.outputFields.length}</div>
+                      <div className="text-xs text-slate-400">Output{step.outputFields.length > 1 ? 's' : ''}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="flex gap-2 pt-2">
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingStep({ step, index });
+                }}
+                variant="ghost"
+                size="sm"
+                className="flex-1 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20 transition-colors"
+              >
+                ✏️ Edit
+              </Button>
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const updatedSteps = action.pseudoSteps?.filter(s => s.id !== step.id) || [];
+                  onUpdate({ ...action, pseudoSteps: updatedSteps });
+                }}
+                variant="ghost"
+                size="sm"
+                className="text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-colors"
+              >
+                <CrossIcon size={14} />
+              </Button>
+            </div>
+          </div>
+        );
+
+      case 'add-step':
+        return (
+          <div className="mt-4 space-y-4 text-center" onClick={(e) => e.stopPropagation()}>
+            <div className="text-blue-400/70 font-mono text-sm">
+              Generate intelligent workflow steps with AI
+            </div>
             <Button
               onClick={(e) => {
                 e.stopPropagation();
-                const newStep = {
-                  id: generateNewId('step', action.pseudoSteps || []),
-                  type: 'Database find many' as const,
-                  description: '',
-                  inputFields: [{
-                    id: generateNewId('field', []),
-                    name: '',
-                    type: 'String',
-                    kind: 'scalar' as const,
-                    required: false,
-                    list: false,
-                    description: ''
-                  }],
-                  outputFields: [{
-                    id: generateNewId('field', []),
-                    name: '',
-                    type: 'String',
-                    kind: 'scalar' as const,
-                    required: false,
-                    list: false,
-                    description: ''
-                  }]
-                };
-                const updatedSteps = [...(action.pseudoSteps || []), newStep];
-                onUpdate({ ...action, pseudoSteps: updatedSteps });
+                generateStepsFromDescription();
               }}
+              disabled={!action.name.trim() || !action.description.trim() || isGeneratingSteps}
               className="btn-matrix w-full text-sm py-3"
             >
-              <PlusIcon size={14} />
-              Add Step
-            </Button>
-
-            {/* Generate UI Components Button */}
-            <Button
-              onClick={(e) => {
-                e.stopPropagation();
-                generateUIComponentsFromSteps(false); // Initial generation
-              }}
-              disabled={!action.pseudoSteps?.length || isGeneratingUIComponents}
-              className="btn-matrix w-full text-sm py-2"
-            >
-              {isGeneratingUIComponents ? "⚡ Designing..." : "🎨 Design UI →"}
+              {isGeneratingSteps ? "🤖 AI is crafting..." : "✨ Generate Steps"}
             </Button>
           </div>
         );
@@ -1277,10 +1236,10 @@ export const ActionMindMapEditor = memo(({
             </div>
             <div>
               <h3 className="text-lg md:text-xl font-bold text-blue-200 font-mono">
-                {isMobile ? 'Mind Flow' : 'Action Mind Map'}
+                Action Builder
               </h3>
               <p className="text-blue-400 text-xs md:text-sm font-mono">
-                {isMobile ? 'Idea → Steps → Test & Create' : 'Simple flow from idea to working action'}
+                Idea → Steps → Test & Create
               </p>
             </div>
           </div>
@@ -1298,158 +1257,260 @@ export const ActionMindMapEditor = memo(({
         </div>
       </div>
 
-      {/* Mind Map Container */}
-      <div className="flex-1 relative min-h-[500px] overflow-auto">
-        <div 
-          ref={containerRef}
-          className="relative bg-gradient-to-br from-blue-950/20 via-purple-950/20 to-blue-950/20"
-          style={{ 
-            minHeight: isMobile ? '800px' : '600px', 
-            minWidth: isMobile ? '320px' : '1100px',
-            width: '100%'
-          }}
-        >
-          {/* SVG for connections */}
-          <svg 
-            className="absolute inset-0 w-full h-full pointer-events-none" 
-            style={{ zIndex: 1 }}
-          >
-            {connections.map(connection => {
-              const fromNode = nodes.find(n => n.id === connection.from);
-              const toNode = nodes.find(n => n.id === connection.to);
-              if (!fromNode || !toNode) return null;
-
-              return (
-                <path
-                  key={connection.id}
-                  d={getConnectionPath(fromNode, toNode)}
-                  stroke={connection.status === 'flowing' ? '#60A5FA' : '#3B82F6'}
-                  strokeWidth={connection.status === 'flowing' ? 3 : 2}
-                  fill="none"
-                  strokeDasharray={connection.status === 'flowing' ? '0' : '5,5'}
-                  className="transition-all duration-300"
-                  style={{
-                    filter: connection.status === 'flowing' ? 'drop-shadow(0 0 8px #60A5FA)' : 'none'
-                  }}
-                />
-              );
-            })}
-          </svg>
-
-          {/* Nodes */}
-          {nodes.map(node => {
-            const currentPosition = isMobile ? 'mobile' : 'desktop';
-            const nodeWidth = isMobile ? 280 : 300;
-            
-            return (
-              <div
-                key={node.id}
-                className={`absolute transition-all duration-500 cursor-pointer ${
-                  selectedNode === node.id ? 'z-20' : 'z-10'
-                }`}
-                style={{
-                  left: node.position[currentPosition].x,
-                  top: node.position[currentPosition].y,
-                  width: nodeWidth,
-                  transform: selectedNode === node.id ? 'scale(1.02)' : 'scale(1)',
-                }}
-                onClick={() => setSelectedNode(selectedNode === node.id ? null : node.id)}
-              >
-                <div
-                  className={`p-3 md:p-4 rounded-xl border transition-all duration-300 ${
-                    selectedNode === node.id
-                      ? 'bg-blue-500/20 border-blue-400/60 shadow-xl shadow-blue-500/20'
-                      : 'bg-blue-950/40 border-blue-500/30 hover:border-blue-400/50'
-                  } ${
-                    node.status === 'complete' ? 'ring-2 ring-emerald-400/50' :
-                    node.status === 'processing' ? 'ring-2 ring-blue-400/50 ai-generating' : ''
-                  }`}
-                  style={{
-                    backdropFilter: 'blur(8px)',
-                    ...(selectedNode === node.id && {
-                      boxShadow: '0 0 30px rgba(59, 130, 246, 0.3), inset 0 0 20px rgba(59, 130, 246, 0.1)'
-                    }),
-                    ...(node.status === 'processing' && {
-                      animation: 'ai-glow 2s ease-in-out infinite alternate, ai-shimmer 3s linear infinite'
-                    })
-                  }}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className={`font-mono font-bold transition-all duration-300 ${
-                      selectedNode === node.id ? 'text-blue-200 text-base' : 'text-blue-300 text-sm'
-                    }`}>
-                      {node.title}
-                    </h4>
-                    <div className="flex items-center gap-1">
-                      {node.status === 'complete' && <span className="text-emerald-400 text-lg">✅</span>}
-                      {node.status === 'processing' && (
-                        <div className="flex items-center gap-1">
-                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-400 border-t-transparent"></div>
-                          <span className="text-blue-400 text-lg animate-pulse">⚡</span>
-                        </div>
-                      )}
-                      {node.status === 'empty' && <span className="text-blue-500/50 text-lg">⭕</span>}
-                    </div>
-                  </div>
-                  
-                  <div className={`text-blue-400 font-mono transition-all duration-300 ${
-                    selectedNode === node.id ? 'text-sm' : 'text-xs'
-                  }`}>
-                    {node.content}
-                  </div>
-
-                  {selectedNode === node.id && (
-                    <div className="transition-all duration-300 ease-out">
-                      {renderNodeContent(node)}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Quick Actions */}
-          {!selectedNode && (
-            <div className="absolute bottom-4 right-4 flex flex-col gap-2">
-              <Button
-                onClick={() => setSelectedNode('description')}
-                className="btn-matrix text-xs px-3 py-2"
-                disabled={isGeneratingSteps || isGeneratingCode || isGeneratingUIComponents}
-              >
-                🎯 Start Here
-              </Button>
-              {action.description && (
-                <Button
-                  onClick={generateStepsFromDescription}
-                  className="btn-matrix text-xs px-3 py-2"
-                  disabled={!action.name.trim() || !action.description.trim() || isGeneratingSteps}
-                >
-                  {isGeneratingSteps ? "⚡" : "✨ Steps"}
-                </Button>
-              )}
-              {(action.pseudoSteps?.length || 0) > 0 && (
-                <Button
-                  onClick={() => {
-                    setSelectedNode('ui-components');
-                    if (!action.uiComponentsDesign?.length) {
-                      generateUIComponentsFromSteps(false);
-                    }
-                  }}
-                  className="btn-matrix text-xs px-3 py-2"
-                  disabled={!action.pseudoSteps?.length || isGeneratingUIComponents}
-                >
-                  {isGeneratingUIComponents ? "⚡" : "🎨 UI"}
-                </Button>
-              )}
+      {/* Action Idea Section */}
+      <div className="p-4 md:p-6 border-b border-blue-500/20 bg-blue-500/5">
+        <div className="max-w-2xl">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+              <span className="text-blue-400">💡</span>
             </div>
-          )}
+            <h4 className="text-blue-200 font-mono font-semibold">Action Idea</h4>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="action-name" className="text-blue-300 font-mono text-sm">✨ Action Name</Label>
+              <Input
+                id="action-name"
+                value={action.name}
+                onChange={(e) => onUpdate({ ...action, name: e.target.value })}
+                placeholder="e.g., Create Customer Invoice"
+                className="bg-black/50 border-blue-500/30 text-blue-200 font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="action-description" className="text-blue-300 font-mono text-sm">📝 Vision & Purpose</Label>
+              <Textarea
+                id="action-description"
+                value={action.description}
+                onChange={(e) => onUpdate({ ...action, description: e.target.value })}
+                placeholder="Describe what this action should accomplish..."
+                className="bg-black/50 border-blue-500/30 text-blue-200 font-mono text-xs min-h-[80px] resize-none"
+              />
+            </div>
+            {action.name?.trim() && action.description?.trim() && !action.pseudoSteps?.length && (
+              <Button
+                onClick={generateStepsFromDescription}
+                disabled={isGeneratingSteps}
+                className="btn-matrix w-full text-sm py-2"
+              >
+                {isGeneratingSteps ? "🤖 AI is crafting..." : "✨ Generate Steps →"}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
+      {/* Steps Chain Mind Map - Only shows when steps exist */}
+      {action.pseudoSteps && action.pseudoSteps.length > 0 && (
+        <div className="border-b border-purple-500/20 bg-purple-500/5">
+          <div className="p-4 md:p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center border border-purple-500/30">
+                <span className="text-purple-400">🔄</span>
+              </div>
+              <h4 className="text-purple-200 font-mono font-semibold">Steps Chain</h4>
+              <div className="text-purple-400 text-xs">
+                {action.pseudoSteps.length} step{action.pseudoSteps.length > 1 ? 's' : ''}
+              </div>
+            </div>
+          </div>
+          
+          <div className="relative min-h-[300px] overflow-auto">
+            <div 
+              ref={containerRef}
+              className="relative bg-gradient-to-r from-purple-950/20 to-purple-900/20 p-4"
+              style={{ 
+                minHeight: isMobile ? 
+                  `${100 + ((action.pseudoSteps?.length || 0) * 280)}px` : 
+                  '200px', 
+                minWidth: isMobile ? '320px' : 
+                  `${Math.max(400, (action.pseudoSteps?.length || 0) * 320)}px`,
+                width: '100%'
+              }}
+            >
+              {/* SVG for connections */}
+              <svg 
+                className="absolute inset-0 w-full h-full pointer-events-none" 
+                style={{ zIndex: 1 }}
+              >
+                {generateConnections(nodes).map((connection: MindMapConnection) => {
+                  const fromNode = nodes.find(n => n.id === connection.from);
+                  const toNode = nodes.find(n => n.id === connection.to);
+                  if (!fromNode || !toNode) return null;
+
+                  return (
+                    <path
+                      key={connection.id}
+                      d={getConnectionPath(fromNode, toNode)}
+                      stroke="#A855F7"
+                      strokeWidth={2}
+                      fill="none"
+                      strokeDasharray="5,5"
+                      className="transition-all duration-300"
+                    />
+                  );
+                })}
+              </svg>
+
+              {/* Nodes */}
+              {nodes.map(node => {
+                const currentPosition = isMobile ? 'mobile' : 'desktop';
+                const nodeWidth = isMobile ? 280 : 300;
+                
+                // Clean unified styling for all nodes
+                const getNodeStyle = () => {
+                  return selectedNode === node.id
+                    ? 'bg-slate-700/60 border-slate-400/80 shadow-xl'
+                    : 'bg-slate-800/60 border-slate-600/50 hover:border-slate-400/70';
+                };
+                
+                return (
+                  <div
+                    key={node.id}
+                    className={`absolute transition-all duration-500 cursor-pointer ${
+                      selectedNode === node.id ? 'z-20' : 'z-10'
+                    }`}
+                    style={{
+                      left: node.position[currentPosition].x,
+                      top: node.position[currentPosition].y,
+                      width: nodeWidth,
+                      transform: selectedNode === node.id ? 'scale(1.02)' : 'scale(1)',
+                    }}
+                    onClick={() => setSelectedNode(selectedNode === node.id ? null : node.id)}
+                  >
+                    <div
+                      className={`p-3 md:p-4 rounded-xl border transition-all duration-300 ${
+                        getNodeStyle()
+                      } ${
+                        node.status === 'complete' ? 'ring-2 ring-emerald-400/50' :
+                        node.status === 'processing' ? 'ring-2 ring-blue-400/50 ai-generating' : ''
+                      }`}
+                      style={{
+                        backdropFilter: 'blur(8px)',
+                        ...(selectedNode === node.id && {
+                          boxShadow: '0 0 30px rgba(59, 130, 246, 0.3), inset 0 0 20px rgba(59, 130, 246, 0.1)'
+                        }),
+                        ...(node.status === 'processing' && {
+                          animation: 'ai-glow 2s ease-in-out infinite alternate, ai-shimmer 3s linear infinite'
+                        })
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className={`font-mono font-bold transition-all duration-300 ${
+                          selectedNode === node.id ? 'text-slate-200 text-base' : 'text-slate-300 text-sm'
+                        }`}>
+                          {node.title}
+                        </h4>
+                        <div className="flex items-center gap-1">
+                          {node.status === 'complete' && <span className="text-emerald-400 text-lg">✅</span>}
+                          {node.status === 'processing' && (
+                            <div className="flex items-center gap-1">
+                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-400 border-t-transparent"></div>
+                              <span className="text-blue-400 text-lg animate-pulse">⚡</span>
+                            </div>
+                          )}
+                          {node.status === 'empty' && <span className="text-blue-500/50 text-lg">⭕</span>}
+                        </div>
+                      </div>
+                      
+                      <div className={`text-blue-400 font-mono transition-all duration-300 ${
+                        selectedNode === node.id ? 'text-sm' : 'text-xs'
+                      }`}>
+                        {node.content}
+                      </div>
+
+                      {selectedNode === node.id && (
+                        <div className="transition-all duration-300 ease-out">
+                          {renderNodeContent(node)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UI & Test Section - Only shows when steps exist */}
+      {action.pseudoSteps && action.pseudoSteps.length > 0 && (
+        <div className="p-4 md:p-6 bg-emerald-500/5">
+          <div className="max-w-4xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center border border-emerald-500/30">
+                <span className="text-emerald-400">🎨</span>
+              </div>
+              <h4 className="text-emerald-200 font-mono font-semibold">UI & Test</h4>
+              {action.uiComponentsDesign?.length && (
+                <div className="text-emerald-400 text-xs">
+                  {action.uiComponentsDesign.length} component{action.uiComponentsDesign.length > 1 ? 's' : ''} ready
+                </div>
+              )}
+            </div>
+            
+            <div className="space-y-4">
+              {/* UI Components Status */}
+              {action.uiComponentsDesign?.length ? (
+                <div className="space-y-4">
+                  <div className="flex gap-4">
+                    <Button
+                      onClick={() => {
+                        setIsLiveMode(false);
+                        setShowTestModal(true);
+                      }}
+                      className="btn-matrix flex-1"
+                    >
+                      🧪 Test Action
+                    </Button>
+                    
+                    {actionCreated && (
+                      <Button
+                        onClick={() => {
+                          setIsLiveMode(true);
+                          setShowTestModal(true);
+                        }}
+                        className="btn-matrix flex-1"
+                      >
+                        🚀 Run Live
+                      </Button>
+                    )}
+                  </div>
+                  
+                  {!actionCreated && nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult && (
+                    <Button
+                      onClick={generateCodeFromSteps}
+                      disabled={isGeneratingCode}
+                      className="btn-matrix w-full"
+                    >
+                      {isGeneratingCode ? "🔮 Creating..." : "✨ Create Live Action"}
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="text-emerald-300 text-sm text-center p-4 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                    Generate UI components to test and create your action
+                  </div>
+                  <Button
+                    onClick={() => generateUIComponentsFromSteps(false)}
+                    disabled={isGeneratingUIComponents}
+                    className="btn-matrix w-full"
+                  >
+                    {isGeneratingUIComponents ? "⚡ Designing..." : "🎨 Generate UI Components"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Test Action Modal */}
       <Dialog open={showTestModal} onOpenChange={setShowTestModal}>
-                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-black/95 border border-blue-500/20">
-                     <DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-black/95 border border-blue-500/20">
+          <DialogHeader>
             <DialogTitle className="text-blue-300 font-mono text-lg">
               {actionCreated && !isLiveMode ? "🎉 Action Complete" : 
                isLiveMode ? "🚀 Live Run" : "🧪 Test Action"}: {action.name}
@@ -1464,33 +1525,33 @@ export const ActionMindMapEditor = memo(({
             )}
           </DialogHeader>
           
-                     {/* Modal Content */}
-           <div className="space-y-6 mt-4">
-             {/* Interactive Test Components */}
-             <div className={`p-4 rounded-lg ${isLiveMode ? 
-               'bg-gradient-to-br from-emerald-500/10 to-green-500/10 border border-emerald-500/30' :
-               'bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/30'
-             }`}>
-               <InteractiveTestComponents 
-                 steps={action.pseudoSteps || []}
-                 components={action.uiComponentsDesign || []}
-                 allModels={allModels}
-                 isRunningTest={isRunningTest}
-                 isLiveMode={isLiveMode}
-                 onRunTest={(inputParameters) => {
-                   runTest(inputParameters);
-                 }}
-                 onTestResult={(result) => {
-                   setNodes(prev => prev.map(node => 
-                     node.id === 'ui-components' 
-                       ? { ...node, data: { ...node.data, lastTestResult: result } }
-                       : node
-                   ));
-                 }}
-               />
-             </div>
+          {/* Modal Content */}
+          <div className="space-y-6 mt-4">
+            {/* Interactive Test Components */}
+            <div className={`p-4 rounded-lg ${isLiveMode ? 
+              'bg-gradient-to-br from-emerald-500/10 to-green-500/10 border border-emerald-500/30' :
+              'bg-gradient-to-br from-blue-500/10 to-purple-500/10 border border-blue-500/30'
+            }`}>
+              <InteractiveTestComponents 
+                steps={action.pseudoSteps || []}
+                components={action.uiComponentsDesign || []}
+                allModels={allModels}
+                isRunningTest={isRunningTest}
+                isLiveMode={isLiveMode}
+                onRunTest={(inputParameters) => {
+                  runTest(inputParameters);
+                }}
+                onTestResult={(result) => {
+                  setNodes(prev => prev.map(node => 
+                    node.id === 'ui-components' 
+                      ? { ...node, data: { ...node.data, lastTestResult: result } }
+                      : node
+                  ));
+                }}
+              />
+            </div>
 
-                         {/* UI Controls - After seeing the UI in action (Only in test mode) */}
+            {/* UI Controls - After seeing the UI in action (Only in test mode) */}
             {!isLiveMode && (
               <div className="text-center space-y-3">
                 <div className="flex gap-3 justify-center">
@@ -1527,141 +1588,141 @@ export const ActionMindMapEditor = memo(({
               </div>
             )}
 
-                         {/* Test Results */}
-                          {nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult && (
-               <div className="bg-gradient-to-br from-emerald-500/5 to-blue-500/5 border border-emerald-500/20 rounded-lg p-6 space-y-6">
-                 {/* Business Test Results Header */}
-                 <div className="flex items-center justify-between">
-                   <div className="flex items-center gap-3">
-                     <div className="flex items-center justify-center w-8 h-8 bg-emerald-500 rounded-full">
-                       <span className="text-black font-bold text-sm">✓</span>
-                     </div>
-                     <div>
-                       <div className="text-emerald-300 font-semibold text-lg">
-                         {isLiveMode ? 'Live Execution Successful!' : 'Test Successful!'}
-                       </div>
-                       <div className="text-emerald-400/80 text-sm font-mono">
-                         {(() => {
-                           const result = nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult;
-                           if (!result) return '';
-                           const counts = result.stepResults?.reduce((acc: any, step: any) => {
-                             if (step.result?.created) acc.created += step.result.created;
-                             if (step.result?.updated) acc.updated += step.result.updated;
-                             if (step.result?.found) acc.found += step.result.found;
-                             if (step.result?.record) acc.found += 1;
-                             return acc;
-                           }, { created: 0, updated: 0, found: 0 }) || {};
-                           
-                           const parts = [];
-                           if (counts.created > 0) parts.push(`Created ${counts.created}`);
-                           if (counts.updated > 0) parts.push(`Updated ${counts.updated}`);
-                           if (counts.found > 0) parts.push(`Found ${counts.found}`);
-                           if (isLiveMode) {
-                             return parts.join(' • ') || `${result.totalChanges || 0} database operations completed`;
-                           } else {
-                             return parts.join(' • ') || 'Test scenario completed';
-                           }
-                         })()}
-                       </div>
-                     </div>
-                   </div>
-                   <Button
-                     variant="ghost"
-                     size="sm"
-                     onClick={() => setShowDetailsModal(true)}
-                     className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 text-xs font-mono"
-                   >
-                     📊 DETAILS
-                   </Button>
-                 </div>
+            {/* Test Results */}
+            {nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult && (
+              <div className="bg-gradient-to-br from-emerald-500/5 to-blue-500/5 border border-emerald-500/20 rounded-lg p-6 space-y-6">
+                {/* Business Test Results Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center w-8 h-8 bg-emerald-500 rounded-full">
+                      <span className="text-black font-bold text-sm">✓</span>
+                    </div>
+                    <div>
+                      <div className="text-emerald-300 font-semibold text-lg">
+                        {isLiveMode ? 'Live Execution Successful!' : 'Test Successful!'}
+                      </div>
+                      <div className="text-emerald-400/80 text-sm font-mono">
+                        {(() => {
+                          const result = nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult;
+                          if (!result) return '';
+                          const counts = result.stepResults?.reduce((acc: any, step: any) => {
+                            if (step.result?.created) acc.created += step.result.created;
+                            if (step.result?.updated) acc.updated += step.result.updated;
+                            if (step.result?.found) acc.found += step.result.found;
+                            if (step.result?.record) acc.found += 1;
+                            return acc;
+                          }, { created: 0, updated: 0, found: 0 }) || {};
+                          
+                          const parts = [];
+                          if (counts.created > 0) parts.push(`Created ${counts.created}`);
+                          if (counts.updated > 0) parts.push(`Updated ${counts.updated}`);
+                          if (counts.found > 0) parts.push(`Found ${counts.found}`);
+                          if (isLiveMode) {
+                            return parts.join(' • ') || `${result.totalChanges || 0} database operations completed`;
+                          } else {
+                            return parts.join(' • ') || 'Test scenario completed';
+                          }
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowDetailsModal(true)}
+                    className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 text-xs font-mono"
+                  >
+                    📊 DETAILS
+                  </Button>
+                </div>
 
-                 {/* Quick Stats Cards */}
-                 <div className="flex justify-center gap-4">
-                   {(() => {
-                     const result = nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult;
-                     const counts = result?.stepResults?.reduce((acc: any, step: any) => {
-                       if (step.result?.created) acc.created += step.result.created;
-                       if (step.result?.updated) acc.updated += step.result.updated;
-                       if (step.result?.found) acc.found += step.result.found;
-                       if (step.result?.record) acc.found += 1;
-                       return acc;
-                     }, { created: 0, updated: 0, found: 0 }) || {};
-                     
-                     const items = [];
-                     if (counts.created > 0) {
-                       items.push(
-                         <div key="created" className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 text-center min-w-[80px]">
-                           <div className="text-emerald-300 font-bold text-2xl">{counts.created}</div>
-                           <div className="text-emerald-400/70 text-xs font-mono">Created</div>
-                         </div>
-                       );
-                     }
-                     if (counts.updated > 0) {
-                       items.push(
-                         <div key="updated" className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 text-center min-w-[80px]">
-                           <div className="text-blue-300 font-bold text-2xl">{counts.updated}</div>
-                           <div className="text-blue-400/70 text-xs font-mono">Updated</div>
-                         </div>
-                       );
-                     }
-                     if (counts.found > 0) {
-                       items.push(
-                         <div key="found" className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 text-center min-w-[80px]">
-                           <div className="text-yellow-300 font-bold text-2xl">{counts.found}</div>
-                           <div className="text-yellow-400/70 text-xs font-mono">Found</div>
-                         </div>
-                       );
-                     }
-                     return items;
-                   })()}
-                 </div>
+                {/* Quick Stats Cards */}
+                <div className="flex justify-center gap-4">
+                  {(() => {
+                    const result = nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult;
+                    const counts = result?.stepResults?.reduce((acc: any, step: any) => {
+                      if (step.result?.created) acc.created += step.result.created;
+                      if (step.result?.updated) acc.updated += step.result.updated;
+                      if (step.result?.found) acc.found += step.result.found;
+                      if (step.result?.record) acc.found += 1;
+                      return acc;
+                    }, { created: 0, updated: 0, found: 0 }) || {};
+                    
+                    const items = [];
+                    if (counts.created > 0) {
+                      items.push(
+                        <div key="created" className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 text-center min-w-[80px]">
+                          <div className="text-emerald-300 font-bold text-2xl">{counts.created}</div>
+                          <div className="text-emerald-400/70 text-xs font-mono">Created</div>
+                        </div>
+                      );
+                    }
+                    if (counts.updated > 0) {
+                      items.push(
+                        <div key="updated" className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 text-center min-w-[80px]">
+                          <div className="text-blue-300 font-bold text-2xl">{counts.updated}</div>
+                          <div className="text-blue-400/70 text-xs font-mono">Updated</div>
+                        </div>
+                      );
+                    }
+                    if (counts.found > 0) {
+                      items.push(
+                        <div key="found" className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 text-center min-w-[80px]">
+                          <div className="text-yellow-300 font-bold text-2xl">{counts.found}</div>
+                          <div className="text-yellow-400/70 text-xs font-mono">Found</div>
+                        </div>
+                      );
+                    }
+                    return items;
+                  })()}
+                </div>
 
-                 {/* Execution Summary */}
-                 <div className="flex items-center justify-center gap-6 py-4 border-t border-emerald-500/10">
-                   <div className="flex items-center gap-2 text-sm font-mono">
-                     <span className="text-emerald-400">⚡</span>
-                     <span className="text-emerald-300">{nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult?.executionTime || 0}ms</span>
-                   </div>
-                   <div className="flex items-center gap-2 text-sm font-mono">
-                     <span className="text-blue-400">📊</span>
-                     <span className="text-blue-300">{nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult?.stepResults?.length || 0} steps</span>
-                   </div>
-                   <div className="flex items-center gap-2 text-sm font-mono">
-                     <span className="text-yellow-400">🤖</span>
-                     <span className="text-yellow-300">{nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult?.stepResults?.filter((step: any) => step.step?.includes('AI') || step.step?.includes('Generate'))?.length || 0} AI</span>
-                   </div>
-                 </div>
+                {/* Execution Summary */}
+                <div className="flex items-center justify-center gap-6 py-4 border-t border-emerald-500/10">
+                  <div className="flex items-center gap-2 text-sm font-mono">
+                    <span className="text-emerald-400">⚡</span>
+                    <span className="text-emerald-300">{nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult?.executionTime || 0}ms</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm font-mono">
+                    <span className="text-blue-400">📊</span>
+                    <span className="text-blue-300">{nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult?.stepResults?.length || 0} steps</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm font-mono">
+                    <span className="text-yellow-400">🤖</span>
+                    <span className="text-yellow-300">{nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult?.stepResults?.filter((step: any) => step.step?.includes('AI') || step.step?.includes('Generate'))?.length || 0} AI</span>
+                  </div>
+                </div>
 
-                 {/* Detailed Log Access */}
-                 <div className="text-center space-y-4 pt-2">
-                   <div className="space-y-1">
-                     <div className="text-emerald-300 font-mono font-medium">
-                       🔍 Need step-by-step details?
-                     </div>
-                     <div className="text-emerald-400/70 text-sm">
-                       {isLiveMode ? 
-                         'See exactly how each database operation executed' :
-                         'See exactly how each step processed your test data'
-                       }
-                     </div>
-                   </div>
-                   
-                   <Button
-                     variant="outline"
-                     onClick={() => setShowDetailsModal(true)}
-                     className="text-emerald-300 hover:text-emerald-200 border-emerald-500/40 hover:bg-emerald-500/10 px-6 py-3 font-medium transition-all duration-200 hover:scale-105"
-                   >
-                     📊 View Detailed Execution Log →
-                   </Button>
-                   
-                   <div className="text-emerald-500/50 text-xs font-mono">
-                     💡 Press 'D' for quick access
-                   </div>
-                 </div>
-               </div>
-             )}
+                {/* Detailed Log Access */}
+                <div className="text-center space-y-4 pt-2">
+                  <div className="space-y-1">
+                    <div className="text-emerald-300 font-mono font-medium">
+                      🔍 Need step-by-step details?
+                    </div>
+                    <div className="text-emerald-400/70 text-sm">
+                      {isLiveMode ? 
+                        'See exactly how each database operation executed' :
+                        'See exactly how each step processed your test data'
+                      }
+                    </div>
+                  </div>
+                  
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowDetailsModal(true)}
+                    className="text-emerald-300 hover:text-emerald-200 border-emerald-500/40 hover:bg-emerald-500/10 px-6 py-3 font-medium transition-all duration-200 hover:scale-105"
+                  >
+                    📊 View Detailed Execution Log →
+                  </Button>
+                  
+                  <div className="text-emerald-500/50 text-xs font-mono">
+                    💡 Press 'D' for quick access
+                  </div>
+                </div>
+              </div>
+            )}
 
-                                                  {/* Modal Actions */}
+            {/* Modal Actions */}
             <div className="pt-4 border-t border-blue-500/20">
               {isGeneratingCode ? (
                 // Creating action - show progress
@@ -1685,82 +1746,82 @@ export const ActionMindMapEditor = memo(({
                 </div>
               ) : actionCreated && !isLiveMode ? (
                 // Action already created - show success state (only in non-live mode)
-                                  <div className="space-y-4">
-                    <div className="text-center">
-                      <div className="text-emerald-300 font-mono text-lg mb-2">
-                        🎉 Action Successfully Created!
-                      </div>
-                      <div className="text-blue-400/70 text-sm mb-4">
-                        Your "{action.name}" action is now ready to use
-                      </div>
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <div className="text-emerald-300 font-mono text-lg mb-2">
+                      🎉 Action Successfully Created!
                     </div>
-                    
-                    {/* Live Action Runner */}
-                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 space-y-3">
-                      <div className="text-emerald-300 font-mono text-sm font-semibold">
-                        🚀 Your Live Action is Ready
-                      </div>
-                      <div className="text-emerald-200 text-xs mb-3">
-                        Run with real data or update the code:
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsLiveMode(true);
-                            setActionCreated(false);
-                            setShowTestModal(true);
-                          }}
-                          className="btn-matrix flex-1 text-sm px-3 py-2"
-                        >
-                          🚀 Run Live
-                        </Button>
-                        <Button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            generateCodeFromSteps();
-                          }}
-                          disabled={isGeneratingCode}
-                          variant="outline"
-                          className="flex-1 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/10 text-sm px-3 py-2"
-                        >
-                          {isGeneratingCode ? "🔄 Updating..." : "🔄 Regenerate Code"}
-                        </Button>
-                      </div>
-                    </div>
-                    
-                                       <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
-                       <div className="text-blue-300 font-mono text-xs mb-2">📍 What's Next:</div>
-                       <div className="text-blue-200 text-xs space-y-1">
-                         <div>• View your action in the list below</div>
-                         <div>• Run it anytime with real data</div>
-                         <div>• Share it with your team</div>
-                       </div>
-                     </div>
-                    
-                    <div className="flex gap-3">
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowTestModal(false)}
-                        className="flex-1 text-blue-300 border-blue-500/30"
-                      >
-                        Close
-                      </Button>
-                                           <Button
-                         onClick={() => {
-                           setShowTestModal(false);
-                           if (onGoBack) {
-                             onGoBack();
-                           } else {
-                             window.location.reload();
-                           }
-                         }}
-                         className="flex-[2] btn-matrix text-sm py-2"
-                       >
-                         ← Back to Actions
-                       </Button>
+                    <div className="text-blue-400/70 text-sm mb-4">
+                      Your "{action.name}" action is now ready to use
                     </div>
                   </div>
+                  
+                  {/* Live Action Runner */}
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 space-y-3">
+                    <div className="text-emerald-300 font-mono text-sm font-semibold">
+                      🚀 Your Live Action is Ready
+                    </div>
+                    <div className="text-emerald-200 text-xs mb-3">
+                      Run with real data or update the code:
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setIsLiveMode(true);
+                          setActionCreated(false);
+                          setShowTestModal(true);
+                        }}
+                        className="btn-matrix flex-1 text-sm px-3 py-2"
+                      >
+                        🚀 Run Live
+                      </Button>
+                      <Button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          generateCodeFromSteps();
+                        }}
+                        disabled={isGeneratingCode}
+                        variant="outline"
+                        className="flex-1 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/10 text-sm px-3 py-2"
+                      >
+                        {isGeneratingCode ? "🔄 Updating..." : "🔄 Regenerate Code"}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                    <div className="text-blue-300 font-mono text-xs mb-2">📍 What's Next:</div>
+                    <div className="text-blue-200 text-xs space-y-1">
+                      <div>• View your action in the list below</div>
+                      <div>• Run it anytime with real data</div>
+                      <div>• Share it with your team</div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowTestModal(false)}
+                      className="flex-1 text-blue-300 border-blue-500/30"
+                    >
+                      Close
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setShowTestModal(false);
+                        if (onGoBack) {
+                          onGoBack();
+                        } else {
+                          window.location.reload();
+                        }
+                      }}
+                      className="flex-[2] btn-matrix text-sm py-2"
+                    >
+                      ← Back to Actions
+                    </Button>
+                  </div>
+                </div>
               ) : nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult ? (
                 // After successful run - show creation action (test mode) or done (live mode)
                 <div className="space-y-3">
@@ -1814,12 +1875,12 @@ export const ActionMindMapEditor = memo(({
                   </Button>
                 </div>
               )}
-             </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
 
-            {/* Test Details Modal */}
+      {/* Test Details Modal */}
       <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-black/95 border border-emerald-500/20">
           <DialogHeader className="border-b border-emerald-500/20 pb-4">

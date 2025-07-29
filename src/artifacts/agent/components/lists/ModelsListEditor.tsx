@@ -211,7 +211,7 @@ export const ModelsListEditor = memo(({
                     <span className="text-green-400 text-xs sm:text-sm font-mono">
                       {model.fields.length} fields • {model.enums?.length || 0} enums
                     </span>
-                    <span className="text-blue-400 text-xs sm:text-sm font-mono">
+                    <span className="text-green-400 text-xs sm:text-sm font-mono">
                       {model.records?.length || 0} records
                     </span>
                   </div>

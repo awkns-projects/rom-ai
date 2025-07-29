@@ -82,9 +82,9 @@ export const ScheduleEditor = memo(({
   const aiGeneratingCardClass = `
     relative overflow-hidden
     before:absolute before:inset-0 before:bg-gradient-to-r 
-    before:from-transparent before:via-purple-500/20 before:to-transparent
+    before:from-transparent before:via-orange-500/20 before:to-transparent
     before:translate-x-[-100%] before:animate-[shimmer_2s_infinite]
-    border-purple-400/40 shadow-[0_0_20px_rgba(147,51,234,0.3)]
+    border-orange-400/40 shadow-[0_0_20px_rgba(255,165,0,0.3)]
     animate-pulse
   `;
 
@@ -969,9 +969,9 @@ export const ScheduleEditor = memo(({
                 <div className="flex items-center gap-3">
                   <h4 className="text-lg font-bold text-orange-200 font-mono">1. Description</h4>
                   {isGeneratingDescription && (
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/30">
-                      <div className="w-3 h-3 rounded-full bg-purple-400 animate-ping"></div>
-                      <span className="text-purple-300 text-sm font-mono">AI Generating...</span>
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 border border-orange-400/30">
+                      <div className="w-3 h-3 rounded-full bg-orange-400 animate-ping"></div>
+                      <span className="text-orange-300 text-sm font-mono">AI Generating...</span>
                     </div>
                   )}
                 </div>
@@ -1026,9 +1026,9 @@ export const ScheduleEditor = memo(({
                 <div className="flex items-center gap-3">
                   <h4 className="text-lg font-bold text-orange-200 font-mono">2. AI-Generated Pseudo Steps</h4>
                   {isGeneratingSteps && (
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/30">
-                      <div className="w-3 h-3 rounded-full bg-purple-400 animate-ping"></div>
-                      <span className="text-purple-300 text-sm font-mono">AI Thinking...</span>
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 border border-orange-400/30">
+                      <div className="w-3 h-3 rounded-full bg-orange-400 animate-ping"></div>
+                      <span className="text-orange-300 text-sm font-mono">AI Thinking...</span>
                     </div>
                   )}
                 </div>

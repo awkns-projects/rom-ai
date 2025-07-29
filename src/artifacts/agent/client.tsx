@@ -1396,22 +1396,22 @@ const AgentBuilderContent = memo(({
                 return (
                   <div className="space-y-6">
                     {/* Introduction Section */}
-                    <div className="p-4 sm:p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm">
+                    <div className="p-4 sm:p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center border border-purple-500/30">
+                              <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
                                 <span className="text-lg">⚡</span>
                               </div>
-                              <h2 className="text-xl font-bold text-purple-200 font-mono">Actions</h2>
+                              <h2 className="text-xl font-bold text-blue-200 font-mono">Actions</h2>
                             </div>
                             <button
                               onClick={() => setIsActionsIntroExpanded(!isActionsIntroExpanded)}
-                              className="md:hidden p-2 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/30 transition-colors"
+                              className="md:hidden p-2 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 transition-colors"
                               aria-label={isActionsIntroExpanded ? "Minimize introduction" : "Expand introduction"}
                             >
-                              <span className="text-purple-200 text-sm">
+                              <span className="text-blue-200 text-sm">
                                 {isActionsIntroExpanded ? '−' : '+'}
                               </span>
                             </button>
@@ -1420,13 +1420,13 @@ const AgentBuilderContent = memo(({
                             "transition-all duration-300 overflow-hidden",
                             isActionsIntroExpanded ? "max-h-96 opacity-100" : "max-h-0 opacity-0 md:max-h-96 md:opacity-100"
                           )}>
-                            <p className="text-purple-300 text-sm font-mono leading-relaxed mb-3">
+                            <p className="text-blue-300 text-sm font-mono leading-relaxed mb-3">
                               Create interactive actions that users can trigger to manipulate data. Actions can collect user input, process information, and create or update records in your models. Perfect for forms, workflows, and user interactions.
                             </p>
                             <div className="flex flex-wrap gap-2 text-xs font-mono">
-                              <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-300">🎯 User Triggered</span>
-                              <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-300">📝 Data Input</span>
-                              <span className="px-2 py-1 rounded bg-purple-500/20 text-purple-300">🔄 Processing</span>
+                              <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-300">🎯 User Triggered</span>
+                              <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-300">📝 Data Input</span>
+                              <span className="px-2 py-1 rounded bg-blue-500/20 text-blue-300">🔄 Processing</span>
                             </div>
                           </div>
                           {/* Truncated description for mobile when collapsed */}
@@ -1434,7 +1434,7 @@ const AgentBuilderContent = memo(({
                             "md:hidden transition-all duration-300",
                             !isActionsIntroExpanded ? "opacity-100 max-h-20" : "opacity-0 max-h-0"
                           )}>
-                            <p className="text-purple-300 text-sm font-mono leading-relaxed">
+                            <p className="text-blue-300 text-sm font-mono leading-relaxed">
                               Create interactive actions that users can trigger...
                             </p>
                           </div>
@@ -1445,7 +1445,7 @@ const AgentBuilderContent = memo(({
                         )}>
                           <Button
                             onClick={() => openExplanationModal('actions')}
-                            className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-6 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 text-base"
+                            className="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 py-3 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 text-base"
                           >
                             <span>⚡</span>
                             <span>How Actions Work</span>

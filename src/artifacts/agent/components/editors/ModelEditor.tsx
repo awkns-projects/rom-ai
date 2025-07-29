@@ -349,7 +349,7 @@ export const ModelEditor = memo(({
                         <span className="text-green-400 text-sm">({field.type})</span>
                         {field.required && <span className="text-red-400 text-xs">*</span>}
                         {field.unique && <span className="text-blue-400 text-xs">unique</span>}
-                        {field.list && <span className="text-purple-400 text-xs">[]</span>}
+                        {field.list && <span className="text-green-400 text-xs">[]</span>}
                       </div>
                       {field.title && <span className="text-green-500 text-xs font-mono">{field.title}</span>}
                     </div>

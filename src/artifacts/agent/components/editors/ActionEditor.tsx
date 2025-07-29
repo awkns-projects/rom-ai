@@ -994,9 +994,9 @@ export const ActionEditor = memo(({
                 <div className="flex items-center gap-3">
                   <h4 className="text-lg font-bold text-blue-200 font-mono">2. AI-Generated Pseudo Steps</h4>
                   {isGeneratingSteps && (
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/30">
-                      <div className="w-3 h-3 rounded-full bg-purple-400 animate-ping"></div>
-                      <span className="text-purple-300 text-sm font-mono">AI Thinking...</span>
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30">
+                      <div className="w-3 h-3 rounded-full bg-blue-400 animate-ping"></div>
+                      <span className="text-blue-300 text-sm font-mono">AI Thinking...</span>
                     </div>
                   )}
                 </div>
