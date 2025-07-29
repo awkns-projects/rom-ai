@@ -779,6 +779,34 @@ The tool maintains state throughout the generation process and can resume from a
           const existingAgentAny = existingAgent as any;
           const preservedUserData: any = {};
           
+          // CRITICAL FIX: Get the latest agent data from database to ensure we have latest theme/avatar
+          try {
+            console.log('🔄 Fetching latest agent data for final merge...');
+            const latestDocument = await getDocumentById({ id: documentId });
+            if (latestDocument?.content) {
+              const latestAgentData = JSON.parse(latestDocument.content);
+              
+              console.log('🔍 LATEST DATA COMPARISON:', {
+                existingTheme: existingAgentAny.theme,
+                latestTheme: latestAgentData.theme,
+                existingAvatar: !!existingAgentAny.avatar,
+                latestAvatar: !!latestAgentData.avatar,
+                useLatest: !!latestAgentData.theme || !!latestAgentData.avatar
+              });
+              
+              // Use latest data if it has user selections
+              if (latestAgentData.theme || latestAgentData.avatar) {
+                console.log('🔄 Using latest agent data for theme/avatar preservation');
+                existingAgentAny.theme = latestAgentData.theme || existingAgentAny.theme;
+                existingAgentAny.avatar = latestAgentData.avatar || existingAgentAny.avatar;
+                existingAgentAny.oauthTokens = latestAgentData.oauthTokens || existingAgentAny.oauthTokens;
+                existingAgentAny.apiKeys = latestAgentData.apiKeys || existingAgentAny.apiKeys;
+              }
+            }
+          } catch (error) {
+            console.log('⚠️ Could not fetch latest data, using existing agent as-is:', error);
+          }
+          
           // Preserve avatar and theme (user takes priority)
           if (existingAgentAny.avatar) {
             preservedUserData.avatar = existingAgentAny.avatar;

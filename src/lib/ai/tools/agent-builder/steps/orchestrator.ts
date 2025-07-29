@@ -177,6 +177,20 @@ export async function executeAgentGeneration(
         // Use type assertion to access avatar/theme properties that exist but aren't in our type definition
         const existingAgent = config.existingAgent as any;
         
+        // DEBUG: Track what user data is available during partial streaming
+        console.log('🔍 PARTIAL STREAMING DEBUG - existingAgent data:', {
+          hasExistingAgent: !!existingAgent,
+          existingAgentKeys: existingAgent ? Object.keys(existingAgent) : [],
+          hasAvatar: !!existingAgent?.avatar,
+          avatarType: existingAgent?.avatar?.type,
+          hasTheme: !!existingAgent?.theme,
+          theme: existingAgent?.theme,
+          name: existingAgent?.name,
+          description: existingAgent?.description,
+          step0Name: step0Result.agentName,
+          step0Description: step0Result.agentDescription
+        });
+        
         const partialAgentData = {
           id: config.existingAgent?.id || crypto.randomUUID(),
           name: step0Result.agentName || 'Generated Agent',
@@ -194,6 +208,18 @@ export async function executeAgentGeneration(
           ...(existingAgent?.apiKeys && { apiKeys: existingAgent.apiKeys }),
           ...(existingAgent?.credentials && { credentials: existingAgent.credentials })
         };
+
+        // DEBUG: Track what gets included in partial stream
+        console.log('🔍 PARTIAL STREAMING DEBUG - Final partialAgentData:', {
+          hasAvatar: !!partialAgentData.avatar,
+          avatarIncluded: !!partialAgentData.avatar,
+          hasTheme: !!partialAgentData.theme,
+          themeIncluded: !!partialAgentData.theme,
+          theme: partialAgentData.theme,
+          preservedKeys: Object.keys(partialAgentData).filter(key => 
+            ['avatar', 'theme', 'oauthTokens', 'apiKeys', 'credentials'].includes(key)
+          )
+        });
 
         // Only stream if we have a valid dataStream and the agent data is meaningful
         if (config.dataStream && partialAgentData.name && partialAgentData.name !== 'Generated Agent') {

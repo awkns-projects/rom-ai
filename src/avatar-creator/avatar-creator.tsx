@@ -1090,15 +1090,19 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
     
     setCurrentTheme(theme);
     
+    // CRITICAL FIX: Update avatarData state with theme (same pattern as name changes)
+    const updatedAvatarData = { ...avatarData, theme };
+    setAvatarData(updatedAvatarData);
+    
     // CRITICAL FIX: Immediately sync theme to main content (where orchestrator reads from)
     if (onThemeChange) {
       console.log('🎨 IMMEDIATE SYNC: Calling onThemeChange with theme:', theme);
       onThemeChange(theme);
     }
     
-    // ALSO save to database metadata for persistence across reloads
+    // ALSO save to database metadata for persistence across reloads (now with updated data)
     if (documentId && documentId !== 'init') {
-      saveToDatabase(avatarData, step, false).catch(error => {
+      saveToDatabase(updatedAvatarData, step, false).catch(error => {
         console.error('❌ Failed to save theme to database metadata:', error);
       });
     }
