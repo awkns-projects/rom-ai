@@ -882,7 +882,7 @@ const AgentBuilderContent = memo(({
             
             // Save the updated data to persist changes (including prismaSchema)
             const agentContent = JSON.stringify(updatedData, null, 2);
-            onSaveContent(agentContent, false); // Use debounced save to avoid excessive saves during streaming
+            onSaveContent(agentContent, true); // Use debounced save to avoid excessive saves during streaming
             console.log('💾 Saved updated agent data with preserved prismaSchema and enums');
             
             return updatedData;
