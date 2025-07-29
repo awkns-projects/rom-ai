@@ -534,7 +534,13 @@ The tool maintains state throughout the generation process and can resume from a
                 name: existingAgent.name,
                 models: existingAgent.models?.length || 0,
                 actions: existingAgent.actions?.length || 0,
-                schedules: existingAgent.schedules?.length || 0
+                schedules: existingAgent.schedules?.length || 0,
+                // ADDED: Track user-configured data
+                hasAvatar: !!(existingAgent as any).avatar,
+                avatarType: (existingAgent as any).avatar?.type,
+                hasTheme: !!(existingAgent as any).theme,
+                theme: (existingAgent as any).theme,
+                hasOAuthTokens: !!(existingAgent as any).oauthTokens
               });
             }
           } catch (parseError) {
@@ -559,7 +565,13 @@ The tool maintains state throughout the generation process and can resume from a
             name: existingAgent.name,
             models: existingAgent.models?.length || 0,
             actions: existingAgent.actions?.length || 0,
-            schedules: existingAgent.schedules?.length || 0
+            schedules: existingAgent.schedules?.length || 0,
+            // ADDED: Track user-configured data from context
+            hasAvatar: !!(existingAgent as any).avatar,
+            avatarType: (existingAgent as any).avatar?.type,
+            hasTheme: !!(existingAgent as any).theme,
+            theme: (existingAgent as any).theme,
+            hasOAuthTokens: !!(existingAgent as any).oauthTokens
           });
         }
       } catch (parseError) {
@@ -759,8 +771,53 @@ The tool maintains state throughout the generation process and can resume from a
         // Force immediate save of final step progress (bypass debounce)
         await saveStepProgressOnly(documentId, finalStepData, session);
 
+        // CRITICAL FIX: Preserve user data before final save
+        let finalAgentData = result.agent;
+        
+        // If we have existing agent data, merge to preserve user-configured data
+        if (existingAgent) {
+          const existingAgentAny = existingAgent as any;
+          const preservedUserData: any = {};
+          
+          // Preserve avatar and theme (user takes priority)
+          if (existingAgentAny.avatar) {
+            preservedUserData.avatar = existingAgentAny.avatar;
+            console.log('🎨 FINAL SAVE: Preserving user avatar data');
+          }
+          
+          if (existingAgentAny.theme) {
+            preservedUserData.theme = existingAgentAny.theme;
+            console.log('🎨 FINAL SAVE: Preserving user theme data');
+          }
+          
+          // Preserve other user data
+          if (existingAgentAny.oauthTokens) {
+            preservedUserData.oauthTokens = existingAgentAny.oauthTokens;
+          }
+          
+          if (existingAgentAny.apiKeys) {
+            preservedUserData.apiKeys = existingAgentAny.apiKeys;
+          }
+          
+          if (existingAgentAny.credentials) {
+            preservedUserData.credentials = existingAgentAny.credentials;
+          }
+          
+          // Merge preserved data into final agent
+          finalAgentData = { ...result.agent, ...preservedUserData };
+          
+          console.log('🔍 FINAL MERGE COMPLETE:', {
+            originalHasAvatar: !!result.agent.avatar,
+            originalHasTheme: !!(result.agent as any).theme,
+            preservedAvatar: !!preservedUserData.avatar,
+            preservedTheme: !!preservedUserData.theme,
+            finalHasAvatar: !!(finalAgentData as any).avatar,
+            finalHasTheme: !!(finalAgentData as any).theme
+          });
+        }
+
         // Save final agent data with updated timestamp
-        const finalContent = JSON.stringify(result.agent, null, 2);
+        const finalContent = JSON.stringify(finalAgentData, null, 2);
         console.log('💾 Saving final agent data to document...');
         await saveDocumentWithContent(documentId, result.agent.name || 'AI Agent System', finalContent, session, undefined, {
           ...stepMetadata,
@@ -857,6 +914,49 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created with 
           
           // Force immediate save of final step progress (bypass debounce)
           await saveStepProgressOnly(documentId, finalStepData, session);
+
+          // CRITICAL FIX: Preserve user data before partial success save (same as full success)
+          let partialAgentData = result.agent;
+          
+          // If we have existing agent data, merge to preserve user-configured data
+          if (existingAgent) {
+            const existingAgentAny = existingAgent as any;
+            const preservedUserData: any = {};
+            
+            // Preserve avatar and theme (user takes priority)
+            if (existingAgentAny.avatar) {
+              preservedUserData.avatar = existingAgentAny.avatar;
+              console.log('🎨 PARTIAL SUCCESS: Preserving user avatar data');
+            }
+            
+            if (existingAgentAny.theme) {
+              preservedUserData.theme = existingAgentAny.theme;
+              console.log('🎨 PARTIAL SUCCESS: Preserving user theme data');
+            }
+            
+            // Preserve other user data
+            if (existingAgentAny.oauthTokens) {
+              preservedUserData.oauthTokens = existingAgentAny.oauthTokens;
+            }
+            
+            if (existingAgentAny.apiKeys) {
+              preservedUserData.apiKeys = existingAgentAny.apiKeys;
+            }
+            
+            if (existingAgentAny.credentials) {
+              preservedUserData.credentials = existingAgentAny.credentials;
+            }
+            
+            // Merge preserved data into partial agent
+            partialAgentData = { ...result.agent, ...preservedUserData };
+            
+            console.log('🔍 PARTIAL MERGE COMPLETE:', {
+              preservedAvatar: !!preservedUserData.avatar,
+              preservedTheme: !!preservedUserData.theme,
+              finalHasAvatar: !!(partialAgentData as any).avatar,
+              finalHasTheme: !!(partialAgentData as any).theme
+            });
+          }
 
           // Create user-friendly completion message for partial success
           const userFriendlyMessage = result.success 

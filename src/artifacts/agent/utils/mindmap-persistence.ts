@@ -173,30 +173,112 @@ export async function saveAvatarCreatorState(
   try {
     console.log('🎨 Saving avatar creator state:', { documentId, state });
     
-    const response = await fetch(`/api/document?id=${documentId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        metadata: {
-          mindMapStates: {
-            avatarCreator: {
-              ...state,
-              lastUpdated: new Date().toISOString()
-            }
-          }
-        }
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Avatar creator save failed:', response.status, errorText);
-      throw new Error(`Failed to save avatar creator state: ${response.status} ${errorText}`);
+    // Validate documentId before making the request
+    if (!documentId || documentId === 'init' || documentId.trim() === '') {
+      throw new Error(`Invalid documentId: ${documentId}. Cannot save avatar state without a valid document ID.`);
     }
     
-    console.log('✅ Avatar creator state saved successfully');
+    const maxRetries = 3;
+    let retryCount = 0;
+    
+    while (retryCount < maxRetries) {
+      try {
+        const response = await fetch(`/api/document?id=${documentId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            metadata: {
+              mindMapStates: {
+                avatarCreator: {
+                  ...state,
+                  lastUpdated: new Date().toISOString()
+                }
+              }
+            }
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          
+          // Handle 404 specifically - document doesn't exist
+          if (response.status === 404) {
+            console.log(`🔧 Document ${documentId} not found (attempt ${retryCount + 1}/${maxRetries}). Attempting to create...`);
+            
+            // Try to create the document first
+            const createResponse = await fetch(`/api/document?id=${documentId}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                title: 'AI Agent System',
+                content: JSON.stringify({
+                  name: 'New Agent',
+                  description: '',
+                  domain: '',
+                  models: [],
+                  enums: [],
+                  actions: [],
+                  schedules: [],
+                  createdAt: new Date().toISOString(),
+                  // Include the avatar data in the initial content
+                  ...(state.avatarData && { avatar: state.avatarData }),
+                }, null, 2),
+                kind: 'agent',
+              }),
+            });
+            
+            if (createResponse.ok) {
+              console.log(`✅ Document ${documentId} created successfully. Retrying save...`);
+              retryCount++;
+              continue; // Retry the original save operation
+            } else {
+              console.error(`❌ Failed to create document ${documentId}:`, await createResponse.text());
+              throw new Error(`Failed to create document: ${createResponse.status}`);
+            }
+          }
+          
+          // Enhanced error information for debugging
+          console.error('🔍 SAVE FAILURE DEBUG:', {
+            documentId,
+            endpoint: `/api/document?id=${documentId}`,
+            method: 'PATCH',
+            status: response.status,
+            statusText: response.statusText,
+            errorText,
+            attempt: retryCount + 1,
+            maxRetries,
+            suggestion: response.status === 404 
+              ? 'Document not found - will attempt creation'
+              : 'Unknown error - check server logs'
+          });
+          
+          if (retryCount === maxRetries - 1) {
+            throw new Error(`Failed to save avatar creator state after ${maxRetries} attempts: ${response.status} ${errorText}`);
+          }
+        } else {
+          console.log('✅ Avatar creator state saved successfully');
+          return; // Success - exit the retry loop
+        }
+        
+      } catch (fetchError) {
+        console.error(`❌ Network error on attempt ${retryCount + 1}:`, fetchError);
+        if (retryCount === maxRetries - 1) {
+          throw fetchError;
+        }
+      }
+      
+      retryCount++;
+      
+      // Wait before retrying (exponential backoff)
+      const delayMs = Math.min(1000 * Math.pow(2, retryCount), 5000);
+      console.log(`⏳ Waiting ${delayMs}ms before retry...`);
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+    
   } catch (error) {
     console.error('❌ Error saving avatar creator state:', error);
     throw error; // Re-throw so the caller knows it failed

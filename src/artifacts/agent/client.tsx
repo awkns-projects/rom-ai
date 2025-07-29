@@ -602,6 +602,19 @@ const AgentBuilderContent = memo(({
   const documentId = artifact?.documentId;
   const chatId = params.id as string;
 
+  // DEBUG: Track documentId values
+  useEffect(() => {
+    console.log('🔍 CLIENT DEBUG - Document ID tracking:', {
+      documentId,
+      hasDocumentId: !!documentId,
+      documentIdType: typeof documentId,
+      artifactExists: !!artifact,
+      artifactStatus: artifact?.status,
+      chatId,
+      hasChatId: !!chatId
+    });
+  }, [documentId, artifact?.status, chatId]);
+
   // Extract deployment information from agent data
   const deploymentInfo = agentData.deployment || null;
 

@@ -530,6 +530,13 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
                     externalApisMetadata={agentData?.externalApis || []}
                     agentData={agentData}
                     onAvatarChange={(avatarData: any) => {
+                      console.log('🎨 OnboardContent - Avatar change:', {
+                        documentId,
+                        hasDocumentId: !!documentId,
+                        documentIdType: typeof documentId,
+                        avatarData: !!avatarData
+                      });
+                      
                       if (onDataChange && agentData) {
                         const updatedAgent = {
                           ...agentData,
@@ -539,6 +546,12 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
                       }
                     }}
                     onThemeChange={(theme: string) => {
+                      console.log('🎨 OnboardContent - Theme change:', {
+                        documentId,
+                        hasDocumentId: !!documentId,
+                        theme
+                      });
+                      
                       // FIXED: Properly handle theme changes in avatar creator
                       if (onThemeChange) {
                         onThemeChange(theme);

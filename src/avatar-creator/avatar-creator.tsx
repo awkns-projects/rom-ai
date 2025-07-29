@@ -383,6 +383,8 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
   const saveToDatabase = useCallback(async (data: AvatarData, currentStep: number, updateContent = false) => {
     console.log('💾 Saving avatar data:', { 
       hasDocumentId: !!documentId,
+      documentId, // ADDED: Log actual documentId value
+      documentIdType: typeof documentId, // ADDED: Log documentId type
       hasOnAvatarChange: !!onAvatarChange,
       avatarName: data.name, 
       step: currentStep,
@@ -411,16 +413,52 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
     // Always save to database metadata for persistence (lightweight)
     if (documentId && documentId !== 'init') {
       try {
+        console.log('🔍 SAVE DEBUG - Attempting database save:', {
+          documentId,
+          endpoint: `/api/document?id=${documentId}`,
+          isValidDocumentId: typeof documentId === 'string' && documentId.length > 0 && documentId !== 'init'
+        });
+        
         await saveAvatarCreatorState(documentId, {
           avatarData: data,
           step: currentStep,
         });
         console.log('✅ Avatar data saved to database metadata only');
       } catch (error) {
-        console.error("❌ Failed to save to database metadata:", error)
+        console.error("❌ Failed to save to database metadata:", error);
+        console.error("🔍 SAVE ERROR DEBUG:", {
+          documentId,
+          documentIdValid: !!(documentId && documentId !== 'init'),
+          errorType: error instanceof Error ? error.constructor.name : typeof error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          endpoint: `/api/document?id=${documentId}`,
+          suggestion: "Check if this documentId exists in the database"
+        });
+        
+        // Try to get more information about the document
+        if (documentId && documentId !== 'init') {
+          console.log('🔍 Attempting to verify document exists with GET request...');
+          try {
+            const response = await fetch(`/api/document?id=${documentId}`);
+            console.log('🔍 Document verification response:', {
+              status: response.status,
+              statusText: response.statusText,
+              url: response.url
+            });
+          } catch (verifyError) {
+            console.log('🔍 Document verification failed:', verifyError);
+          }
+        }
       }
     } else {
-      console.log('⚪ Skipping database save - no valid document ID yet');
+      console.log('⚪ Skipping database save - no valid document ID yet:', {
+        documentId,
+        isUndefined: documentId === undefined,
+        isNull: documentId === null,
+        isInit: documentId === 'init',
+        isEmpty: documentId === '',
+        actualValue: JSON.stringify(documentId)
+      });
     }
     
     setLastSaved(new Date())

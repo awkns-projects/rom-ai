@@ -583,6 +583,9 @@ function assembleCompleteAgent(
   step3: Step3Output
 ): AgentData {
   const now = new Date().toISOString();
+  
+  // Cast existing agent to access avatar/theme properties
+  const existingAgent = config.existingAgent as any;
 
   const newAgentData: AgentData = {
     id: config.existingAgent?.id || crypto.randomUUID(),
@@ -612,7 +615,45 @@ function assembleCompleteAgent(
     }
   };
 
-  return newAgentData;
+  // CRITICAL FIX: Preserve user-configured avatar and theme data
+  const preservedData: any = {};
+  
+  if (existingAgent?.avatar) {
+    preservedData.avatar = existingAgent.avatar;
+    console.log('🎨 ASSEMBLY: Preserving user avatar data:', existingAgent.avatar);
+  }
+  
+  if (existingAgent?.theme) {
+    preservedData.theme = existingAgent.theme;
+    console.log('🎨 ASSEMBLY: Preserving user theme data:', existingAgent.theme);
+  }
+  
+  // Preserve other user-configured data
+  if (existingAgent?.oauthTokens) {
+    preservedData.oauthTokens = existingAgent.oauthTokens;
+  }
+  
+  if (existingAgent?.apiKeys) {
+    preservedData.apiKeys = existingAgent.apiKeys;
+  }
+  
+  if (existingAgent?.credentials) {
+    preservedData.credentials = existingAgent.credentials;
+  }
+  
+  // Merge preserved data into the new agent data
+  const finalAgentData = { ...newAgentData, ...preservedData };
+  
+  console.log('🔍 ASSEMBLY COMPLETE:', {
+    preservedAvatar: !!preservedData.avatar,
+    preservedTheme: !!preservedData.theme,
+    preservedOAuth: !!preservedData.oauthTokens,
+    preservedApiKeys: !!preservedData.apiKeys,
+    finalHasAvatar: !!finalAgentData.avatar,
+    finalHasTheme: !!finalAgentData.theme
+  });
+
+  return finalAgentData;
 }
 
 /**
