@@ -633,9 +633,28 @@ const AgentBuilderContent = memo(({
       newScheduleNames: (newData.schedules || []).map((s: AgentSchedule) => s.name)
     });
     
+    // SPECIAL HANDLING: Detect avatar or theme changes and save immediately
+    const avatarChanged = JSON.stringify(agentData.avatar) !== JSON.stringify(newData.avatar);
+    const themeChanged = agentData.theme !== newData.theme;
+    
+    if (avatarChanged || themeChanged) {
+      console.log('🎨 CRITICAL: Avatar or theme change detected - saving immediately to prevent loss:', {
+        avatarChanged,
+        themeChanged,
+        oldTheme: agentData.theme,
+        newTheme: newData.theme,
+        oldAvatar: !!agentData.avatar,
+        newAvatar: !!newData.avatar
+      });
+      
+      // Immediately save when avatar/theme changes to prevent orchestrator from overriding
+      const agentContent = JSON.stringify(newData, null, 2);
+      onSaveContent(agentContent, false); // No debounce - immediate save
+    }
+    
     setAgentData(newData);
     setHasUnsavedChanges(true);
-  }, [agentData]);
+  }, [agentData, onSaveContent]);
 
   // Enhanced save function
   const saveAgentToConversation = useCallback(async () => {
@@ -784,6 +803,18 @@ const AgentBuilderContent = memo(({
 
       // Only update if we have real data
       if (hasRealData) {
+        // DEBUG: Track what we're merging
+        console.log('🔍 MERGE DEBUG - Before merge:', {
+          currentUserTheme: agentData?.theme,
+          currentUserAvatar: !!agentData?.avatar,
+          currentUserAvatarType: agentData?.avatar?.type,
+          parsedTheme: parsed.theme,
+          parsedAvatar: !!parsed.avatar,
+          parsedAvatarType: parsed.avatar?.type,
+          shouldPreserveTheme: !!agentData?.theme,
+          shouldPreserveAvatar: !!agentData?.avatar
+        });
+        
         // Intelligently merge data - preserve user-configured data while allowing orchestrator updates
         const updatedData = {
           id: parsed.id,
@@ -796,18 +827,19 @@ const AgentBuilderContent = memo(({
           schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
           prismaSchema: parsed.prismaSchema || agentData?.prismaSchema || '', // Preserve generated schema
           createdAt: parsed.createdAt || new Date().toISOString(),
-          // PRESERVE USER-CONFIGURED DATA: Only use external data if user hasn't configured these
-          theme: agentData?.theme || parsed.theme, // Preserve user's theme selection (user takes priority)
-          avatar: agentData?.avatar || parsed.avatar, // Preserve user's avatar data (user takes priority)
-          externalApis: agentData?.externalApis || parsed.externalApis, // Preserve external API metadata (user takes priority)
-          deployment: agentData?.deployment || parsed.deployment, // Include deployment information (user takes priority)
-          metadata: agentData?.metadata || parsed.metadata, // Include metadata (user takes priority)
-          oauthTokens: agentData?.oauthTokens || parsed.oauthTokens, // Preserve OAuth tokens (user takes priority)
-          apiKeys: agentData?.apiKeys || parsed.apiKeys, // Preserve API keys (user takes priority)
-          credentials: agentData?.credentials || parsed.credentials, // Preserve credentials (user takes priority)
-          authConfig: agentData?.authConfig || parsed.authConfig, // Preserve auth configuration (user takes priority)
-          integrations: agentData?.integrations || parsed.integrations, // Preserve integrations (user takes priority)
-          settings: agentData?.settings || parsed.settings // Preserve any additional settings (user takes priority)
+          // PRESERVE USER-CONFIGURED DATA: More aggressive preservation
+          // Only use parsed data if current agentData doesn't have user-configured values
+          theme: agentData?.theme || parsed.theme, // User data takes absolute priority
+          avatar: agentData?.avatar || parsed.avatar, // User data takes absolute priority
+          externalApis: parsed.externalApis || agentData?.externalApis, // Use parsed for external APIs (orchestrator manages this)
+          deployment: agentData?.deployment || parsed.deployment, // User deployment takes priority
+          metadata: agentData?.metadata || parsed.metadata, // User metadata takes priority
+          oauthTokens: agentData?.oauthTokens || parsed.oauthTokens, // User auth takes priority
+          apiKeys: agentData?.apiKeys || parsed.apiKeys, // User API keys take priority
+          credentials: agentData?.credentials || parsed.credentials, // User credentials take priority
+          authConfig: agentData?.authConfig || parsed.authConfig, // User auth config takes priority
+          integrations: agentData?.integrations || parsed.integrations, // User integrations take priority
+          settings: agentData?.settings || parsed.settings // User settings take priority
         };
         
         console.log('🔄 Content update with intelligent merge:', {
@@ -823,6 +855,15 @@ const AgentBuilderContent = memo(({
           hasAvatar: !!updatedData.avatar,
           hasPrismaSchema: !!updatedData.prismaSchema,
           hasEnums: !!updatedData.enums?.length
+        });
+        
+        // DEBUG: Post-merge verification
+        console.log('🔍 MERGE DEBUG - After merge:', {
+          finalTheme: updatedData.theme,
+          finalAvatar: !!updatedData.avatar,
+          finalAvatarType: updatedData.avatar?.type,
+          themeSuccessfullyPreserved: agentData?.theme ? updatedData.theme === agentData.theme : 'no-user-theme',
+          avatarSuccessfullyPreserved: agentData?.avatar ? JSON.stringify(updatedData.avatar) === JSON.stringify(agentData.avatar) : 'no-user-avatar'
         });
         
         // Use a more stable comparison approach - Include all relevant properties

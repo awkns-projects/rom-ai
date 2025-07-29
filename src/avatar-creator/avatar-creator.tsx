@@ -409,7 +409,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
     }
     
     // Always save to database metadata for persistence (lightweight)
-    if (documentId) {
+    if (documentId && documentId !== 'init') {
       try {
         await saveAvatarCreatorState(documentId, {
           avatarData: data,
@@ -419,6 +419,8 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
       } catch (error) {
         console.error("❌ Failed to save to database metadata:", error)
       }
+    } else {
+      console.log('⚪ Skipping database save - no valid document ID yet');
     }
     
     setLastSaved(new Date())
@@ -427,7 +429,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
 
   // Load from database on mount, then merge with agentData if available
   useEffect(() => {
-    if (!documentId) return;
+    if (!documentId || documentId === 'init') return;
     
     const loadSavedData = async () => {
       try {
@@ -543,7 +545,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
 
   const clearSavedData = async () => {
     // Clear database state instead of localStorage
-    if (documentId) {
+    if (documentId && documentId !== 'init') {
       try {
         await saveAvatarCreatorState(documentId, {
           avatarData: {

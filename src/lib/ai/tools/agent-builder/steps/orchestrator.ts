@@ -174,6 +174,9 @@ export async function executeAgentGeneration(
       // IMMEDIATE FIX: Stream partial agent data with external API metadata
       // This allows AvatarCreator to show correct connection UI right away
       try {
+        // Use type assertion to access avatar/theme properties that exist but aren't in our type definition
+        const existingAgent = config.existingAgent as any;
+        
         const partialAgentData = {
           id: config.existingAgent?.id || crypto.randomUUID(),
           name: step0Result.agentName || 'Generated Agent',
@@ -182,15 +185,21 @@ export async function executeAgentGeneration(
           models: [], // Empty arrays for now - will be filled in later steps
           actions: [],
           schedules: [],
-          createdAt: config.existingAgent?.createdAt || new Date().toISOString(),
-          externalApis: step0Result.externalApis || []
+          externalApis: step0Result.externalApis || [],
+          // PRESERVE USER-CONFIGURED DATA: Don't override avatar and theme from existing agent
+          ...(existingAgent?.avatar && { avatar: existingAgent.avatar }),
+          ...(existingAgent?.theme && { theme: existingAgent.theme }),
+          // Preserve other user-configured data as well
+          ...(existingAgent?.oauthTokens && { oauthTokens: existingAgent.oauthTokens }),
+          ...(existingAgent?.apiKeys && { apiKeys: existingAgent.apiKeys }),
+          ...(existingAgent?.credentials && { credentials: existingAgent.credentials })
         };
 
         // Only stream if we have a valid dataStream and the agent data is meaningful
         if (config.dataStream && partialAgentData.name && partialAgentData.name !== 'Generated Agent') {
           console.log('🔄 Streaming partial agent data with external APIs metadata after Step 0:', {
             apisCount: partialAgentData.externalApis.length,
-            primaryApis: partialAgentData.externalApis.filter(api => api.priority === 'primary'),
+            primaryApis: partialAgentData.externalApis.filter((api: any) => api.priority === 'primary'),
             agentName: partialAgentData.name
           });
           
