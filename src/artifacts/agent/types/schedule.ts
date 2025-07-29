@@ -1,52 +1,70 @@
-import type { DatabaseModel, EnvVar, PseudoCodeStep } from './action';
+import type { DatabaseModel, EnvVar } from './action';
 
-// Interface for recurring scheduled tasks
+// Interface for step execution in action chains
+export interface ActionChainStep {
+  id: string;
+  actionId: string; // Reference to an existing Action
+  name: string; // Display name for this step
+  description?: string;
+  delay?: {
+    duration: number; // in milliseconds
+    unit: 'seconds' | 'minutes' | 'hours';
+  };
+  inputMapping?: Record<string, any>; // How to map inputs to this action
+  condition?: {
+    type: 'always' | 'if' | 'unless';
+    expression?: string; // Future feature for conditional execution
+  };
+  onError?: {
+    action: 'stop' | 'continue' | 'retry';
+    retryCount?: number;
+    retryDelay?: number;
+  };
+}
+
+// Interface for scheduled action chains
 export interface AgentSchedule {
   id: string;
   name: string;
   emoji?: string; // AI-generated emoji representing the schedule
   description: string;
-  type: 'Create' | 'Update';
   role: 'admin' | 'member';
-  pseudoSteps?: PseudoCodeStep[];
-  interval: {
-    pattern: string;
+  
+  // Timing configuration
+  trigger: {
+    type: 'cron' | 'interval' | 'date' | 'manual';
+    pattern?: string; // cron expression for cron type
+    interval?: {
+      value: number;
+      unit: 'minutes' | 'hours' | 'days' | 'weeks';
+    };
+    date?: string; // ISO date string for one-time execution
     timezone?: string;
     active?: boolean;
   };
-  dataSource: {
-    type: 'custom' | 'database';
-    customFunction?: {
-      code: string;
-      envVars?: EnvVar[];
-    };
-    database?: {
-      models: DatabaseModel[];
-    };
+
+  // Action chain configuration
+  steps: ActionChainStep[];
+  
+  // Global configuration for the entire chain
+  globalInputs?: Record<string, any>; // Inputs available to all steps
+  environment?: {
+    envVars: EnvVar[];
   };
-  execute: {
-    type: 'code' | 'prompt';
-    code?: {
-      script: string;
-      envVars?: EnvVar[];
-    };
-    prompt?: {
-      template: string; 
-      model?: string;
-      temperature?: number;
-      maxTokens?: number;
-    };
+  
+  // Execution history and results
+  lastExecution?: {
+    timestamp: string;
+    success: boolean;
+    duration: number;
+    stepsCompleted: number;
+    totalSteps: number;
+    error?: string;
+    results?: Record<string, any>;
   };
-  results: {
-    actionType: 'Create' | 'Update';
-    model: string;
-    identifierIds?: string[];
-    fields?: Record<string, any>;
-    fieldsToUpdate?: Record<string, any>;
-  };
-  savedInputs?: {
-    inputParameters: Record<string, any>;
-    envVars: Record<string, string>;
-    lastUpdated: string;
-  };
+  
+  // Metadata
+  createdAt?: string;
+  updatedAt?: string;
+  version?: number;
 } 

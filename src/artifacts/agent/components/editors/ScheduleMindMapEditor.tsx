@@ -1,60 +1,70 @@
 import * as React from 'react';
-import { memo, useCallback, useState, useEffect, useRef } from 'react';
+import { memo, useCallback, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CrossIcon, PlusIcon } from '@/components/icons';
-import { StepFieldEditor } from './StepFieldEditor';
-import type { AgentSchedule, EnvVar, PseudoCodeStep, StepField, AgentModel } from '../../types';
+import type { AgentSchedule, ActionChainStep, AgentAction, EnvVar, AgentModel } from '../../types';
 import { generateNewId } from '../../utils';
 
 interface ScheduleMindMapEditorProps {
   schedule: AgentSchedule;
   onUpdate: (schedule: AgentSchedule) => void;
   onDelete: () => void;
+  availableActions?: AgentAction[];
   allModels?: AgentModel[];
   documentId?: string;
 }
 
-interface MindMapNode {
+interface ScheduleCard {
   id: string;
-  type: 'description' | 'timing' | 'step' | 'code' | 'execution';
+  type: 'setup' | 'action' | 'add-action' | 'execute';
+  icon: string;
   title: string;
-  content: string;
-  status: 'empty' | 'processing' | 'complete' | 'ready';
-  position: { 
+  subtitle: string;
+  status: 'complete' | 'incomplete' | 'ready' | 'active';
+  content: React.ReactNode;
+  actionButton?: React.ReactNode;
+  position: {
     desktop: { x: number; y: number };
     mobile: { x: number; y: number };
   };
-  connections: string[];
-  data?: any;
-}
-
-interface MindMapConnection {
-  id: string;
-  from: string;
-  to: string;
-  status: 'complete' | 'inactive' | 'flowing';
 }
 
 export const ScheduleMindMapEditor = memo(({
   schedule,
   onUpdate,
   onDelete,
+  availableActions = [],
   allModels = [],
   documentId
 }: ScheduleMindMapEditorProps) => {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [selectedNode, setSelectedNode] = useState<string | null>('description');
-  const [isGeneratingSteps, setIsGeneratingSteps] = useState(false);
-  const [isGeneratingCode, setIsGeneratingCode] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState<any>(null);
+  const [expandedCard, setExpandedCard] = useState<string | null>('setup');
   const [isMobile, setIsMobile] = useState(false);
 
+  // Ensure schedule is properly initialized
+  useEffect(() => {
+    const needsUpdate = !schedule.trigger || !schedule.steps;
+    
+    if (needsUpdate) {
+      onUpdate({
+        ...schedule,
+        trigger: schedule.trigger || {
+          type: 'cron',
+          pattern: '0 0 * * *',
+          timezone: 'UTC',
+          active: false
+        },
+        steps: schedule.steps || []
+      });
+    }
+  }, [schedule, onUpdate]);
+
+  // Detect mobile/desktop
   useEffect(() => {
     const checkIsMobile = () => {
       setIsMobile(window.innerWidth < 768);
@@ -65,233 +75,10 @@ export const ScheduleMindMapEditor = memo(({
     return () => window.removeEventListener('resize', checkIsMobile);
   }, []);
 
-  const [nodes, setNodes] = useState<MindMapNode[]>(() => [
-    {
-      id: 'description',
-      type: 'description',
-      title: '📝 Schedule Details',
-      content: schedule.name && schedule.description ? 'Schedule defined' : 'Define your automated schedule',
-      status: schedule.name && schedule.description ? 'complete' : 'empty',
-      position: { 
-        desktop: { x: 50, y: 200 },
-        mobile: { x: 20, y: 50 }
-      },
-      connections: ['timing'],
-      data: { name: schedule.name, description: schedule.description }
-    },
-    {
-      id: 'timing',
-      type: 'timing',
-      title: '⏰ Schedule Timing',
-      content: schedule.interval?.pattern ? 'Timing configured' : 'Set when this schedule runs',
-      status: schedule.interval?.pattern ? 'complete' : 'empty',
-      position: { 
-        desktop: { x: 380, y: 200 },
-        mobile: { x: 20, y: 220 }
-      },
-      connections: ['steps'],
-      data: schedule.interval
-    },
-    {
-      id: 'steps',
-      type: 'step',
-      title: '🔄 Automation Steps',
-      content: schedule.pseudoSteps?.length ? `${schedule.pseudoSteps.length} steps defined` : 'Break down the process',
-      status: schedule.pseudoSteps && schedule.pseudoSteps.length > 0 ? 'complete' : 'empty',
-      position: { 
-        desktop: { x: 710, y: 200 },
-        mobile: { x: 20, y: 390 }
-      },
-      connections: ['code'],
-      data: schedule.pseudoSteps
-    },
-    {
-      id: 'code',
-      type: 'code',
-      title: '⚡ Executable Code',
-      content: schedule.execute?.code?.script ? 'Code generated' : 'Generated automation code',
-      status: schedule.execute?.code?.script ? 'complete' : 'empty',
-      position: { 
-        desktop: { x: 1040, y: 200 },
-        mobile: { x: 20, y: 560 }
-      },
-      connections: ['execution'],
-      data: schedule.execute?.code
-    },
-    {
-      id: 'execution',
-      type: 'execution',
-      title: '🚀 Schedule Activation',
-      content: 'Activate & monitor schedule',
-      status: schedule.execute?.code?.script ? 'ready' : 'empty',
-      position: { 
-        desktop: { x: 1370, y: 200 },
-        mobile: { x: 20, y: 730 }
-      },
-      connections: [],
-      data: null
-    }
-  ]);
-
-  const [connections] = useState<MindMapConnection[]>([
-    { id: 'desc-timing', from: 'description', to: 'timing', status: 'inactive' },
-    { id: 'timing-steps', from: 'timing', to: 'steps', status: 'inactive' },
-    { id: 'steps-code', from: 'steps', to: 'code', status: 'inactive' },
-    { id: 'code-exec', from: 'code', to: 'execution', status: 'inactive' }
-  ]);
-
-  useEffect(() => {
-    setNodes(prevNodes => prevNodes.map(node => {
-      switch (node.id) {
-        case 'description':
-          return {
-            ...node,
-            status: schedule.name && schedule.description ? 'complete' : 'empty',
-            content: schedule.name && schedule.description ? 'Schedule defined' : 'Define your automated schedule',
-            data: { name: schedule.name, description: schedule.description }
-          };
-        case 'timing':
-          return {
-            ...node,
-            status: schedule.interval?.pattern ? 'complete' : 'empty',
-            content: schedule.interval?.pattern ? 'Timing configured' : 'Set when this schedule runs',
-            data: schedule.interval
-          };
-        case 'steps':
-          return {
-            ...node,
-            status: schedule.pseudoSteps && schedule.pseudoSteps.length > 0 ? 'complete' : 'empty',
-            content: schedule.pseudoSteps?.length ? `${schedule.pseudoSteps.length} steps defined` : 'Break down the process',
-            data: schedule.pseudoSteps
-          };
-        case 'code':
-          return {
-            ...node,
-            status: schedule.execute?.code?.script ? 'complete' : 'empty',
-            content: schedule.execute?.code?.script ? 'Code generated' : 'Generated automation code',
-            data: schedule.execute?.code
-          };
-        case 'execution':
-          return {
-            ...node,
-            status: schedule.execute?.code?.script ? 'ready' : 'empty'
-          };
-        default:
-          return node;
-      }
-    }));
-  }, [schedule]);
-
-  const generateStepsFromDescription = useCallback(async () => {
-    if (!schedule.name?.trim() || !schedule.description?.trim()) return;
-    
-    setIsGeneratingSteps(true);
-    setNodes(prev => prev.map(node => 
-      node.id === 'steps' ? { ...node, status: 'processing', content: 'AI is crafting steps...' } : node
-    ));
-
-    try {
-      const response = await fetch('/api/agent/generate-steps', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: schedule.name,
-          description: schedule.description,
-          availableModels: allModels,
-          entityType: 'schedule',
-          type: (schedule as any).type || 'mutation', // Default to mutation if type is not set
-          businessContext: `Generate pseudo steps for ${schedule.name}. This is a scheduled task that runs automatically.`
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const generatedSteps = data.pseudoSteps || [];
-        onUpdate({ ...schedule, pseudoSteps: generatedSteps });
-        setNodes(prev => prev.map(node => 
-          node.id === 'steps' ? { 
-            ...node, 
-            status: 'complete', 
-            content: `${generatedSteps.length} steps defined`,
-            data: generatedSteps
-          } : node
-        ));
-      } else {
-        throw new Error('Failed to generate steps');
-      }
-    } catch (error) {
-      console.error('Error generating steps:', error);
-      setNodes(prev => prev.map(node => 
-        node.id === 'steps' ? { ...node, status: 'empty', content: 'Failed to generate steps' } : node
-      ));
-    } finally {
-      setIsGeneratingSteps(false);
-    }
-  }, [schedule, onUpdate, allModels]);
-
-  const generateCodeFromSteps = useCallback(async () => {
-    if (!schedule.pseudoSteps?.length) return;
-
-    setIsGeneratingCode(true);
-    setNodes(prev => prev.map(node => 
-      node.id === 'code' ? { ...node, status: 'processing', content: 'AI is generating code...' } : node
-    ));
-
-    try {
-      const response = await fetch('/api/agent/generate-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: schedule.name,
-          description: schedule.description,
-          pseudoSteps: schedule.pseudoSteps,
-          availableModels: allModels,
-          entityType: 'schedule',
-          businessContext: `This is a scheduled business task for ${schedule.name}.`
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        onUpdate({
-          ...schedule,
-          execute: {
-            ...schedule.execute,
-            type: 'code',
-            code: {
-              script: data.code || '',
-              envVars: data.envVars || []
-            }
-          }
-        });
-        setNodes(prev => prev.map(node => 
-          node.id === 'code' ? { 
-            ...node, 
-            status: 'complete', 
-            content: 'Code generated',
-            data: { script: data.code, envVars: data.envVars }
-          } : node
-        ));
-      } else {
-        throw new Error('Failed to generate code');
-      }
-    } catch (error) {
-      console.error('Error generating code:', error);
-      setNodes(prev => prev.map(node => 
-        node.id === 'code' ? { ...node, status: 'empty', content: 'Failed to generate code' } : node
-      ));
-    } finally {
-      setIsGeneratingCode(false);
-    }
-  }, [schedule, onUpdate, allModels]);
-
   const executeSchedule = useCallback(async () => {
-    if (!schedule.execute?.code?.script || !documentId) return;
+    if (!schedule.steps?.length || !documentId) return;
 
     setIsExecuting(true);
-    setNodes(prev => prev.map(node => 
-      node.id === 'execution' ? { ...node, status: 'processing', content: 'Testing schedule...' } : node
-    ));
 
     try {
       const response = await fetch('/api/agent/execute-schedule', {
@@ -300,11 +87,11 @@ export const ScheduleMindMapEditor = memo(({
         body: JSON.stringify({
           documentId,
           scheduleId: schedule.id,
-          code: schedule.execute.code.script,
+          steps: schedule.steps,
           testMode: true,
-          interval: {
-            pattern: schedule.interval?.pattern || '0 0 * * *',
-            timezone: schedule.interval?.timezone || 'UTC',
+          trigger: {
+            pattern: schedule.trigger?.pattern || '0 0 * * *',
+            timezone: schedule.trigger?.timezone || 'UTC',
             active: false
           }
         }),
@@ -312,47 +99,630 @@ export const ScheduleMindMapEditor = memo(({
 
       const result = await response.json();
       setExecutionResult(result);
-
-      if (result.success) {
-        setNodes(prev => prev.map(node => 
-          node.id === 'execution' ? { 
-            ...node, 
-            status: 'ready', 
-            content: `Test successful! ${result.executionTime}ms`
-          } : node
-        ));
-      } else {
-        throw new Error(result.error || 'Execution failed');
-      }
     } catch (error) {
       console.error('Error executing schedule:', error);
-      setNodes(prev => prev.map(node => 
-        node.id === 'execution' ? { ...node, status: 'ready', content: 'Test failed - check console' } : node
-      ));
+      setExecutionResult({ success: false, error: error instanceof Error ? error.message : 'Unknown error' });
     } finally {
       setIsExecuting(false);
     }
   }, [schedule, documentId]);
 
-  const getNodeColor = (status: string) => {
-    switch (status) {
-      case 'empty': return 'from-gray-500/20 to-gray-600/20 border-gray-500/30';
-      case 'processing': return 'from-yellow-500/20 to-orange-500/20 border-yellow-500/30 animate-pulse';
-      case 'complete': return 'from-green-500/20 to-emerald-500/20 border-green-500/30';
-      case 'ready': return 'from-orange-500/20 to-red-500/20 border-orange-500/30';
-      default: return 'from-gray-500/20 to-gray-600/20 border-gray-500/30';
+  const addNewAction = () => {
+    const newStep: ActionChainStep = {
+      id: generateNewId('step', schedule.steps || []),
+      actionId: '',
+      name: `Action ${(schedule.steps || []).length + 1}`,
+      description: '',
+      condition: { type: 'always' },
+      onError: { action: 'stop' }
+    };
+    const updatedSteps = [...(schedule.steps || []), newStep];
+    onUpdate({ ...schedule, steps: updatedSteps });
+    setExpandedCard(newStep.id);
+  };
+
+  const removeAction = (stepId: string) => {
+    const updatedSteps = schedule.steps?.filter(s => s.id !== stepId) || [];
+    onUpdate({ ...schedule, steps: updatedSteps });
+    if (expandedCard === stepId) {
+      setExpandedCard(null);
     }
   };
 
-  const getConnectionPath = (from: MindMapNode, to: MindMapNode) => {
-    const currentPosition = isMobile ? 'mobile' : 'desktop';
-    const nodeWidth = isMobile ? 280 : 300;
-    const nodeHeight = 120;
+  const moveAction = (stepId: string, direction: 'up' | 'down') => {
+    const steps = schedule.steps || [];
+    const currentIndex = steps.findIndex(s => s.id === stepId);
+    if (currentIndex === -1) return;
+
+    const newIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (newIndex < 0 || newIndex >= steps.length) return;
+
+    const updatedSteps = [...steps];
+    [updatedSteps[currentIndex], updatedSteps[newIndex]] = [updatedSteps[newIndex], updatedSteps[currentIndex]];
     
-    const startX = from.position[currentPosition].x + (isMobile ? nodeWidth / 2 : nodeWidth);
-    const startY = from.position[currentPosition].y + nodeHeight / 2;
-    const endX = to.position[currentPosition].x + (isMobile ? nodeWidth / 2 : 0);
-    const endY = to.position[currentPosition].y + nodeHeight / 2;
+    onUpdate({ ...schedule, steps: updatedSteps });
+  };
+
+  const getSetupStatus = () => {
+    if (schedule.name?.trim() && schedule.description?.trim() && schedule.trigger?.type) {
+      return 'complete';
+    }
+    return 'incomplete';
+  };
+
+  const getBasicSetupStatus = () => {
+    // Just need name to start adding actions
+    return schedule.name?.trim() ? 'ready' : 'incomplete';
+  };
+
+  const getActionStatus = (step: ActionChainStep) => {
+    return step.actionId ? 'complete' : 'incomplete';
+  };
+
+  const getExecutionStatus = () => {
+    if (schedule.steps?.length && schedule.trigger?.active) return 'active';
+    if (schedule.steps?.length) return 'ready';
+    return 'incomplete';
+  };
+
+  const StatusIcon = ({ status }: { status: 'complete' | 'incomplete' | 'ready' | 'active' }) => {
+    switch (status) {
+      case 'complete':
+        return <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white">✓</div>;
+      case 'ready':
+        return <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white">⚡</div>;
+      case 'active':
+        return <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white animate-pulse">▶</div>;
+      default:
+        return <div className="w-8 h-8 rounded-full bg-red-500 flex items-center justify-center text-white">○</div>;
+    }
+  };
+
+  // Generate cards with responsive positioning
+  const generateCards = (): ScheduleCard[] => {
+    const cards: ScheduleCard[] = [];
+    let currentIndex = 0;
+
+    // Helper to get position for current index
+    const getPosition = (index: number) => ({
+      desktop: { x: 50 + (index * 420), y: 100 },
+      mobile: { x: 20, y: 50 + (index * 300) }
+    });
+
+    // Setup Card
+    cards.push({
+      id: 'setup',
+      type: 'setup',
+      icon: '⚙️',
+      title: 'Schedule Setup',
+      subtitle: schedule.name 
+        ? `${schedule.name} • ${schedule.trigger?.type && schedule.trigger?.pattern ? schedule.trigger.type : 'Configure timing'}`
+        : 'Define name, purpose, and timing',
+      status: getSetupStatus(),
+      position: getPosition(currentIndex++),
+      content: getSetupStatus() === 'complete' && expandedCard !== 'setup'
+        ? `Automated schedule "${schedule.name}" configured to run ${
+            schedule.trigger?.type === 'cron' ? schedule.trigger.pattern :
+            schedule.trigger?.type === 'interval' ? `every ${schedule.trigger.interval?.value} ${schedule.trigger.interval?.unit}` :
+            schedule.trigger?.type === 'date' ? 'on specific date' :
+            'manually'
+          }.`
+        : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <Label className="text-blue-300 font-mono text-sm">✨ Schedule Name</Label>
+                <Input
+                  value={schedule.name || ''}
+                  onChange={(e) => onUpdate({ ...schedule, name: e.target.value })}
+                  placeholder="e.g., Daily Reports, Weekly Sync"
+                  className="bg-slate-800 border-slate-600 text-white font-mono"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-blue-300 font-mono text-sm">📝 Vision & Purpose</Label>
+                <Textarea
+                  value={schedule.description || ''}
+                  onChange={(e) => onUpdate({ ...schedule, description: e.target.value })}
+                  placeholder="Describe what this automation chain will accomplish..."
+                  className="bg-slate-800 border-slate-600 text-white font-mono text-sm min-h-[80px] resize-none"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-blue-300 font-mono text-sm">⏰ Trigger Type</Label>
+                <Select
+                  value={schedule.trigger?.type || 'cron'}
+                  onValueChange={(value: 'cron' | 'interval' | 'date' | 'manual') => onUpdate({
+                    ...schedule,
+                    trigger: { ...schedule.trigger, type: value }
+                  })}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-600 text-white font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-600">
+                    <SelectItem value="cron" className="text-white font-mono">Cron Schedule</SelectItem>
+                    <SelectItem value="interval" className="text-white font-mono">Regular Interval</SelectItem>
+                    <SelectItem value="date" className="text-white font-mono">Specific Date</SelectItem>
+                    <SelectItem value="manual" className="text-white font-mono">Manual Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {schedule.trigger?.type === 'cron' && (
+                <div className="space-y-2">
+                  <Label className="text-blue-300 font-mono text-sm">Pattern</Label>
+                  <Select
+                    value={schedule.trigger?.pattern || '0 0 * * *'}
+                    onValueChange={(value) => onUpdate({
+                      ...schedule,
+                      trigger: { ...schedule.trigger, pattern: value }
+                    })}
+                  >
+                    <SelectTrigger className="bg-slate-800 border-slate-600 text-white font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-600">
+                      <SelectItem value="*/10 * * * *">Every 10 minutes</SelectItem>
+                      <SelectItem value="0 * * * *">Every hour</SelectItem>
+                      <SelectItem value="0 9 * * 1-5">Weekdays at 9 AM</SelectItem>
+                      <SelectItem value="0 0 * * *">Daily at midnight</SelectItem>
+                      <SelectItem value="0 0 * * 0">Weekly on Sunday</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {schedule.trigger?.type === 'interval' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <Label className="text-blue-300 font-mono text-sm">Every</Label>
+                    <Input
+                      type="number"
+                      value={schedule.trigger?.interval?.value || 1}
+                      onChange={(e) => onUpdate({
+                        ...schedule,
+                        trigger: { 
+                          ...schedule.trigger, 
+                          interval: { 
+                            unit: schedule.trigger?.interval?.unit || 'hours',
+                            value: parseInt(e.target.value) || 1 
+                          }
+                        }
+                      })}
+                      className="bg-slate-800 border-slate-600 text-white font-mono"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-blue-300 font-mono text-sm">Unit</Label>
+                    <Select
+                      value={schedule.trigger?.interval?.unit || 'hours'}
+                      onValueChange={(value: 'minutes' | 'hours' | 'days' | 'weeks') => onUpdate({
+                        ...schedule,
+                        trigger: { 
+                          ...schedule.trigger, 
+                          interval: { 
+                            value: schedule.trigger?.interval?.value || 1,
+                            unit: value 
+                          }
+                        }
+                      })}
+                    >
+                      <SelectTrigger className="bg-slate-800 border-slate-600 text-white font-mono">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="minutes">Minutes</SelectItem>
+                        <SelectItem value="hours">Hours</SelectItem>
+                        <SelectItem value="days">Days</SelectItem>
+                        <SelectItem value="weeks">Weeks</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ),
+      actionButton: (
+        <div className="space-y-2">
+          <Button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (getBasicSetupStatus() === 'ready' && schedule.steps?.length === 0) {
+                addNewAction();
+              } else if (getSetupStatus() !== 'complete') {
+                // Focus the first incomplete field
+                setExpandedCard('setup');
+              }
+            }}
+            className={`w-full font-mono py-3 rounded-lg ${
+              getBasicSetupStatus() === 'ready'
+                ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white'
+                : 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span>{getBasicSetupStatus() === 'ready' ? '✨' : '⚠️'}</span>
+              {getBasicSetupStatus() === 'ready' 
+                ? (schedule.steps?.length === 0 ? 'Add First Action →' : 'Setup Complete ✓')
+                : 'Add Schedule Name First'
+              }
+            </div>
+          </Button>
+          
+          {/* Always show action chain button if name exists */}
+          {schedule.name?.trim() && (
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                addNewAction();
+              }}
+              variant="outline"
+              className="w-full font-mono py-2 text-blue-300 border-blue-500/30 hover:bg-blue-500/10"
+            >
+              <div className="flex items-center gap-2">
+                <PlusIcon size={16} />
+                Add Action to Chain
+              </div>
+            </Button>
+          )}
+        </div>
+      )
+    });
+
+    // Action Cards
+    (schedule.steps || []).forEach((step, index) => {
+      const action = availableActions.find(a => a.id === step.actionId);
+      
+      cards.push({
+        id: step.id,
+        type: 'action',
+        icon: action?.emoji || '🔧',
+        title: `Action ${index + 1}`,
+        subtitle: action?.name || 'Select an action to configure',
+        status: getActionStatus(step),
+        position: getPosition(currentIndex++),
+        content: getActionStatus(step) === 'complete' && expandedCard !== step.id
+          ? (
+            <div className="space-y-2">
+              <div className="text-slate-300 text-sm font-mono leading-relaxed">
+                Execute "{action?.name}" with {step.delay?.duration ? `${step.delay.duration / 1000}s delay` : 'no delay'}. On error: {step.onError?.action || 'stop'}.
+              </div>
+              <div className="flex items-center gap-4 text-xs text-slate-400">
+                <span>📍 Step {index + 1} of {schedule.steps?.length}</span>
+                {index > 0 && <span>⬅️ After Step {index}</span>}
+                {index < (schedule.steps?.length || 0) - 1 && <span>➡️ Before Step {index + 2}</span>}
+              </div>
+            </div>
+          )
+          : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-blue-300 font-mono text-sm">🎯 Select Action</Label>
+                <Select
+                  value={step.actionId}
+                  onValueChange={(actionId: string) => {
+                    const selectedAction = availableActions.find(a => a.id === actionId);
+                    const updatedSteps = schedule.steps?.map(s => 
+                      s.id === step.id ? { 
+                        ...s, 
+                        actionId,
+                        name: selectedAction?.name || s.name 
+                      } : s
+                    ) || [];
+                    onUpdate({ ...schedule, steps: updatedSteps });
+                  }}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-600 text-white font-mono">
+                    <SelectValue placeholder="Choose an action..." />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-600">
+                    {availableActions.map(action => (
+                      <SelectItem key={action.id} value={action.id} className="text-white font-mono">
+                        {action.emoji} {action.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {action && (
+                <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                  <div className="text-blue-300 font-mono text-sm font-medium mb-1">Selected Action</div>
+                  <div className="text-white font-mono text-sm">{action.description}</div>
+                  <div className="text-slate-400 font-mono text-xs mt-1">
+                    {action.role} • {action.execute?.type}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-blue-300 font-mono text-sm">⏱️ Delay (seconds)</Label>
+                  <Input
+                    type="number"
+                    value={step.delay?.duration ? step.delay.duration / 1000 : 0}
+                    onChange={(e) => {
+                      const seconds = parseInt(e.target.value) || 0;
+                      const updatedSteps = schedule.steps?.map(s => 
+                        s.id === step.id ? { 
+                          ...s, 
+                          delay: { duration: seconds * 1000, unit: 'seconds' as const }
+                        } : s
+                      ) || [];
+                      onUpdate({ ...schedule, steps: updatedSteps });
+                    }}
+                    className="bg-slate-800 border-slate-600 text-white font-mono"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-blue-300 font-mono text-sm">🚨 On Error</Label>
+                  <Select
+                    value={step.onError?.action || 'stop'}
+                    onValueChange={(value: 'stop' | 'continue' | 'retry') => {
+                      const updatedSteps = schedule.steps?.map(s => 
+                        s.id === step.id ? { 
+                          ...s, 
+                          onError: { ...s.onError, action: value }
+                        } : s
+                      ) || [];
+                      onUpdate({ ...schedule, steps: updatedSteps });
+                    }}
+                  >
+                    <SelectTrigger className="bg-slate-800 border-slate-600 text-white font-mono">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="stop">Stop Chain</SelectItem>
+                      <SelectItem value="continue">Continue</SelectItem>
+                      <SelectItem value="retry">Retry</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Chain Management */}
+              <div className="flex gap-2">
+                <Button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    moveAction(step.id, 'up');
+                  }}
+                  disabled={index === 0}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-slate-400 border-slate-600"
+                >
+                  ↑ Move Up
+                </Button>
+                <Button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    moveAction(step.id, 'down');
+                  }}
+                  disabled={index === (schedule.steps?.length || 0) - 1}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-slate-400 border-slate-600"
+                >
+                  ↓ Move Down
+                </Button>
+              </div>
+
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeAction(step.id);
+                }}
+                variant="destructive"
+                className="w-full font-mono"
+              >
+                <div className="flex items-center gap-2">
+                  <CrossIcon size={14} />
+                  Remove Action
+                </div>
+              </Button>
+            </div>
+          ),
+        actionButton: (
+          <div className="space-y-2">
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                addNewAction();
+              }}
+              className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-mono py-3 rounded-lg"
+            >
+              <div className="flex items-center gap-2">
+                <PlusIcon size={16} />
+                Add Next Action →
+              </div>
+            </Button>
+            
+            {getActionStatus(step) === 'complete' && (
+              <div className="text-center text-xs text-slate-400 font-mono">
+                Step {index + 1} ready • Chain continues
+              </div>
+            )}
+          </div>
+        )
+      });
+    });
+
+    // Add Action Card (if no actions yet)
+    if (schedule.steps?.length === 0 && getBasicSetupStatus() === 'ready') {
+      cards.push({
+        id: 'add-action',
+        type: 'add-action',
+        icon: '➕',
+        title: 'Add Action',
+        subtitle: 'Start building your chain',
+        status: 'incomplete',
+        position: getPosition(currentIndex++),
+        content: (
+          <div className="space-y-3">
+            <div className="text-slate-300 text-sm font-mono leading-relaxed">
+              Click to add your first action to the automation chain.
+            </div>
+            {getSetupStatus() !== 'complete' && (
+              <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                <div className="text-orange-300 font-mono text-xs font-medium mb-1">⚠️ Complete Setup Later</div>
+                <div className="text-orange-200 text-xs">
+                  You can add actions now and configure timing later in the Setup card.
+                </div>
+              </div>
+            )}
+          </div>
+        ),
+        actionButton: (
+          <Button
+            onClick={(e) => {
+              e.stopPropagation();
+              addNewAction();
+            }}
+            className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-mono py-3 rounded-lg"
+          >
+            <div className="flex items-center gap-2">
+              <PlusIcon size={16} />
+              Add First Action →
+            </div>
+          </Button>
+        )
+      });
+    }
+
+    // Execute Card
+    if (schedule.steps?.length > 0) {
+      cards.push({
+        id: 'execute',
+        type: 'execute',
+        icon: '🚀',
+        title: 'Execute',
+        subtitle: schedule.trigger?.active ? 'Schedule is active' : 'Ready to activate',
+        status: getExecutionStatus(),
+        position: getPosition(currentIndex++),
+        content: (
+          <div className="space-y-3">
+            <div className="text-slate-300 text-sm font-mono leading-relaxed">
+              {`${schedule.steps.length} action${schedule.steps.length === 1 ? '' : 's'} ready to execute. Schedule will ${schedule.trigger?.active ? 'run automatically' : 'run when activated'}.`}
+            </div>
+            
+            {/* Chain Summary */}
+            <div className="p-3 rounded-lg bg-slate-800/50 border border-slate-600">
+              <div className="text-blue-300 font-mono text-xs font-medium mb-2">Action Chain Summary:</div>
+              <div className="space-y-1">
+                {schedule.steps?.map((step, index) => {
+                  const action = availableActions.find(a => a.id === step.actionId);
+                  return (
+                    <div key={step.id} className="flex items-center gap-2 text-xs">
+                      <span className="text-slate-400">{index + 1}.</span>
+                      <span className="text-slate-300">
+                        {action?.name || 'Unconfigured Action'}
+                      </span>
+                      {step.delay?.duration && step.delay.duration > 0 && (
+                        <span className="text-orange-400">({step.delay.duration / 1000}s delay)</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Active Status */}
+            <div className={`p-3 rounded-lg border ${
+              schedule.trigger?.active 
+                ? 'bg-green-500/10 border-green-500/30' 
+                : 'bg-slate-500/10 border-slate-500/30'
+            }`}>
+              <div className="flex items-center gap-2">
+                <div className={`w-3 h-3 rounded-full ${
+                  schedule.trigger?.active ? 'bg-green-400 animate-pulse' : 'bg-slate-400'
+                }`} />
+                <span className={`font-mono text-sm ${
+                  schedule.trigger?.active ? 'text-green-300' : 'text-slate-300'
+                }`}>
+                  {schedule.trigger?.active ? 'ACTIVE - Running automatically' : 'INACTIVE - Manual trigger only'}
+                </span>
+              </div>
+            </div>
+          </div>
+        ),
+        actionButton: (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  executeSchedule();
+                }}
+                disabled={isExecuting}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-mono py-2"
+              >
+                {isExecuting ? '🧪 Testing...' : '🧪 Test Chain'}
+              </Button>
+              
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUpdate({ 
+                    ...schedule, 
+                    trigger: { 
+                      ...schedule.trigger!, 
+                      active: !schedule.trigger?.active 
+                    } 
+                  });
+                }}
+                className={`font-mono py-2 ${
+                  schedule.trigger?.active 
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-green-600 hover:bg-green-700 text-white'
+                }`}
+              >
+                {schedule.trigger?.active ? '⏸️ Deactivate' : '▶️ Activate'}
+              </Button>
+            </div>
+
+            {executionResult && (
+              <div className="p-3 rounded-lg bg-slate-800 border border-slate-600">
+                <div className="text-blue-300 font-mono text-sm font-medium mb-1">Test Result</div>
+                <div className={`text-sm font-mono ${executionResult.success ? 'text-green-300' : 'text-red-300'}`}>
+                  {executionResult.success ? `✅ Success (${executionResult.duration}ms)` : `❌ Failed`}
+                </div>
+                {executionResult.error && (
+                  <div className="text-red-400 font-mono text-xs mt-1">
+                    {executionResult.error}
+                  </div>
+                )}
+              </div>
+            )}
+            
+            <div className="text-center text-xs text-slate-400 font-mono">
+              {schedule.trigger?.active ? '🟢 Schedule will run automatically' : '🔴 Manual activation required'}
+            </div>
+          </div>
+        )
+      });
+    }
+
+    return cards;
+  };
+
+  const cards = generateCards();
+
+  // Generate connections between cards
+  const getConnectionPath = (fromCard: ScheduleCard, toCard: ScheduleCard) => {
+    const currentPosition = isMobile ? 'mobile' : 'desktop';
+    const cardWidth = isMobile ? 280 : 380;
+    const cardHeight = 200;
+    
+    const startX = fromCard.position[currentPosition].x + (isMobile ? cardWidth / 2 : cardWidth);
+    const startY = fromCard.position[currentPosition].y + cardHeight / 2;
+    const endX = toCard.position[currentPosition].x + (isMobile ? cardWidth / 2 : 0);
+    const endY = toCard.position[currentPosition].y + cardHeight / 2;
     
     if (isMobile) {
       // Vertical connections for mobile
@@ -365,455 +735,97 @@ export const ScheduleMindMapEditor = memo(({
     }
   };
 
-  const renderNodeContent = (node: MindMapNode) => {
-    if (selectedNode !== node.id) return null;
-
-    const baseClasses = "mt-4 space-y-3";
-
-    switch (node.type) {
-      case 'description':
-        return (
-          <div className={baseClasses} onClick={(e) => e.stopPropagation()}>
-            <div className="space-y-2">
-              <Label htmlFor="schedule-name" className="text-orange-300 font-mono text-sm">✨ Schedule Name</Label>
-              <Input
-                id="schedule-name"
-                value={schedule.name || ''}
-                onChange={(e) => onUpdate({ ...schedule, name: e.target.value })}
-                placeholder="e.g., Daily Data Sync, Weekly Reports"
-                className="bg-black/50 border-orange-500/30 text-orange-200 font-mono text-sm"
-                onClick={(e) => e.stopPropagation()}
-                onFocus={(e) => e.stopPropagation()}
-              />
+  const renderCard = (card: ScheduleCard) => {
+    const isExpanded = expandedCard === card.id;
+    const currentPosition = isMobile ? 'mobile' : 'desktop';
+    const cardWidth = isMobile ? 280 : 380;
+    
+    return (
+      <div
+        key={card.id}
+        className={`absolute transition-all duration-500 cursor-pointer ${
+          isExpanded ? 'z-20' : 'z-10'
+        }`}
+        style={{
+          left: card.position[currentPosition].x,
+          top: card.position[currentPosition].y,
+          width: cardWidth,
+          transform: isExpanded ? 'scale(1.02)' : 'scale(1)',
+        }}
+        onClick={() => setExpandedCard(isExpanded ? null : card.id)}
+      >
+        <div
+          className={`p-3 md:p-4 rounded-xl border transition-all duration-300 ${
+            isExpanded
+              ? 'bg-blue-500/20 border-blue-400/60 shadow-xl shadow-blue-500/20'
+              : 'bg-slate-900/60 border-slate-600/50 hover:border-blue-400/40'
+          } ${
+            card.status === 'complete' ? 'ring-2 ring-emerald-400/50' :
+            card.status === 'active' ? 'ring-2 ring-green-400/50' : ''
+          }`}
+          style={{
+            backdropFilter: 'blur(8px)',
+            minHeight: isExpanded ? '400px' : '200px',
+            ...(isExpanded && {
+              boxShadow: '0 0 30px rgba(59, 130, 246, 0.3), inset 0 0 20px rgba(59, 130, 246, 0.1)'
+            })
+          }}
+        >
+          {/* Header */}
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{card.icon}</span>
+              <div>
+                <h3 className={`font-mono font-bold transition-all duration-300 ${
+                  isExpanded ? 'text-white text-lg' : 'text-white text-base'
+                }`}>
+                  {card.title}
+                </h3>
+                <p className={`text-slate-400 font-mono transition-all duration-300 ${
+                  isExpanded ? 'text-sm' : 'text-xs'
+                }`}>
+                  {card.subtitle}
+                </p>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="schedule-description" className="text-orange-300 font-mono text-sm">📝 Purpose & Goals</Label>
-              <Textarea
-                id="schedule-description"
-                value={schedule.description || ''}
-                onChange={(e) => onUpdate({ ...schedule, description: e.target.value })}
-                placeholder="Describe what this schedule will automate and achieve..."
-                className="bg-black/50 border-orange-500/30 text-orange-200 font-mono text-xs min-h-[80px] resize-none"
-                onClick={(e) => e.stopPropagation()}
-                onFocus={(e) => e.stopPropagation()}
-              />
-            </div>
-            <Button
-              onClick={(e) => {
-                e.stopPropagation();
-                generateStepsFromDescription();
-              }}
-              disabled={!schedule.name?.trim() || !schedule.description?.trim() || isGeneratingSteps}
-              className="w-full bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/40 text-orange-200 hover:from-orange-500/30 hover:to-red-500/30 font-mono rounded-lg transition-all duration-200 text-sm py-2"
-            >
-              {isGeneratingSteps ? "🤖 AI is crafting..." : "✨ Generate Steps →"}
-            </Button>
+            <StatusIcon status={card.status} />
           </div>
-        );
 
-      case 'timing':
-        return (
-          <div className={baseClasses} onClick={(e) => e.stopPropagation()}>
-            <div className="space-y-2">
-              <Label className="text-orange-300 font-mono text-sm">⏰ Timing Pattern</Label>
-              <Select
-                value={schedule.interval?.pattern || '0 0 * * *'}
-                onValueChange={(value) => onUpdate({
-                  ...schedule,
-                  interval: { ...schedule.interval, pattern: value, timezone: schedule.interval?.timezone || 'UTC' }
-                })}
-              >
-                <SelectTrigger className="bg-black/50 border-orange-500/30 text-orange-200 focus:border-orange-400 focus:ring-orange-400/20 font-mono text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-black/90 border-orange-500/30">
-                  <SelectItem value="*/10 * * * *" className="text-orange-200 font-mono focus:bg-orange-500/20">Every 10 minutes</SelectItem>
-                  <SelectItem value="0 * * * *" className="text-orange-200 font-mono focus:bg-orange-500/20">Every hour</SelectItem>
-                  <SelectItem value="0 9 * * 1-5" className="text-orange-200 font-mono focus:bg-orange-500/20">Weekdays at 9 AM</SelectItem>
-                  <SelectItem value="0 0 * * *" className="text-orange-200 font-mono focus:bg-orange-500/20">Daily at midnight</SelectItem>
-                  <SelectItem value="0 0 * * 0" className="text-orange-200 font-mono focus:bg-orange-500/20">Weekly on Sunday</SelectItem>
-                  <SelectItem value="0 0 1 * *" className="text-orange-200 font-mono focus:bg-orange-500/20">Monthly on 1st</SelectItem>
-                </SelectContent>
-              </Select>
+          {/* Content */}
+          {!isExpanded ? (
+            <div className="text-slate-300 text-sm font-mono leading-relaxed flex-1">
+              {typeof card.content === 'string' ? card.content : ''}
             </div>
-            
-            <div className="space-y-2">
-              <Label className="text-orange-300 font-mono text-sm">🌍 Timezone</Label>
-              <Select
-                value={schedule.interval?.timezone || 'UTC'}
-                onValueChange={(value) => onUpdate({
-                  ...schedule,
-                  interval: { ...schedule.interval, pattern: schedule.interval?.pattern || '0 0 * * *', timezone: value }
-                })}
-              >
-                <SelectTrigger className="bg-black/50 border-orange-500/30 text-orange-200 focus:border-orange-400 focus:ring-orange-400/20 font-mono text-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-black/90 border-orange-500/30">
-                  <SelectItem value="UTC" className="text-orange-200 font-mono focus:bg-orange-500/20">UTC</SelectItem>
-                  <SelectItem value="America/New_York" className="text-orange-200 font-mono focus:bg-orange-500/20">Eastern Time</SelectItem>
-                  <SelectItem value="America/Chicago" className="text-orange-200 font-mono focus:bg-orange-500/20">Central Time</SelectItem>
-                  <SelectItem value="America/Denver" className="text-orange-200 font-mono focus:bg-orange-500/20">Mountain Time</SelectItem>
-                  <SelectItem value="America/Los_Angeles" className="text-orange-200 font-mono focus:bg-orange-500/20">Pacific Time</SelectItem>
-                </SelectContent>
-              </Select>
+          ) : (
+            <div className="flex-1 overflow-auto" onClick={(e) => e.stopPropagation()}>
+              {card.content}
             </div>
+          )}
 
-            <div className="p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
-              <div className="text-orange-300 font-mono text-xs font-medium mb-1">Preview</div>
-              <div className="text-orange-100 font-mono text-sm">
-                {schedule.interval?.pattern || '0 0 * * *'}
-              </div>
-              <div className="text-orange-400/70 font-mono text-xs">
-                in {schedule.interval?.timezone || 'UTC'}
-              </div>
+          {/* Action Button */}
+          {card.actionButton && (
+            <div className="mt-4 pt-4 border-t border-slate-600/50" onClick={(e) => e.stopPropagation()}>
+              {card.actionButton}
             </div>
-          </div>
-        );
-
-      case 'step':
-        return (
-          <div className={baseClasses} onClick={(e) => e.stopPropagation()}>
-            <div className="max-h-60 overflow-y-auto space-y-3">
-              {(schedule.pseudoSteps || []).length === 0 ? (
-                <div className="text-center py-8 text-orange-400/70">
-                  <p className="font-mono text-sm">No steps defined yet.</p>
-                  <p className="font-mono text-xs mt-2">
-                    Complete the description first, then generate steps.
-                  </p>
-                </div>
-              ) : (
-                (schedule.pseudoSteps || []).map((step, index) => (
-                  <div key={step.id} className="p-3 rounded-lg bg-black/40 border border-orange-500/30">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="text-orange-300 font-mono text-xs font-semibold">
-                          Step {index + 1}
-                        </div>
-                        <Button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const updatedSteps = schedule.pseudoSteps?.filter(s => s.id !== step.id) || [];
-                            onUpdate({ ...schedule, pseudoSteps: updatedSteps });
-                          }}
-                          variant="destructive"
-                          size="sm"
-                          className="h-6 w-6 p-0"
-                        >
-                          <CrossIcon size={12} />
-                        </Button>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-orange-300 font-mono text-xs">Type</Label>
-                        <Select
-                          value={step.type}
-                          onValueChange={(value: "Database find unique" | "Database find many" | "Database update unique" | "Database update many" | "Database create" | "Database create many" | "Database delete unique" | "Database delete many" | "call external api" | "ai analysis") => {
-                            const updatedSteps = schedule.pseudoSteps?.map(s => 
-                              s.id === step.id ? { ...s, type: value } : s
-                            ) || [];
-                            onUpdate({ ...schedule, pseudoSteps: updatedSteps });
-                          }}
-                        >
-                          <SelectTrigger 
-                            className="bg-black/50 border-orange-500/30 text-orange-200 h-8 text-xs font-mono"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-black border-orange-500/30">
-                            <SelectItem value="Database find unique" className="text-orange-200 font-mono">Database find unique</SelectItem>
-                            <SelectItem value="Database find many" className="text-orange-200 font-mono">Database find many</SelectItem>
-                            <SelectItem value="Database update unique" className="text-orange-200 font-mono">Database update unique</SelectItem>
-                            <SelectItem value="Database update many" className="text-orange-200 font-mono">Database update many</SelectItem>
-                            <SelectItem value="Database create" className="text-orange-200 font-mono">Database create</SelectItem>
-                            <SelectItem value="Database create many" className="text-orange-200 font-mono">Database create many</SelectItem>
-                            <SelectItem value="Database delete unique" className="text-orange-200 font-mono">Database delete unique</SelectItem>
-                            <SelectItem value="Database delete many" className="text-orange-200 font-mono">Database delete many</SelectItem>
-                            <SelectItem value="call external api" className="text-orange-200 font-mono">Call External API</SelectItem>
-                            <SelectItem value="ai analysis" className="text-orange-200 font-mono">AI Analysis</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-orange-300 font-mono text-xs">Description</Label>
-                        <Textarea
-                          value={step.description}
-                          onChange={(e) => {
-                            const updatedSteps = schedule.pseudoSteps?.map(s => 
-                              s.id === step.id ? { ...s, description: e.target.value } : s
-                            ) || [];
-                            onUpdate({ ...schedule, pseudoSteps: updatedSteps });
-                          }}
-                          placeholder="Describe what this step does..."
-                          className="bg-black/50 border-orange-500/30 text-orange-200 font-mono text-xs min-h-[50px] resize-none"
-                          onClick={(e) => e.stopPropagation()}
-                          onFocus={(e) => e.stopPropagation()}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-orange-300 font-mono text-xs">📥 Input Fields</Label>
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <StepFieldEditor
-                            fields={step.inputFields || []}
-                            onFieldsChange={(fields) => {
-                              const updatedSteps = schedule.pseudoSteps?.map(s => 
-                                s.id === step.id ? { ...s, inputFields: fields } : s
-                              ) || [];
-                              onUpdate({ ...schedule, pseudoSteps: updatedSteps });
-                            }}
-                            label=""
-                            color="orange"
-                            allModels={allModels}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label className="text-orange-300 font-mono text-xs">📤 Output Fields</Label>
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <StepFieldEditor
-                            fields={step.outputFields || []}
-                            onFieldsChange={(fields) => {
-                              const updatedSteps = schedule.pseudoSteps?.map(s => 
-                                s.id === step.id ? { ...s, outputFields: fields } : s
-                              ) || [];
-                              onUpdate({ ...schedule, pseudoSteps: updatedSteps });
-                            }}
-                            label=""
-                            color="orange"
-                            allModels={allModels}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <Button
-              onClick={(e) => {
-                e.stopPropagation();
-                const newStep = {
-                  id: generateNewId('step', schedule.pseudoSteps || []),
-                  type: 'Database find many' as const,
-                  description: '',
-                  inputFields: [{
-                    id: generateNewId('field', []),
-                    name: '',
-                    type: 'String',
-                    kind: 'scalar' as const,
-                    required: false,
-                    list: false,
-                    description: ''
-                  }],
-                  outputFields: [{
-                    id: generateNewId('field', []),
-                    name: '',
-                    type: 'String',
-                    kind: 'scalar' as const,
-                    required: false,
-                    list: false,
-                    description: ''
-                  }]
-                };
-                const updatedSteps = [...(schedule.pseudoSteps || []), newStep];
-                onUpdate({ ...schedule, pseudoSteps: updatedSteps });
-              }}
-              className="w-full bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/40 text-orange-200 hover:from-orange-500/30 hover:to-red-500/30 font-mono rounded-lg transition-all duration-200 text-sm py-2"
-            >
-              <div className="flex items-center gap-2">
-                <PlusIcon size={14} />
-                Add Step
-              </div>
-            </Button>
-
-            {(schedule.pseudoSteps || []).length > 0 && (
-              <Button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  generateCodeFromSteps();
-                }}
-                disabled={!schedule.pseudoSteps?.length || isGeneratingCode}
-                className="w-full bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/40 text-orange-200 hover:from-orange-500/30 hover:to-red-500/30 font-mono rounded-lg transition-all duration-200 text-sm py-2"
-              >
-                {isGeneratingCode ? "🤖 Generating..." : "⚡ Generate Code →"}
-              </Button>
-            )}
-          </div>
-        );
-
-      case 'code':
-        return (
-          <div className={baseClasses} onClick={(e) => e.stopPropagation()}>
-            <div className="space-y-2">
-              <Label className="text-orange-300 font-mono text-xs">💎 Executable Code</Label>
-              <Textarea
-                value={schedule.execute?.code?.script || ''}
-                onChange={(e) => onUpdate({
-                  ...schedule,
-                  execute: {
-                    ...schedule.execute,
-                    type: 'code',
-                    code: {
-                      script: e.target.value,
-                      envVars: schedule.execute?.code?.envVars || []
-                    }
-                  }
-                })}
-                placeholder="// Your executable JavaScript code will appear here
-// You can edit it directly or regenerate from steps
-async function executeSchedule(input, env) {
-  // Implementation goes here
-  return { success: true, data: {} };
-}"
-                className="bg-black/50 border-orange-500/30 text-orange-200 font-mono text-xs min-h-[120px] resize-none"
-                onClick={(e) => e.stopPropagation()}
-                onFocus={(e) => e.stopPropagation()}
-              />
-            </div>
-
-            {schedule.execute?.code?.envVars && schedule.execute.code.envVars.length > 0 && (
-              <div className="space-y-2">
-                <Label className="text-orange-300 font-mono text-xs">🔐 Environment Variables</Label>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {schedule.execute.code.envVars.map((envVar, index) => (
-                    <div key={index} className="p-2 rounded bg-black/40 border border-orange-500/20">
-                      <div className="text-orange-200 font-mono text-xs">
-                        {envVar.name} {envVar.required && <span className="text-red-400">*</span>}
-                      </div>
-                      <div className="text-orange-400/70 font-mono text-xs">
-                        {envVar.description}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!schedule.execute?.code?.script && (
-              <div className="text-center py-4 text-orange-400/70">
-                <p className="font-mono text-xs">Generate code from steps first</p>
-              </div>
-            )}
-          </div>
-        );
-
-      case 'execution':
-        return (
-          <div className={baseClasses} onClick={(e) => e.stopPropagation()}>
-            <div className="text-center">
-              <div className="text-orange-300 font-mono text-sm font-medium mb-3">Schedule Status</div>
-              <div className={`inline-flex items-center gap-3 px-4 py-2 rounded-full text-sm font-mono ${
-                schedule.interval?.active 
-                  ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                  : 'bg-gray-500/20 text-gray-300 border border-gray-500/30'
-              }`}>
-                <div className={`w-3 h-3 rounded-full ${schedule.interval?.active ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`} />
-                {schedule.interval?.active ? 'ACTIVE' : 'INACTIVE'}
-              </div>
-            </div>
-            
-            {schedule.interval?.pattern && (
-              <div className="text-center p-4 rounded-lg bg-orange-500/10 border border-orange-500/20">
-                <div className="text-orange-300 font-mono text-sm font-medium">Schedule Pattern</div>
-                <div className="text-orange-100 font-mono text-lg mt-1">
-                  {schedule.interval.pattern}
-                </div>
-                <div className="text-orange-400/70 font-mono text-xs mt-1">
-                  {schedule.interval.timezone || 'UTC'}
-                </div>
-              </div>
-            )}
-
-            {executionResult && (
-              <div className="p-3 rounded-lg bg-black/40 border border-orange-500/20">
-                <div className="text-orange-300 font-mono text-xs font-medium mb-2">Last Test Result</div>
-                <div className={`text-sm font-mono ${executionResult.success ? 'text-green-300' : 'text-red-300'}`}>
-                  {executionResult.success ? `✅ Success (${executionResult.executionTime}ms)` : `❌ Failed`}
-                </div>
-                {executionResult.error && (
-                  <div className="text-red-400 font-mono text-xs mt-1">
-                    {executionResult.error}
-                  </div>
-                )}
-              </div>
-            )}
-            
-            <div className="grid grid-cols-1 gap-2">
-              <Button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  executeSchedule();
-                }}
-                disabled={!schedule.execute?.code?.script || isExecuting}
-                className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/40 text-green-200 hover:from-green-500/30 hover:to-emerald-500/30 font-mono rounded-lg transition-all duration-200 text-sm py-2"
-              >
-                {isExecuting ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-green-400/30 border-t-green-400 rounded-full animate-spin" />
-                    Testing...
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span>🧪</span>
-                    Test Run
-                  </div>
-                )}
-              </Button>
-              
-              <Button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUpdate({ 
-                    ...schedule, 
-                    interval: { 
-                      ...schedule.interval, 
-                      pattern: schedule.interval?.pattern || '0 0 * * *',
-                      timezone: schedule.interval?.timezone || 'UTC',
-                      active: !schedule.interval?.active 
-                    } 
-                  });
-                }}
-                disabled={!schedule.execute?.code?.script}
-                className={`font-mono rounded-lg transition-all duration-200 text-sm py-2 ${
-                  schedule.interval?.active 
-                    ? 'bg-gradient-to-r from-red-500/20 to-orange-500/20 border border-red-500/40 text-red-200 hover:from-red-500/30 hover:to-orange-500/30'
-                    : 'bg-gradient-to-r from-orange-500/20 to-green-500/20 border border-orange-500/40 text-orange-200 hover:from-orange-500/30 hover:to-green-500/30'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span>{schedule.interval?.active ? '⏸️' : '▶️'}</span>
-                  {schedule.interval?.active ? 'Deactivate' : 'Activate'}
-                </div>
-              </Button>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
-    }
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
-    <div className="min-h-[600px] flex flex-col">
+    <div className="min-h-[600px] flex flex-col bg-slate-950">
       {/* Header */}
-      <div className="p-4 md:p-6 border-b border-orange-500/20">
+      <div className="p-4 md:p-6 border-b border-slate-700">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 md:gap-3">
-            <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-orange-500/20 flex items-center justify-center border border-orange-500/30">
-              <span className="text-orange-400 text-lg md:text-xl">🗓️</span>
+            <div className="w-8 h-8 md:w-10 md:h-10 rounded-xl bg-blue-500/20 flex items-center justify-center border border-blue-500/30">
+              <span className="text-blue-400 text-lg md:text-xl">🔗</span>
             </div>
             <div>
-              <h3 className="text-lg md:text-xl font-bold text-orange-200 font-mono">
-                {isMobile ? 'Schedule Flow' : 'Schedule Mind Map'}
-              </h3>
-              <p className="text-orange-400 text-xs md:text-sm font-mono">
-                {isMobile ? 'Idea → Timing → Steps → Code → Activate' : 'Visual workflow for automated schedules'}
+              <h3 className="text-lg md:text-xl font-bold text-white font-mono">Schedule Builder</h3>
+              <p className="text-slate-400 text-xs md:text-sm font-mono">
+                {isMobile ? 'Setup → Chain → Activate' : 'Build automated action chains with timing'}
               </p>
             </div>
           </div>
@@ -831,14 +843,51 @@ async function executeSchedule(input, env) {
         </div>
       </div>
 
-      {/* Mind Map Container */}
+      {/* Schedule Overview */}
+      {(schedule.steps?.length > 0 || schedule.name) && (
+        <div className="p-4 md:p-6 border-b border-slate-700 bg-slate-900/30">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-white font-mono font-medium">
+                {schedule.name || 'Unnamed Schedule'}
+              </div>
+              <div className="text-slate-400 text-sm font-mono">
+                {schedule.steps?.length || 0} action{schedule.steps?.length === 1 ? '' : 's'} • 
+                {schedule.trigger?.active ? ' 🟢 Active' : ' 🔴 Inactive'}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {schedule.steps?.length === 0 && schedule.name?.trim() && (
+                <Button
+                  onClick={addNewAction}
+                  className="bg-green-600 hover:bg-green-700 text-white font-mono text-sm px-4 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <PlusIcon size={16} />
+                    Add Actions
+                  </div>
+                </Button>
+              )}
+              {schedule.steps?.length > 0 && (
+                <Button
+                  onClick={() => setExpandedCard('execute')}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-mono text-sm px-4 py-2"
+                >
+                  {schedule.trigger?.active ? '⏸️ Manage' : '▶️ Activate'}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Card Flow Container */}
       <div className="flex-1 relative min-h-[500px] overflow-auto">
         <div 
-          ref={containerRef}
-          className="relative bg-gradient-to-br from-orange-950/20 via-red-950/20 to-orange-950/20"
+          className="relative bg-gradient-to-br from-blue-950/20 via-purple-950/20 to-blue-950/20"
           style={{ 
-            minHeight: isMobile ? '900px' : '600px', 
-            minWidth: isMobile ? '320px' : '1700px',
+            minHeight: isMobile ? (cards.length * 320) + 100 : '600px', 
+            minWidth: isMobile ? '320px' : (cards.length * 420) + 100,
             width: '100%'
           }}
         >
@@ -847,136 +896,56 @@ async function executeSchedule(input, env) {
             className="absolute inset-0 w-full h-full pointer-events-none" 
             style={{ zIndex: 1 }}
           >
-            {connections.map(connection => {
-              const fromNode = nodes.find(n => n.id === connection.from);
-              const toNode = nodes.find(n => n.id === connection.to);
-              if (!fromNode || !toNode) return null;
-
+            {cards.map((card, index) => {
+              if (index === cards.length - 1) return null;
+              const nextCard = cards[index + 1];
+              
               return (
                 <path
-                  key={connection.id}
-                  d={getConnectionPath(fromNode, toNode)}
-                  stroke="#fb923c"
+                  key={`connection-${card.id}-${nextCard.id}`}
+                  d={getConnectionPath(card, nextCard)}
+                  stroke="#60A5FA"
                   strokeWidth={2}
                   fill="none"
                   strokeDasharray="5,5"
                   className="transition-all duration-300"
-                  style={{
-                    filter: 'drop-shadow(0 0 6px rgba(251, 146, 60, 0.3))'
-                  }}
                 />
               );
             })}
           </svg>
 
-          {/* Nodes */}
-          {nodes.map(node => {
-            const currentPosition = isMobile ? 'mobile' : 'desktop';
-            const nodeWidth = isMobile ? 280 : 300;
-            
-            return (
-              <div
-                key={node.id}
-                className={`absolute transition-all duration-500 cursor-pointer ${
-                  selectedNode === node.id ? 'z-20' : 'z-10'
-                }`}
-                style={{
-                  left: node.position[currentPosition].x,
-                  top: node.position[currentPosition].y,
-                  width: nodeWidth,
-                  transform: selectedNode === node.id ? 'scale(1.02)' : 'scale(1)',
-                }}
-                onClick={() => setSelectedNode(selectedNode === node.id ? null : node.id)}
-              >
-                <div
-                  className={`p-3 md:p-4 rounded-xl border transition-all duration-300 ${
-                    selectedNode === node.id
-                      ? 'bg-orange-500/20 border-orange-400/60 shadow-xl shadow-orange-500/20'
-                      : 'bg-orange-950/40 border-orange-500/30 hover:border-orange-400/50'
-                  } ${
-                    node.status === 'complete' ? 'ring-2 ring-emerald-400/50' :
-                    node.status === 'processing' ? 'ring-2 ring-orange-400/50 ai-generating' : ''
-                  }`}
-                  style={{
-                    backdropFilter: 'blur(8px)',
-                    ...(selectedNode === node.id && {
-                      boxShadow: '0 0 30px rgba(251, 146, 60, 0.3), inset 0 0 20px rgba(251, 146, 60, 0.1)'
-                    }),
-                    ...(node.status === 'processing' && {
-                      animation: 'ai-glow 2s ease-in-out infinite alternate, ai-shimmer 3s linear infinite'
-                    })
-                  }}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className={`font-mono font-bold transition-all duration-300 ${
-                      selectedNode === node.id ? 'text-orange-200 text-base' : 'text-orange-300 text-sm'
-                    }`}>
-                      {node.title}
-                    </h4>
-                    <div className="flex items-center gap-1">
-                      {node.status === 'complete' && <span className="text-emerald-400 text-lg">✅</span>}
-                      {node.status === 'processing' && (
-                        <div className="flex items-center gap-1">
-                          <div className="animate-spin rounded-full h-4 w-4 border-2 border-orange-400 border-t-transparent"></div>
-                          <span className="text-orange-400 text-lg animate-pulse">⚡</span>
-                        </div>
-                      )}
-                      {node.status === 'ready' && <span className="text-orange-400 text-lg">🚀</span>}
-                      {node.status === 'empty' && <span className="text-orange-500/50 text-lg">⭕</span>}
-                    </div>
-                  </div>
-                  
-                  <div className={`text-orange-400 font-mono transition-all duration-300 ${
-                    selectedNode === node.id ? 'text-sm' : 'text-xs'
-                  }`}>
-                    {node.content}
-                  </div>
-
-                  {selectedNode === node.id && (
-                    <div className="transition-all duration-300 ease-out">
-                      {renderNodeContent(node)}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+          {/* Cards */}
+          {cards.map(card => renderCard(card))}
 
           {/* Quick Actions */}
-          {!selectedNode && (
-            <div className="absolute bottom-4 right-4 flex flex-col gap-2">
+          {!expandedCard && (
+            <div className={`absolute flex ${isMobile ? 'flex-col' : 'flex-row'} gap-2 ${
+              isMobile ? 'bottom-4 right-4' : 'bottom-4 right-4'
+            }`}>
               <Button
-                onClick={() => setSelectedNode('description')}
-                className="bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/40 text-orange-200 hover:from-orange-500/30 hover:to-red-500/30 font-mono text-xs px-3 py-2 rounded-lg"
-                disabled={isGeneratingSteps || isGeneratingCode || isExecuting}
+                onClick={() => setExpandedCard('setup')}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 font-mono"
               >
-                🎯 Start Here
+                🎯 Setup
               </Button>
-              {schedule.description && (
+              {schedule.steps?.length === 0 && getBasicSetupStatus() === 'ready' && (
                 <Button
-                  onClick={generateStepsFromDescription}
-                  className="bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/40 text-orange-200 hover:from-orange-500/30 hover:to-red-500/30 font-mono text-xs px-3 py-2 rounded-lg"
-                  disabled={!schedule.name?.trim() || !schedule.description?.trim() || isGeneratingSteps}
+                  onClick={addNewAction}
+                  className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-2 font-mono"
                 >
-                  {isGeneratingSteps ? "⚡" : "✨ Steps"}
+                  ✨ Add Action
                 </Button>
               )}
-              {(schedule.pseudoSteps?.length || 0) > 0 && (
+              {schedule.steps?.length > 0 && (
                 <Button
-                  onClick={generateCodeFromSteps}
-                  className="bg-gradient-to-r from-orange-500/20 to-red-500/20 border border-orange-500/40 text-orange-200 hover:from-orange-500/30 hover:to-red-500/30 font-mono text-xs px-3 py-2 rounded-lg"
-                  disabled={!schedule.pseudoSteps?.length || isGeneratingCode}
+                  onClick={() => setExpandedCard('execute')}
+                  className={`text-xs px-3 py-2 font-mono ${
+                    schedule.trigger?.active 
+                      ? 'bg-green-600 hover:bg-green-700 text-white'
+                      : 'bg-orange-600 hover:bg-orange-700 text-white'
+                  }`}
                 >
-                  {isGeneratingCode ? "⚡" : "🔮 Code"}
-                </Button>
-              )}
-              {schedule.execute?.code?.script && (
-                <Button
-                  onClick={executeSchedule}
-                  className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-500/40 text-green-200 hover:from-green-500/30 hover:to-emerald-500/30 font-mono text-xs px-3 py-2 rounded-lg"
-                  disabled={!schedule.execute?.code?.script || isExecuting}
-                >
-                  {isExecuting ? "🚀" : "🧪 Test"}
+                  {schedule.trigger?.active ? '🟢 Active' : '🚀 Activate'}
                 </Button>
               )}
             </div>

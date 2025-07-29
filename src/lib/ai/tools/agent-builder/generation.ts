@@ -3554,6 +3554,112 @@ Follow these patterns exactly to ensure proper relationship detection!`;
   return convertedSteps;
 }
 
+/**
+ * Generate interactive UI components based on pseudo steps
+ */
+export async function generateUIComponents(
+  name: string,
+  description: string,
+  pseudoSteps: PseudoCodeStep[],
+  availableModels: AgentModel[],
+  businessContext?: string
+): Promise<any[]> {
+  console.log(`🎨 Generating UI components for: ${name}`);
+  
+  const model = await getAgentBuilderModel();
+
+  const systemPrompt = `You are a UX expert creating interactive UI components for testing business actions.
+
+ACTION DETAILS:
+- Name: ${name}
+- Description: ${description}
+
+PSEUDO STEPS:
+${pseudoSteps.map((step, index) => `
+Step ${index + 1}: ${step.description}
+- Type: ${step.type}
+- Inputs: ${step.inputFields?.map(f => `${f.name} (${f.type}${f.relationModel ? ` -> ${f.relationModel}` : ''})`).join(', ') || 'None'}
+- Outputs: ${step.outputFields?.map(f => `${f.name} (${f.type}${f.relationModel ? ` -> ${f.relationModel}` : ''})`).join(', ') || 'None'}
+`).join('')}
+
+AVAILABLE DATA MODELS:
+${availableModels.map(model => `
+- ${model.name}: ${(model.fields || []).map(f => `${f.name} (${f.type})`).join(', ')}
+`).join('')}
+
+${businessContext ? `BUSINESS CONTEXT: ${businessContext}` : ''}
+
+Create user-friendly interactive components that allow users to test this action flow. Focus on:
+
+1. **Smart Input Types**: 
+   - For model relations (like CustomerId, ProductId), create dropdowns with realistic mock data
+   - For strings, use appropriate input types (email, phone, etc.)
+   - For numbers, use number inputs with realistic ranges
+   - For dates, use date pickers
+
+2. **Realistic Mock Data**:
+   - Generate 3-5 realistic options for each dropdown
+   - Use business-appropriate names, emails, products, etc.
+   - Make data feel authentic to the business context
+
+3. **Progressive Flow**:
+   - Start with inputs needed for the first step
+   - Group related inputs logically
+   - Use clear labels and descriptions
+
+4. **Validation**:
+   - Mark required fields clearly
+   - Include helpful placeholder text
+   - Show field descriptions
+
+Generate components that make it easy to test the action flow with realistic data.`;
+
+  const uiComponentsSchema = z.object({
+    components: z.array(z.object({
+      id: z.string().describe('Unique component identifier'),
+      stepNumber: z.number().describe('Which step this component relates to (1-based)'),
+      type: z.enum(['input', 'select', 'textarea', 'checkbox', 'date', 'number', 'email', 'phone']).describe('UI component type'),
+      label: z.string().describe('User-friendly label'),
+      name: z.string().describe('Field name from the step'),
+      description: z.string().describe('Help text for the user'),
+      required: z.boolean().describe('Whether this field is required'),
+      placeholder: z.string().optional().describe('Placeholder text'),
+      options: z.array(z.object({
+        value: z.string().describe('Option value'),
+        label: z.string().describe('Option display text'),
+        description: z.string().optional().describe('Additional context about this option')
+      })).optional().describe('For select components - realistic mock data options'),
+      validation: z.object({
+        minLength: z.number().optional(),
+        maxLength: z.number().optional(),
+        pattern: z.string().optional(),
+        min: z.number().optional(),
+        max: z.number().optional()
+      }).optional().describe('Validation rules'),
+      defaultValue: z.string().optional().describe('Default value if any')
+    }))
+  });
+
+  const result = await generateObject({
+    model,
+    schema: uiComponentsSchema,
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      },
+      {
+        role: 'user',
+        content: `Generate interactive UI components for testing "${name}". Focus on the first step inputs: ${pseudoSteps[0]?.inputFields?.map(f => f.name).join(', ')}. Create realistic dropdowns for any model relations and appropriate input types for other fields.`
+      }
+    ],
+    temperature: 0.3,
+  });
+
+  console.log(`✅ Generated ${result.object.components.length} UI components for ${name}`);
+  return result.object.components;
+}
+
 
 
 // Define a Prisma-specific schema for generation

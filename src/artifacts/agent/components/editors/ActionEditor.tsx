@@ -16,6 +16,7 @@ interface ActionEditorProps {
   action: AgentAction;
   onUpdate: (action: AgentAction) => void;
   onDelete: () => void;
+  onGoBack?: () => void; // Navigate back to action list
   allModels?: AgentModel[];
   documentId?: string;
 }
@@ -51,6 +52,7 @@ export const ActionEditor = memo(({
   action,
   onUpdate,
   onDelete,
+  onGoBack,
   allModels = [],
   documentId
 }: ActionEditorProps) => {
@@ -876,6 +878,7 @@ export const ActionEditor = memo(({
             action={action}
             onUpdate={onUpdate}
             onDelete={onDelete}
+            onGoBack={onGoBack}
             allModels={allModels}
             documentId={documentId}
           />

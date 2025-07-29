@@ -408,6 +408,7 @@ export const ActionsListEditor = memo(({
           action={editingAction}
           onUpdate={(updatedAction) => updateAction(editingAction.id, updatedAction)}
           onDelete={() => deleteAction(editingAction.id)}
+          onGoBack={() => setEditingActionId(null)}
           allModels={allModels}
           documentId={documentId}
         />

@@ -33,9 +33,17 @@ export async function POST(request: NextRequest) {
       businessContext
     );
 
+    // Enhanced analysis is temporarily disabled to avoid complexity
+    // TODO: Implement proper enhanced analysis integration when needed
+
     return NextResponse.json({
       success: true,
-      pseudoSteps
+      pseudoSteps,
+      // Store the enhanced analysis for testing but don't expose details  
+      _internal: {
+        hasRealCode: false,
+        hasTestCases: false
+      }
     });
 
   } catch (error) {

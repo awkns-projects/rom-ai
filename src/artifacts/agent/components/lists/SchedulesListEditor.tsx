@@ -43,24 +43,19 @@ export const SchedulesListEditor = memo(({
   const [isExecuting, setIsExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState<any>(null);
 
-  // Extract input parameters from schedule's first step
+  // Extract input parameters from schedule's global inputs
   const extractInputParameters = useCallback((schedule: AgentSchedule): InputParameter[] => {
-    if (!schedule.pseudoSteps || schedule.pseudoSteps.length === 0) return [];
+    if (!schedule.globalInputs) return [];
     
-    const firstStep = schedule.pseudoSteps[0];
-    if (!firstStep.inputFields || firstStep.inputFields.length === 0) return [];
-    
-    return firstStep.inputFields
-      .filter(field => field.name && field.name.trim() !== '')
-      .map(field => ({
-        name: field.name,
-        type: field.type,
-        required: field.required,
-        description: field.description || `Input parameter for ${field.name}`,
-        kind: (field.kind === 'object' ? 'object' : field.kind === 'enum' ? 'enum' : 'scalar') as 'scalar' | 'object' | 'enum',
-        relationModel: field.relationModel,
-        list: field.list
-      }));
+    // Convert global inputs to parameter format
+    return Object.entries(schedule.globalInputs).map(([key, value]) => ({
+      name: key,
+      type: typeof value === 'string' ? 'String' : typeof value === 'number' ? 'Int' : 'String',
+      required: false,
+      description: `Global input: ${key}`,
+      defaultValue: value,
+      kind: 'scalar' as const
+    }));
   }, []);
 
   // Check if schedule is ready to be activated
@@ -75,16 +70,12 @@ export const SchedulesListEditor = memo(({
       issues.push('Schedule description is required');
     }
     
-    if (!schedule.execute?.code?.script?.trim()) {
-      issues.push('No executable code generated');
+    if (!schedule.steps || schedule.steps.length === 0) {
+      issues.push('No actions in chain');
     }
     
-    if (!schedule.pseudoSteps || schedule.pseudoSteps.length === 0) {
-      issues.push('No pseudo steps defined');
-    }
-    
-    if (!schedule.interval?.pattern?.trim()) {
-      issues.push('No execution interval set');
+    if (!schedule.trigger?.pattern && !schedule.trigger?.interval && !schedule.trigger?.date && schedule.trigger?.type !== 'manual') {
+      issues.push('No execution trigger set');
     }
 
     // Check if required input parameters have values
@@ -424,7 +415,7 @@ export const SchedulesListEditor = memo(({
                   <div className="flex-1 min-w-0">
                     <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{schedule.name || 'Unnamed Schedule'}</h4>
                     <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
-                      {schedule.type} • {schedule.interval.pattern} • {schedule.interval.active ? 'Active' : 'Inactive'}
+                      {schedule.steps?.length || 0} actions • {schedule.trigger?.pattern || schedule.trigger?.type || 'No trigger'} • {schedule.trigger?.active ? 'Active' : 'Inactive'}
                     </p>
                     {schedule.description && (
                       <p className="text-green-300/80 text-xs sm:text-sm font-mono leading-relaxed">
