@@ -549,13 +549,28 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
                       console.log('🎨 OnboardContent - Theme change:', {
                         documentId,
                         hasDocumentId: !!documentId,
-                        theme
+                        documentIdType: typeof documentId,
+                        theme,
+                        hasAgentData: !!agentData,
+                        currentAgentTheme: agentData?.theme
                       });
                       
-                      // FIXED: Properly handle theme changes in avatar creator
-                      if (onThemeChange) {
-                        onThemeChange(theme);
+                      // CRITICAL FIX: Update agentData with theme (same pattern as avatar)
+                      if (onDataChange && agentData) {
+                        const updatedAgent = {
+                          ...agentData,
+                          theme: theme  // Save theme to main agentData content
+                        };
+                        console.log('🎨 OnboardContent - Updating agentData with theme:', {
+                          previousTheme: agentData.theme,
+                          newTheme: theme,
+                          updatedAgent: !!updatedAgent
+                        });
+                        onDataChange(updatedAgent);
                       }
+                      
+                      // REMOVED: Don't call onThemeChange to avoid race condition
+                      // The agentData update above is sufficient
                     }}
                   />
                 );

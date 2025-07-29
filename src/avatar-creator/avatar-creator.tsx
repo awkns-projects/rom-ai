@@ -1090,18 +1090,19 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
     
     setCurrentTheme(theme);
     
-    // Immediately sync theme to main content to trigger preservation logic
-    if (syncThemeToMainContent(theme)) {
-      console.log('✅ Theme synced to main content immediately');
-      
-      // Also save to database metadata immediately
-      if (documentId && documentId !== 'init') {
-        saveToDatabase(avatarData, step, false).catch(error => {
-          console.error('❌ Failed to save theme to database:', error);
-        });
-      }
+    // CRITICAL FIX: Immediately sync theme to main content (where orchestrator reads from)
+    if (onThemeChange) {
+      console.log('🎨 IMMEDIATE SYNC: Calling onThemeChange with theme:', theme);
+      onThemeChange(theme);
     }
-  }, [syncThemeToMainContent, documentId, avatarData, step, saveToDatabase, currentTheme]);
+    
+    // ALSO save to database metadata for persistence across reloads
+    if (documentId && documentId !== 'init') {
+      saveToDatabase(avatarData, step, false).catch(error => {
+        console.error('❌ Failed to save theme to database metadata:', error);
+      });
+    }
+  }, [onThemeChange, documentId, avatarData, step, saveToDatabase]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-gray-100 p-3 sm:p-6 font-mono">
