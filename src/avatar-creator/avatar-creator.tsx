@@ -274,16 +274,7 @@ const generateRandomUnicorn = (): UnicornParts => {
 
 export default function AvatarCreator({ documentId, externalApisMetadata, agentData, onAvatarChange, onThemeChange }: AvatarCreatorProps = {}) {
   const [step, setStep] = useState(1)
-  const [currentTheme, setCurrentTheme] = useState<string>(() => {
-    const initialTheme = agentData?.theme || 'green';
-    console.log('🎨 AvatarCreator - Initializing theme state:', {
-      agentDataTheme: agentData?.theme,
-      hasAgentData: !!agentData,
-      initialTheme,
-      fallbackUsed: !agentData?.theme
-    });
-    return initialTheme;
-  }); // ADDED: Track current theme
+  const [currentTheme, setCurrentTheme] = useState<string>('green'); // Will be updated from saved state or agentData
   const [showMatrixBox, setShowMatrixBox] = useState(false) // ADDED: Explicit Matrix Box control - will be set in useEffect
   // Initialize avatar data - will be updated from database if available
   const [avatarData, setAvatarData] = useState<AvatarData>(() => {
@@ -605,13 +596,31 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
 
   // ADDED: Monitor theme changes from agentData
   useEffect(() => {
-    if (agentData?.theme && agentData.theme !== currentTheme) {
+    // CRITICAL FIX: Only sync FROM agentData TO currentTheme during initial load or if user hasn't made selections
+    // Don't override user selections when orchestrator sends updates with default/missing theme
+    
+    // Skip sync if user has already made a theme selection (currentTheme !== 'green' default)
+    if (currentTheme !== 'green' && agentData?.theme === 'green') {
+      console.log('🚫 SKIPPING agentData theme sync - preserving user selection:', {
+        userTheme: currentTheme,
+        agentDataTheme: agentData.theme,
+        reason: 'user_selection_priority'
+      });
+      return;
+    }
+    
+    // Only sync if agentData has a non-default theme AND it's different from current
+    if (agentData?.theme && agentData.theme !== 'green' && agentData.theme !== currentTheme) {
       console.log('🎨 Updating theme from agentData changes:', {
         oldTheme: currentTheme,
-        newTheme: agentData.theme
+        newTheme: agentData.theme,
+        source: 'agentData_update',
+        reason: 'non_default_theme_from_external'
       });
       setCurrentTheme(agentData.theme);
     }
+    // CRITICAL: Don't reset currentTheme if agentData.theme becomes undefined or default
+    // This preserves user selections during orchestrator updates
   }, [agentData?.theme, currentTheme]);
 
   // REMOVED: Control Matrix Box visibility useEffect - let manual control handle it

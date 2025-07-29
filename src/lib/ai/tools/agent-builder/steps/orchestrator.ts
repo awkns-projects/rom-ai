@@ -1,5 +1,10 @@
 import type { AgentData } from '../types';
-import { executeStep0ComprehensiveAnalysis, validateStep0Output, extractStep0Insights, type Step0Output } from './step0-comprehensive-analysis';
+import { 
+  executeStep0ComprehensiveAnalysis, 
+  validateStep0Output, 
+  extractStep0Insights, 
+  type Step0Output 
+} from './step0-comprehensive-analysis';
 import { executeStep1DatabaseGeneration, validateStep1Output, extractModelInsights, type Step1Output } from './step1-database-generation';
 import { executeStep2ActionGeneration, validateStep2Output, extractActionInsights, type Step2Output } from './step2-action-generation';
 import { executeStep3ScheduleGeneration, validateStep3Output, extractScheduleInsights, type Step3Output } from './step3-schedule-generation';
@@ -223,15 +228,29 @@ export async function executeAgentGeneration(
 
         // Only stream if we have a valid dataStream and the agent data is meaningful
         if (config.dataStream && partialAgentData.name && partialAgentData.name !== 'Generated Agent') {
-          console.log('🔄 Streaming partial agent data with external APIs metadata after Step 0:', {
-            apisCount: partialAgentData.externalApis.length,
-            primaryApis: partialAgentData.externalApis.filter((api: any) => api.priority === 'primary'),
-            agentName: partialAgentData.name
-          });
-          
           // Use a slight delay to ensure the UI is ready to receive the data
           setTimeout(() => {
             if (config.dataStream) {
+              // CRITICAL FIX: Don't stream if it would override user data with empty values
+              // This prevents the partial stream from overriding user theme/avatar selections
+              const hasUserData = partialAgentData.theme || partialAgentData.avatar;
+              const wouldOverrideUserData = !hasUserData && (existingAgent?.theme || existingAgent?.avatar);
+              
+              if (wouldOverrideUserData) {
+                console.log('🚫 SKIPPING partial stream to prevent overriding user selections:', {
+                  hasThemeInPartial: !!partialAgentData.theme,
+                  hasAvatarInPartial: !!partialAgentData.avatar,
+                  hasThemeInExisting: !!existingAgent?.theme,
+                  hasAvatarInExisting: !!existingAgent?.avatar
+                });
+                return;
+              }
+              
+              console.log('✅ STREAMING partial data (safe - no user data to override):', {
+                hasTheme: !!partialAgentData.theme,
+                hasAvatar: !!partialAgentData.avatar
+              });
+              
               config.dataStream.writeData({ 
                 type: 'agent-data', 
                 content: JSON.stringify(partialAgentData, null, 2)

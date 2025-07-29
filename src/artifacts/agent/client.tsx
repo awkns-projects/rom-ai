@@ -638,15 +638,12 @@ const AgentBuilderContent = memo(({
       newSchedules: newData.schedules?.length || 0,
       newTheme: newData.theme,
       newExternalApis: newData.externalApis?.map(api => api.provider).join(', ') || 'none',
-      currentModelNames: (agentData.models || []).map((m: AgentModel) => m.name),
-      newModelNames: (newData.models || []).map((m: AgentModel) => m.name),
-      currentActionNames: (agentData.actions || []).map((a: AgentAction) => a.name),
-      newActionNames: (newData.actions || []).map((a: AgentAction) => a.name),
-      currentScheduleNames: (agentData.schedules || []).map((s: AgentSchedule) => s.name),
-      newScheduleNames: (newData.schedules || []).map((s: AgentSchedule) => s.name)
+      currentModelNames: (agentData.models || []).map(m => m.name).join(', ') || 'none',
+      newModelNames: (newData.models || []).map(m => m.name).join(', ') || 'none',
+      callStack: new Error().stack?.split('\n').slice(1, 4).join(' -> ') // Show call stack
     });
-    
-    // SPECIAL HANDLING: Detect avatar or theme changes and save immediately
+
+    // Check for avatar/theme changes and save immediately to prevent orchestrator override  
     const avatarChanged = JSON.stringify(agentData.avatar) !== JSON.stringify(newData.avatar);
     const themeChanged = agentData.theme !== newData.theme;
     
@@ -657,17 +654,27 @@ const AgentBuilderContent = memo(({
         oldTheme: agentData.theme,
         newTheme: newData.theme,
         oldAvatar: !!agentData.avatar,
-        newAvatar: !!newData.avatar
+        newAvatar: !!newData.avatar,
+        willSaveContent: true,
+        documentId
       });
       
       // Immediately save when avatar/theme changes to prevent orchestrator from overriding
       const agentContent = JSON.stringify(newData, null, 2);
+      console.log('💾 IMMEDIATE SAVE: Calling onSaveContent with theme data:', {
+        contentHasTheme: agentContent.includes('"theme":'),
+        themeInContent: newData.theme,
+        contentPreview: agentContent.substring(0, 200)
+      });
+      
       onSaveContent(agentContent, false); // No debounce - immediate save
+      
+      console.log('✅ Theme/avatar save triggered - should now be in database');
     }
     
     setAgentData(newData);
     setHasUnsavedChanges(true);
-  }, [agentData, onSaveContent]);
+  }, [agentData, onSaveContent, documentId]);
 
   // Enhanced save function
   const saveAgentToConversation = useCallback(async () => {

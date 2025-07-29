@@ -840,7 +840,12 @@ The tool maintains state throughout the generation process and can resume from a
             preservedAvatar: !!preservedUserData.avatar,
             preservedTheme: !!preservedUserData.theme,
             finalHasAvatar: !!(finalAgentData as any).avatar,
-            finalHasTheme: !!(finalAgentData as any).theme
+            finalHasTheme: !!(finalAgentData as any).theme,
+            // ADDED: Debug theme data flow
+            preservedThemeValue: preservedUserData.theme,
+            finalThemeValue: (finalAgentData as any).theme,
+            existingAgentTheme: (existingAgent as any)?.theme,
+            resultAgentTheme: (result.agent as any).theme
           });
         }
 
@@ -871,8 +876,32 @@ Your AI agent "${result.agent.name || 'AI Agent System'}" has been created with 
 ✅ **Ready to Use:** Your agent system is now available and ready for deployment!`;
 
         console.log('📡 Streaming final agent data...');
+        
+        // CRITICAL FIX: Add delay to ensure user saves complete before final stream
+        // This prevents race condition where final stream overwrites user theme selection
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Re-fetch latest data one more time right before final stream
+        try {
+          console.log('🔄 Final check: Re-fetching latest data before final stream...');
+          const ultimateLatestDocument = await getDocumentById({ id: documentId });
+          if (ultimateLatestDocument?.content) {
+            const ultimateLatestData = JSON.parse(ultimateLatestDocument.content);
+            if (ultimateLatestData.theme) {
+              (finalAgentData as any).theme = ultimateLatestData.theme;
+              console.log('🎨 FINAL STREAM: Using ultimate latest theme:', ultimateLatestData.theme);
+            }
+            if (ultimateLatestData.avatar) {
+              (finalAgentData as any).avatar = ultimateLatestData.avatar;
+              console.log('🎨 FINAL STREAM: Using ultimate latest avatar');
+            }
+          }
+        } catch (error) {
+          console.log('⚠️ Could not fetch ultimate latest data:', error);
+        }
+        
         // Stream the final agent data
-        streamWithPersistence(dataStream, 'agent-data', finalContent, documentId, session);
+        streamWithPersistence(dataStream, 'agent-data', JSON.stringify(finalAgentData, null, 2), documentId, session);
         
         console.log('📝 Streaming final user-friendly content...');
         // Stream the final user-friendly content
