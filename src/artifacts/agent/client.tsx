@@ -44,29 +44,11 @@ import { OnboardContent } from './components/OnboardContent';
 import { ModelDataViewer } from './components/editors/ModelDataViewer';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
-
-interface AgentModel {
-  id: string;
-  name: string;
-  emoji?: string; // AI-generated emoji representing the model
-  description?: string; // AI-generated description for preview
-  hasPublishedField?: boolean; // Whether this model has a published field
-  idField: string;
-  displayFields: string[];
-  fields: AgentField[];
-  enums: AgentEnum[];
-  forms?: AgentForm[]; // Forms for grouping fields during create/update
-  records?: ModelRecord[]; // Store actual data records
-  exampleRecords?: ModelRecord[]; // Store example data records
-}
-
-interface ModelRecord {
-  id: string;
-  modelId: string;
-  data: Record<string, any>;
-  createdAt: string;
-  updatedAt: string;
-}
+// Import proper types
+import type { AgentData, AgentArtifactMetadata } from './types/agent';
+import type { AgentModel } from './types/model';
+import type { AgentAction } from './types/action';
+import type { LegacyAgentSchedule as AgentSchedule } from './types/schedule';
 
 interface AgentField {
   id: string;
@@ -97,65 +79,6 @@ interface AgentEnumField {
   defaultValue?: string;
 }
 
-interface AgentAction {
-  id: string;
-  name: string;
-  emoji?: string; // AI-generated emoji representing the action
-  description: string;
-  role: 'admin' | 'member';
-  dataSource: {
-    type: 'custom' | 'database';
-    customFunction?: {
-      code: string;
-      envVars?: EnvVar[];
-    };
-    database?: {
-      models: DatabaseModel[];
-    };
-  };
-  execute: {
-    type: 'code' | 'prompt';
-    code?: {
-      script: string;
-      envVars?: EnvVar[];
-    };
-    prompt?: {
-      template: string;
-      model?: string;
-      temperature?: number;
-      maxTokens?: number;
-    };
-  };
-  results: {
-    actionType: 'Create' | 'Update';
-    model: string;
-    identifierIds?: string[];
-    fields?: Record<string, any>;
-    fieldsToUpdate?: Record<string, any>;
-  };
-  uiComponents?: {
-    stepForms: Array<{
-      stepNumber: number;
-      title: string;
-      description: string;
-      reactCode: string;
-      propsInterface: Record<string, any>;
-      validationLogic: string;
-      dataRequirements: Array<{
-        modelName: string;
-        fields: string[];
-        purpose: string;
-      }>;
-    }>;
-    resultView: {
-      title: string;
-      description: string;
-      reactCode: string;
-      propsInterface: Record<string, any>;
-    };
-  };
-}
-
 interface DatabaseModel {
   id: string;
   name: string;
@@ -176,114 +99,12 @@ interface EnvVar {
   sensitive: boolean;
 }
 
-interface AgentData {
-  id?: string; // Optional for new agents, required for existing ones
-  name: string;
-  description: string;
-  domain: string;
-  models: AgentModel[];
-  actions: AgentAction[];
-  schedules: AgentSchedule[];
-  createdAt: string;
-  theme?: string; // Stored theme selection for the agent
-  externalApis?: Array<{
-    provider: string;
-    requiresConnection: boolean;
-    connectionType: 'oauth' | 'api_key' | 'none';
-    primaryUseCase: string;
-    requiredScopes: string[];
-    priority: 'primary' | 'secondary';
-  }>;
-  deployment?: {
-    deploymentId: string;
-    projectId: string;
-    deploymentUrl: string;
-    status: 'pending' | 'building' | 'ready' | 'error';
-    apiEndpoints: string[];
-    vercelProjectId: string;
-    deployedAt: string;
-    warnings: string[];
-    deploymentNotes: string[];
-  };
-  metadata?: {
-    createdAt: string;
-    updatedAt: string;
-    version: string;
-    lastModifiedBy: string;
-    tags: string[];
-    status: string;
-    [key: string]: any; // Allow additional metadata fields from orchestrator
-  };
-}
-
-interface AgentArtifactMetadata {
-  selectedTab: 'onboard' | 'models' | 'actions' | 'schedules' | 'chat';
-  editingModel: string | null;
-  editingAction: string | null;
-  editingSchedule: string | null;
-  viewingModelData: string | null;
-  editingRecord: string | null;
-  currentStep?: string;
-  stepProgress?: {
-    'analysis'?: 'processing' | 'complete';
-    models?: 'processing' | 'complete';
-    actions?: 'processing' | 'complete';
-    schedules?: 'processing' | 'complete';
-    deployment?: 'processing' | 'complete';
-    complete?: 'processing' | 'complete';
-  };
-  stepMessages?: Record<string, string>;
-  dataManagement?: {
-    viewingModelId?: string;
-    editingRecordId?: string | null;
-    isAddingRecord?: boolean;
-  } | null;
-  showExplanationModal?: 'models' | 'actions' | 'schedules' | null;
-}
-
-// Interface for recurring scheduled tasks
-interface AgentSchedule {
+interface ModelRecord {
   id: string;
-  name: string;
-  emoji?: string; // AI-generated emoji representing the schedule
-  description: string;
-  type: 'Create' | 'Update';
-  role: 'admin' | 'member';
-  interval: {
-    pattern: string;
-    timezone?: string;
-    active?: boolean;
-  };
-  dataSource: {
-    type: 'custom' | 'database';
-    customFunction?: {
-      code: string;
-      envVars?: EnvVar[];
-    };
-    database?: {
-      models: DatabaseModel[];
-    };
-  };
-  execute: {
-    type: 'code' | 'prompt';
-    code?: {
-      script: string;
-      envVars?: EnvVar[];
-    };
-    prompt?: {
-      template: string; 
-      model?: string;
-      temperature?: number;
-      maxTokens?: number;
-    };
-  };
-  results: {
-    actionType: 'Create' | 'Update';
-    model: string;
-    identifierIds?: string[];
-    fields?: Record<string, any>;
-    fieldsToUpdate?: Record<string, any>;
-  };
+  modelId: string;
+  data: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface AgentForm {
@@ -371,8 +192,10 @@ const useAgentData = (content: string) => {
           description: '',
           domain: '',
           models: [],
+          enums: [],
           actions: [],
           schedules: [],
+          prismaSchema: '',
           createdAt: new Date().toISOString()
         };
       }
@@ -392,8 +215,10 @@ const useAgentData = (content: string) => {
           description: parsed.description || '',
           domain: parsed.domain || '',
           models,
+          enums: parsed.enums, // Preserve generated enums
           actions,
           schedules,
+          prismaSchema: parsed.prismaSchema, // Preserve generated schema
           createdAt: parsed.createdAt || new Date().toISOString(),
           theme: parsed.theme, // Preserve theme selection
           avatar: parsed.avatar, // Include avatar data
@@ -410,8 +235,8 @@ const useAgentData = (content: string) => {
           scheduleCount: initialData.schedules.length,
           hasMetadata: !!initialData.metadata,
           hasExternalApis: !!initialData.externalApis?.length,
-          externalApiProviders: initialData.externalApis?.map(api => api.provider).join(', ') || 'none',
-          externalApiRequiresConnection: initialData.externalApis?.some(api => api.requiresConnection) || false
+          externalApiProviders: initialData.externalApis?.map((api: any) => api.provider).join(', ') || 'none',
+          externalApiRequiresConnection: initialData.externalApis?.some((api: any) => api.requiresConnection) || false
         });
 
         return initialData;
@@ -422,8 +247,10 @@ const useAgentData = (content: string) => {
           description: '',
           domain: '',
           models: [],
+          enums: [],
           actions: [],
           schedules: [],
+          prismaSchema: '',
           createdAt: new Date().toISOString()
         };
       }
@@ -436,8 +263,10 @@ const useAgentData = (content: string) => {
         description: '',
         domain: '',
         models: [],
+        enums: [],
         actions: [],
         schedules: [],
+        prismaSchema: '',
         createdAt: new Date().toISOString()
       };
     }
@@ -756,6 +585,8 @@ const AgentBuilderContent = memo(({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showDeploymentModal, setShowDeploymentModal] = useState(false);
+  const [isDeploying, setIsDeploying] = useState(false);
+  const [deploymentProgress, setDeploymentProgress] = useState('');
   
   // Introduction state hooks
   const {
@@ -772,7 +603,7 @@ const AgentBuilderContent = memo(({
   const chatId = params.id as string;
 
   // Extract deployment information from agent data
-  const deploymentInfo = agentData.deployment;
+  const deploymentInfo = agentData.deployment || null;
 
   // Update metadata safely
   const updateMetadata = useCallback((updates: Partial<AgentArtifactMetadata>) => {
@@ -814,21 +645,26 @@ const AgentBuilderContent = memo(({
         hasAvatar: !!agentData.avatar,
         avatarType: agentData.avatar?.type,
         hasTheme: !!agentData.theme,
+        currentTheme: agentData.theme, // ADDED: Show exact theme being saved
         hasExternalApis: !!agentData.externalApis?.length,
         modelCount: agentData.models?.length || 0,
         actionCount: agentData.actions?.length || 0,
         scheduleCount: agentData.schedules?.length || 0,
+        avatarData: agentData.avatar, // Log full avatar data
+        themeData: agentData.theme
       });
       
       const agentContent = JSON.stringify(agentData, null, 2);
-      onSaveContent(agentContent, true);
+      onSaveContent(agentContent, false); // FIXED: No debounce/autosave - immediate save
       
       setHasUnsavedChanges(false);
-      console.log('✅ Agent data saved through standard document mechanism');
+      console.log('✅ Agent data saved immediately without autosave');
       console.log('📄 Saved content includes:', {
         avatarData: !!agentData.avatar,
         themeData: !!agentData.theme,
-        externalApiData: !!agentData.externalApis
+        externalApiData: !!agentData.externalApis,
+        fullAvatarData: agentData.avatar,
+        fullThemeData: agentData.theme
       });
       
       setShowDeploymentModal(true);
@@ -838,6 +674,65 @@ const AgentBuilderContent = memo(({
       setIsSaving(false);
     }
   }, [agentData, onSaveContent]);
+
+  // Deploy agent function
+  const deployAgent = useCallback(async () => {
+    if (!documentId) return;
+    
+    setIsDeploying(true);
+    setDeploymentProgress('Initializing deployment...');
+    
+    try {
+      const response = await fetch('/api/agent/deploy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          agentData,
+          documentId,
+          projectName: agentData.name,
+          description: agentData.description,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Deployment failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('✅ Deployment successful:', result.deploymentResult);
+        
+        // Update agent data with deployment info
+        const updatedAgentData = result.agentData;
+        setAgentData(updatedAgentData);
+        
+        // Save updated agent data
+        const agentContent = JSON.stringify(updatedAgentData, null, 2);
+        onSaveContent(agentContent, true);
+        
+        setDeploymentProgress('Deployment completed successfully!');
+        
+        // Auto-close modal after 2 seconds
+        setTimeout(() => {
+          setShowDeploymentModal(false);
+          setIsDeploying(false);
+          setDeploymentProgress('');
+        }, 2000);
+      } else {
+        throw new Error(result.details || 'Deployment failed');
+      }
+    } catch (error) {
+      console.error('❌ Deployment failed:', error);
+      setDeploymentProgress(`Deployment failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setTimeout(() => {
+        setIsDeploying(false);
+        setDeploymentProgress('');
+      }, 3000);
+    }
+  }, [agentData, documentId, onSaveContent]);
 
   // Agent actions hooks
   const { addModel, addSchedule, addAction } = useAgentActions(agentData, updateAgentData, updateMetadata);
@@ -889,63 +784,106 @@ const AgentBuilderContent = memo(({
 
       // Only update if we have real data
       if (hasRealData) {
+        // Intelligently merge data - preserve user-configured data while allowing orchestrator updates
         const updatedData = {
           id: parsed.id,
-          name: parsed.name || 'New Agent',
-          description: parsed.description || '',
-          domain: parsed.domain || '',
+          name: parsed.name || agentData?.name || 'New Agent',
+          description: parsed.description || agentData?.description || '',
+          domain: parsed.domain || agentData?.domain || '',
           models: Array.isArray(parsed.models) ? parsed.models : [],
+          enums: parsed.enums || agentData?.enums || [], // Preserve generated enums
           actions: Array.isArray(parsed.actions) ? parsed.actions : [],
           schedules: Array.isArray(parsed.schedules) ? parsed.schedules : [],
+          prismaSchema: parsed.prismaSchema || agentData?.prismaSchema || '', // Preserve generated schema
           createdAt: parsed.createdAt || new Date().toISOString(),
-          theme: parsed.theme, // Preserve theme selection
-          avatar: parsed.avatar, // Include avatar data
-          externalApis: parsed.externalApis, // Preserve external API metadata
-          deployment: parsed.deployment, // Include deployment information
-          metadata: parsed.metadata
+          // PRESERVE USER-CONFIGURED DATA: Only use external data if user hasn't configured these
+          theme: parsed.theme || agentData?.theme, // Preserve user's theme selection
+          avatar: parsed.avatar || agentData?.avatar, // Preserve user's avatar data
+          externalApis: parsed.externalApis || agentData?.externalApis, // Preserve external API metadata
+          deployment: parsed.deployment || agentData?.deployment, // Include deployment information
+          metadata: parsed.metadata || agentData.metadata, // Include metadata
+          oauthTokens: parsed.oauthTokens || agentData.oauthTokens, // Preserve OAuth tokens
+          apiKeys: parsed.apiKeys || agentData.apiKeys, // Preserve API keys
+          credentials: parsed.credentials || agentData.credentials, // Preserve credentials
+          authConfig: parsed.authConfig || agentData.authConfig, // Preserve auth configuration
+          integrations: parsed.integrations || agentData.integrations, // Preserve integrations
+          settings: parsed.settings || agentData.settings // Preserve any additional settings
         };
         
-        console.log('🔄 Content update with external APIs:', {
+        console.log('🔄 Content update with intelligent merge:', {
+          preservedTheme: updatedData.theme === agentData.theme ? 'user' : 'external',
+          preservedAvatar: updatedData.avatar === agentData.avatar ? 'user' : 'external',
+          preservedOAuth: updatedData.oauthTokens === agentData.oauthTokens ? 'user' : 'external',
+          preservedApiKeys: updatedData.apiKeys === agentData.apiKeys ? 'user' : 'external',
           hasExternalApis: !!updatedData.externalApis?.length,
           providers: updatedData.externalApis?.map((api: any) => api.provider).join(', ') || 'none',
           requiresConnection: updatedData.externalApis?.some((api: any) => api.requiresConnection) || false,
-          hasDeployment: !!updatedData.deployment
+          hasDeployment: !!updatedData.deployment,
+          finalTheme: updatedData.theme,
+          hasAvatar: !!updatedData.avatar
         });
         
-        // Use a more stable comparison approach - FIXED: Include externalApi in comparison
+        // Use a more stable comparison approach - Include all relevant properties
         setAgentData(prevData => {
           const currentDataString = JSON.stringify({
             name: prevData.name,
             description: prevData.description,
             domain: prevData.domain,
             models: prevData.models,
+            enums: prevData.enums,
             actions: prevData.actions,
             schedules: prevData.schedules,
+            prismaSchema: prevData.prismaSchema,
             theme: prevData.theme,
-            externalApis: prevData.externalApis // FIXED: Include externalApis in comparison
+            avatar: prevData.avatar,
+            externalApis: prevData.externalApis,
+            oauthTokens: prevData.oauthTokens,
+            apiKeys: prevData.apiKeys,
+            credentials: prevData.credentials,
+            authConfig: prevData.authConfig,
+            integrations: prevData.integrations,
+            settings: prevData.settings
           });
           const newDataString = JSON.stringify({
             name: updatedData.name,
             description: updatedData.description,
             domain: updatedData.domain,
             models: updatedData.models,
+            enums: updatedData.enums,
             actions: updatedData.actions,
             schedules: updatedData.schedules,
+            prismaSchema: updatedData.prismaSchema,
             theme: updatedData.theme,
-            externalApis: updatedData.externalApis // FIXED: Include externalApis in comparison
+            avatar: updatedData.avatar,
+            externalApis: updatedData.externalApis,
+            oauthTokens: updatedData.oauthTokens,
+            apiKeys: updatedData.apiKeys,
+            credentials: updatedData.credentials,
+            authConfig: updatedData.authConfig,
+            integrations: updatedData.integrations,
+            settings: updatedData.settings
           });
           
           // Only update if data has actually changed
           if (currentDataString !== newDataString) {
-            console.log('📥 Updating agent data from content change:', {
-              previousExternalApis: prevData.externalApis?.map(api => api.provider).join(', ') || 'none',
-              newExternalApis: updatedData.externalApis?.map(api => api.provider).join(', ') || 'none',
+            console.log('📥 Updating agent data from content change with preservation:', {
+              preservedUserTheme: updatedData.theme === prevData.theme,
+              preservedUserAvatar: updatedData.avatar === prevData.avatar,
+              preservedUserAuth: updatedData.oauthTokens === prevData.oauthTokens,
+              previousExternalApis: prevData.externalApis?.map((api: any) => api.provider).join(', ') || 'none',
+              newExternalApis: updatedData.externalApis?.map((api: any) => api.provider).join(', ') || 'none',
               dataChanged: true
             });
+            
+            // Save the updated data to persist changes (including prismaSchema)
+            const agentContent = JSON.stringify(updatedData, null, 2);
+            onSaveContent(agentContent, true); // Use debounced save to avoid excessive saves during streaming
+            console.log('💾 Saved updated agent data with preserved prismaSchema and enums');
+            
             return updatedData;
           }
           
-          console.log('⚪ No agent data update needed (content unchanged)');
+          console.log('⚪ No agent data update needed (content unchanged after intelligent merge)');
           return prevData;
         });
       }
@@ -1022,26 +960,28 @@ const AgentBuilderContent = memo(({
                 </Button>
               )}
 
-              {/* Save Button */}
-              <Button
-                onClick={saveAgentToConversation}
-                disabled={isSaving}
-                className={cn(
-                  "px-4 sm:px-6 py-2.5 text-sm font-medium font-mono transition-all duration-200",
-                  hasUnsavedChanges 
-                    ? "btn-matrix border-yellow-500/50 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300" 
-                    : "btn-matrix"
-                )}
-              >
-                <div className="flex items-center gap-2 justify-center">
-                  <div className="w-4 h-4">
-                    {isSaving ? '⏳' : hasUnsavedChanges ? '📝' : '💾'}
+              {/* Save Button - Hide during building */}
+              {status !== 'streaming' && (
+                <Button
+                  onClick={saveAgentToConversation}
+                  disabled={isSaving}
+                  className={cn(
+                    "px-4 sm:px-6 py-2.5 text-sm font-medium font-mono transition-all duration-200",
+                    hasUnsavedChanges 
+                      ? "btn-matrix border-yellow-500/50 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300" 
+                      : "btn-matrix"
+                  )}
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <div className="w-4 h-4">
+                      {isSaving ? '⏳' : hasUnsavedChanges ? '📝' : '💾'}
+                    </div>
+                    <span>
+                      {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'Save Agent'}
+                    </span>
                   </div>
-                  <span>
-                    {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'Save Agent'}
-                  </span>
-                </div>
-              </Button>
+                </Button>
+              )}
             </div>
           </div>
           
@@ -1084,8 +1024,7 @@ const AgentBuilderContent = memo(({
                       { id: 'analysis', label: 'Analysis' },
                       { id: 'models', label: 'Models' },
                       { id: 'actions', label: 'Actions' },
-                      { id: 'schedules', label: 'Schedules' },
-                      { id: 'deployment', label: 'Deployment' }
+                      { id: 'schedules', label: 'Schedules' }
                     ];
                     
                     const getEnhancedStepStatus = (stepId: string) => {
@@ -1094,7 +1033,6 @@ const AgentBuilderContent = memo(({
                         'step1': 'models',
                         'step2': 'actions',
                         'step3': 'schedules',
-                        'step4': 'deployment',
                         'complete': 'complete'
                       };
                       
@@ -1183,8 +1121,7 @@ const AgentBuilderContent = memo(({
                       { id: 'analysis', label: 'Analysis' },
                       { id: 'models', label: 'Models' },
                       { id: 'actions', label: 'Actions' },
-                      { id: 'schedules', label: 'Schedules' },
-                      { id: 'deployment', label: 'Deployment' }
+                      { id: 'schedules', label: 'Schedules' }
                     ];
                     
                     const getEnhancedStepStatus = (stepId: string) => {
@@ -1193,7 +1130,6 @@ const AgentBuilderContent = memo(({
                         'step1': 'models',
                         'step2': 'actions',
                         'step3': 'schedules',
-                        'step4': 'deployment',
                         'complete': 'complete'
                       };
                       
@@ -1343,7 +1279,10 @@ const AgentBuilderContent = memo(({
                     })} 
                     models={agentData.models || []}
                     agentData={agentData}
-                    onThemeChange={(theme) => updateAgentData({ ...agentData, theme })}
+                    onThemeChange={(theme) => {
+                      console.log('🎨 Main client received theme change:', theme);
+                      updateAgentData({ ...agentData, theme });
+                    }}
                     onDataChange={updateAgentData}
                     documentId={documentId}
                   />
@@ -1599,7 +1538,7 @@ const AgentBuilderContent = memo(({
       
       {/* Deployment Modal */}
       <Dialog open={showDeploymentModal} onOpenChange={setShowDeploymentModal}>
-        <DialogContent className="sm:max-w-[425px] bg-black/95 border-green-500/20 backdrop-blur-xl">
+        <DialogContent className="sm:max-w-[500px] bg-black/95 border-green-500/20 backdrop-blur-xl">
           <DialogHeader>
             <DialogTitle className="text-green-200 font-mono text-xl flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-green-600 to-green-700 flex items-center justify-center">
@@ -1608,51 +1547,115 @@ const AgentBuilderContent = memo(({
               Agent Saved Successfully!
             </DialogTitle>
             <DialogDescription className="text-green-400 font-mono">
-              Your agent "<span className="text-green-200 font-semibold">{agentData.name}</span>" has been saved. 
-              Would you like to proceed to the deployment page to make it live?
+              Your agent "<span className="text-green-200 font-semibold">{agentData.name}</span>" has been saved.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex flex-col gap-4 mt-6">
-            <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-green-600 rounded-full" />
-                <span className="text-green-200 font-medium font-mono">What happens next?</span>
+          {/* Deployment Progress */}
+          {isDeploying && (
+            <div className="flex flex-col gap-4 mt-6">
+              <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-4 h-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+                  <span className="text-blue-200 font-medium font-mono">Deploying Agent...</span>
+                </div>
+                <div className="text-sm text-blue-400 font-mono ml-7">
+                  {deploymentProgress}
+                </div>
               </div>
-              <ul className="text-sm text-green-400 font-mono space-y-1 ml-4">
-                <li>• Configure deployment environment</li>
-                <li>• Set up database connections</li>
-                <li>• Deploy agent to production</li>
-                <li>• Monitor and manage your agent</li>
-              </ul>
             </div>
-          </div>
+          )}
+
+          {/* Show different content based on deployment state */}
+          {!isDeploying && (
+            <div className="flex flex-col gap-4 mt-6">
+              {deploymentInfo?.deploymentUrl ? (
+                // Agent is already deployed
+                <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-green-600 rounded-full" />
+                    <span className="text-green-200 font-medium font-mono">Already Deployed</span>
+                  </div>
+                  <div className="text-sm text-green-400 font-mono mb-3 ml-4">
+                    Your agent is live at: <span className="text-green-200 break-all">{deploymentInfo.deploymentUrl}</span>
+                  </div>
+                  <ul className="text-sm text-green-400 font-mono space-y-1 ml-4">
+                    <li>• Redeploy with latest changes</li>
+                    <li>• Manage deployment settings</li>
+                    <li>• Monitor performance</li>
+                  </ul>
+                </div>
+              ) : (
+                // Agent is not deployed yet
+                <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-1 h-6 bg-gradient-to-b from-yellow-500 to-yellow-600 rounded-full" />
+                    <span className="text-yellow-200 font-medium font-mono">Ready for Deployment</span>
+                  </div>
+                  <ul className="text-sm text-yellow-400 font-mono space-y-1 ml-4">
+                    <li>• Configure deployment environment</li>
+                    <li>• Set up database connections</li>
+                    <li>• Deploy agent to production</li>
+                    <li>• Monitor and manage your agent</li>
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
           
-          <DialogFooter className="gap-3 mt-6">
-            <Button
-              variant="outline"
-              onClick={() => setShowDeploymentModal(false)}
-              className="btn-matrix border-green-500/30 hover:border-green-500/50 text-white hover:text-green-200 bg-transparent hover:bg-green-500/10"
-            >
-              <span className="font-mono">Maybe Later</span>
-            </Button>
-            <Button
-              onClick={() => {
-                setShowDeploymentModal(false);
-                // Navigate to deployment page with chatId
-                const deploymentUrl = chatId 
-                  ? `/deployment?chatId=${chatId}`
-                  : '/deployment';
-                router.push(deploymentUrl);
-              }}
-              className="btn-matrix bg-green-600 hover:bg-green-700 text-black font-bold"
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-mono">Publish Agent</span>
-                <span>🚀</span>
-              </div>
-            </Button>
-          </DialogFooter>
+          {!isDeploying && (
+            <DialogFooter className="gap-3 mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeploymentModal(false)}
+                className="btn-matrix border-green-500/30 hover:border-green-500/50 text-white hover:text-green-200 bg-transparent hover:bg-green-500/10"
+              >
+                <span className="font-mono">Maybe Later</span>
+              </Button>
+              
+              {deploymentInfo?.deploymentUrl ? (
+                // Show different buttons for deployed agents
+                <>
+                  <Button
+                    onClick={deployAgent}
+                    className="btn-matrix bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono">Redeploy</span>
+                      <span>🔄</span>
+                    </div>
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowDeploymentModal(false);
+                      // Navigate to deployment page with chatId
+                      const deploymentUrl = chatId 
+                        ? `/deployment?chatId=${chatId}`
+                        : '/deployment';
+                      router.push(deploymentUrl);
+                    }}
+                    className="btn-matrix bg-green-600 hover:bg-green-700 text-black font-bold"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono">Publish Agent</span>
+                      <span>🚀</span>
+                    </div>
+                  </Button>
+                </>
+              ) : (
+                // Show deploy button for new agents
+                <Button
+                  onClick={deployAgent}
+                  className="btn-matrix bg-green-600 hover:bg-green-700 text-black font-bold"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono">Deploy Agent</span>
+                    <span>🚀</span>
+                  </div>
+                </Button>
+              )}
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 

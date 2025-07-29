@@ -331,147 +331,14 @@ export async function executeAgentGeneration(
 
     sendStepUpdate(config, 'step3', 'complete', `Schedules generated: ${step3Result.schedules.length} schedules`);
 
-    // STEP 4: Deployment
-    if (config.enableDeployment) {
-      sendStepUpdate(config, 'step4', 'processing', 'Rendering and deploying agent...');
-      const step4StartTime = Date.now();
-
-      // Prepare Step4Input from config
-      const deploymentConfig = {
-        ...config.deploymentConfig,
-        projectName: config.deploymentConfig?.projectName || step0Result.agentName || 'Generated Agent'
-      };
-      if (!deploymentConfig?.projectName) {
-        console.warn('⚠️ Skipping deployment - Project name not provided');
-        sendStepUpdate(config, 'step4', 'complete', 'Deployment skipped - missing project name');
-      } else {
-        // Check for existing deployment metadata (now stored in agent JSON)
-        let existingDeployment: any = null;
-        // Note: Deployment metadata is now included in the agent JSON data
-
-        let step4Result: Step4Output;
-
-        if (existingDeployment?.projectId && config.existingAgent) { // Changed from serviceId to projectId
-          // Check if deployment update is needed
-          const updateCheck = checkDeploymentUpdateNeeded(
-            config.existingAgent,
-            { models: step1Result.models, actions: step2Result.actions, schedules: step3Result.schedules },
-            existingDeployment
-          );
-
-          if (updateCheck.needsUpdate) {
-            console.log(`🔄 Updating existing deployment: ${updateCheck.reasons.join(', ')}`);
-            sendStepUpdate(config, 'step4', 'processing', `Updating deployment: ${updateCheck.reasons.join(', ')}`);
-
-            // Update existing deployment
-            const updateResult = await executeStepWithRetry(
-              'step4',
-              () => updateExistingDeployment({
-                step1Output: step1Result,
-                step2Output: step2Result,
-                step3Output: step3Result,
-                vercelProjectId: existingDeployment.projectId, // Changed from serviceId to projectId
-                projectName: deploymentConfig.projectName || step0Result.agentName || 'Generated Agent',
-                description: deploymentConfig.description || step0Result.agentDescription,
-                environmentVariables: deploymentConfig.environmentVariables || {},
-                executeMigrations: updateCheck.requiresMigration
-              }),
-              config,
-              result
-            );
-
-            if (!updateResult) {
-              throw new Error('Step 4 (Deployment Update) failed');
-            }
-            step4Result = updateResult;
-          } else {
-            console.log('✅ No deployment update needed');
-            sendStepUpdate(config, 'step4', 'complete', 'No deployment update needed');
-            
-            // Return existing deployment info
-            step4Result = {
-              deploymentId: existingDeployment.deploymentId || 'existing',
-              projectId: existingDeployment.projectId, // Changed from serviceId to projectId
-              deploymentUrl: existingDeployment.deploymentUrl || '',
-              status: 'ready' as const,
-              environmentVariables: existingDeployment.environmentVariables || {},
-              prismaSchema: step1Result.prismaSchema,
-              deploymentNotes: ['No changes detected', 'Using existing deployment'],
-              apiEndpoints: existingDeployment.apiEndpoints || [],
-              cronJobs: existingDeployment.cronJobs || [],
-              databaseUrl: existingDeployment.databaseUrl || '',
-              sqliteFilename: existingDeployment.sqliteFilename || 'dev.db',
-              vercelProjectId: existingDeployment.vercelProjectId || existingDeployment.projectId, // Changed from serviceId to projectId
-              warnings: existingDeployment.warnings || []
-            };
-          }
-        } else {
-          // Create new deployment
-          console.log('🚀 Creating new deployment');
-          sendStepUpdate(config, 'step4', 'processing', 'Creating new deployment...');
-
-          const step4Input: Step4Input = {
-            step1Output: step1Result,
-            step2Output: step2Result,
-            step3Output: step3Result,
-            projectName: deploymentConfig.projectName || step0Result.agentName || 'Generated Agent',
-            description: deploymentConfig.description || step0Result.agentDescription,
-            environmentVariables: deploymentConfig.environmentVariables || {},
-            vercelTeam: deploymentConfig.vercelTeam,
-            documentId: config.documentId
-          };
-
-          const newDeployResult = await executeStepWithRetry(
-            'step4',
-            () => executeStep4VercelDeployment(step4Input, (message) => {
-              // Send real-time deployment progress updates
-              sendStepUpdate(config, 'step4', 'processing', message);
-            }),
-            config,
-            result
-          );
-
-          if (!newDeployResult) {
-            throw new Error('Step 4 (New Deployment) failed');
-          }
-          step4Result = newDeployResult;
-        }
-
-        if (!step4Result) {
-          throw new Error('Step 4 (Deployment) failed');
-        }
-
-        result.stepResults.step4 = step4Result;
-        result.executionMetrics.stepDurations.step4 = Date.now() - step4StartTime;
-
-        // Validate Step 4
-        if (config.enableValidation !== false) {
-          result.validationResults.step4 = validateStep4Output(step4Result);
-          if (!result.validationResults.step4 && config.stopOnValidationFailure) {
-            throw new Error('Step 4 validation failed');
-          }
-        }
-
-        // Extract insights
-        if (config.enableInsights !== false) {
-          result.insights.deployment = extractStep4Insights(step4Result);
-        }
-
-        // Send final completion status for step4
-        const finalStatus = step4Result.status === 'ready' ? 'complete' : 'processing';
-        const finalMessage = step4Result.status === 'ready' 
-          ? `Deployment completed: ${step4Result.deploymentUrl}` 
-          : `Deployment submitted but may still be building: ${step4Result.deploymentUrl}`;
-        sendStepUpdate(config, 'step4', finalStatus, finalMessage);
-
-        // Deployment metadata is now persisted in agent JSON (handled by assembleCompleteAgent)
-        // No separate database storage needed
-      }
-    }
+    // STEP 4: Deployment - DISABLED
+    // Deployment is now handled separately through the UI modal
+    console.log('⏭️ Skipping Step 4 (Deployment) - will be handled via UI modal');
+    sendStepUpdate(config, 'step4', 'complete', 'Deployment deferred to UI modal');
 
     // FINAL ASSEMBLY
     console.log('🔧 FINAL ASSEMBLY: Combining all components...');
-    result.agent = assembleCompleteAgent(config, step0Result, step1Result, step2Result, step3Result, result.stepResults.step4);
+    result.agent = assembleCompleteAgent(config, step0Result, step1Result, step2Result, step3Result);
 
     // Calculate overall validation and quality
     result.validationResults.overall = calculateOverallValidation(result.validationResults);
@@ -704,8 +571,7 @@ function assembleCompleteAgent(
   step0: Step0Output,
   step1: Step1Output,
   step2: Step2Output,
-  step3: Step3Output,
-  step4?: Step4Output
+  step3: Step3Output
 ): AgentData {
   const now = new Date().toISOString();
 
@@ -721,17 +587,8 @@ function assembleCompleteAgent(
     prismaSchema: step1.prismaSchema, // Not needed for UI
     createdAt: config.existingAgent?.createdAt || now,
     externalApis: step0.externalApis || [],
-    deployment: step4 ? {
-      deploymentId: step4.deploymentId,
-      projectId: step4.projectId,
-      deploymentUrl: step4.deploymentUrl,
-      status: step4.status,
-      apiEndpoints: step4.apiEndpoints,
-      vercelProjectId: step4.vercelProjectId,
-      deployedAt: now,
-      warnings: step4.warnings,
-      deploymentNotes: step4.deploymentNotes
-    } : undefined,
+    // Preserve existing deployment data if available
+    deployment: config.existingAgent?.deployment,
     metadata: {
       createdAt: config.existingAgent?.metadata?.createdAt || now,
       updatedAt: now,
@@ -742,7 +599,7 @@ function assembleCompleteAgent(
         step0.domain || 'general',
         step0.agentName || 'agent'
       ],
-      status: step4 ? 'deployed' : 'generated'
+      status: config.existingAgent?.deployment ? 'deployed' : 'generated'
     }
   };
 

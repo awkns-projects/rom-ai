@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useEffect } from 'react';
 import type { AgentData, AgentModel, AgentAction, AgentSchedule } from '../types';
 import { CompositeUnicorn } from '@/components/composite-unicorn';
 import Image from 'next/image';
@@ -186,13 +186,25 @@ export const MobileAppDemoWrapper = memo(({ agentData, onThemeChange, onDataChan
   const [isExpanded, setIsExpanded] = useState(false);
   const [viewMode, setViewMode] = useState<'mobile' | 'desktop'>('mobile'); // Add view mode state
 
+  // ADDED: Update theme when agentData.theme changes from external sources
+  useEffect(() => {
+    if (agentData?.theme && agentData.theme !== currentTheme) {
+      setCurrentTheme(agentData.theme as keyof typeof themes);
+      console.log('🎨 Theme updated from agentData:', agentData.theme);
+    }
+  }, [agentData?.theme, currentTheme]);
+
   // Handle theme change with persistence
   const handleThemeChange = useCallback((newTheme: keyof typeof themes) => {
+    console.log('🎨 Theme change requested:', { from: currentTheme, to: newTheme });
     setCurrentTheme(newTheme);
     if (onThemeChange) {
+      console.log('🎨 Calling onThemeChange callback with:', newTheme);
       onThemeChange(newTheme);
+    } else {
+      console.warn('🎨 onThemeChange callback not provided');
     }
-  }, [onThemeChange]);
+  }, [onThemeChange, currentTheme]);
 
   // Display first 6 themes when collapsed, all when expanded
   const visibleThemes = isExpanded 

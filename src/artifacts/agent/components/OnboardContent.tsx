@@ -538,6 +538,12 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
                         onDataChange(updatedAgent);
                       }
                     }}
+                    onThemeChange={(theme: string) => {
+                      // FIXED: Properly handle theme changes in avatar creator
+                      if (onThemeChange) {
+                        onThemeChange(theme);
+                      }
+                    }}
                   />
                 );
               })()}

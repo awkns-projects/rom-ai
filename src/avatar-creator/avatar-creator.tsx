@@ -74,6 +74,7 @@ interface AvatarCreatorProps {
   }>;
   agentData?: any;
   onAvatarChange?: (avatarData: any) => void;
+  onThemeChange?: (theme: string) => void; // ADDED: Dedicated theme change callback
 }
 
 const oauthProviders = [
@@ -271,8 +272,10 @@ const generateRandomUnicorn = (): UnicornParts => {
   }
 }
 
-export default function AvatarCreator({ documentId, externalApisMetadata, agentData, onAvatarChange }: AvatarCreatorProps = {}) {
+export default function AvatarCreator({ documentId, externalApisMetadata, agentData, onAvatarChange, onThemeChange }: AvatarCreatorProps = {}) {
   const [step, setStep] = useState(1)
+  const [currentTheme, setCurrentTheme] = useState<string>(agentData?.theme || 'green') // ADDED: Track current theme
+  const [showMatrixBox, setShowMatrixBox] = useState(false) // ADDED: Explicit Matrix Box control - will be set in useEffect
   // Initialize avatar data - will be updated from database if available
   const [avatarData, setAvatarData] = useState<AvatarData>(() => {
     return {
@@ -307,19 +310,85 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [showCreateNew, setShowCreateNew] = useState(false)
+  const [isRegenerating, setIsRegenerating] = useState(false) // ADDED: Track regeneration state
 
   // Avatar management hooks
   const { avatars, createAvatar: createAvatarInDB, setActiveAvatar } = useAvatars(documentId)
 
+  // Function to explicitly sync current avatar data to main agent content
+  const syncToMainContent = useCallback(async () => {
+    console.log('🔄 Syncing avatar and theme data to main agent content...');
+    
+    let syncedAvatar = false;
+    let syncedTheme = false;
+    
+    // Convert avatar data to agent avatar format
+    const agentAvatarData = {
+      type: avatarData.type,
+      unicornParts: avatarData.unicornParts,
+      customType: avatarData.customType,
+      uploadedImage: avatarData.uploadedImage,
+      selectedNFT: avatarData.selectedNFT,
+    };
+    
+    // Update the main agent data through the callback
+    if (onAvatarChange) {
+      onAvatarChange(agentAvatarData);
+      console.log('✅ Avatar data synced to main agent content');
+      syncedAvatar = true;
+    } else {
+      console.warn('⚠️ No onAvatarChange callback available');
+    }
+    
+    // Sync current theme
+    if (onThemeChange && currentTheme) {
+      console.log('🎨 Syncing current theme to main content:', currentTheme);
+      onThemeChange(currentTheme);
+      console.log('✅ Theme synced to main agent content');
+      syncedTheme = true;
+    } else {
+      console.warn('⚠️ No onThemeChange callback or current theme available');
+    }
+    
+    if (syncedAvatar || syncedTheme) {
+      const syncedItems = [];
+      if (syncedAvatar) syncedItems.push('Avatar');
+      if (syncedTheme) syncedItems.push('Theme');
+      
+      console.log('✅ All data synced to main agent content');
+      alert(`✅ ${syncedItems.join(' and ')} changes saved successfully!`);
+    } else {
+      console.warn('⚠️ No data could be synced');
+      alert('⚠️ Could not save changes. Please try again.');
+    }
+    
+    return syncedAvatar || syncedTheme;
+  }, [avatarData, onAvatarChange, currentTheme, onThemeChange]);
+
+  // Function to explicitly sync current theme to main agent content
+  const syncThemeToMainContent = useCallback((theme: string) => {
+    console.log('🎨 Syncing theme to main agent content:', theme);
+    
+    if (onThemeChange) {
+      onThemeChange(theme);
+      console.log('✅ Theme synced to main agent content');
+      return true;
+    } else {
+      console.warn('⚠️ No onThemeChange callback available');
+      return false;
+    }
+  }, [onThemeChange]);
+
   // Auto-save functionality - now saves to both database and agent data
-  const saveToDatabase = useCallback(async (data: AvatarData, currentStep: number) => {
+  const saveToDatabase = useCallback(async (data: AvatarData, currentStep: number, updateContent = false) => {
     console.log('💾 Saving avatar data:', { 
       hasDocumentId: !!documentId,
       hasOnAvatarChange: !!onAvatarChange,
       avatarName: data.name, 
       step: currentStep,
       type: data.type,
-      hasConnections: data.oauthConnections?.length || 0
+      hasConnections: data.oauthConnections?.length || 0,
+      updateContent // ADDED: Flag to control whether to update main content
     });
     
     // Convert avatar data to agent avatar format
@@ -331,20 +400,22 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
       selectedNFT: data.selectedNFT,
     };
     
-    // Update the main agent data through the callback
-    if (onAvatarChange) {
+    // MODIFIED: Only update the main agent data if explicitly requested
+    if (updateContent && onAvatarChange) {
       onAvatarChange(agentAvatarData);
-      console.log('✅ Avatar data updated in agent');
+      console.log('✅ Avatar data updated in main agent content');
+    } else {
+      console.log('⚪ Skipping main content update (metadata only)');
     }
     
-    // Also save to database metadata for persistence (fallback)
+    // Always save to database metadata for persistence (lightweight)
     if (documentId) {
       try {
         await saveAvatarCreatorState(documentId, {
           avatarData: data,
           step: currentStep,
         });
-        console.log('✅ Avatar data saved to database metadata');
+        console.log('✅ Avatar data saved to database metadata only');
       } catch (error) {
         console.error("❌ Failed to save to database metadata:", error)
       }
@@ -375,8 +446,9 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
         // If we have saved state, use it
         if (savedState?.avatarData) {
           finalAvatarData = { ...finalAvatarData, ...savedState.avatarData };
-          setStep(savedState.step || 1);
-          console.log("✅ Restored avatar from database:", {
+          // FIXED: Always start on step 1 (Avatar tab) for better UX instead of restoring saved step
+          // setStep(1);
+          console.log("✅ Restored avatar from database (starting on step 1):", {
             type: finalAvatarData.type,
             hasUnicornParts: !!finalAvatarData.unicornParts,
             hasUploadedImage: !!finalAvatarData.uploadedImage
@@ -443,30 +515,31 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
     }
   }, [agentData?.avatar, avatarData.type, avatarData.unicornParts, avatarData.uploadedImage, hasLoadedFromDatabase]);
 
-  // Auto-save when data changes (with proper debouncing) - DISABLED
-  // useEffect(() => {
-  //   if (lastSaved !== null && hasLoadedFromDatabase) {
-  //     // Don't save on initial load or before database load is complete
-  //     const timeoutId = setTimeout(async () => {
-  //       setHasUnsavedChanges(true) // Show saving only when actually saving
-  //       await saveToDatabase(avatarData, step)
-  //       setHasUnsavedChanges(false)
-  //     }, 2000) // Reduced to 2 seconds for better UX
+  // ADDED: Monitor theme changes from agentData
+  useEffect(() => {
+    if (agentData?.theme && agentData.theme !== currentTheme) {
+      console.log('🎨 Updating theme from agentData changes:', {
+        oldTheme: currentTheme,
+        newTheme: agentData.theme
+      });
+      setCurrentTheme(agentData.theme);
+    }
+  }, [agentData?.theme, currentTheme]);
 
-  //     return () => clearTimeout(timeoutId)
-  //   }
-  // }, [
-  //   avatarData.name, 
-  //   avatarData.type, 
-  //   avatarData.romUnicornType, 
-  //   avatarData.customType, 
-  //   avatarData.uploadedImage,
-  //   JSON.stringify(avatarData.unicornParts),
-  //   step, 
-  //   saveToDatabase, 
-  //   lastSaved, 
-  //   hasLoadedFromDatabase
-  // ])
+  // REMOVED: Control Matrix Box visibility useEffect - let manual control handle it
+  // This was causing conflicts with the regenerate function
+
+  // ADDED: Initialize Matrix Box visibility on load
+  useEffect(() => {
+    const hasUnicornParts = !!(avatarData.unicornParts && Object.keys(avatarData.unicornParts).length > 0);
+    if (!hasUnicornParts && !showMatrixBox) {
+      console.log("🎲 Initializing Matrix Box visibility - no unicorn parts found");
+      setShowMatrixBox(true);
+    } else if (hasUnicornParts && showMatrixBox) {
+      console.log("🎲 Hiding Matrix Box - unicorn parts found");
+      setShowMatrixBox(false);
+    }
+  }, [hasLoadedFromDatabase]); // Only run after initial load
 
   const clearSavedData = async () => {
     // Clear database state instead of localStorage
@@ -499,7 +572,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
       customType: "upload",
       oauthConnections: [],
     })
-    setStep(1)
+    // setStep(1)
     setGeneratedVariations([])
     setCreationProgress(0)
     setIsCreating(false)
@@ -508,25 +581,29 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
   const handleNameChange = (name: string) => {
     const updatedData = { ...avatarData, name };
     setAvatarData(updatedData);
-    // Let auto-save handle the saving with debouncing
+    // FIXED: Save only to metadata, don't update main content for performance
+    saveToDatabase(updatedData, step, false);
   }
 
   const handleTypeChange = (type: AvatarType) => {
     const updatedData = { ...avatarData, type };
     setAvatarData(updatedData);
-    // Let auto-save handle the saving with debouncing
+    // FIXED: Save only to metadata, don't update main content for performance
+    saveToDatabase(updatedData, step, false);
   }
 
   const handleRomUnicornTypeChange = (romUnicornType: RomUnicornType) => {
     const updatedData = { ...avatarData, romUnicornType };
     setAvatarData(updatedData);
-    // Let auto-save handle the saving with debouncing
+    // FIXED: Save only to metadata, don't update main content for performance
+    saveToDatabase(updatedData, step, false);
   }
 
   const handleCustomTypeChange = (customType: CustomType) => {
     const updatedData = { ...avatarData, customType };
     setAvatarData(updatedData);
-    // Let auto-save handle the saving with debouncing
+    // FIXED: Save only to metadata, don't update main content for performance
+    saveToDatabase(updatedData, step, false);
   }
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -534,14 +611,20 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
     if (file) {
       const reader = new FileReader()
       reader.onload = (e) => {
-        setAvatarData((prev) => ({ ...prev, uploadedImage: e.target?.result as string }))
+        const updatedData = { ...avatarData, uploadedImage: e.target?.result as string };
+        setAvatarData(updatedData);
+        // FIXED: Save only to metadata, don't update main content for performance
+        saveToDatabase(updatedData, step, false);
       }
       reader.readAsDataURL(file)
     }
   }
 
   const handleStyleSelect = (styleId: string) => {
-    setAvatarData((prev) => ({ ...prev, selectedStyle: styleId }))
+    const updatedData = { ...avatarData, selectedStyle: styleId };
+    setAvatarData(updatedData);
+    // FIXED: Save only to metadata, don't update main content for performance
+    saveToDatabase(updatedData, step, false);
   }
 
   const handleAccessTokenChange = (token: string) => {
@@ -707,40 +790,68 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
   }
 
   const handlePersonalityChange = (personality: string) => {
-    setAvatarData((prev) => ({ ...prev, personality }))
+    const updatedData = { ...avatarData, personality };
+    setAvatarData(updatedData);
+    // FIXED: Save only to metadata, don't update main content for performance
+    saveToDatabase(updatedData, step, false);
   }
 
   const handleCharacterNamesChange = (characterNames: string) => {
-    setAvatarData((prev) => ({ ...prev, characterNames }))
+    const updatedData = { ...avatarData, characterNames };
+    setAvatarData(updatedData);
+    // FIXED: Save only to metadata, don't update main content for performance
+    saveToDatabase(updatedData, step, false);
   }
 
   const nextStep = () => setStep((prev) => Math.min(prev + 1, 4))
   const prevStep = () => setStep((prev) => Math.max(prev - 1, 1))
 
   const handleGenerateRandomUnicorn = () => {
-    // Clear current unicorn to show Matrix Box again
-    setAvatarData((prev) => ({ ...prev, unicornParts: undefined }))
+    // FIXED: Clear unicorn parts and explicitly show Matrix Box for manual user interaction
+    console.log("🔄 REGENERATE CLICKED - Clearing avatar to show Matrix Box...");
+    console.log("Current state before clear:", {
+      hasUnicornParts: !!avatarData.unicornParts,
+      unicornParts: avatarData.unicornParts,
+      showMatrixBox: showMatrixBox
+    });
+    setIsRegenerating(true);
+    
+    // Completely remove unicorn parts and explicitly show Matrix Box
+    const clearedData = { ...avatarData };
+    delete clearedData.unicornParts; // Remove unicornParts completely
+    console.log("Setting cleared data:", clearedData);
+    console.log("Setting showMatrixBox to TRUE");
+    
+    setAvatarData(clearedData);
+    setShowMatrixBox(true); // Explicitly show Matrix Box
+    saveToDatabase(clearedData, step, false);
+    
+    // Reset regenerating state after clearing
+    setTimeout(() => {
+      setIsRegenerating(false);
+      console.log("✅ REGENERATE COMPLETE - Matrix Box should now be visible!");
+      console.log("Final state:", {
+        hasUnicornParts: !!clearedData.unicornParts,
+        showMatrixBox: true
+      });
+    }, 100); // Brief delay to show feedback
+    
+    console.log("✅ Avatar cleared - Matrix Box ready for user interaction");
   }
 
   const connectWallet = async () => {
     console.log("Connecting to wallet...")
-    setAvatarData((prev) => ({ ...prev, connectedWallet: "0x1234...5678" }))
+    const updatedData = { ...avatarData, connectedWallet: "0x1234...5678" };
+    setAvatarData(updatedData);
+    // FIXED: Save only to metadata, don't update main content for performance
+    saveToDatabase(updatedData, step, false);
   }
 
   const selectNFT = (nftId: string) => {
-    setAvatarData((prev) => ({ ...prev, selectedNFT: nftId }))
-  }
-
-
-
-
-
-  const regenerateAvatar = async () => {
-    console.log("Regenerating avatar...")
-    
-    // Generate new random parts - this will trigger auto-save via handleUnicornGenerated
-    const newParts = generateRandomUnicorn()
-    await handleUnicornGenerated(newParts)
+    const updatedData = { ...avatarData, selectedNFT: nftId };
+    setAvatarData(updatedData);
+    // FIXED: Save only to metadata, don't update main content for performance
+    saveToDatabase(updatedData, step, false);
   }
 
   const [isSaving, setIsSaving] = useState(false)
@@ -770,55 +881,47 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
     }
     
     setAvatarData(updatedAvatarData)
+    setShowMatrixBox(false) // Hide Matrix Box when unicorn is generated
+    console.log("🎲 Matrix Box hidden - unicorn generated successfully");
     
-    // DISABLED: Automatic save to database after generation
-    // try {
-    //   // Automatically save to database immediately after generation
-    //   const avatarPayload: any = {
-    //     name: updatedAvatarData.name,
-    //     type: updatedAvatarData.type,
-    //     romUnicornType: updatedAvatarData.romUnicornType,
-    //     unicornParts: updatedAvatarData.unicornParts,
-    //     isActive: false,
-    //   };
-    //   
-    //   // Only include optional fields if they have values
-    //   if (documentId) avatarPayload.documentId = documentId;
-    //   if (updatedAvatarData.personality) avatarPayload.personality = updatedAvatarData.personality;
-    //   if (updatedAvatarData.characterNames) avatarPayload.characterNames = updatedAvatarData.characterNames;
-    //   if (updatedAvatarData.customType) avatarPayload.customType = updatedAvatarData.customType;
-    //   if (updatedAvatarData.uploadedImage) avatarPayload.uploadedImage = updatedAvatarData.uploadedImage;
-    //   if (updatedAvatarData.selectedStyle) avatarPayload.selectedStyle = updatedAvatarData.selectedStyle;
-    //   if (updatedAvatarData.connectedWallet) avatarPayload.connectedWallet = updatedAvatarData.connectedWallet;
-    //   if (updatedAvatarData.selectedNFT) avatarPayload.selectedNFT = updatedAvatarData.selectedNFT;
-    //   if (updatedAvatarData.oauthConnections && updatedAvatarData.oauthConnections.length > 0) {
-    //     // OAuth connections are now stored in a separate table, not in avatar payload
-    //     // avatarPayload.oauthConnections = updatedAvatarData.oauthConnections;
-    //   }
-    //   
-    //   console.log("Avatar payload being sent:", JSON.stringify(avatarPayload, null, 2));
-    //   
-    //   const newAvatar = await createAvatarInDB(avatarPayload)
-    //   
-    //   // Auto-select the newly created avatar
-    //   if (newAvatar) {
-    //     await setActiveAvatar(newAvatar.id)
-    //   }
-    //   
-    //   console.log("Avatar automatically saved after lootbox generation:", newAvatar)
-    // } catch (error) {
-    //   console.error("Failed to auto-save avatar:", error)
-    //   // Show error to user
-    //   alert("Failed to save avatar. Please try again.")
-    // } finally {
-    //   setIsSaving(false)
-    //   isProcessingRef.current = false
-    // }
-    
-    // Clean up state since auto-save is disabled
-    setIsSaving(false)
-    isProcessingRef.current = false
-  }, [avatarData, createAvatarInDB, setActiveAvatar, documentId])
+    // FIXED: Immediately save and propagate changes to main agent data
+    try {
+      await saveToDatabase(updatedAvatarData, step, true);
+      console.log("✅ Generated unicorn saved and propagated to agent data");
+      
+      // RESTORED: Save to database for avatar selection functionality
+      const avatarPayload: any = {
+        name: updatedAvatarData.name,
+        type: updatedAvatarData.type,
+        romUnicornType: updatedAvatarData.romUnicornType,
+        unicornParts: updatedAvatarData.unicornParts,
+        isActive: false,
+      };
+      
+      // Only include optional fields if they have values
+      if (documentId) avatarPayload.documentId = documentId;
+      if (updatedAvatarData.personality) avatarPayload.personality = updatedAvatarData.personality;
+      if (updatedAvatarData.characterNames) avatarPayload.characterNames = updatedAvatarData.characterNames;
+      if (updatedAvatarData.customType) avatarPayload.customType = updatedAvatarData.customType;
+      if (updatedAvatarData.uploadedImage) avatarPayload.uploadedImage = updatedAvatarData.uploadedImage;
+      if (updatedAvatarData.selectedStyle) avatarPayload.selectedStyle = updatedAvatarData.selectedStyle;
+      if (updatedAvatarData.connectedWallet) avatarPayload.connectedWallet = updatedAvatarData.connectedWallet;
+      if (updatedAvatarData.selectedNFT) avatarPayload.selectedNFT = updatedAvatarData.selectedNFT;
+      
+      console.log("Avatar payload being sent:", JSON.stringify(avatarPayload, null, 2));
+      
+      const newAvatar = await createAvatarInDB(avatarPayload)
+      
+      console.log("Avatar saved to database for selection:", newAvatar)
+    } catch (error) {
+      console.error("Failed to save avatar:", error)
+      // Show error to user
+      alert("Failed to save avatar. Please try again.")
+    } finally {
+      setIsSaving(false)
+      isProcessingRef.current = false
+    }
+  }, [avatarData, createAvatarInDB, documentId, saveToDatabase, step])
 
   const handleSelectAvatar = async (avatar: Avatar) => {
     try {
@@ -826,7 +929,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
       await setActiveAvatar(avatar.id)
       
       // Load the selected avatar data into the current form for viewing
-      setAvatarData({
+      const updatedAvatarData = {
         name: avatar.name,
         personality: avatar.personality,
         characterNames: avatar.characterNames,
@@ -842,12 +945,17 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
         isAuthenticated: (avatar as any).oauthConnections?.length > 0 || avatarData.isAuthenticated,
         accessToken: avatarData.accessToken,
         shopifyStore: avatarData.shopifyStore,
-      })
+      };
       
-      // Go to step 1 to show the selected avatar
-      setStep(1)
+      setAvatarData(updatedAvatarData);
       
-      console.log(`Avatar "${avatar.name}" is now active for this document`)
+      // FIXED: Update main content when selecting from library so avatar is saved to agent
+      await saveToDatabase(updatedAvatarData, step, true);
+      
+      // REMOVED: Don't force tab change during save operations - let user stay on current tab
+      // setStep(1)
+      
+      console.log(`Avatar "${avatar.name}" is now active and saved to agent data`)
     } catch (error) {
       console.error('Failed to select avatar:', error)
     }
@@ -1072,6 +1180,8 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
                           onClick={() => {
                             setShowCreateNew(false)
                             setAvatarData(prev => ({ ...prev, unicornParts: undefined }))
+                            setShowMatrixBox(true) // Show Matrix Box when going back to selection
+                            console.log("🔄 Back to Selection - Matrix Box should show");
                           }}
                           variant="outline"
                           size="sm"
@@ -1091,8 +1201,19 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
                         Generate New Avatar
                       </h4>
 
-                      {/* Matrix Box - Only show when no unicorn parts generated */}
-                      {!avatarData.unicornParts && (
+                      {/* Matrix Box - Show when explicitly requested or when no unicorn parts exist */}
+                      {(() => {
+                        const hasUnicornParts = !!(avatarData.unicornParts && Object.keys(avatarData.unicornParts).length > 0);
+                        const shouldShow = showMatrixBox || !hasUnicornParts;
+                        console.log('🎲 Matrix Box render check:', {
+                          showMatrixBox,
+                          hasUnicornParts,
+                          unicornPartsValue: avatarData.unicornParts,
+                          shouldShow,
+                          step
+                        });
+                        return shouldShow;
+                      })() && (
                         <div className="space-y-4">
                           <MatrixBox onUnicornGenerated={handleUnicornGenerated} />
                           
@@ -1127,11 +1248,12 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
                           <div className="flex flex-col sm:flex-row justify-center gap-3 sm:gap-4">
                             <Button
                               onClick={handleGenerateRandomUnicorn}
+                              disabled={isRegenerating}
                               variant="outline"
-                              className="bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30 transition-all duration-150 h-10 sm:h-auto"
+                              className="bg-green-500/20 border-green-500/30 text-green-400 hover:bg-green-500/30 transition-all duration-150 h-10 sm:h-auto disabled:opacity-50"
                             >
-                              <span className="mr-2">🔄</span>
-                              Regenerate
+                              <span className="mr-2">{isRegenerating ? '⏳' : '🔄'}</span>
+                              {isRegenerating ? 'Clearing...' : 'Regenerate'}
                             </Button>
                             
                             {/* Auto-saved indicator */}
@@ -1575,7 +1697,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
                           name: avatarData.name || "My AI Agent",
                           description: avatarData.personality || "A helpful AI assistant",
                           domain: "E-commerce",
-                          theme: "green",
+                          theme: currentTheme, // FIXED: Use current theme state to reflect latest selection
                           createdAt: new Date().toISOString(),
                           avatar: avatarData.unicornParts ? {
                             type: 'rom-unicorn',
@@ -1677,12 +1799,27 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
                           ]
                         } as any)}
                         onThemeChange={(theme) => {
-                          // Handle theme changes if needed
-                          console.log("Theme changed to:", theme);
+                          // FIXED: Properly track and save theme changes
+                          console.log("🎨 Avatar Creator - Theme changed to:", theme);
+                          console.log("🎨 Previous theme:", currentTheme);
+                          
+                          // Update local theme state
+                          setCurrentTheme(theme);
+                          
+                          // Immediately sync theme to main content for better UX
+                          if (onThemeChange) {
+                            console.log("🎨 Calling onThemeChange callback with:", theme);
+                            onThemeChange(theme);
+                            console.log("✅ Theme change propagated to main agent data");
+                          } else {
+                            console.warn("⚠️ onThemeChange callback not available");
+                          }
                         }}
-                        onDataChange={(agentData) => {
-                          // Handle data changes if needed
-                          console.log("Agent data changed:", agentData);
+                        onDataChange={(updatedAgentData) => {
+                          // FIXED: Handle other data changes if needed
+                          console.log("Agent data changed:", updatedAgentData);
+                          // For now, we only handle avatar and theme changes separately
+                          // Other data changes can be handled here if needed in the future
                         }}
                       />
                     </div>
@@ -1705,7 +1842,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
             )}
 
             {/* Navigation Buttons */}
-            <div className="flex justify-between mt-4 pt-4 sm:pt-6 border-t border-gray-800">
+            <div className="flex justify-between items-center mt-4 pt-4 sm:pt-6 border-t border-gray-800">
               <Button
                 onClick={prevStep}
                 disabled={step === 1}
@@ -1714,7 +1851,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
               >
                 Previous
               </Button>
-
+           
               {step < 4 && (
                 <Button
                   onClick={nextStep}

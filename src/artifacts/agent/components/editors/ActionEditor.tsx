@@ -871,7 +871,7 @@ export const ActionEditor = memo(({
   if (viewMode === 'mindmap') {
     return (
       <div className="space-y-4">
-        {viewToggleHeader}
+        {/* {viewToggleHeader} */}
         {/* Mind Map Editor */}
         <div className="min-h-[600px] max-h-screen rounded-xl border border-blue-500/20 overflow-auto">
           <ActionMindMapEditor

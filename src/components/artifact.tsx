@@ -12,7 +12,7 @@ import {
 import useSWR, { useSWRConfig } from 'swr';
 import { useDebounceCallback, useWindowSize } from 'usehooks-ts';
 import type { Document, Vote } from '@/lib/db/schema';
-import { fetcher } from '@/lib/utils';
+import { fetcher, cn } from '@/lib/utils';
 import { MultimodalInput } from './multimodal-input';
 import { Toolbar } from './toolbar';
 import { VersionFooter } from './version-footer';
@@ -506,16 +506,19 @@ function PureArtifact({
           )}
 
           <motion.div
-            className="fixed bg-black h-dvh flex flex-col overflow-y-scroll md:border-l border-green-500/20"
+            className={cn(
+              "fixed bg-black h-dvh flex flex-col overflow-y-scroll",
+              isAgentArtifact 
+                ? "w-full left-0 top-0" 
+                : "md:border-l border-green-500/20"
+            )}
             initial={
               isAgentArtifact
                 ? {
-                    // Agent artifacts: simple fade in, full screen immediately
+                    // Agent artifacts: simple fade in, use CSS for responsive sizing
                     opacity: 0,
                     x: 0,
                     y: 0,
-                    height: windowHeight,
-                    width: windowWidth ? windowWidth : 'calc(100dvw)',
                     borderRadius: 0,
                   }
                 : isMobile
@@ -539,7 +542,7 @@ function PureArtifact({
             animate={
               isAgentArtifact
                 ? {
-                    // Agent artifacts: simple fade in
+                    // Agent artifacts: simple fade in, let CSS handle sizing
                     opacity: 1,
                     transition: {
                       duration: 0.3,

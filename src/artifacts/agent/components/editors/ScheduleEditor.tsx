@@ -906,7 +906,7 @@ export const ScheduleEditor = memo(({
   if (viewMode === 'mindmap') {
     return (
       <div className="space-y-4 max-h-screen overflow-y-auto">
-        {viewToggleHeader}
+        {/* {viewToggleHeader} */}
         {/* Mind Map Editor */}
         <div className="min-h-[600px] max-h-screen rounded-xl border border-orange-500/20 overflow-auto">
           <ScheduleMindMapEditor

@@ -1,6 +1,6 @@
 import type { AgentModel } from './model';
 import type { AgentAction } from './action';
-import type { AgentSchedule } from './schedule';
+import type { LegacyAgentSchedule } from './schedule';
 
 export interface AgentData {
   id?: string; // Optional for new agents, required for existing ones
@@ -8,8 +8,10 @@ export interface AgentData {
   description: string;
   domain: string;
   models: AgentModel[];
+  enums?: any[]; // Generated database enums for deployment
   actions: AgentAction[];
-  schedules: AgentSchedule[];
+  schedules: LegacyAgentSchedule[];
+  prismaSchema?: string; // Generated database schema for deployment
   createdAt: string;
   theme?: string; // Stored theme selection for the agent
   avatar?: {
@@ -53,10 +55,40 @@ export interface AgentData {
     status: string;
     [key: string]: any; // Allow additional metadata fields from orchestrator
   };
+  oauthTokens?: Record<string, {
+    access_token: string;
+    refresh_token?: string;
+    expires_at?: number;
+    scope?: string;
+  }>;
+  apiKeys?: Record<string, {
+    key: string;
+    name: string;
+    createdAt: string;
+    lastUsed?: string;
+  }>;
+  credentials?: Record<string, {
+    type: 'oauth' | 'api_key' | 'custom';
+    data: any;
+    isActive: boolean;
+  }>;
+  authConfig?: {
+    providers: string[];
+    defaultProvider?: string;
+    settings: Record<string, any>;
+  };
+  integrations?: Array<{
+    id: string;
+    provider: string;
+    status: 'connected' | 'disconnected' | 'error';
+    connectionDate: string;
+    lastSync?: string;
+  }>;
+  settings?: Record<string, any>;
 }
 
 export interface AgentArtifactMetadata {
-  selectedTab: 'onboard' | 'models' | 'actions' | 'schedules';
+  selectedTab: 'onboard' | 'models' | 'actions' | 'schedules' | 'chat';
   editingModel: string | null;
   editingAction: string | null;
   editingSchedule: string | null;
@@ -81,4 +113,5 @@ export interface AgentArtifactMetadata {
     editingRecordId?: string | null;
     isAddingRecord?: boolean;
   } | null;
+  showExplanationModal?: 'models' | 'actions' | 'schedules' | null;
 } 
