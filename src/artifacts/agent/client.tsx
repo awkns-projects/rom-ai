@@ -877,7 +877,7 @@ const AgentBuilderContent = memo(({
             
             // Save the updated data to persist changes (including prismaSchema)
             const agentContent = JSON.stringify(updatedData, null, 2);
-            onSaveContent(agentContent, true); // Use debounced save to avoid excessive saves during streaming
+            onSaveContent(agentContent, false); // Use debounced save to avoid excessive saves during streaming
             console.log('💾 Saved updated agent data with preserved prismaSchema and enums');
             
             return updatedData;
@@ -891,7 +891,7 @@ const AgentBuilderContent = memo(({
       console.warn('❌ Failed to parse updated content:', e);
       console.warn('📄 Problematic content (first 200 chars):', content ? content.substring(0, 200) : 'none');
     }
-  }, [content]); // Remove agentData dependency to prevent infinite loop
+  }, [content, agentData?.name, agentData?.description, agentData?.theme, agentData?.avatar, agentData?.externalApis, agentData?.oauthTokens, agentData?.apiKeys]); // Remove agentData dependency to prevent infinite loop
 
   // NOW ALL HOOKS ARE DECLARED - we can safely do early returns
   if (isLoading) {
