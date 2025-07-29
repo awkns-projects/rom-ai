@@ -655,7 +655,7 @@ const AgentBuilderContent = memo(({
       });
       
       const agentContent = JSON.stringify(agentData, null, 2);
-      onSaveContent(agentContent, false); // FIXED: No debounce/autosave - immediate save
+      onSaveContent(agentContent, true); // FIXED: No debounce/autosave - immediate save
       
       setHasUnsavedChanges(false);
       console.log('✅ Agent data saved immediately without autosave');
@@ -882,7 +882,7 @@ const AgentBuilderContent = memo(({
             
             // Save the updated data to persist changes (including prismaSchema)
             const agentContent = JSON.stringify(updatedData, null, 2);
-            onSaveContent(agentContent, true); // Use debounced save to avoid excessive saves during streaming
+            // onSaveContent(agentContent, true); // Use debounced save to avoid excessive saves during streaming
             console.log('💾 Saved updated agent data with preserved prismaSchema and enums');
             
             return updatedData;
