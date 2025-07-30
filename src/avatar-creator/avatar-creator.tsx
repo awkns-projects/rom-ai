@@ -18,7 +18,142 @@ import { AvatarList } from "@/components/avatar-list"
 import { useAvatars, type Avatar } from "@/hooks/use-avatar"
 import { OnboardContent } from "@/artifacts/agent/components/OnboardContent"
 import { MobileAppDemoWrapper } from "@/artifacts/agent/components/MobileAppDemo"
-import { saveAvatarCreatorState, loadAvatarCreatorState, createDebouncedSaver } from "@/artifacts/agent/utils/mindmap-persistence"
+// Avatar and theme data is now stored directly in document content via API
+
+/**
+ * Save avatar creator data directly to document content
+ */
+async function saveAvatarCreatorState(
+  documentId: string,
+  state: {
+    avatarData?: any;
+    step?: number;
+    theme?: string;
+    name?: string;
+  }
+): Promise<void> {
+  try {
+    console.log('🎨 Saving avatar creator state to document content:', { documentId, state });
+    
+    // Validate documentId before making the request
+    if (!documentId || documentId === 'init' || documentId.trim() === '') {
+      throw new Error(`Invalid documentId: ${documentId}. Cannot save avatar state without a valid document ID.`);
+    }
+    
+    // First, try to get the existing document
+    const getResponse = await fetch(`/api/document?id=${documentId}`);
+    let existingDocument = null;
+    let existingContent = null;
+
+    if (getResponse.ok) {
+      const documents = await getResponse.json();
+      existingDocument = Array.isArray(documents) ? documents[0] : documents;
+      
+      if (existingDocument?.content) {
+        try {
+          existingContent = JSON.parse(existingDocument.content);
+        } catch (e) {
+          console.warn('Failed to parse existing document content, creating new structure');
+          existingContent = {};
+        }
+      }
+    }
+
+    // Prepare the updated content
+    const updatedContent = {
+      name: 'New Agent',
+      description: '',
+      domain: '',
+      models: [],
+      enums: [],
+      actions: [],
+      schedules: [],
+      createdAt: new Date().toISOString(),
+      ...existingContent, // Preserve existing content
+      // Update with new state data
+      ...(state.name && { name: state.name }),
+      ...(state.avatarData && { avatar: state.avatarData }),
+      ...(state.theme && { theme: state.theme }),
+    };
+
+    const title = state.name || existingContent?.name || 'AI Agent System';
+
+    // Update the document content
+    const response = await fetch(`/api/document?id=${documentId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title,
+        content: JSON.stringify(updatedContent, null, 2),
+        kind: 'agent',
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Failed to save avatar creator state:', errorText);
+      throw new Error(`Failed to save avatar creator state: ${response.status} ${errorText}`);
+    }
+
+    console.log('✅ Avatar creator state saved successfully to document content');
+  } catch (error) {
+    console.error('❌ Error saving avatar creator state:', error);
+    throw error;
+  }
+}
+
+/**
+ * Load avatar creator data from document content
+ */
+async function loadAvatarCreatorState(
+  documentId: string
+): Promise<{
+  avatarData?: any;
+  step?: number;
+  theme?: string;
+  name?: string;
+} | null> {
+  try {
+    console.log('🔍 Loading avatar creator state from document content:', documentId);
+    
+    const response = await fetch(`/api/document?id=${documentId}`);
+    if (!response.ok) {
+      console.log('📭 No existing document found or access denied');
+      return null;
+    }
+
+    const documents = await response.json();
+    const document = Array.isArray(documents) ? documents[0] : documents;
+    
+    if (!document?.content) {
+      console.log('📭 No document content found');
+      return null;
+    }
+
+    let agentData;
+    try {
+      agentData = JSON.parse(document.content);
+    } catch (e) {
+      console.error('❌ Failed to parse document content:', e);
+      return null;
+    }
+
+    const avatarState = {
+      avatarData: agentData.avatar || null,
+      theme: agentData.theme || null,
+      name: agentData.name || null,
+      step: 1, // Default step if not stored
+    };
+    
+    console.log('📥 Loaded avatar creator state from document content:', avatarState);
+    return avatarState;
+  } catch (error) {
+    console.error('❌ Error loading avatar creator state:', error);
+    return null;
+  }
+}
 
 type AvatarType = "rom-unicorn" | "custom"
 type RomUnicornType = "default" | "random"
@@ -428,6 +563,8 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
           step: currentStep,
           // CRITICAL FIX: Include theme data in database save
           theme: currentTheme,
+          // Include name for direct storage in document content
+          name: data.name,
         });
         console.log('✅ Avatar data and theme saved to database metadata successfully:', {
           hasTheme: !!currentTheme,
@@ -652,6 +789,8 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
             oauthConnections: [],
           },
           step: 1,
+          name: "",
+          theme: 'green', // Reset to default theme
         });
       } catch (error) {
         console.error("Failed to clear saved data:", error);
@@ -1114,6 +1253,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
             avatarData,
             step,
             theme: theme, // Use the new theme directly, not currentTheme state
+            name: avatarData.name,
           });
           console.log('✅ Avatar data and theme saved with new theme:', theme);
         } catch (error) {

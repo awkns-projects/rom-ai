@@ -126,14 +126,10 @@ export async function PATCH(request: Request) {
   // Merge existing metadata with new metadata
   const existingMetadata = (document.metadata as any) || {};
   
-  // Deep merge mindMapStates to avoid overwriting other states
+  // Simple merge without mindMapStates
   const mergedMetadata = {
     ...existingMetadata,
     ...metadata,
-    mindMapStates: {
-      ...existingMetadata.mindMapStates,
-      ...metadata.mindMapStates
-    },
     lastUpdated: new Date().toISOString()
   };
 

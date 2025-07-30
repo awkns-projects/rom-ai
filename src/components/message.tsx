@@ -24,7 +24,6 @@ import { useArtifact } from '@/hooks/use-artifact';
 import useSWR from 'swr';
 import { LoaderIcon } from './icons';
 import { MobileAppDemo } from '@/artifacts/agent/components/MobileAppDemo';
-import { loadAvatarCreatorState } from '@/artifacts/agent/utils/mindmap-persistence';
 
 // Agent Builder Loading Component
 const AgentBuilderLoading = memo(({ args, message, isLoading, metadata, persistedMetadata }: { 
@@ -568,49 +567,32 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
     return null;
   }, [documents, result?.content]);
 
-  // Fetch mindmap state data for UI preferences
-  const { data: mindmapState } = useSWR(
-    result?.id ? `mindmap-state-${result.id}` : null,
-    () => result?.id ? loadAvatarCreatorState(result.id) : null,
-    { 
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false
-    }
-  );
+  // Note: Avatar and theme data is now stored directly in document content
+  // No need to fetch separate mindmap state for UI preferences
 
-  // Extract UI preferences from mindmap state and agent data
+  // Extract UI preferences from agent data and document content
   const uiPreferences = useMemo(() => {
     const document = documents?.[0];
     
-    // Extract data from mindmap state
-    const avatarData = mindmapState?.avatarData;
-    const mindmapTheme = mindmapState?.theme;
-    console.log('mindmapState: ',mindmapState)
-    // Extract name - priority: avatarData.name > agentData.name > document.title > result.title > 'AI Agent System'
-    const name = avatarData?.name || 
-                 agentData?.name || 
+    // Extract data directly from agent data (which comes from document content)
+    console.log('agentData: ', agentData, document);
+    
+    // Extract name - priority: agentData.name > document.title > result.title > 'AI Agent System'
+    const name = agentData?.avatar?.name || 
                  document?.title || 
                  result?.title || 
                  'AI Agent System';
     
-    // Extract avatar info from mindmap avatarData
-    const avatar = avatarData ? {
-      type: avatarData.type || 'rom-unicorn',
-      customType: avatarData.customType,
-      romUnicornType: avatarData.romUnicornType,
-      unicornParts: avatarData.unicornParts,
-      personality: avatarData.personality,
-      isAuthenticated: avatarData.isAuthenticated,
-      uploadedImage: avatarData.uploadedImage
-    } : (agentData?.avatar || null);
+    // Extract avatar info directly from agentData
+    const avatar = agentData?.avatar || null;
     
-    // Extract theme - priority: agentData.theme > mindmapTheme > 'green'
-    const theme =  mindmapTheme || agentData?.theme || 'green';
+    // Extract theme - priority: agentData.theme > 'green'
+    const theme = agentData?.theme || 'green';
     
     // Extract domain - fallback to document title or default
     const domain = agentData?.domain || document?.title || 'AI Agent System';
 
-    console.log('🎨 Extracted UI preferences from mindmap state:', {
+    console.log('🎨 Extracted UI preferences from document content:', {
       name,
       theme,
       avatar: avatar ? {
@@ -621,14 +603,12 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
       } : 'None',
       domain,
       sources: {
-        mindmapAvatarName: avatarData?.name,
         agentDataName: agentData?.name,
         documentTitle: document?.title,
         resultTitle: result?.title,
         agentDataTheme: agentData?.theme,
-        mindmapTheme: mindmapTheme,
-        hasMindmapData: !!mindmapState,
-        hasAvatarData: !!avatarData
+        hasAgentData: !!agentData,
+        hasAvatar: !!avatar
       }
     });
 
@@ -638,7 +618,7 @@ const AgentSummary = memo(({ result, isReadonly, chatId }: { result: any; isRead
       avatar,
       domain
     };
-  }, [mindmapState, agentData, documents, result]);
+  }, [agentData, documents, result]);
   
   const openAgentBuilder = () => {
     if (agentData && result?.id) {
