@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { saveOAuthConnection } from '@/lib/db/oauth-tokens';
+import { auth } from '@/app/(auth)/auth';
+import { handleOAuthCallback, createOAuthCallbackData } from '@/lib/oauth-callback-handler';
 import { verifyOAuthState, generateOAuthState } from '@/lib/oauth-security';
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const code = searchParams.get('code');
     const state = searchParams.get('state');
@@ -84,40 +90,29 @@ export async function GET(request: NextRequest) {
 
     const profileData = await profileResponse.json();
 
-    // Save OAuth connection to database
-    const connectionData = {
-      provider: 'google' as const,
-      providerUserId: profileData.id,
-      accessToken: tokenData.access_token,
-      refreshToken: tokenData.refresh_token || null,
-      expiresAt: tokenData.expires_in ? new Date(Date.now() + tokenData.expires_in * 1000) : null,
-      scope: tokenData.scope || 'openid email profile https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/gmail.readonly',
-      profileData: {
-        id: profileData.id,
-        name: profileData.name,
-        email: profileData.email,
-        picture: profileData.picture,
-        verified_email: profileData.verified_email,
-        locale: profileData.locale,
-      },
-    };
-
-    // TODO: Get actual user ID from session
-    // For now, we'll use a placeholder user ID
-    const userId = 'temp-user-id';
-    await saveOAuthConnection(userId, connectionData);
-
-    // Redirect back to chat with success
-    return NextResponse.redirect(
-      new URL(`/chat?oauth_success=google&connection_data=${encodeURIComponent(JSON.stringify({
-        provider: 'google',
-        userId: profileData.id,
-        name: profileData.name,
-        email: profileData.email,
-        picture: profileData.picture,
-        isActive: true
-      }))}`, request.url)
+    // Create OAuth callback data
+    const callbackData = createOAuthCallbackData(
+      'google',
+      profileData.id,
+      tokenData.access_token,
+      {
+        username: profileData.name,
+        refreshToken: tokenData.refresh_token || null,
+        expiresAt: tokenData.expires_in ? new Date(Date.now() + tokenData.expires_in * 1000) : null,
+        scopes: tokenData.scope?.split(' ') || ['openid', 'email', 'profile'],
+        profileData: {
+          id: profileData.id,
+          name: profileData.name,
+          email: profileData.email,
+          picture: profileData.picture,
+          verified_email: profileData.verified_email,
+          locale: profileData.locale,
+        }
+      }
     );
+
+    // Handle OAuth callback and save to database
+    return await handleOAuthCallback(request, 'google', callbackData);
 
   } catch (error) {
     console.error('Google OAuth callback error:', error);

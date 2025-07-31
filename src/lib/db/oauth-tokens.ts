@@ -90,7 +90,7 @@ export async function saveOAuthConnection(
           scopes: connectionData.scopes,
           providerData: connectionData.providerData,
           username: connectionData.username,
-          documentId: connectionData.documentId,
+          documentId: connectionData.documentId, // Temporarily commented out
           isActive: true,
           updatedAt: new Date()
         })
@@ -104,7 +104,7 @@ export async function saveOAuthConnection(
         .insert(oauthConnection)
         .values({
           userId,
-          documentId: connectionData.documentId,
+          // documentId: connectionData.documentId, // Temporarily commented out
           provider: connectionData.provider,
           providerUserId: connectionData.providerUserId,
           username: connectionData.username,
