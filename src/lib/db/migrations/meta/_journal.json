@@ -50,6 +50,27 @@
       "when": 1752817944646,
       "tag": "0006_glamorous_gorilla_man",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1753925767172,
+      "tag": "0007_oauth_document_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1753926322035,
+      "tag": "0008_icy_proudstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1753926581716,
+      "tag": "0009_awesome_captain_cross",
+      "breakpoints": true
     }
   ]
 }
