@@ -892,7 +892,8 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
         },
         body: JSON.stringify({
           providerId,
-          shopDomain
+          shopDomain,
+          documentId
         })
       })
 

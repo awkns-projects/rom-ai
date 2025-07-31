@@ -27,6 +27,16 @@ export async function handleOAuthCallback(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Try to get documentId from state parameter
+    const { searchParams } = new URL(request.url);
+    const state = searchParams.get('state');
+    const documentId = state?.includes('_') ? state.split('_')[1] : null;
+    
+    // If we have a documentId, add it to the callback data
+    if (documentId) {
+      callbackData.documentId = documentId;
+    }
+
     // Save OAuth connection to database
     const saveResult = await saveOAuthConnection(session.user.id, callbackData);
     

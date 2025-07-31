@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { providerId, shopDomain } = await request.json();
+    const { providerId, shopDomain, documentId } = await request.json();
 
     if (!providerId) {
       return NextResponse.json({ error: 'Provider ID is required' }, { status: 400 });
@@ -19,11 +19,14 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
     const redirectUri = `${baseUrl}/api/oauth/${providerId}/callback`;
 
+    // Include documentId in state if provided
+    const stateWithDocumentId = documentId ? `${state}_${documentId}` : state;
+
     const params = new URLSearchParams({
       client_id: getClientId(providerId),
       redirect_uri: redirectUri,
       response_type: 'code',
-      state,
+      state: stateWithDocumentId,
       ...getProviderScopes(providerId)
     });
 
