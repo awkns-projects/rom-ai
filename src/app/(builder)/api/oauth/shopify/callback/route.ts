@@ -59,7 +59,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify HMAC signature for security
-    if (!verifyShopifyHmac(params, process.env.SHOPIFY_CLIENT_SECRET!)) {
+    const shopifySecret = process.env.SHOPIFY_CLIENT_SECRET;
+    if (!shopifySecret) {
+      console.error('SHOPIFY_CLIENT_SECRET is not set');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+    
+    if (!verifyShopifyHmac(params, shopifySecret)) {
       return NextResponse.json({ error: 'Invalid HMAC signature' }, { status: 400 });
     }
 
@@ -70,14 +76,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Exchange authorization code for access token
+    const shopifyClientId = process.env.SHOPIFY_CLIENT_ID;
+    if (!shopifyClientId) {
+      console.error('SHOPIFY_CLIENT_ID is not set');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+    
     const tokenResponse = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        client_id: process.env.SHOPIFY_CLIENT_ID!,
-        client_secret: process.env.SHOPIFY_CLIENT_SECRET!,
+        client_id: shopifyClientId,
+        client_secret: shopifySecret,
         code: validatedParams.code
       })
     });
