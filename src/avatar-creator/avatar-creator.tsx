@@ -884,6 +884,11 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
         shopDomain = shopDomainInput
       }
 
+      // Get current chat ID from URL if available
+      const currentChatId = typeof window !== 'undefined' 
+        ? window.location.pathname.match(/\/chat\/([^\/\?]+)/)?.[1] 
+        : null;
+
       // Call server-side API to generate OAuth URL
       const response = await fetch('/api/oauth/generate-url', {
         method: 'POST',
@@ -893,7 +898,8 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
         body: JSON.stringify({
           providerId,
           shopDomain,
-          documentId
+          documentId,
+          chatId: currentChatId
         })
       })
 

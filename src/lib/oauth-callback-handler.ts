@@ -18,19 +18,34 @@ export interface OAuthCallbackData {
 export async function handleOAuthCallback(
   request: NextRequest,
   provider: string,
-  callbackData: OAuthCallbackData
+  callbackData: OAuthCallbackData,
+  originalChatId?: string
 ): Promise<NextResponse> {
+  // Try to get documentId and chatId from state parameter
+  const { searchParams } = new URL(request.url);
+  const state = searchParams.get('state');
+  
+  let documentId = null;
+  let chatId = null;
+  
+  if (state) {
+    const stateParts = state.split('_');
+    for (let i = 0; i < stateParts.length; i++) {
+      if (stateParts[i] === 'doc' && i + 1 < stateParts.length) {
+        documentId = stateParts[i + 1];
+      }
+      if (stateParts[i] === 'chat' && i + 1 < stateParts.length) {
+        chatId = stateParts[i + 1];
+      }
+    }
+  }
+  
   try {
     // Verify user session
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    // Try to get documentId from state parameter
-    const { searchParams } = new URL(request.url);
-    const state = searchParams.get('state');
-    const documentId = state?.includes('_') ? state.split('_')[1] : null;
     
     // If we have a documentId, add it to the callback data
     if (documentId) {
@@ -42,9 +57,10 @@ export async function handleOAuthCallback(
     
     if (!saveResult.success) {
       console.error(`Failed to save ${provider} OAuth connection:`, saveResult.error);
-      return NextResponse.redirect(
-        new URL(`/chat?oauth_error=${encodeURIComponent('Failed to save connection')}`, request.url)
-      );
+      const redirectUrl = chatId 
+        ? `/chat/${chatId}?oauth_error=${encodeURIComponent('Failed to save connection')}`
+        : `/chat?oauth_error=${encodeURIComponent('Failed to save connection')}`;
+      return NextResponse.redirect(new URL(redirectUrl, request.url));
     }
 
     // Create response data for client
@@ -63,15 +79,18 @@ export async function handleOAuthCallback(
 
     const connectionDataEncoded = encodeURIComponent(JSON.stringify(responseData));
     
-    return NextResponse.redirect(
-      new URL(`/chat?oauth_success=${provider}&connection=${connectionDataEncoded}`, request.url)
-    );
+    const redirectUrl = chatId 
+      ? `/chat/${chatId}?oauth_success=${provider}&connection=${connectionDataEncoded}`
+      : `/chat?oauth_success=${provider}&connection=${connectionDataEncoded}`;
+    
+    return NextResponse.redirect(new URL(redirectUrl, request.url));
 
   } catch (error) {
     console.error(`${provider} OAuth callback error:`, error);
-    return NextResponse.redirect(
-      new URL(`/chat?oauth_error=${encodeURIComponent('OAuth callback failed')}`, request.url)
-    );
+    const redirectUrl = chatId 
+      ? `/chat/${chatId}?oauth_error=${encodeURIComponent('OAuth callback failed')}`
+      : `/chat?oauth_error=${encodeURIComponent('OAuth callback failed')}`;
+    return NextResponse.redirect(new URL(redirectUrl, request.url));
   }
 }
 
