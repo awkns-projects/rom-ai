@@ -88,7 +88,7 @@ export const document = pgTable(
   },
   (table) => {
     return {
-      pk: primaryKey({ columns: [table.id, table.createdAt] }),
+      pk: primaryKey({ columns: [table.id] }),
     };
   },
 );
