@@ -11,7 +11,7 @@ import { Artifact } from './artifact';
 import { MultimodalInput } from './multimodal-input';
 import { Messages } from './messages';
 import type { VisibilityType } from './visibility-selector';
-import { useArtifactSelector } from '@/hooks/use-artifact';
+import { useArtifactSelector, useArtifact } from '@/hooks/use-artifact';
 import { unstable_serialize } from 'swr/infinite';
 import { getChatHistoryPaginationKey } from './sidebar-history';
 import { toast } from './toast';
@@ -128,10 +128,13 @@ export function Chat({
     },
   });
 
+  const { setArtifact } = useArtifact();
   const searchParams = useSearchParams();
   const query = searchParams.get('query');
+  const openAgentBuilder = searchParams.get('open_agent_builder');
 
   const [hasAppendedQuery, setHasAppendedQuery] = useState(false);
+  const [hasOpenedAgentBuilder, setHasOpenedAgentBuilder] = useState(false);
 
   useEffect(() => {
     if (query && !hasAppendedQuery) {
@@ -144,6 +147,33 @@ export function Chat({
       window.history.replaceState({}, '', `/chat/${id}`);
     }
   }, [query, append, hasAppendedQuery, id]);
+
+  // Handle opening agent builder from URL parameter
+  useEffect(() => {
+    if (openAgentBuilder && !hasOpenedAgentBuilder) {
+      // Set the artifact to open agent builder
+      setArtifact({
+        documentId: openAgentBuilder,
+        title: 'Agent Builder',
+        kind: 'agent',
+        content: '',
+        isVisible: true,
+        status: 'idle',
+        boundingBox: {
+          top: 0,
+          left: 0,
+          width: typeof window !== 'undefined' ? window.innerWidth : 1920,
+          height: typeof window !== 'undefined' ? window.innerHeight : 1080,
+        },
+      });
+      
+      setHasOpenedAgentBuilder(true);
+      // Clean up URL parameter
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.delete('open_agent_builder');
+      window.history.replaceState({}, '', newUrl.toString());
+    }
+  }, [openAgentBuilder, hasOpenedAgentBuilder, setArtifact]);
 
   const { data: votes } = useSWR<Array<Vote>>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,

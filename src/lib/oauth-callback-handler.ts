@@ -79,9 +79,19 @@ export async function handleOAuthCallback(
 
     const connectionDataEncoded = encodeURIComponent(JSON.stringify(responseData));
     
-    const redirectUrl = chatId 
-      ? `/chat/${chatId}?oauth_success=${provider}&connection=${connectionDataEncoded}`
-      : `/chat?oauth_success=${provider}&connection=${connectionDataEncoded}`;
+    // Check if we should redirect to agent builder
+    const shouldOpenAgentBuilder = documentId && chatId;
+    
+    let redirectUrl;
+    if (shouldOpenAgentBuilder) {
+      // Redirect to chat with agent builder open
+      redirectUrl = `/chat/${chatId}?oauth_success=${provider}&connection=${connectionDataEncoded}&open_agent_builder=${documentId}`;
+    } else {
+      // Fallback to regular chat redirect
+      redirectUrl = chatId 
+        ? `/chat/${chatId}?oauth_success=${provider}&connection=${connectionDataEncoded}`
+        : `/chat?oauth_success=${provider}&connection=${connectionDataEncoded}`;
+    }
     
     return NextResponse.redirect(new URL(redirectUrl, request.url));
 
