@@ -343,7 +343,7 @@ export async function executeAgentGeneration(
       result.insights.actions = extractActionInsights(step2Result);
     }
 
-    sendStepUpdate(config, 'step2', 'complete', `Actions generated: ${step2Result.actions.length} actions`);
+    sendStepUpdate(config, 'step2', 'complete', `Actions generated: ${step2Result.actions.length} actions with ${step2Result.implementationComplexity} complexity`);
 
     // STEP 3: Schedule Generation
     sendStepUpdate(config, 'step3', 'processing', 'Generating schedules...');
@@ -383,7 +383,7 @@ export async function executeAgentGeneration(
       result.insights.schedules = extractScheduleInsights(step3Result);
     }
 
-    sendStepUpdate(config, 'step3', 'complete', `Schedules generated: ${step3Result.schedules.length} schedules`);
+    sendStepUpdate(config, 'step3', 'complete', `Schedules generated: ${step3Result.schedules.length} schedules with ${step3Result.implementationComplexity} complexity`);
 
     // STEP 4: Deployment - DISABLED
     // Deployment is now handled separately through the UI modal
@@ -527,7 +527,7 @@ function getStepResultSummary(stepName: string, stepResult: any): string {
     case 'step2':
       return `Actions: ${stepResult.actions?.length || 0} actions, ${stepResult.implementationComplexity} complexity`;
     case 'step3':
-      return `Schedules: ${stepResult.schedules?.length || 0} schedules, ${stepResult.implementationComplexity} complexity`;
+      return `Schedules: ${stepResult.schedules?.length || 0} schedules, ${stepResult.implementationComplexity || 'low'} complexity`;
     case 'step4':
       return `Deployment: ${stepResult.deploymentUrl || 'No URL available'}`;
     default:

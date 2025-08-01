@@ -435,7 +435,7 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    - Specify relationships between models
    - If external APIs are specified, design models that integrate with those APIs' data structures
 
-2. MANUAL ACTIONS (query/mutation only):
+2. BUSINESS PROCESS ACTIONS (query/mutation only):
    ${existingAgent ? `
    - For EXISTING actions: operation="update" with updateDescription of what changes
    - For NEW actions: operation="create"
@@ -443,11 +443,24 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    ` : 'All actions are new (operation="create")'}
    - Type: MUST be either 'query' (read data) or 'mutation' (write/modify data)
    - Operation: MUST be either 'create' (new action) or 'update' (modify existing action)
-   - User-triggered operations that require manual interaction
-   - Include role requirements (admin/member)
-   - Specify input/output requirements
-   - Define complexity and business value
-   - If external APIs are specified, design actions that interact with those APIs
+   
+   CRITICAL: Generate BUSINESS PROCESS ACTIONS, not basic CRUD operations
+   - Focus on workflows that integrate multiple systems
+   - Each action should orchestrate external API calls, data processing, and business logic
+   - Actions should represent complete business processes, not database operations
+   - Users already have basic CRUD capabilities - don't generate those
+   
+   EXAMPLES for inventory system with Shopify + Google Sheets + Gmail:
+   - "Sync Shopify Inventory" (mutation) - Connect to Shopify API, fetch inventory, process data
+   - "Update Stock Alerts" (mutation) - Write formatted alerts to Google Sheets with conditional highlighting  
+   - "Send Restock Notifications" (mutation) - Send personalized Gmail notifications with priority levels
+   - "Generate Inventory Analysis" (query) - Analyze trends, calculate reorder points, predict demand
+   
+   AVOID basic CRUD like:
+   - "Create Inventory Item", "Update Product", "List Orders" - these are basic database operations
+   - "Set Alert Thresholds" - this is configuration, not a business process
+   
+   Generate 3-5 meaningful business process actions that solve real automation needs
 
 3. AUTOMATED SCHEDULES (query/mutation only):
    ${existingAgent ? `
@@ -514,12 +527,12 @@ Convert the semantic requirements into concrete technical specifications with pr
         })).max(5),
         
         actions: z.array(z.object({
-          name: z.string(),
-          purpose: z.string(),
+          name: z.string().describe('Business process name (e.g., "Sync Shopify Inventory", "Send Gmail Notifications")'),
+          purpose: z.string().describe('Complete workflow description including external API integration and business logic'),
           type: z.enum(['query', 'mutation']),
           operation: z.enum(['create', 'update']),
           updateDescription: z.string().optional()
-        })).max(7),
+        })).min(3).max(7).describe('Business process actions that integrate external APIs and orchestrate workflows - NOT basic CRUD operations'),
         
         schedules: z.array(z.object({
           name: z.string(),
@@ -615,12 +628,20 @@ Using ALL the above information, convert these semantic requirements into concre
    - Consider integration requirements for external data fields
    - If external APIs specified, design models that match those APIs' data structures
 
-2. MANUAL ACTIONS - Use core features, user roles, and required data:
-   - Map core features to essential actions
-   - Design actions based on user roles (admin vs member)
-   - Include input fields based on required data from semantic analysis
-   - Consider urgency level for action prioritization
-   - If external APIs specified, design actions that interact with those APIs
+2. BUSINESS PROCESS ACTIONS - Use core features and external API integrations:
+   - Map each core feature to a complete business process action
+   - For external API requirements, create dedicated integration actions
+   - Each action should represent a full workflow, not a single database operation
+   - Focus on automation between systems (API → Processing → Output)
+   
+   MAPPING STRATEGY:
+   - Shopify integration → "Sync Shopify Inventory" action
+   - Google Sheets integration → "Update Google Sheets" action  
+   - Gmail integration → "Send Notifications" action
+   - Analytics/reporting needs → "Generate Analysis" action
+   - Multi-system workflows → Combined process actions
+   
+   AVOID creating actions for basic CRUD operations that users already have
 
 3. AUTOMATED SCHEDULES - Use business processes and automation potential:
    - High automation potential processes should become schedules
@@ -629,7 +650,24 @@ Using ALL the above information, convert these semantic requirements into concre
    - Map recurring business processes to schedule operations
    - If external APIs specified, design schedules that sync with or process those APIs' data
 
-${existingAgent ? 'Focus on NEW models and additional fields for existing models, plus new actions and schedules that fulfill the identified requirements.' : 'Design everything from scratch based on the comprehensive analysis above.'}`
+${existingAgent ? 'Focus on NEW models and additional fields for existing models, plus new actions and schedules that fulfill the identified requirements.' : 'Design everything from scratch based on the comprehensive analysis above.'}
+
+CRITICAL ACTION GENERATION REQUIREMENTS:
+
+For inventory tracking with Shopify + Google Sheets + Gmail, generate these types of business process actions:
+
+✅ CORRECT Business Process Actions:
+1. "Sync Shopify Inventory Data" (mutation) - Connect to Shopify API, fetch all product inventory levels, process and validate data
+2. "Update Google Sheets Dashboard" (mutation) - Format inventory data, write to Google Sheets with conditional formatting for low stock
+3. "Send Restocking Email Alerts" (mutation) - Generate personalized Gmail notifications with product details and reorder recommendations  
+4. "Generate Inventory Analytics Report" (query) - Analyze inventory trends, calculate velocity, predict stockouts, suggest reorder points
+
+❌ AVOID Basic CRUD Actions:
+- "Create Product", "Update Inventory Item", "Delete Stock Record" - users already have these
+- "Set Alert Threshold", "Configure Settings" - these are configuration, not business processes
+- "List Products", "View Inventory" - these are basic queries users already have
+
+Generate 3-5 business process actions that represent complete workflows integrating the specified external APIs.`
         }
       ],
       temperature: 0.3,

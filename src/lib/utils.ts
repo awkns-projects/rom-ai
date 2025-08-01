@@ -45,14 +45,34 @@ export async function fetchWithErrorHandlers(
     const response = await fetch(input, init);
 
     if (!response.ok) {
-      const { code, cause } = await response.json();
-      throw new ChatSDKError(code as ErrorCode, cause);
+      // Try to parse error response, but handle cases where it might fail
+      try {
+        const { code, cause } = await response.json();
+        throw new ChatSDKError(code as ErrorCode, cause);
+      } catch (jsonError) {
+        // If we can't parse JSON, it might be a network/timeout issue
+        console.warn('Failed to parse error response as JSON, treating as network error:', jsonError);
+        throw new ChatSDKError('offline:chat', `Network error: ${response.status} ${response.statusText}`);
+      }
     }
 
     return response;
   } catch (error: unknown) {
+    // Check for offline status
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       throw new ChatSDKError('offline:chat');
+    }
+
+    // Handle various network failure scenarios that can occur after idle
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      console.warn('Network fetch failed, likely after idle period:', error.message);
+      throw new ChatSDKError('offline:chat', 'Network request failed - please try again');
+    }
+
+    // Handle timeout errors
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      console.warn('Request timed out, likely after idle period');
+      throw new ChatSDKError('offline:chat', 'Request timeout - please try again');
     }
 
     throw error;

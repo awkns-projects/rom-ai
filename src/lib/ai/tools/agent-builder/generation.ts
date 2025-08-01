@@ -1355,35 +1355,34 @@ MINDMAP EDITOR REQUIREMENTS - MUST INCLUDE:
    - Use 'stop' for error handling unless continuation makes sense
 
 EXAMPLE MINDMAP STRUCTURE:
-For a "Daily Customer Report" schedule (using real action IDs):
+For a "Daily Customer Report" schedule:
 - trigger: { type: 'cron', pattern: '0 9 * * *', timezone: 'UTC', active: false }
 - steps: [
     { 
       id: 'step_1', 
-      actionId: '[USE REAL ACTION ID FROM STEP 2 LIST]', 
+      actionId: "${(availableActions && availableActions.length > 0) ? availableActions[0].id : 'action_example_123'}", 
       name: 'Fetch Customer Data',
       delay: { duration: 0, unit: 'seconds' },
       condition: { type: 'always' }
     },
     { 
       id: 'step_2', 
-      actionId: '[USE REAL ACTION ID FROM STEP 2 LIST]', 
+      actionId: "${(availableActions && availableActions.length > 1) ? availableActions[1].id : (availableActions && availableActions.length > 0) ? availableActions[0].id : 'action_example_456'}", 
       name: 'Generate Report',
       delay: { duration: 2000, unit: 'seconds' }, 
       onError: { action: 'stop' },
       condition: { type: 'always' }
-    },
-    { 
-      id: 'step_3', 
-      actionId: '[USE REAL ACTION ID FROM STEP 2 LIST]', 
-      name: 'Send Email Report',
-      delay: { duration: 1000, unit: 'seconds' }, 
-      onError: { action: 'continue' },
-      condition: { type: 'always' }
     }
   ]
 
-CRITICAL: Steps MUST reference actionId fields that correspond to ACTUAL existing actions generated in Step 2. Do NOT create placeholder or fake action IDs. Only use the real action IDs provided in the "AVAILABLE ACTIONS FROM STEP 2" list. If no actions are available, the schedule should have minimal steps but still use proper structure.
+CRITICAL ACTION ID REQUIREMENTS:
+- ONLY use action IDs from the "AVAILABLE ACTIONS FROM STEP 2" list above
+- Each actionId must EXACTLY match one of the IDs listed (copy the exact string)
+- Do NOT create new action IDs or use placeholders
+- If you need to repeat actions in multiple steps, that's allowed
+- If no actions are available, create minimal schedules with fewer steps
+
+ACTION ID FORMAT: The action IDs look like "action_1234567890_abc123def" - use the EXACT strings from the list above.
 
 Generate exactly ${expectedScheduleCount} schedules that solve real business automation needs with complete mindmap data.`;
 
@@ -1408,18 +1407,54 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
 
     console.log(`✅ Generated ${result.object.schedules.length} schedules`);
 
+    // Get available action IDs for validation
+    const availableActionIds = new Set((availableActions || []).map(action => action.id));
+    console.log(`🔍 Available action IDs for validation: [${Array.from(availableActionIds).join(', ')}]`);
+
     // Validate and fix the schedules
-    const fixedSchedules = result.object.schedules.map((schedule: any, index: number) => ({
-      ...schedule,
-      id: schedule.id || `schedule_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name: schedule.name || 'Unnamed Schedule',
-      description: schedule.description || schedule.name || 'No description provided',
-      type: schedule.type || 'query',
-      role: schedule.role || 'admin',
-      interval: schedule.interval || {
-        pattern: schedule.frequency || 'daily',
-        value: 1
-      },
+    const fixedSchedules = result.object.schedules.map((schedule: any, index: number) => {
+      // Validate and fix action IDs in steps
+      const validatedSteps = (schedule.steps || []).map((step: any, stepIndex: number) => {
+        if (step.actionId && !availableActionIds.has(step.actionId)) {
+          console.warn(`⚠️ Invalid actionId "${step.actionId}" in schedule "${schedule.name}", step "${step.name}". Available IDs: [${Array.from(availableActionIds).join(', ')}]`);
+          
+          // Try to fix by using the first available action ID
+          if (availableActionIds.size > 0) {
+            const firstAvailableActionId = Array.from(availableActionIds)[0];
+            console.log(`🔧 Fixing step "${step.name}" to use valid actionId: "${firstAvailableActionId}"`);
+            step.actionId = firstAvailableActionId;
+          } else {
+            console.warn(`❌ No available actions to fix step "${step.name}" - removing step`);
+            return null; // Will be filtered out
+          }
+        } else if (step.actionId) {
+          console.log(`✅ Valid actionId "${step.actionId}" in step "${step.name}"`);
+        }
+        
+        return {
+          ...step,
+          id: step.id || `step_${stepIndex + 1}`,
+          delay: step.delay || { duration: 1000, unit: 'seconds' },
+          condition: step.condition || { type: 'always' }
+        };
+      }).filter(Boolean); // Remove null steps
+
+      return {
+        ...schedule,
+        id: schedule.id || `schedule_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: schedule.name || 'Unnamed Schedule',
+        description: schedule.description || schedule.name || 'No description provided',
+        type: schedule.type || 'query',
+        role: schedule.role || 'admin',
+        steps: validatedSteps,
+        trigger: schedule.trigger || {
+          type: 'manual',
+          active: false
+        },
+        interval: schedule.interval || {
+          pattern: schedule.frequency || 'daily',
+          value: 1
+        },
       // dataSource: schedule.dataSource || {
       //   type: 'custom',
       //   customFunction: {
@@ -1480,7 +1515,17 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
       //   fields: {},
       //   fieldsToUpdate: undefined
       // }
-    }));
+      };
+    });
+
+    // Log validation results
+    const totalSteps = fixedSchedules.reduce((sum, schedule) => sum + (schedule.steps?.length || 0), 0);
+    const validSteps = fixedSchedules.reduce((sum, schedule) => sum + (schedule.steps?.filter((s: any) => s.actionId && availableActionIds.has(s.actionId)).length || 0), 0);
+    console.log(`📊 Schedule Validation Summary: ${validSteps}/${totalSteps} steps have valid action IDs`);
+    
+    if (validSteps < totalSteps) {
+      console.warn(`⚠️ ${totalSteps - validSteps} steps had invalid action IDs and were fixed or removed`);
+    }
 
     // Handle incremental updates by merging with existing schedules
     if (isIncrementalUpdate && existingAgent?.schedules) {
