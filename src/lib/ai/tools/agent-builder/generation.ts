@@ -1424,18 +1424,49 @@ ACTION ID FORMAT: The action IDs look like "action_1234567890_abc123def" - use t
 Generate exactly ${expectedScheduleCount} schedules that solve real business automation needs with complete mindmap data.`;
 
   try {
-  const result = await generateObject({
-    model,
-    schema: unifiedSchedulesSchema,
-    messages: [
-      {
-          role: 'system',
-        content: systemPrompt
+    let result;
+    
+    try {
+      result = await generateObject({
+        model,
+        schema: unifiedSchedulesSchema,
+        messages: [
+          {
+              role: 'system',
+            content: systemPrompt
+          }
+        ],
+          temperature: 0.4,
+          maxTokens: 6000
+        });
+    } catch (schemaError: any) {
+      console.error('❌ Schema validation failed, trying fallback approach:', schemaError);
+      
+      // Fallback: Use generateText and try to parse JSON manually
+      const { generateText } = await import('ai');
+      
+      const textResult = await generateText({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt + '\n\nIMPORTANT: Return your response as valid JSON that matches this structure:\n{\n  "schedules": [\n    {\n      "id": "string",\n      "name": "string", \n      "emoji": "string",\n      "description": "string",\n      "role": "admin" | "member",\n      "trigger": {\n        "type": "cron" | "interval" | "date" | "manual",\n        "pattern": "string (for cron)",\n        "active": false\n      },\n      "steps": [\n        {\n          "id": "string",\n          "actionId": "string", \n          "name": "string",\n          "delay": { "duration": 1000, "unit": "seconds" },\n          "condition": { "type": "always" }\n        }\n      ]\n    }\n  ]\n}'
+          }
+        ],
+        temperature: 0.4,
+        maxTokens: 6000
+      });
+      
+      try {
+        const parsedResult = JSON.parse(textResult.text);
+        result = { object: parsedResult };
+        console.log('✅ Successfully parsed fallback JSON response');
+      } catch (parseError) {
+        console.error('❌ Failed to parse fallback JSON response:', parseError);
+        console.error('Raw response:', textResult.text);
+        throw new Error(`Both schema validation and JSON parsing failed. Schema error: ${schemaError?.message || 'Unknown schema error'}`);
       }
-    ],
-      temperature: 0.4,
-      maxTokens: 6000
-    });
+    }
 
     if (!result?.object?.schedules) {
       console.error('❌ No schedules generated');
@@ -1556,8 +1587,8 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
     });
 
     // Log validation results
-    const totalSteps = fixedSchedules.reduce((sum, schedule) => sum + (schedule.steps?.length || 0), 0);
-    const validSteps = fixedSchedules.reduce((sum, schedule) => sum + (schedule.steps?.filter((s: any) => s.actionId && availableActionIds.has(s.actionId)).length || 0), 0);
+    const totalSteps = fixedSchedules.reduce((sum: number, schedule: any) => sum + (schedule.steps?.length || 0), 0);
+    const validSteps = fixedSchedules.reduce((sum: number, schedule: any) => sum + (schedule.steps?.filter((s: any) => s.actionId && availableActionIds.has(s.actionId)).length || 0), 0);
     console.log(`📊 Schedule Validation Summary: ${validSteps}/${totalSteps} steps have valid action IDs`);
     
     if (validSteps < totalSteps) {
@@ -1578,10 +1609,66 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
     };
   }
 
-    console.log(`✅ Generated ${fixedSchedules.length} new schedules`);
+    // Final validation to ensure all schedules meet minimum requirements
+    const validatedSchedules = fixedSchedules.filter((schedule: any) => {
+      const isValid = schedule.name && schedule.description && schedule.trigger && 
+                     schedule.id && schedule.role;
+      
+      if (!isValid) {
+        console.warn(`⚠️ Filtering out invalid schedule: ${schedule.name || 'Unnamed'}`);
+        console.warn(`Missing fields: ${JSON.stringify({
+          name: !schedule.name,
+          description: !schedule.description, 
+          trigger: !schedule.trigger,
+          id: !schedule.id,
+          role: !schedule.role
+        })}`);
+      }
+      
+      return isValid;
+    });
+
+    console.log(`✅ Generated ${validatedSchedules.length} validated schedules (${fixedSchedules.length - validatedSchedules.length} filtered out)`);
+
+    // If no valid schedules were generated, create a minimal default schedule
+    if (validatedSchedules.length === 0) {
+      console.warn('⚠️ No valid schedules generated, creating default schedule');
+      
+      const defaultSchedule = {
+        id: `schedule_${Date.now()}_default`,
+        name: 'Daily Status Check',
+        emoji: '⏰',
+        description: 'A default daily schedule for system monitoring and basic automation',
+        type: 'query' as const,
+        role: 'admin' as const,
+        interval: {
+          pattern: '0 9 * * *', // 9 AM daily
+          active: false
+        },
+        trigger: {
+          type: 'cron' as const,
+          pattern: '0 9 * * *', // 9 AM daily
+          active: false
+        },
+        steps: availableActions && availableActions.length > 0 ? [
+          {
+            id: 'step_1',
+            actionId: availableActions[0].id,
+            name: 'Execute Daily Check',
+            delay: { duration: 1000, unit: 'seconds' as const },
+            condition: { type: 'always' as const }
+          }
+        ] : [],
+        createdAt: new Date().toISOString()
+      };
+      
+      return {
+        schedules: [defaultSchedule]
+      };
+    }
 
   return {
-    schedules: fixedSchedules
+    schedules: validatedSchedules
   };
     
   } catch (error) {
@@ -3786,6 +3873,31 @@ export async function generateUIComponents(
   
   const model = await getAgentBuilderModel();
 
+  // Check if step 1 actually requires any input fields (only step 1 matters for UI)
+  const step1InputFields = pseudoSteps[0]?.inputFields || [];
+  const hasRequiredInputs = step1InputFields.length > 0;
+  
+  console.log(`📋 Step 1 input field analysis: ${step1InputFields.length} input fields found, hasRequiredInputs: ${hasRequiredInputs}`);
+
+  // If no inputs are required, generate minimal or no UI components
+  if (!hasRequiredInputs) {
+    console.log(`✅ No input fields required for "${name}" - generating minimal trigger UI`);
+    
+    return [{
+      id: `trigger_${Date.now()}`,
+      stepNumber: 1,
+      type: 'checkbox' as const,
+      label: 'Execute Action',
+      name: 'executeAction',
+      description: `Click to trigger the "${name}" action. No additional input is required.`,
+      required: false,
+      placeholder: '',
+      options: undefined,
+      validation: undefined,
+      defaultValue: 'false'
+    }];
+  }
+
   const systemPrompt = `You are a UX expert creating interactive UI components for testing business actions.
 
 ACTION DETAILS:
@@ -3806,6 +3918,9 @@ ${availableModels.map(model => `
 `).join('')}
 
 ${businessContext ? `BUSINESS CONTEXT: ${businessContext}` : ''}
+
+REQUIRED INPUT FIELDS TO HANDLE (STEP 1 ONLY):
+${step1InputFields.map(field => `- ${field.name} (${field.type}${field.relationModel ? ` -> ${field.relationModel}` : ''}) - Required: ${field.required || false}`).join('\n')}
 
 🚨 CRITICAL BATCH PROCESSING UI REQUIREMENTS:
 
