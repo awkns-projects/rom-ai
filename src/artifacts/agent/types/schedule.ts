@@ -1,5 +1,11 @@
 import type { DatabaseModel, EnvVar } from './action';
 
+// ParamValue type for supporting static values, references to previous actions, and alias-based references during loops
+export type ParamValue = 
+  | { type: 'static'; value: any }
+  | { type: 'ref'; fromActionIndex: number; outputKey: string }
+  | { type: 'alias'; fromAlias: string; outputKey: string };
+
 // Legacy interface for backward compatibility
 export interface LegacyAgentSchedule {
   id: string;
@@ -55,7 +61,8 @@ export interface ActionChainStep {
     duration: number; // in milliseconds
     unit: 'seconds' | 'minutes' | 'hours';
   };
-  inputMapping?: Record<string, any>; // How to map inputs to this action
+  // Updated to use ParamValue system for parameter chaining
+  inputParams?: Record<string, ParamValue>;
   condition?: {
     type: 'always' | 'if' | 'unless';
     expression?: string; // Future feature for conditional execution
@@ -105,11 +112,24 @@ export interface AgentSchedule {
     stepsCompleted: number;
     totalSteps: number;
     error?: string;
-    results?: Record<string, any>;
+    results?: Record<string, any>[];
   };
   
   // Metadata
   createdAt?: string;
   updatedAt?: string;
   version?: number;
+}
+
+// Runtime execution context for resolving parameter references
+export interface ExecutionContext {
+  stepResults: Record<number, any>; // Results from each step by index
+  globalInputs?: Record<string, any>;
+  environment?: Record<string, string>;
+  aliases?: Record<string, any>; // Alias context for loop iterations
+}
+
+// Helper interface for parameter resolution
+export interface ResolvedParams {
+  [key: string]: any;
 } 

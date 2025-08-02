@@ -182,12 +182,33 @@ export class VercelClient {
       } catch (error: any) {
         // Check if it's a 409 conflict error for project name conflicts
         const errorMessage = error.message || '';
-        const isNameConflict = (
-          errorMessage.includes('409 Conflict') || 
-          errorMessage.includes('already exists') ||
-          errorMessage.includes('conflict') ||
-          (error.response?.status === 409)
-        );
+        console.log(`🔍 Deployment error caught:`, errorMessage);
+        
+        // Try to parse the Vercel API error response from the error message
+        let isNameConflict = false;
+        
+        // Check for basic conflict indicators in the error message
+        if (errorMessage.includes('409 Conflict') || 
+            errorMessage.includes('already exists') ||
+            errorMessage.includes('conflict')) {
+          isNameConflict = true;
+        }
+        
+        // Also try to parse the JSON response body if present
+        try {
+          const responseBodyMatch = errorMessage.match(/Response body: ({.*})/s);
+          if (responseBodyMatch) {
+            const responseBody = JSON.parse(responseBodyMatch[1]);
+            if (responseBody.error && 
+                (responseBody.error.code === 'conflict' || 
+                 responseBody.error.message?.includes('already exists'))) {
+              isNameConflict = true;
+            }
+          }
+        } catch (parseError) {
+          // If parsing fails, rely on the basic string checks above
+          console.log('Could not parse error response JSON, using basic conflict detection');
+        }
         
         if (isNameConflict) {
           attempt++;
@@ -426,17 +447,33 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     
     // Step 4: Set up environment variables
     sendProgress('🔧 Configuring environment variables...');
-    const agentKey = generateRandomSecret(); // Generate unique key for this agent
-    const allEnvVars = {
-      DATABASE_URL: databaseUrl,
-      NEXTAUTH_SECRET: generateRandomSecret(),
-      NEXTAUTH_URL: `https://${vercelProject.name}.vercel.app`,
+    
+    // Import agent authentication functions
+    const { generateSecureAgentKey, generateAgentToken } = await import('@/lib/agent-auth');
+    
+    // Generate secure agent key and JWT token
+    const agentKey = generateSecureAgentKey();
+    const agentDeploymentUrl = `https://${vercelProject.name}.vercel.app`;
+    const agentToken = await generateAgentToken(
+      input.documentId || '',
+      agentKey,
+      agentDeploymentUrl,
+      ['read', 'execute'] // Default permissions for deployed agents
+    );
+    
+          const allEnvVars = {
+        DATABASE_URL: databaseUrl,
+        NEXTAUTH_SECRET: generateRandomSecret(),
+        NEXTAUTH_URL: agentDeploymentUrl,
       NODE_ENV: 'production',
       CRON_SECRET: generateRandomSecret(),
       // Configuration for calling back to main app
-      NEXT_PUBLIC_MAIN_APP_URL: process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://rewrite-complete.vercel.app',
+      NEXT_PUBLIC_MAIN_APP_URL: process.env.NEXT_PUBLIC_MAIN_APP_URL,
       NEXT_PUBLIC_DOCUMENT_ID: input.documentId || '',
       NEXT_PUBLIC_AGENT_KEY: agentKey,
+      NEXT_PUBLIC_AGENT_TOKEN: agentToken,
+      // Add agent JWT secret for token verification
+      AGENT_JWT_SECRET: process.env.AGENT_JWT_SECRET || process.env.AUTH_SECRET || generateRandomSecret(),
       ...environmentVariables
     };
     

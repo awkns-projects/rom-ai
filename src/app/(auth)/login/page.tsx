@@ -39,8 +39,11 @@ export default function Page() {
       });
     } else if (state.status === 'success') {
       setIsSuccessful(true);
-      updateSession();
-      router.refresh();
+      updateSession().then(() => {
+        setTimeout(() => {
+          router.push('/chat');
+        }, 100);
+      });
     }
   }, [state.status]);
 

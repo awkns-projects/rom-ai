@@ -309,7 +309,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
   const [newRecordData, setNewRecordData] = useState<Record<string, any>>({}); // State for new record form
   const [editRecordData, setEditRecordData] = useState<Record<string, any>>({}); // State for editing record form
   
-  const theme = themes[currentTheme];
+  const theme = themes[currentTheme] || themes.green;
   
   // Use actual agent data or fallback defaults
   const agentName = agentData?.name || 'AI Agent';

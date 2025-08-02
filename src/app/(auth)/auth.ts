@@ -253,6 +253,63 @@ export const {
   signOut,
 } = NextAuth({
   ...authConfig,
+  trustHost: true,
+  useSecureCookies: process.env.NODE_ENV === 'production',
+  cookies: process.env.NGROK_URL ? {
+    sessionToken: {
+      name: 'next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'none', // Changed to 'none' for cross-origin
+        path: '/',
+        secure: true, // ngrok provides HTTPS
+      },
+    },
+    callbackUrl: {
+      name: 'next-auth.callback-url',
+      options: {
+        sameSite: 'none', // Changed to 'none' for cross-origin
+        path: '/',
+        secure: true, // ngrok provides HTTPS
+      },
+    },
+    csrfToken: {
+      name: 'next-auth.csrf-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'none', // Changed to 'none' for cross-origin
+        path: '/',
+        secure: true, // ngrok provides HTTPS
+      },
+    },
+  } : {
+    sessionToken: {
+      name: 'next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: false, // localhost uses HTTP
+      },
+    },
+    callbackUrl: {
+      name: 'next-auth.callback-url',
+      options: {
+        sameSite: 'lax',
+        path: '/',
+        secure: false, // localhost uses HTTP
+      },
+    },
+    csrfToken: {
+      name: 'next-auth.csrf-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: false, // localhost uses HTTP
+      },
+    },
+  },
   providers: [
     Credentials({
       credentials: {},

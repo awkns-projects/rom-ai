@@ -6,8 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CrossIcon, PlusIcon } from '@/components/icons';
-import type { AgentSchedule, ActionChainStep, AgentAction, EnvVar, AgentModel } from '../../types';
+import type { AgentSchedule, ActionChainStep, ParamValue } from '../../types/schedule';
+import type { AgentAction, EnvVar } from '../../types/action';
+import type { AgentModel } from '../../types';
 import { generateNewId } from '../../utils';
+import { ParameterEditor } from './ParameterEditor';
+import { createStaticParam, createRefParam } from '../../utils/parameter-resolver';
 
 interface ScheduleMindMapEditorProps {
   schedule: AgentSchedule;
@@ -141,6 +145,54 @@ export const ScheduleMindMapEditor = memo(({
     [updatedSteps[currentIndex], updatedSteps[newIndex]] = [updatedSteps[newIndex], updatedSteps[currentIndex]];
     
     onUpdate({ ...schedule, steps: updatedSteps });
+  };
+
+
+
+  const updateParameter = (stepId: string, paramKey: string, paramValue: ParamValue) => {
+    const updatedSteps = schedule.steps?.map(s => {
+      if (s.id === stepId) {
+        return {
+          ...s,
+          inputParams: {
+            ...s.inputParams,
+            [paramKey]: paramValue
+          }
+        };
+      }
+      return s;
+    }) || [];
+    onUpdate({ ...schedule, steps: updatedSteps });
+  };
+
+  const removeParameter = (stepId: string, paramKey: string) => {
+    const updatedSteps = schedule.steps?.map(s => {
+      if (s.id === stepId) {
+        const { [paramKey]: removed, ...remainingParams } = s.inputParams || {};
+        return {
+          ...s,
+          inputParams: remainingParams
+        };
+      }
+      return s;
+    }) || [];
+    onUpdate({ ...schedule, steps: updatedSteps });
+  };
+
+
+
+  // Get available outputs for parameter chaining
+  const getAvailableOutputs = (): Record<number, string[]> => {
+    // For now, return mock outputs - in real implementation this would come from action definitions
+    const mockOutputs: Record<number, string[]> = {};
+    (schedule.steps || []).forEach((step, index) => {
+      const action = availableActions.find(a => a.id === step.actionId);
+      if (action) {
+        // Mock some common output fields based on action type
+        mockOutputs[index] = ['id', 'result', 'data', 'status', 'timestamp'];
+      }
+    });
+    return mockOutputs;
   };
 
   const getSetupStatus = () => {
@@ -391,6 +443,28 @@ export const ScheduleMindMapEditor = memo(({
               <div className="text-slate-300 text-sm font-mono leading-relaxed">
                 Execute "{action?.name}" with {step.delay?.duration ? `${step.delay.duration / 1000}s delay` : 'no delay'}. On error: {step.onError?.action || 'stop'}.
               </div>
+              
+              {/* Parameter Summary */}
+              {step.inputParams && Object.keys(step.inputParams).length > 0 && (
+                <div className="p-2 rounded bg-slate-800/30 border border-slate-600/30">
+                  <div className="text-orange-300 text-xs font-mono font-medium mb-1">Parameters:</div>
+                  <div className="space-y-1">
+                    {Object.entries(step.inputParams).map(([key, param]) => (
+                      <div key={key} className="flex items-center gap-2 text-xs">
+                        <span className="text-slate-300">{key}:</span>
+                        {param.type === 'static' ? (
+                          <span className="text-blue-300">📝 "{param.value}"</span>
+                        ) : param.type === 'ref' ? (
+                          <span className="text-orange-300">🔗 Step {param.fromActionIndex + 1}.{param.outputKey}</span>
+                        ) : (
+                          <span className="text-purple-300">🏷️ {param.fromAlias}.{param.outputKey}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
               <div className="flex items-center gap-4 text-xs text-slate-400">
                 <span>📍 Step {index + 1} of {schedule.steps?.length}</span>
                 {index > 0 && <span>⬅️ After Step {index}</span>}
@@ -511,6 +585,125 @@ export const ScheduleMindMapEditor = memo(({
                   </Select>
                 </div>
               </div>
+
+              {/* Parameters Section */}
+              {action && (() => {
+                const codeMetadata = (action._internal as any)?.codeGenerationMetadata;
+                const expectedParams = codeMetadata?.inputParameters || [];
+                
+                // Check if this action actually needs input parameters for execution
+                // Some actions (like data fetching) work standalone without requiring inputs
+                const hasActualInputRequirements = expectedParams.some((param: any) => {
+                  // Skip parameters that are used for data processing but not for input configuration
+                  const isProcessingParam = param.name === 'items' || param.name === 'data' || param.name === 'input';
+                  const hasDefaultValue = param.defaultValue !== undefined && param.defaultValue !== null;
+                  const isOptional = !param.required || param.required === false;
+                  
+                  // Only consider it a real input requirement if it's not a processing param
+                  // and doesn't have a sensible default
+                  return !isProcessingParam && (!hasDefaultValue || !isOptional);
+                });
+                
+                if (!hasActualInputRequirements || expectedParams.length === 0) {
+                  return (
+                    <div className="space-y-3">
+                      <Label className="text-orange-300 font-mono text-sm">🎯 Parameters</Label>
+                      <div className="text-slate-400 text-sm font-mono text-center py-3 border border-slate-600/30 rounded bg-slate-900/30">
+                        This action works automatically without input parameters.
+                      </div>
+                    </div>
+                  );
+                }
+                
+                return (
+                  <div className="space-y-3">
+                    <Label className="text-orange-300 font-mono text-sm">🎯 Parameters</Label>
+                    
+                    {(() => {
+                      // Only show parameters that actually need configuration
+                      const requiredParams = expectedParams.filter((param: any) => {
+                        const isProcessingParam = param.name === 'items' || param.name === 'data' || param.name === 'input';
+                        const hasDefaultValue = param.defaultValue !== undefined && param.defaultValue !== null;
+                        const isOptional = !param.required || param.required === false;
+                        
+                        return !isProcessingParam && (!hasDefaultValue || !isOptional);
+                      });
+                      
+                      if (requiredParams.length === 0) {
+                        return (
+                          <div className="text-slate-400 text-sm font-mono text-center py-3 border border-slate-600/30 rounded bg-slate-900/30">
+                            All parameters have sensible defaults.
+                          </div>
+                        );
+                      }
+                      
+                      // Ensure all required parameters exist in inputParams
+                      const currentParams = step.inputParams || {};
+                      const needsUpdate = requiredParams.some((param: any) => !(param.name in currentParams));
+                      
+                      if (needsUpdate) {
+                        // Auto-initialize missing parameters
+                        const updatedParams = { ...currentParams };
+                        requiredParams.forEach((param: any) => {
+                          if (!(param.name in updatedParams)) {
+                            if (param.type === 'Boolean') {
+                              updatedParams[param.name] = createStaticParam(param.defaultValue ?? false);
+                            } else if (param.type === 'Int' || param.type === 'Float') {
+                              updatedParams[param.name] = createStaticParam(param.defaultValue ?? 0);
+                            } else if (param.type === 'Array') {
+                              updatedParams[param.name] = createStaticParam(param.defaultValue ?? []);
+                            } else {
+                              updatedParams[param.name] = createStaticParam(param.defaultValue ?? '');
+                            }
+                          }
+                        });
+                        
+                        // Update the step with the auto-initialized parameters
+                        setTimeout(() => {
+                          const updatedSteps = schedule.steps?.map(s => 
+                            s.id === step.id ? { ...s, inputParams: updatedParams } : s
+                          ) || [];
+                          onUpdate({ ...schedule, steps: updatedSteps });
+                        }, 0);
+                      }
+                      
+                      return (
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {requiredParams.map((param: any) => {
+                            const paramValue = (step.inputParams || {})[param.name];
+                            const previousSteps = (schedule.steps || []).slice(0, index).map((s, idx) => ({
+                              step: s,
+                              action: availableActions.find(a => a.id === s.actionId),
+                              stepIndex: idx
+                            }));
+                            
+                            return (
+                              <ParameterEditor
+                                key={param.name}
+                                paramKey={param.name}
+                                paramValue={paramValue || createStaticParam(param.defaultValue ?? '')}
+                                onUpdate={(key, value) => updateParameter(step.id, key, value)}
+                                onRemove={() => {}} // Don't allow removing required action parameters
+                                stepIndex={index}
+                                previousSteps={previousSteps}
+                                availableOutputs={getAvailableOutputs()}
+                                expectedParam={{
+                                  name: param.name,
+                                  type: param.type,
+                                  description: param.description,
+                                  required: param.required ?? true
+                                }}
+                              />
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                );
+              })()}
+
+
 
               {/* Chain Management */}
               <div className="flex gap-2">

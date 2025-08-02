@@ -170,27 +170,41 @@ CODE GENERATION REQUIREMENTS:
    - input: User-provided input parameters (MUST include all parameters from the first step)
    - envVars: Environment variables for external APIs
 
-2. INPUT PARAMETER HANDLING:
+2. CRITICAL BATCH INPUT REQUIREMENT:
+   ⚡ ALL ACTIONS MUST ACCEPT BATCH INPUT WITH items[] ARRAY:
+   
+   The input MUST always be structured as: input = { items: Array<{parameters}> }
+   
+   NEVER generate actions that accept single-item inputs like { userId: "123" }
+   ALWAYS generate actions that accept: { items: [{ userId: "123" }] }
+   
+   Your code MUST:
+   - Validate that input.items exists and is a non-empty array
+   - Process each item in the array (even if typically only one item)
+   - Return results that include count and processed items
+   - Use for-loop to iterate over input.items array
+   - Return object with success, data (array), count, and message properties
+
+3. INPUT PARAMETER HANDLING:
    ${extractedInputParams.length > 0 ? `
-   The code MUST expect these input parameters in the input object:
+   The code MUST expect these input parameters wrapped in items array:
    ${extractedInputParams.map((param: any) => `
-   - input.${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}
+   - input.items[].${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}
      ${param.kind === 'object' ? `This is a database relation ID for ${param.relationModel} model` : ''}
    `).join('')}
    
-   Always validate required input parameters at the start of your code:
-   ${extractedInputParams.filter((p: any) => p.required).map((param: any) => `
-   if (!input.${param.name}) throw new Error('Required parameter ${param.name} is missing');`).join('')}
-   ` : 'No input parameters required.'}
+   Always validate required input parameters for each item:
+   Loop through input.items and check each required parameter exists on the item object.
+   ` : 'Each item in input.items array should contain the action-specific parameters.'}
 
-3. CODE STRUCTURE:
-   - Start with input parameter validation
-   - Process each pseudo step sequentially
+4. CODE STRUCTURE:
+   - Start with input.items array validation
+   - Process each item in the array sequentially
    - Handle data flow between steps (output of step N becomes input of step N+1)
    - Include proper error handling
-   - Return structured result object
+   - Return structured result with count and processed items
 
-4. DATABASE OPERATIONS:
+5. DATABASE OPERATIONS:
    For database operations, use the actual API format:
    - db.findMany(modelName, { where: filter, limit: number }) - find multiple records
    - db.findUnique(modelName, where) - find single record  
@@ -213,7 +227,7 @@ CODE GENERATION REQUIREMENTS:
 
    IMPORTANT: The first parameter is always the MODEL NAME as a string, not db.ModelName.method()!
 
-5. AI OPERATIONS:
+6. AI OPERATIONS:
    For AI analysis/decisions, use:
    const result = await ai.generateObject({
      messages: [
@@ -227,7 +241,7 @@ CODE GENERATION REQUIREMENTS:
      })
    });
 
-6. EXTERNAL API CALLS:
+7. EXTERNAL API CALLS:
    For "call external api" step type, use fetch() with proper authentication and environment handling:
    
    // OAuth2 API example with test/live environment support:
@@ -244,16 +258,18 @@ CODE GENERATION REQUIREMENTS:
      body: JSON.stringify(requestData)
    });
 
-7. RETURN FORMAT:
-   Always return: { success: boolean, data: any, message: string, executionTime: number }
+8. RETURN FORMAT:
+   Always return: { success: boolean, data: any, count: number, message: string, executionTime: number }
+   Where data contains the processed results array and count is the number of items processed.
 
-8. PERFORMANCE:
+9. PERFORMANCE:
    - Include execution time tracking
    - Handle errors gracefully
    - Use appropriate database queries (findUnique vs findMany)
    - Minimize API calls
+   - Process items efficiently in batches where possible
 
-Generate production-ready, executable JavaScript code that implements the business logic described in the pseudo steps and properly uses the input parameters.`;
+`;
 
   const result = await generateObject({
     model,
@@ -320,15 +336,40 @@ async function generateBusinessProcessActions(
 
 BUSINESS CONTEXT:
 - Business Goal: ${businessContext}
-- Domain: ${entityType}
-- Agent Description: ${step0Analysis.agentDescription || 'No description'}
-- Available Models: ${availableModels.map(m => m.name).join(', ') || 'none'}
-
-EXTERNAL API INTEGRATIONS:
-${hasExternalApis ? 
-  externalApis.map((api: any) => `- ${api.provider}: ${api.primaryUseCase} (${api.connectionType})`).join('\n') :
+- Available Models: ${availableModels.map(m => `${m.name} (${m.fields?.map((f: any) => `${f.name}: ${f.type}`).join(', ')})`).join(', ')}
+- External APIs: ${externalApis && externalApis.length > 0 ? 
+  externalApis.map((api: any) => `${api.provider} (${api.connectionType})`).join('\n') :
   '- No external APIs specified'
 }
+
+🚨 CRITICAL BATCH PROCESSING REQUIREMENTS:
+
+**ZERO MANUAL SELECTION ALLOWED - ONLY AUTOMATED SCANNING/FILTERING:**
+
+1. **NEVER DESIGN SINGLE-ITEM SELECTION WORKFLOWS**: Do not create actions that require users to manually pick one specific item to process
+2. **NO DROPDOWNS FOR ITEM SELECTION**: Never create "Select Product ID", "Choose Customer", "Pick Order" dropdowns
+3. **START WITH AUTOMATED SCANNING**: Always begin with database scans, API queries, or automated data retrieval
+4. **USE SMART FILTERING**: Replace manual selection with intelligent filters (date ranges, status, categories, conditions)
+5. **PROCESS EVERYTHING BY DEFAULT**: Design actions that process ALL relevant items unless filtered out
+6. **AUTONOMOUS OPERATION**: Actions should run without human intervention - fully automated scanning and processing
+
+**EXAMPLES OF CORRECT BATCH DESIGN:**
+- ✅ "Sync All Low-Stock Products" (scans inventory, finds low stock items automatically)
+- ✅ "Process Pending Orders from Last 24 Hours" (filters by date and status automatically)  
+- ✅ "Update Customer Profiles with New Preferences" (scans all customers, applies updates)
+- ✅ "Validate Product Data Against External API" (processes entire product catalog)
+
+**FORBIDDEN PATTERNS:**
+- ❌ "Select Product ID" dropdowns
+- ❌ "Choose specific customer" selection
+- ❌ "Pick individual order" workflows
+- ❌ Any manual item selection interfaces
+
+🔗 PARAMETER CHAINING CAPABILITIES:
+- Actions can now be chained together in schedules using parameter references
+- Each action's output can be used as input for subsequent actions
+- Design actions with clear, useful outputs that can feed into other actions
+- Consider how actions can work together as part of larger automated workflows
 
 REQUIREMENTS:
 
@@ -338,28 +379,61 @@ REQUIREMENTS:
    - Focus on automation and integration between systems
    - Actions should solve real business problems, not just data operations
 
-2. EXTERNAL API INTEGRATION:
+2. BATCH-FIRST DESIGN PRINCIPLES:
+   - Start with filtering criteria (date ranges, status, categories, etc.)
+   - Process collections of items throughout the workflow
+   - Use batch operations for updates/creates/deletes
+   - Design smart defaults for filters when none provided
+   - Ensure workflows scale from 1 to 1000+ items
+
+3. PARAMETER CHAINING AWARENESS:
+   - Design actions that produce useful outputs for chaining (IDs, status, data objects)
+   - Consider how actions can work together in sequences
+   - Make outputs descriptive and reusable (e.g., "customerIds", "reportUrl", "processedData")
+   - Think about common workflow patterns where one action feeds into another
+
+4. EXTERNAL API INTEGRATION:
    - If external APIs are specified, create actions that leverage those APIs
    - Each API should have at least one dedicated integration action
    - Design actions that combine multiple APIs for workflow automation
    - Focus on API-to-API orchestration and data synchronization
 
-3. ACTION TYPES:
+5. ACTION TYPES:
    - 'mutation': Actions that create, update, or modify data across systems
    - 'query': Actions that analyze, generate insights, or retrieve complex data
 
-4. AVOID BASIC CRUD:
+6. AVOID BASIC CRUD:
    - Don't generate actions like "Create Record", "Update Item", "Delete Entry"
    - Users already have basic database operations available
    - Focus on business logic that adds significant value
 
-5. EXAMPLES OF GOOD BUSINESS PROCESS ACTIONS:
-   - "Sync Shopify Product Catalog" - Connect to Shopify, fetch products, update local database
-   - "Generate Automated Reports" - Analyze data, format results, distribute via email/Slack
-   - "Process Customer Onboarding" - Multi-step workflow with validations and notifications
-   - "Monitor Inventory Levels" - Check stock, predict demand, trigger reorder workflows
+7. EXAMPLES OF CHAINABLE BATCH BUSINESS PROCESS ACTIONS:
+   - "Import Customer Data" → processes all customers → outputs customerIds → feeds into "Send Welcome Email Campaign"
+   - "Analyze Sales Data" → analyzes all sales → outputs reportId → feeds into "Generate Dashboard"
+   - "Process Orders Batch" → processes all pending orders → outputs orderIds → feeds into "Update Inventory Levels"
+   - "Fetch User Preferences" → gets all user preferences → outputs preferences → feeds into "Customize Experience Campaign"
+   - "Validate Product Data" → validates all products → outputs validatedData → feeds into "Sync to Catalog"
 
-Generate 3-5 meaningful business process actions that represent complete workflows and leverage available integrations.`;
+8. CRITICAL BATCH INPUT REQUIREMENT:
+   ALL ACTIONS MUST BE DESIGNED TO ACCEPT BATCH INPUT WITH items[] ARRAYS:
+   - Never design actions that take single parameters like { userId: "123" }
+   - Always design actions that accept: { items: [{ userId: "123" }] }
+   - Actions should process arrays of items for scalability
+   - This ensures compatibility with schedules and automation workflows
+
+**BATCH PROCESSING EXAMPLES:**
+
+❌ WRONG ACTION DESIGN:
+- "Update Customer Profile" (requires user to pick one customer)
+- "Process Single Order" (requires selecting one order)
+- "Send Email to Customer" (requires choosing one customer)
+
+✅ CORRECT ACTION DESIGN:
+- "Update Customer Profiles by Segment" (filters customers by criteria, processes batch)
+- "Process Pending Orders" (finds all pending orders, processes batch)
+- "Send Email Campaign to Subscribers" (filters subscribers, sends to all)
+
+Generate 3-5 meaningful business process actions that can work independently OR be chained together for complex automation workflows. Each action MUST use batch processing patterns and NEVER require single-item selection.`;
 
   const result = await generateObject({
     model,
@@ -369,7 +443,9 @@ Generate 3-5 meaningful business process actions that represent complete workflo
         purpose: z.string().describe('Detailed description of the complete workflow including external API integrations'),
         type: z.enum(['query', 'mutation']).describe('query for data analysis/retrieval, mutation for data modification/creation'),
         operation: z.literal('create').describe('All generated actions are new'),
-        businessValue: z.string().describe('Explanation of the business value and automation benefit')
+        businessValue: z.string().describe('Explanation of the business value and automation benefit'),
+        expectedOutputs: z.array(z.string()).describe('List of key outputs this action produces that could be used by other actions (e.g., "customerId", "reportUrl", "processedData")').optional(),
+        chainingSuggestions: z.string().describe('Brief note on how this action could work with others in a chained workflow').optional()
       })).min(3).max(5).describe('Business process actions that integrate systems and automate workflows')
     }),
     messages: [
@@ -385,13 +461,19 @@ Generate 3-5 meaningful business process actions that represent complete workflo
 2. Automate complete business workflows (not individual database operations)
 3. Integrate multiple systems for end-to-end automation
 4. Solve real business problems and add significant value
+5. 🔗 PRODUCE CHAINABLE OUTPUTS: Design actions that output useful data for parameter chaining
 
 ${hasExternalApis ? 
-  `Focus heavily on integrating these external services into comprehensive workflows that span multiple systems.` :
-  `Design internal business process automation and data analysis workflows.`
+  `Focus heavily on integrating these external services into comprehensive workflows that span multiple systems. Consider how data flows between different APIs and services.` :
+  `Design internal business process automation and data analysis workflows that can be chained together.`
 }
 
-Generate actions that represent complete business processes, not basic CRUD operations.`
+🔗 CHAINING EXAMPLES:
+- Action 1: "Process New Customer" → outputs: customerId, customerData
+- Action 2: "Send Welcome Email" → uses customerId from Action 1
+- Action 3: "Setup Customer Dashboard" → uses customerData from Action 1
+
+Generate actions that represent complete business processes AND can be chained together for complex workflows.`
       }
     ],
     temperature: 0.3,
@@ -406,7 +488,9 @@ Generate actions that represent complete business processes, not basic CRUD oper
     type: action.type,
     operation: action.operation,
     _aiGenerated: true,
-    businessValue: action.businessValue
+    businessValue: action.businessValue,
+    expectedOutputs: action.expectedOutputs || [],
+    chainingSuggestions: action.chainingSuggestions
   }));
 }
 

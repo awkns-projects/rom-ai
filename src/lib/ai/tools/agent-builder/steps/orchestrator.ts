@@ -278,7 +278,11 @@ export async function executeAgentGeneration(
         step0Analysis: step0Result,
         existingAgent: config.existingAgent,
         conversationContext: config.conversationContext,
-        command: config.command
+        command: config.command,
+        // Pass context for auto-deployment
+        documentId: config.documentId,
+        session: config.session,
+        dataStream: config.dataStream
       }),
       config,
       result
@@ -305,6 +309,66 @@ export async function executeAgentGeneration(
     }
 
     sendStepUpdate(config, 'step1', 'complete', `Database generated: ${step1Result.models.length} models`);
+
+    // 🔧 CRITICAL FIX: Save document after Step 1 to ensure it exists before auto-deployment
+    if (config.documentId && config.session) {
+      console.log('💾 Saving early document after Step 1 for auto-deployment...');
+      try {
+        const { getDocumentById, saveOrUpdateDocument } = await import('../../../../db/queries');
+        
+        // Create early agent data with Step 0 + Step 1 results
+        const earlyAgentData = {
+          ...(config.existingAgent || {
+            id: config.documentId,
+            name: step0Result.agentName || 'AI Agent System',
+            description: step0Result.agentDescription || '',
+            domain: step0Result.domain || '',
+            avatar: '',
+            theme: 'default',
+            visibility: 'private',
+            actions: [],
+            schedules: [],
+            externalApis: [],
+            createdAt: new Date().toISOString(),
+          }),
+          // Override with fresh results
+          name: step0Result.agentName || config.existingAgent?.name || 'AI Agent System',
+          description: step0Result.agentDescription || config.existingAgent?.description || '',
+          domain: step0Result.domain || config.existingAgent?.domain || '',
+          models: step1Result.models,
+          enums: step1Result.enums,
+          prismaSchema: step1Result.prismaSchema,
+          metadata: {
+            ...(config.existingAgent?.metadata || {}),
+            updatedAt: new Date().toISOString(),
+            status: 'generating',
+            step1Complete: true
+          }
+        };
+
+        // Check if document exists
+        let existingDoc;
+        try {
+          existingDoc = await getDocumentById({ id: config.documentId });
+        } catch {
+          existingDoc = null;
+        }
+
+        await saveOrUpdateDocument({
+          id: config.documentId,
+          title: earlyAgentData.name,
+          content: JSON.stringify(earlyAgentData, null, 2),
+          kind: 'agent',
+          userId: config.session.user?.id as string,
+          metadata: existingDoc?.metadata || {}
+        });
+
+        console.log('✅ Early document saved successfully for auto-deployment');
+      } catch (error) {
+        console.error('❌ Failed to save early document:', error);
+        // Don't fail the process, just log the error
+      }
+    }
 
     // STEP 2: Action Generation
     sendStepUpdate(config, 'step2', 'processing', 'Generating actions...');
@@ -385,10 +449,11 @@ export async function executeAgentGeneration(
 
     sendStepUpdate(config, 'step3', 'complete', `Schedules generated: ${step3Result.schedules.length} schedules with ${step3Result.implementationComplexity} complexity`);
 
-    // STEP 4: Deployment - DISABLED
-    // Deployment is now handled separately through the UI modal
-    console.log('⏭️ Skipping Step 4 (Deployment) - will be handled via UI modal');
-    sendStepUpdate(config, 'step4', 'complete', 'Deployment deferred to UI modal');
+    // STEP 4: Deployment - AUTOMATIC
+    // Deployment is now triggered automatically after database generation (Step 1)
+    // This provides seamless user experience with auto-updating deployments
+    console.log('⏭️ Skipping Step 4 (Deployment) - triggered automatically after database generation');
+    sendStepUpdate(config, 'step4', 'complete', 'Deployment triggered automatically after Step 1');
 
     // FINAL ASSEMBLY
     console.log('🔧 FINAL ASSEMBLY: Combining all components...');
