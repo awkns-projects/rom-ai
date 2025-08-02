@@ -161,7 +161,7 @@ export async function middleware(request: NextRequest) {
 
   // Prevent redirect loops - if we're already being redirected FROM guest auth, allow it through
   const referer = request.headers.get('referer');
-  const isFromGuestAuth = referer && referer.includes('/api/auth/guest');
+  const isFromGuestAuth = referer && (referer.includes('/api/auth/guest') || referer.includes('/api/auth/signin'));
   const isFromSignIn = referer && referer.includes('/api/auth/signin');
   
   if (isFromGuestAuth || isFromSignIn) {
@@ -179,11 +179,17 @@ export async function middleware(request: NextRequest) {
     });
   } catch (error) {
     console.error('❌ Token verification error:', error);
-    // If token verification fails, allow through to prevent loops
-    if (isTrustedRequest || pathname === '/') {
-      console.log(`🔓 Token error, allowing through: ${pathname}`);
+    
+    // If token verification fails due to configuration issues, 
+    // allow through for specific routes to prevent infinite loops
+    if (isTrustedRequest || pathname === '/' || pathname.startsWith('/api/health')) {
+      console.log(`🔓 Token error, allowing through for fallback: ${pathname}`);
       return NextResponse.next();
     }
+    
+    // For other routes, redirect to home and let it handle the error
+    console.log(`🔄 Token error, redirecting to home: ${pathname}`);
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
   // Handle unauthenticated users
@@ -194,9 +200,15 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // For production, only redirect to guest auth for specific routes
-    const shouldRedirectToAuth = pathname === '/' || 
-                                pathname.startsWith('/chat') || 
+    // For production, check if this is the home page and allow it to load
+    // even if there are auth configuration issues
+    if (pathname === '/') {
+      console.log(`🏠 Allowing home page to load without auth: ${pathname}`);
+      return NextResponse.next();
+    }
+
+    // For other protected routes, redirect to guest auth
+    const shouldRedirectToAuth = pathname.startsWith('/chat') || 
                                 pathname.startsWith('/deployment') ||
                                 pathname.startsWith('/auth-test');
 
@@ -205,12 +217,19 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // Redirect to guest authentication for production
-    console.log(`🔒 No token, redirecting to guest auth: ${pathname}`);
-    const redirectUrl = encodeURIComponent(request.url);
-    return NextResponse.redirect(
-      new URL(`/api/auth/signin/guest?callbackUrl=${redirectUrl}`, request.url),
-    );
+    // Try to redirect to guest authentication, but with error handling
+    console.log(`🔒 No token, attempting guest auth redirect: ${pathname}`);
+    try {
+      const callbackUrl = encodeURIComponent(request.url);
+      return NextResponse.redirect(
+        new URL(`/api/auth/guest?callbackUrl=${callbackUrl}`, request.url),
+      );
+    } catch (error) {
+      console.error('❌ Failed to redirect to guest auth:', error);
+      // Fallback: allow the request through and let the page handle auth errors
+      console.log(`🔓 Auth redirect failed, allowing through: ${pathname}`);
+      return NextResponse.next();
+    }
   }
 
   // Handle authenticated users trying to access login/register

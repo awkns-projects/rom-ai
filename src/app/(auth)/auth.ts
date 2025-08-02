@@ -59,6 +59,17 @@ if (process.env.NODE_ENV === 'production') {
   }
 }
 
+// Dynamic URL handling for production to handle both www and non-www
+const getAuthUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    // If NEXTAUTH_URL is set, use it, but also handle dynamic domains
+    const baseUrl = process.env.NEXTAUTH_URL || 'https://rom.cards';
+    // Normalize to non-www version for consistency
+    return baseUrl.replace('https://www.rom.cards', 'https://rom.cards');
+  }
+  return process.env.NEXTAUTH_URL || 'http://localhost:3000';
+};
+
 console.log('🔐 Auth configuration loaded successfully:', {
   environment: process.env.NODE_ENV,
   hasAuthSecret: !!process.env.AUTH_SECRET,
@@ -314,7 +325,7 @@ export const {
   signOut,
 } = NextAuth({
   ...authConfig,
-  trustHost: true,
+  trustHost: true, // Allow dynamic host handling
   
   // Enhanced session and JWT configuration with production settings
   session: {
@@ -327,12 +338,14 @@ export const {
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
 
-  // Production-ready configuration
+  // Production-ready configuration with flexible URL handling
   ...(process.env.NODE_ENV === 'production' && {
     // Force HTTPS in production
     useSecureCookies: true,
-    // Set the auth URL explicitly
-    url: process.env.NEXTAUTH_URL || 'https://rom.cards',
+    // Set the auth URL explicitly with normalization
+    url: getAuthUrl(),
+    // Allow cross-origin requests for www/non-www compatibility
+    allowCredentials: true,
   }),
   
   // Environment-appropriate cookie settings
