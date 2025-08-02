@@ -444,9 +444,9 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
       'scripts/init-sqlite.js': this.generateSQLiteInitScript()
     };
 
-    // Add Prisma schema - use provided one or generate default
+    // Add Prisma schema - use provided one (sanitized) or generate default
     if (this.options.prismaSchema) {
-      files['prisma/schema.prisma'] = this.options.prismaSchema;
+      files['prisma/schema.prisma'] = this.sanitizePrismaSchema(this.options.prismaSchema);
     } else {
       files['prisma/schema.prisma'] = this.generateDefaultPrismaSchema();
     }
@@ -519,17 +519,14 @@ export default function Layout({
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <div className={\`min-h-screen bg-gradient-to-br \${currentTheme.gradient} relative\`}>
-        {/* Matrix-style backdrop */}
-        <div className="fixed inset-0 backdrop-blur-sm"></div>
-        
-        {/* Dynamic background effects */}
-        <div className="fixed inset-0 opacity-30 pointer-events-none">
-          <div className={\`absolute inset-0 bg-gradient-to-br from-black via-\${currentTheme.primary}-950/30 to-\${currentTheme.primary}-950/20\`}></div>
+      <div className={\`min-h-screen bg-black relative\`}>
+        {/* Subtle dark gradient overlay */}
+        <div className="fixed inset-0 pointer-events-none">
+          <div className={\`absolute inset-0 bg-gradient-to-br from-\${currentTheme.primary}-950/40 via-black to-\${currentTheme.primary}-950/20\`}></div>
         </div>
 
         {/* Main Content */}
-        <div className={\`relative z-10 \${isMobile ? 'pb-20' : ''}\`}>
+        <div className={\`relative z-10 \${isMobile ? 'pb-16' : ''}\`}>
           {/* Desktop Header */}
           {!isMobile && (
             <header className={\`\${currentTheme.bg} border-b \${currentTheme.border} sticky top-0 z-40\`}>
@@ -581,7 +578,7 @@ export default function Layout({
           )}
 
           {/* Page Content */}
-          <main className={\`\${isMobile ? 'max-w-md mx-auto' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}\`}>
+          <main className={\`\${isMobile ? 'max-w-sm mx-auto px-2' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}\`}>
             {children}
           </main>
         </div>
@@ -613,19 +610,19 @@ export default function MobileNav({ currentTheme }: MobileNavProps) {
   ];
 
   return (
-    <div className={\`fixed bottom-0 left-0 right-0 \${currentTheme.bg} border-t \${currentTheme.border} z-50\`}>
-      <div className="flex justify-around items-center py-2 px-4 max-w-md mx-auto">
+    <div className={\`fixed bottom-0 left-0 right-0 bg-black/90 border-t \${currentTheme.border} z-50\`}>
+      <div className="flex justify-around items-center py-1 px-2 max-w-sm mx-auto">
         {navItems.map((item) => (
           <button
             key={item.path}
             onClick={() => router.push(item.path)}
-            className={\`flex flex-col items-center gap-1 p-2 rounded-lg transition-all duration-200 min-w-0 flex-1 \${
+            className={\`flex flex-col items-center gap-1 p-1 rounded-lg transition-all duration-200 min-w-0 flex-1 \${
               router.pathname === item.path
-                ? \`\${currentTheme.bgActive} \${currentTheme.accent} scale-110\`
+                ? \`\${currentTheme.bgActive} \${currentTheme.accent}\`
                 : \`\${currentTheme.dim} hover:\${currentTheme.light} hover:\${currentTheme.bgHover}\`
             }\`}
           >
-            <span className={\`text-lg \${router.pathname === item.path ? 'scale-110' : ''} transition-transform\`}>
+            <span className={\`text-sm \${router.pathname === item.path ? 'scale-110' : ''} transition-transform\`}>
               {item.icon}
             </span>
             <span className="font-mono text-xs font-medium truncate">{item.label}</span>
@@ -645,6 +642,8 @@ import StatsCard from '@/components/StatsCard';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import api from '@/lib/api';
+import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
 
 export default function HomePage() {
   const router = useRouter();
@@ -656,6 +655,17 @@ export default function HomePage() {
     totalSchedules: ${schedules.length}
   });
   const [loading, setLoading] = useState(true);
+
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+  const displayName = agentConfig?.name || '${projectName}';
+  
+  // Extract avatar URL from config
+  const avatarUrl = agentConfig?.avatar?.uploadedImage || null;
 
   useEffect(() => {
     fetchStats();
@@ -677,48 +687,57 @@ export default function HomePage() {
       path: '/chat', 
       icon: '💬', 
       title: 'Chat with AI', 
-      desc: 'Ask questions or give commands',
-      color: 'bg-blue-500/15 border-blue-400/30 hover:bg-blue-500/25'
+      desc: 'Ask questions or give commands'
     },
     { 
       path: '/models', 
       icon: '🗃️', 
       title: 'View Data', 
-      desc: 'Manage your information',
-      color: 'bg-green-500/15 border-green-400/30 hover:bg-green-500/25'
+      desc: 'Manage your information'
     },
     { 
       path: '/actions', 
       icon: '⚡', 
       title: 'Execute Actions', 
-      desc: 'Run smart operations',
-      color: 'bg-yellow-500/15 border-yellow-400/30 hover:bg-yellow-500/25'
+      desc: 'Run smart operations'
     },
     { 
       path: '/schedules', 
       icon: '⏰', 
       title: 'Schedules', 
-      desc: 'Manage automated tasks',
-      color: 'bg-purple-500/15 border-purple-400/30 hover:bg-purple-500/25'
+      desc: 'Manage automated tasks'
     }
   ];
 
   return (
     <Layout title="${projectName}">
-      <div className="p-4 space-y-6">
+      <div className="p-2 space-y-3">
         {/* Hero Section */}
-        <div className="text-center space-y-4 pt-6">
+        <div className="text-center space-y-2 pt-3">
           <div className="flex justify-center">
-            <div className="p-4 bg-green-500/15 border border-green-400/30 rounded-2xl">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-400/20 to-emerald-400/20 border-2 border-green-400/30 flex items-center justify-center">
-                <span className="text-2xl text-green-400">🤖</span>
+            <div className={\`p-2 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
+              <div className={\`w-16 h-16 rounded-full bg-gradient-to-br \${currentTheme.gradient} border-2 \${currentTheme.borderActive} flex items-center justify-center overflow-hidden\`}>
+                {avatarUrl ? (
+                  <img 
+                    src={avatarUrl} 
+                    alt="Agent Avatar" 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to theme emoji if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      target.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                ) : null}
+                <span className={\`text-xl \${currentTheme.accent} \${avatarUrl ? 'hidden' : ''}\`}>🤖</span>
               </div>
             </div>
           </div>
-          <div className="space-y-2">
-            <h1 className="font-mono font-bold text-2xl text-green-200">${projectName}</h1>
-            <p className="font-mono text-sm text-green-300/70 max-w-xs mx-auto leading-relaxed">
-              Your intelligent AI assistant powered by Agent Builder
+          <div className="space-y-1">
+            <h1 className={\`font-mono font-bold text-xl \${currentTheme.light}\`}>{displayName}</h1>
+            <p className={\`font-mono text-xs \${currentTheme.dim} max-w-xs mx-auto leading-tight\`}>
+              Your intelligent AI assistant
             </p>
           </div>
         </div>
@@ -727,38 +746,38 @@ export default function HomePage() {
         <StatsCard stats={stats} loading={loading} />
 
         {/* Quick Actions */}
-        <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
-          <h3 className="font-mono font-semibold text-sm text-green-200 mb-3">Quick Actions</h3>
-          <div className="grid grid-cols-1 gap-3">
+        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3\`}>
+          <h3 className={\`font-mono font-semibold text-xs \${currentTheme.light} mb-2\`}>Quick Actions</h3>
+          <div className="grid grid-cols-1 gap-2">
             {quickActions.map((action, i) => (
               <button
                 key={i}
                 onClick={() => router.push(action.path)}
-                className={\`w-full flex items-center gap-3 p-3 \${action.color} border rounded-lg transition-all duration-200 transform hover:scale-[1.02]\`}
+                className={\`w-full flex items-center gap-2 p-2 \${currentTheme.bg} border \${currentTheme.border} \${currentTheme.bgHover} rounded-lg transition-all duration-200\`}
               >
-                <span className="text-lg">{action.icon}</span>
+                <span className="text-sm">{action.icon}</span>
                 <div className="flex-1 text-left">
-                  <div className="font-mono text-sm text-green-200">{action.title}</div>
-                  <div className="font-mono text-xs text-green-300/70">{action.desc}</div>
+                  <div className={\`font-mono text-xs \${currentTheme.light}\`}>{action.title}</div>
+                  <div className={\`font-mono text-xs \${currentTheme.dim}\`}>{action.desc}</div>
                 </div>
-                <span className="text-xs text-green-300/70">→</span>
+                <span className={\`text-xs \${currentTheme.dim}\`}>→</span>
               </button>
             ))}
           </div>
         </div>
 
         {/* System Status */}
-        <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
+        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3\`}>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+            <div className="flex items-center gap-2">
+              <div className={\`w-2 h-2 \${currentTheme.accent.replace('text-', 'bg-')} rounded-full animate-pulse\`}></div>
               <div>
-                <div className="font-mono font-semibold text-sm text-green-200">System Status</div>
-                <div className="font-mono text-xs text-green-300/70">All systems operational</div>
+                <div className={\`font-mono font-semibold text-xs \${currentTheme.light}\`}>System Status</div>
+                <div className={\`font-mono text-xs \${currentTheme.dim}\`}>All systems operational</div>
               </div>
             </div>
-            <div className="px-2 py-1 bg-green-500/25 border border-green-400/50 rounded-lg">
-              <span className="font-mono text-xs text-green-400">LIVE</span>
+            <div className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg\`}>
+              <span className={\`font-mono text-xs \${currentTheme.accent}\`}>LIVE</span>
             </div>
           </div>
         </div>
@@ -1076,10 +1095,10 @@ export default api;`;
     accent: 'text-green-400',
     light: 'text-green-200',
     dim: 'text-green-300/70',
-    bg: 'bg-green-500/15',
-    bgHover: 'hover:bg-green-500/25',
-    borderActive: 'border-green-400/50',
-    bgActive: 'bg-green-500/25',
+    bg: 'bg-green-500/25',
+    bgHover: 'hover:bg-green-500/35',
+    borderActive: 'border-green-400/60',
+    bgActive: 'bg-green-500/35',
     background: '#0a0f0a',
     foreground: '#22c55e'
   },
@@ -1092,10 +1111,10 @@ export default api;`;
     accent: 'text-blue-400',
     light: 'text-blue-200',
     dim: 'text-blue-300/70',
-    bg: 'bg-blue-500/15',
-    bgHover: 'hover:bg-blue-500/25',
-    borderActive: 'border-blue-400/50',
-    bgActive: 'bg-blue-500/25',
+    bg: 'bg-blue-500/25',
+    bgHover: 'hover:bg-blue-500/35',
+    borderActive: 'border-blue-400/60',
+    bgActive: 'bg-blue-500/35',
     background: '#0a0f1a',
     foreground: '#3b82f6'
   },
@@ -1108,10 +1127,10 @@ export default api;`;
     accent: 'text-purple-400',
     light: 'text-purple-200',
     dim: 'text-purple-300/70',
-    bg: 'bg-purple-500/15',
-    bgHover: 'hover:bg-purple-500/25',
-    borderActive: 'border-purple-400/50',
-    bgActive: 'bg-purple-500/25',
+    bg: 'bg-purple-500/25',
+    bgHover: 'hover:bg-purple-500/35',
+    borderActive: 'border-purple-400/60',
+    bgActive: 'bg-purple-500/35',
     background: '#0f0a1a',
     foreground: '#a855f7'
   },
@@ -1124,10 +1143,10 @@ export default api;`;
     accent: 'text-cyan-300',
     light: 'text-cyan-100',
     dim: 'text-cyan-200/70',
-    bg: 'bg-cyan-500/15',
-    bgHover: 'hover:bg-cyan-500/25',
-    borderActive: 'border-cyan-400/50',
-    bgActive: 'bg-cyan-500/25',
+    bg: 'bg-cyan-500/25',
+    bgHover: 'hover:bg-cyan-500/35',
+    borderActive: 'border-cyan-400/60',
+    bgActive: 'bg-cyan-500/35',
     background: '#0a1a1a',
     foreground: '#06b6d4'
   },
@@ -1140,10 +1159,10 @@ export default api;`;
     accent: 'text-orange-300',
     light: 'text-orange-100',
     dim: 'text-orange-200/70',
-    bg: 'bg-orange-500/15',
-    bgHover: 'hover:bg-orange-500/25',
-    borderActive: 'border-orange-400/50',
-    bgActive: 'bg-orange-500/25',
+    bg: 'bg-orange-500/25',
+    bgHover: 'hover:bg-orange-500/35',
+    borderActive: 'border-orange-400/60',
+    bgActive: 'bg-orange-500/35',
     background: '#1a0f0a',
     foreground: '#f97316'
   },
@@ -1156,10 +1175,10 @@ export default api;`;
     accent: 'text-pink-300',
     light: 'text-pink-100',
     dim: 'text-pink-200/70',
-    bg: 'bg-pink-500/15',
-    bgHover: 'hover:bg-pink-500/25',
-    borderActive: 'border-pink-400/50',
-    bgActive: 'bg-pink-500/25',
+    bg: 'bg-pink-500/25',
+    bgHover: 'hover:bg-pink-500/35',
+    borderActive: 'border-pink-400/60',
+    bgActive: 'bg-pink-500/35',
     background: '#1a0a1a',
     foreground: '#ec4899'
   },
@@ -1172,10 +1191,10 @@ export default api;`;
     accent: 'text-yellow-300',
     light: 'text-yellow-100',
     dim: 'text-yellow-200/70',
-    bg: 'bg-yellow-500/15',
-    bgHover: 'hover:bg-yellow-500/25',
-    borderActive: 'border-yellow-400/50',
-    bgActive: 'bg-yellow-500/25',
+    bg: 'bg-yellow-500/25',
+    bgHover: 'hover:bg-yellow-500/35',
+    borderActive: 'border-yellow-400/60',
+    bgActive: 'bg-yellow-500/35',
     background: '#1a1a0a',
     foreground: '#eab308'
   },
@@ -1188,10 +1207,10 @@ export default api;`;
     accent: 'text-red-300',
     light: 'text-red-100',
     dim: 'text-red-200/70',
-    bg: 'bg-red-500/15',
-    bgHover: 'hover:bg-red-500/25',
-    borderActive: 'border-red-400/50',
-    bgActive: 'bg-red-500/25',
+    bg: 'bg-red-500/25',
+    bgHover: 'hover:bg-red-500/35',
+    borderActive: 'border-red-400/60',
+    bgActive: 'bg-red-500/35',
     background: '#1a0a0a',
     foreground: '#ef4444'
   },
@@ -1204,10 +1223,10 @@ export default api;`;
     accent: 'text-indigo-300',
     light: 'text-indigo-100',
     dim: 'text-indigo-200/70',
-    bg: 'bg-indigo-500/15',
-    bgHover: 'hover:bg-indigo-500/25',
-    borderActive: 'border-indigo-400/50',
-    bgActive: 'bg-indigo-500/25',
+    bg: 'bg-indigo-500/25',
+    bgHover: 'hover:bg-indigo-500/35',
+    borderActive: 'border-indigo-400/60',
+    bgActive: 'bg-indigo-500/35',
     background: '#0a0a1a',
     foreground: '#6366f1'
   },
@@ -1220,10 +1239,10 @@ export default api;`;
     accent: 'text-emerald-300',
     light: 'text-emerald-100',
     dim: 'text-emerald-200/70',
-    bg: 'bg-emerald-500/15',
-    bgHover: 'hover:bg-emerald-500/25',
-    borderActive: 'border-emerald-400/50',
-    bgActive: 'bg-emerald-500/25',
+    bg: 'bg-emerald-500/25',
+    bgHover: 'hover:bg-emerald-500/35',
+    borderActive: 'border-emerald-400/60',
+    bgActive: 'bg-emerald-500/35',
     background: '#0a1a0f',
     foreground: '#10b981'
   },
@@ -1236,10 +1255,10 @@ export default api;`;
     accent: 'text-teal-300',
     light: 'text-teal-100',
     dim: 'text-teal-200/70',
-    bg: 'bg-teal-500/15',
-    bgHover: 'hover:bg-teal-500/25',
-    borderActive: 'border-teal-400/50',
-    bgActive: 'bg-teal-500/25',
+    bg: 'bg-teal-500/25',
+    bgHover: 'hover:bg-teal-500/35',
+    borderActive: 'border-teal-400/60',
+    bgActive: 'bg-teal-500/35',
     background: '#0a1a1a',
     foreground: '#14b8a6'
   },
@@ -1252,10 +1271,10 @@ export default api;`;
     accent: 'text-rose-300',
     light: 'text-rose-100',
     dim: 'text-rose-200/70',
-    bg: 'bg-rose-500/15',
-    bgHover: 'hover:bg-rose-500/25',
-    borderActive: 'border-rose-400/50',
-    bgActive: 'bg-rose-500/25',
+    bg: 'bg-rose-500/25',
+    bgHover: 'hover:bg-rose-500/35',
+    borderActive: 'border-rose-400/60',
+    bgActive: 'bg-rose-500/35',
     background: '#1a0a0f',
     foreground: '#f43f5e'
   }
@@ -1271,6 +1290,8 @@ export type Theme = typeof themes.green;`;
 import ModelCard from '@/components/ModelCard';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
 
 export default function ModelsPage() {
   const [modelsData, setModelsData] = useState<any[]>([]);
@@ -1278,6 +1299,13 @@ export default function ModelsPage() {
 
   const [models, setModels] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
   useEffect(() => {
     fetchModelData();
@@ -1356,8 +1384,8 @@ export default function ModelsPage() {
     <Layout title="Data Models">
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-mono font-bold text-green-200">Data Models</h1>
-          <span className="text-sm font-mono text-green-300/70">
+          <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Data Models</h1>
+          <span className={\`text-sm font-mono \${currentTheme.dim}\`}>
             {models.length} model{models.length !== 1 ? 's' : ''}
           </span>
         </div>
@@ -1373,9 +1401,9 @@ export default function ModelsPage() {
         {loading ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-green-500/10 border border-green-400/20 rounded-xl p-4 animate-pulse">
-                <div className="h-6 bg-green-500/20 rounded w-1/3 mb-2"></div>
-                <div className="h-4 bg-green-500/20 rounded w-2/3"></div>
+              <div key={i} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4 animate-pulse\`}>
+                <div className={\`h-6 \${currentTheme.bg} rounded w-1/3 mb-2\`}></div>
+                <div className={\`h-4 \${currentTheme.bg} rounded w-2/3\`}></div>
               </div>
             ))}
           </div>
@@ -1388,8 +1416,8 @@ export default function ModelsPage() {
         ) : (
           <div className="text-center py-12">
             <div className="text-4xl mb-4">🗃️</div>
-            <h3 className="font-mono text-lg text-green-200 mb-2">No Models Found</h3>
-            <p className="font-mono text-sm text-green-300/70">
+            <h3 className={\`font-mono text-lg \${currentTheme.light} mb-2\`}>No Models Found</h3>
+            <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
               Your data models will appear here once they're created.
             </p>
           </div>
@@ -1533,11 +1561,20 @@ export default function ModelDetailPage() {
 import ActionCard from '@/components/ActionCard';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
 
 export default function ActionsPage() {
   const [actions, setActions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
   useEffect(() => {
     fetchActions();
@@ -1602,14 +1639,14 @@ export default function ActionsPage() {
       <Layout title="Actions">
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-mono font-bold text-green-200">Smart Actions</h1>
-            <span className="text-sm font-mono text-green-300/70">Loading...</span>
+            <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Smart Actions</h1>
+            <span className={\`text-sm font-mono \${currentTheme.dim}\`}>Loading...</span>
           </div>
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-green-500/10 border border-green-400/20 rounded-xl p-4 animate-pulse">
-                <div className="h-6 bg-green-500/20 rounded w-1/3 mb-2"></div>
-                <div className="h-4 bg-green-500/20 rounded w-2/3"></div>
+              <div key={i} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4 animate-pulse\`}>
+                <div className={\`h-6 \${currentTheme.bg} rounded w-1/3 mb-2\`}></div>
+                <div className={\`h-4 \${currentTheme.bg} rounded w-2/3\`}></div>
               </div>
             ))}
           </div>
@@ -1622,8 +1659,8 @@ export default function ActionsPage() {
     <Layout title="Actions">
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-mono font-bold text-green-200">Smart Actions</h1>
-          <span className="text-sm font-mono text-green-300/70">
+          <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Smart Actions</h1>
+          <span className={\`text-sm font-mono \${currentTheme.dim}\`}>
             {actions.length} action{actions.length !== 1 ? 's' : ''}
           </span>
         </div>
@@ -1636,8 +1673,8 @@ export default function ActionsPage() {
           </div>
         )}
 
-        <div className="mb-4 p-4 bg-green-500/10 border border-green-400/20 rounded-xl">
-          <p className="font-mono text-sm text-green-300/70">
+        <div className={\`mb-4 p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
+          <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
             💡 <strong>Interactive Actions:</strong> Click any action card to open the execution modal. 
             Choose between local execution (runs on this sub-agent) or remote execution (runs on main app).
           </p>
@@ -1655,12 +1692,12 @@ export default function ActionsPage() {
         ) : (
           <div className="text-center py-12">
             <div className="text-4xl mb-4">⚡</div>
-            <h3 className="font-mono text-lg text-green-200 mb-2">No Actions Available</h3>
-            <p className="font-mono text-sm text-green-300/70">
+            <h3 className={\`font-mono text-lg \${currentTheme.light} mb-2\`}>No Actions Available</h3>
+            <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
               Smart actions will appear here once they're configured in the main app.
             </p>
-            <div className="mt-6 p-4 bg-blue-500/10 border border-blue-400/20 rounded-xl">
-              <p className="font-mono text-xs text-blue-300/70">
+            <div className={\`mt-6 p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
+              <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
                 🚀 Actions are automatically synced from the main app. Create actions in the main app 
                 and they'll appear here for interactive execution.
               </p>
@@ -1678,11 +1715,20 @@ export default function ActionsPage() {
 import ScheduleCard from '@/components/ScheduleCard';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
 
 export default function SchedulesPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
   useEffect(() => {
     fetchSchedules();
@@ -1752,14 +1798,14 @@ export default function SchedulesPage() {
       <Layout title="Schedules">
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-mono font-bold text-green-200">Scheduled Tasks</h1>
-            <span className="text-sm font-mono text-green-300/70">Loading...</span>
+            <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Scheduled Tasks</h1>
+            <span className={\`text-sm font-mono \${currentTheme.dim}\`}>Loading...</span>
           </div>
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-green-500/10 border border-green-400/20 rounded-xl p-4 animate-pulse">
-                <div className="h-6 bg-green-500/20 rounded w-1/3 mb-2"></div>
-                <div className="h-4 bg-green-500/20 rounded w-2/3"></div>
+              <div key={i} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4 animate-pulse\`}>
+                <div className={\`h-6 \${currentTheme.bg} rounded w-1/3 mb-2\`}></div>
+                <div className={\`h-4 \${currentTheme.bg} rounded w-2/3\`}></div>
               </div>
             ))}
           </div>
@@ -1772,8 +1818,8 @@ export default function SchedulesPage() {
     <Layout title="Schedules">
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-mono font-bold text-green-200">Scheduled Tasks</h1>
-          <span className="text-sm font-mono text-green-300/70">
+          <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Scheduled Tasks</h1>
+          <span className={\`text-sm font-mono \${currentTheme.dim}\`}>
             {schedules.filter(s => s.active).length}/{schedules.length} active
           </span>
         </div>
@@ -1788,17 +1834,17 @@ export default function SchedulesPage() {
 
         {/* Summary Stats */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-3 text-center">
-            <div className="font-mono font-bold text-lg text-green-400">
+          <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3 text-center\`}>
+            <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>
               {schedules.length}
             </div>
-            <div className="font-mono text-xs text-green-300/70">Total Tasks</div>
+            <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Total Tasks</div>
           </div>
-          <div className="bg-blue-500/15 border border-blue-400/30 rounded-xl p-3 text-center">
-            <div className="font-mono font-bold text-lg text-blue-400">
+          <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3 text-center\`}>
+            <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>
               {schedules.filter(s => s.active).length}
             </div>
-            <div className="font-mono text-xs text-blue-300/70">Active Tasks</div>
+            <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Active Tasks</div>
           </div>
         </div>
 
@@ -1817,8 +1863,8 @@ export default function SchedulesPage() {
         ) : (
           <div className="text-center py-12">
             <div className="text-4xl mb-4">⏰</div>
-            <h3 className="font-mono text-lg text-green-200 mb-2">No Schedules</h3>
-            <p className="font-mono text-sm text-green-300/70">
+            <h3 className={\`font-mono text-lg \${currentTheme.light} mb-2\`}>No Schedules</h3>
+            <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
               Automated tasks will appear here once they're configured.
             </p>
           </div>
@@ -2103,7 +2149,10 @@ What would you like to explore first?\`,
 }`;
   }
   private generateModelCardComponent(): string {
-    return `interface ModelCardProps {
+    return `import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
+
+interface ModelCardProps {
   model: {
     name: string;
     emoji?: string;
@@ -2114,23 +2163,30 @@ What would you like to explore first?\`,
 }
 
 export default function ModelCard({ model }: ModelCardProps) {
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+
   return (
-    <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
+    <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
       <div className="flex items-center gap-3 mb-3">
         <span className="text-lg">{model.emoji || '📋'}</span>
         <div className="flex-1">
-          <h3 className="font-mono font-semibold text-sm text-green-200 capitalize">
+          <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light} capitalize\`}>
             {model.name}
           </h3>
-          <p className="font-mono text-xs text-green-300/70">
+          <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
             {model.description || \`Manage \${model.name} records\`}
           </p>
         </div>
         <div className="text-right">
-          <div className="font-mono font-semibold text-sm text-green-400">
+          <div className={\`font-mono font-semibold text-sm \${currentTheme.accent}\`}>
             {model.error ? '⚠️' : (model.recordCount || 0)}
           </div>
-          <div className="font-mono text-xs text-green-300/70">
+          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>
             {model.error ? 'Error' : 'records'}
           </div>
         </div>
@@ -2143,6 +2199,8 @@ export default function ModelCard({ model }: ModelCardProps) {
   private generateActionCardComponent(): string {
     return `import { useState } from 'react';
 import ActionExecutionModal from './ActionExecutionModal';
+import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
 
 interface ActionCardProps {
   action: {
@@ -2161,6 +2219,13 @@ export default function ActionCard({ action }: ActionCardProps) {
   const [lastResult, setLastResult] = useState<any>(null);
   const [lastExecutionTime, setLastExecutionTime] = useState<string | null>(null);
 
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+
   const handleActionComplete = (result: any) => {
     setLastResult(result);
     setLastExecutionTime(new Date().toLocaleString());
@@ -2170,25 +2235,25 @@ export default function ActionCard({ action }: ActionCardProps) {
   return (
     <>
       <div 
-        className="bg-green-500/15 border border-green-400/30 rounded-xl p-4 cursor-pointer hover:bg-green-500/20 transition-colors"
+        className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4 cursor-pointer \${currentTheme.bgHover} transition-colors\`}
         onClick={() => setShowModal(true)}
       >
         <div className="flex items-center gap-3 mb-3">
           <span className="text-lg">{action.emoji || '⚡'}</span>
           <div className="flex-1">
-            <h3 className="font-mono font-semibold text-sm text-green-200">
+            <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light}\`}>
               {action.name}
             </h3>
-            <p className="font-mono text-xs text-green-300/70">
+            <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
               {action.description || \`Execute \${action.name}\`}
             </p>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <span className="px-2 py-1 bg-green-500/25 border border-green-400/50 rounded-lg font-mono text-xs text-green-200">
+            <span className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg font-mono text-xs \${currentTheme.light}\`}>
               {action.type === 'query' ? '🔍 Query' : '⚡ Action'}
             </span>
             {lastExecutionTime && (
-              <span className="font-mono text-xs text-green-300/50">
+              <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
                 Last: {lastExecutionTime.split(' ')[1]?.substring(0, 5)}
               </span>
             )}
@@ -2199,17 +2264,17 @@ export default function ActionCard({ action }: ActionCardProps) {
         {lastResult && (
           <div className="flex items-center gap-2 text-xs font-mono">
             <div className={\`w-2 h-2 rounded-full \${
-              lastResult.success ? 'bg-green-400' : 'bg-red-400'
+              lastResult.success ? currentTheme.accent.replace('text-', 'bg-') : 'bg-red-400'
             }\`} />
-            <span className="text-green-300/70">
+            <span className={\`\${currentTheme.dim}\`}>
               {lastResult.success ? 'Last execution successful' : 'Last execution failed'}
             </span>
           </div>
         )}
 
         {/* Click indicator */}
-        <div className="mt-3 pt-3 border-t border-green-400/20">
-          <p className="font-mono text-xs text-green-300/50 text-center">
+        <div className={\`mt-3 pt-3 border-t \${currentTheme.border}\`}>
+          <p className={\`font-mono text-xs \${currentTheme.dim} text-center\`}>
             Click to execute → 
           </p>
         </div>
@@ -2229,7 +2294,10 @@ export default function ActionCard({ action }: ActionCardProps) {
   }
 
   private generateScheduleCardComponent(): string {
-    return `interface ScheduleCardProps {
+    return `import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
+
+interface ScheduleCardProps {
   schedule: {
     id: string;
     name: string;
@@ -2242,21 +2310,28 @@ export default function ActionCard({ action }: ActionCardProps) {
 }
 
 export default function ScheduleCard({ schedule }: ScheduleCardProps) {
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+
   return (
-    <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
+    <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
       <div className="flex items-center gap-3 mb-3">
         <span className="text-lg">{schedule.emoji || '⏰'}</span>
         <div className="flex-1">
-          <h3 className="font-mono font-semibold text-sm text-green-200">
+          <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light}\`}>
             {schedule.name}
           </h3>
-          <p className="font-mono text-xs text-green-300/70">
+          <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
             {schedule.description || \`Scheduled: \${schedule.pattern}\`}
           </p>
         </div>
         <div className={\`px-2 py-1 rounded-lg border \${
           schedule.active 
-            ? 'bg-green-500/25 border-green-400/50 text-green-400' 
+            ? \`\${currentTheme.bgActive} \${currentTheme.borderActive} \${currentTheme.accent}\`
             : 'bg-gray-500/25 border-gray-400/50 text-gray-400'
         }\`}>
           <span className="font-mono text-xs">
@@ -2264,12 +2339,12 @@ export default function ScheduleCard({ schedule }: ScheduleCardProps) {
           </span>
         </div>
       </div>
-      <div className="font-mono text-xs text-green-300/70">
-        Pattern: <span className="text-green-300">{schedule.pattern}</span>
+      <div className={\`font-mono text-xs \${currentTheme.dim}\`}>
+        Pattern: <span className={\`\${currentTheme.light}\`}>{schedule.pattern}</span>
       </div>
       {schedule.nextRun && (
-        <div className="font-mono text-xs text-green-300/70 mt-1">
-          Next: <span className="text-green-300">{schedule.nextRun}</span>
+        <div className={\`font-mono text-xs \${currentTheme.dim} mt-1\`}>
+          Next: <span className={\`\${currentTheme.light}\`}>{schedule.nextRun}</span>
         </div>
       )}
     </div>
@@ -2278,7 +2353,10 @@ export default function ScheduleCard({ schedule }: ScheduleCardProps) {
   }
 
   private generateStatsCardComponent(): string {
-    return `interface StatsCardProps {
+    return `import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
+
+interface StatsCardProps {
   stats: {
     totalRecords: number;
     activeSchedules: number;
@@ -2290,16 +2368,23 @@ export default function ScheduleCard({ schedule }: ScheduleCardProps) {
 }
 
 export default function StatsCard({ stats, loading }: StatsCardProps) {
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+
   if (loading) {
     return (
-      <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
+      <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
         <div className="animate-pulse">
-          <div className="h-4 bg-green-500/20 rounded w-1/3 mb-3"></div>
+          <div className={\`h-4 \${currentTheme.bg} rounded w-1/3 mb-3\`}></div>
           <div className="grid grid-cols-2 gap-3">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="text-center">
-                <div className="h-6 bg-green-500/20 rounded w-8 mx-auto mb-1"></div>
-                <div className="h-3 bg-green-500/20 rounded w-12 mx-auto"></div>
+                <div className={\`h-6 \${currentTheme.bg} rounded w-8 mx-auto mb-1\`}></div>
+                <div className={\`h-3 \${currentTheme.bg} rounded w-12 mx-auto\`}></div>
               </div>
             ))}
           </div>
@@ -2309,24 +2394,24 @@ export default function StatsCard({ stats, loading }: StatsCardProps) {
   }
 
   return (
-    <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
-      <h3 className="font-mono font-semibold text-sm text-green-200 mb-3">System Overview</h3>
+    <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
+      <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light} mb-3\`}>System Overview</h3>
       <div className="grid grid-cols-2 gap-3">
         <div className="text-center">
-          <div className="font-mono font-bold text-lg text-green-400">{stats.totalRecords}</div>
-          <div className="font-mono text-xs text-green-300/70">Records</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.totalRecords}</div>
+          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Records</div>
         </div>
         <div className="text-center">
-          <div className="font-mono font-bold text-lg text-blue-400">{stats.activeSchedules}</div>
-          <div className="font-mono text-xs text-blue-300/70">Active Tasks</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.activeSchedules}</div>
+          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Active Tasks</div>
         </div>
         <div className="text-center">
-          <div className="font-mono font-bold text-lg text-yellow-400">{stats.totalModels}</div>
-          <div className="font-mono text-xs text-yellow-300/70">Models</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.totalModels}</div>
+          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Models</div>
         </div>
         <div className="text-center">
-          <div className="font-mono font-bold text-lg text-purple-400">{stats.totalActions}</div>
-          <div className="font-mono text-xs text-purple-300/70">Actions</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.totalActions}</div>
+          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Actions</div>
         </div>
       </div>
     </div>
@@ -3174,13 +3259,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     };
 
     // Try to get actual record counts from each model
-    ${this.options.models.map(model => `
+    ${this.options.models.map(model => {
+      const camelCaseModelName = model.name.charAt(0).toLowerCase() + model.name.slice(1);
+      return `
     try {
-      const ${model.name.toLowerCase()}Count = await prisma.${model.name.toLowerCase()}.count();
-      stats.totalRecords += ${model.name.toLowerCase()}Count;
+      const ${camelCaseModelName}Count = await prisma.${camelCaseModelName}.count();
+      stats.totalRecords += ${camelCaseModelName}Count;
     } catch (error) {
       console.log('Model ${model.name} not yet available:', error.message);
-    }`).join('')}
+    }`;
+    }).join('')}
 
     res.status(200).json({ success: true, data: stats });
   } catch (error) {
@@ -3212,9 +3300,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Model name is required' });
   }
 
-  const modelClient = (prisma as any)[modelName.toLowerCase()];
+  // Convert PascalCase model name to camelCase for Prisma client access
+  const camelCaseModelName = modelName.charAt(0).toLowerCase() + modelName.slice(1);
+  const modelClient = (prisma as any)[camelCaseModelName];
+  
   if (!modelClient) {
-    return res.status(404).json({ error: \`Model '\${modelName}' not found\` });
+    console.error(\`Model '\${modelName}' (camelCase: '\${camelCaseModelName}') not found in Prisma client\`);
+    console.error('Available models:', Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_')));
+    return res.status(404).json({ 
+      error: \`Model '\${modelName}' not found\`,
+      details: \`Attempted to access '\${camelCaseModelName}' on Prisma client\`,
+      availableModels: Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_'))
+    });
   }
 
   try {
@@ -3240,18 +3337,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
           let where = {};
           if (search && typeof search === 'string') {
-            // Simple search across text fields (adjust based on your model fields)
-            where = {
-              OR: [
-                { name: { contains: search, mode: 'insensitive' } },
-                { title: { contains: search, mode: 'insensitive' } },
-                { description: { contains: search, mode: 'insensitive' } }
-              ].filter(condition => {
-                // Only include conditions for fields that exist
-                const field = Object.keys(condition)[0];
-                return true; // In a real implementation, you'd check if the field exists on the model
-              })
-            };
+            // Dynamic search - try to search across text fields that might exist
+            // This is a basic implementation that attempts common field names
+            const searchConditions = [];
+            
+            try {
+              // Get a sample record to see what fields exist
+              const sampleRecord = await modelClient.findFirst();
+              if (sampleRecord) {
+                const stringFields = Object.keys(sampleRecord).filter(key => 
+                  typeof sampleRecord[key] === 'string' && 
+                  !['id', 'createdAt', 'updatedAt'].includes(key)
+                );
+                
+                stringFields.forEach(field => {
+                  searchConditions.push({ [field]: { contains: search, mode: 'insensitive' } });
+                });
+              }
+            } catch (error) {
+              // Fallback to common field names if schema inspection fails
+              const commonFields = ['name', 'title', 'description', 'label'];
+              commonFields.forEach(field => {
+                searchConditions.push({ [field]: { contains: search, mode: 'insensitive' } });
+              });
+            }
+            
+            if (searchConditions.length > 0) {
+              where = { OR: searchConditions };
+            }
           }
 
           const [records, total] = await Promise.all([
@@ -3387,9 +3500,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Record ID is required' });
   }
 
-  const modelClient = (prisma as any)[modelName.toLowerCase()];
+  // Convert PascalCase model name to camelCase for Prisma client access
+  const camelCaseModelName = modelName.charAt(0).toLowerCase() + modelName.slice(1);
+  const modelClient = (prisma as any)[camelCaseModelName];
+  
   if (!modelClient) {
-    return res.status(404).json({ error: \`Model '\${modelName}' not found\` });
+    console.error(\`Model '\${modelName}' (camelCase: '\${camelCaseModelName}') not found in Prisma client\`);
+    console.error('Available models:', Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_')));
+    return res.status(404).json({ 
+      error: \`Model '\${modelName}' not found\`,
+      details: \`Attempted to access '\${camelCaseModelName}' on Prisma client\`,
+      availableModels: Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_'))
+    });
   }
 
   try {
@@ -4065,7 +4187,7 @@ async function main() {
   ${this.options.models.map(model => `
   // TODO: Add seed data for ${model.name}
   // Example:
-  // const sample${model.name} = await prisma.${model.name.toLowerCase()}.createMany({
+  // const sample${model.name} = await prisma.${model.name.charAt(0).toLowerCase() + model.name.slice(1)}.createMany({
   //   data: [
   //     // Add your sample data here based on your ${model.name} model fields
   //   ]
@@ -4085,9 +4207,85 @@ main()
   })`;
   }
 
+  private sanitizePrismaSchema(schema: string): string {
+    try {
+      // Fix common relation issues that cause validation errors
+      let sanitizedSchema = schema;
+      
+      // 1. Remove problematic one-to-one relations without @unique
+      // Pattern: fieldName ModelName @relation(fields: [fieldId], references: [id])
+      // where fieldId is not marked as @unique
+      const relationPattern = /(\w+)\s+(\w+)\s*@relation\(fields:\s*\[(\w+)\],\s*references:\s*\[[^\]]+\]\)/g;
+      
+      sanitizedSchema = sanitizedSchema.replace(relationPattern, (match, fieldName, modelName, foreignKeyField) => {
+        // Check if the foreign key field has @unique constraint
+        const uniquePattern = new RegExp(`${foreignKeyField}\\s+\\w+[^\\n]*@unique`, 'g');
+        const hasUnique = uniquePattern.test(sanitizedSchema);
+        
+        if (!hasUnique) {
+          // For now, remove the relation attribute to avoid validation errors
+          // Keep just the field without the relation
+          console.log(`Sanitizing relation: Removed @relation from ${fieldName} -> ${modelName} (missing @unique on ${foreignKeyField})`);
+          return `${fieldName} ${modelName}?`;
+        }
+        
+        return match;
+      });
+      
+      // 2. Ensure foreign key fields are optional if they have relations (but NOT ID fields)
+      const foreignKeyPattern = /(\w+Id)\s+(String|Int)(\s+@unique)?(?!\s*@id)/g;
+      sanitizedSchema = sanitizedSchema.replace(foreignKeyPattern, (match, fieldName, type, unique) => {
+        // Don't make ID fields optional - they must be required
+        if (match.includes('@id')) {
+          return match;
+        }
+        
+        if (unique) {
+          return `${fieldName} ${type}?${unique}`;
+        } else {
+          return `${fieldName} ${type}?`;
+        }
+      });
+      
+      // 3. Fix any ID fields that were accidentally made optional
+      const idFieldPattern = /(\w+)\s+(String|Int)\?\s+@id/g;
+      sanitizedSchema = sanitizedSchema.replace(idFieldPattern, (match, fieldName, type) => {
+        console.log(`Fixing ID field: Removing ? from ${fieldName} (ID fields must be required)`);
+        return `${fieldName} ${type} @id`;
+      });
+      
+      // 4. Add note about sanitization
+      if (sanitizedSchema !== schema) {
+        sanitizedSchema += '\n\n// Note: Schema was sanitized to remove problematic relations during deployment.';
+      }
+      
+      return sanitizedSchema;
+    } catch (error) {
+      console.error('Error sanitizing Prisma schema:', error);
+      // Fallback to generating a clean default schema
+      return this.generateDefaultPrismaSchema();
+    }
+  }
+
   private generateDefaultPrismaSchema(): string {
     const modelSchemas = this.options.models.map(model => {
-      const fields = model.fields.map((field: any) => {
+      // Check if model has an explicit ID field
+      const hasIdField = model.fields.some((field: any) => field.isId);
+      
+      let fieldsArray = [...model.fields];
+      
+      // Add default ID field if none exists
+      if (!hasIdField) {
+        fieldsArray.unshift({
+          name: 'id',
+          type: 'String',
+          isId: true,
+          required: true,
+          unique: false
+        });
+      }
+      
+      const fields = fieldsArray.map((field: any) => {
         let prismaType = 'String';
         switch (field.type.toLowerCase()) {
           case 'int':
@@ -4111,17 +4309,26 @@ main()
         }
 
         const modifiers = [];
-        if (field.isId) modifiers.push('@id @default(cuid())');
-        else if (!field.required) modifiers.push('?');
-        if (field.unique && !field.isId) modifiers.push('@unique');
+        if (field.isId) {
+          // ID fields are ALWAYS required (no ?)
+          modifiers.push('@id @default(cuid())');
+        } else {
+          // Make all non-ID fields optional for flexibility
+          if (!field.required) modifiers.push('?');
+          
+          // Handle unique constraints carefully
+          if (field.unique && !field.isId) {
+            modifiers.push('@unique');
+          }
+        }
 
-        return `  ${field.name} ${prismaType}${modifiers.join(' ')}`;
+        return `  ${field.name} ${prismaType}${modifiers.length > 0 ? ' ' + modifiers.join(' ') : ''}`;
       }).join('\n');
 
       return `model ${model.name} {
 ${fields}
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
 }`;
     }).join('\n\n');
 
@@ -4140,6 +4347,7 @@ ${modelSchemas}
 
 // Note: This schema is automatically generated.
 // Any manual changes will be overwritten on next deployment.
+// Relations are simplified to avoid validation errors.
 `;
   }
 
