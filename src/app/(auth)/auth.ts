@@ -31,10 +31,32 @@ if (missingEnvVars.length > 0) {
   }
 }
 
-// Validate NEXTAUTH_URL for production
-if (process.env.NODE_ENV === 'production' && !process.env.NEXTAUTH_URL) {
-  console.warn('⚠️ NEXTAUTH_URL not set in production. This may cause redirect issues.');
-  console.warn('   Set NEXTAUTH_URL to your production domain (e.g., https://your-domain.com)');
+// Enhanced production validation
+if (process.env.NODE_ENV === 'production') {
+  // Validate NEXTAUTH_URL for production
+  if (!process.env.NEXTAUTH_URL) {
+    console.error('❌ NEXTAUTH_URL is REQUIRED in production!');
+    console.error('   Set NEXTAUTH_URL to: https://rom.cards');
+    throw new Error('NEXTAUTH_URL must be set in production environment');
+  }
+
+  // Validate AUTH_SECRET length
+  if (process.env.AUTH_SECRET && process.env.AUTH_SECRET.length < 32) {
+    console.error('❌ AUTH_SECRET must be at least 32 characters long in production');
+    throw new Error('AUTH_SECRET too short for production use');
+  }
+
+  console.log('🔐 Production auth validation passed:', {
+    nextAuthUrl: process.env.NEXTAUTH_URL,
+    authSecretLength: process.env.AUTH_SECRET?.length,
+    hasDatabase: !!process.env.POSTGRES_URL,
+  });
+} else {
+  // Development warnings
+  if (!process.env.NEXTAUTH_URL) {
+    console.warn('⚠️ NEXTAUTH_URL not set in development. This may cause redirect issues.');
+    console.warn('   Set NEXTAUTH_URL to your development domain (e.g., http://localhost:3000)');
+  }
 }
 
 console.log('🔐 Auth configuration loaded successfully:', {
@@ -294,15 +316,24 @@ export const {
   ...authConfig,
   trustHost: true,
   
-  // Simplified session and JWT configuration
+  // Enhanced session and JWT configuration with production settings
   session: {
     strategy: 'jwt',
     maxAge: 30 * 24 * 60 * 60, // 30 days
+    updateAge: 24 * 60 * 60, // 24 hours
   },
   
   jwt: {
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
+
+  // Production-ready configuration
+  ...(process.env.NODE_ENV === 'production' && {
+    // Force HTTPS in production
+    useSecureCookies: true,
+    // Set the auth URL explicitly
+    url: process.env.NEXTAUTH_URL || 'https://rom.cards',
+  }),
   
   // Environment-appropriate cookie settings
   cookies: {
