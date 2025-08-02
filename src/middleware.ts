@@ -27,6 +27,7 @@ export async function middleware(request: NextRequest) {
     return new Response('pong', { status: 200 });
   }
 
+  // Let NextAuth handle all auth routes without interference
   if (pathname.startsWith('/api/auth')) {
     return NextResponse.next();
   }
@@ -133,56 +134,70 @@ export async function middleware(request: NextRequest) {
     // If no agent token provided, continue with normal auth flow
   }
 
-  const token = await getToken({
-    req: request,
-    secret: process.env.AUTH_SECRET,
-    secureCookie: !isDevelopmentEnvironment,
-  });
-
-  // Check if request is coming from ngrok or localhost for testing/development
-  const host = request.headers.get('host');
-  const ngrokUrl = process.env.NGROK_URL;
+  // Get host and environment info
+  const host = request.headers.get('host') || '';
+  const isProduction = process.env.NODE_ENV === 'production';
   
-  const isNgrokRequest = host && (
-    host.includes('.ngrok-free.app') ||
-    host.includes('.ngrok.io') ||
-    host.includes('.ngrok.app') ||
-    (ngrokUrl && (
-      host.includes(ngrokUrl.replace(/https?:\/\//, '')) ||
-      request.url.includes(ngrokUrl)
-    ))
-  );
-
-  // Allow localhost in development
-  const isLocalhostRequest = host && (
+  // Check for development/testing environments that bypass auth
+  const isNgrokRequest = host.includes('.ngrok-free.app') || 
+                        host.includes('.ngrok.io') || 
+                        host.includes('.ngrok.app') ||
+                        (process.env.NGROK_URL && host.includes(process.env.NGROK_URL.replace(/https?:\/\//, '')));
+                        
+  const isLocalhostRequest = isDevelopmentEnvironment && (
     host.startsWith('localhost:') ||
     host.startsWith('127.0.0.1:') ||
     host === 'localhost' ||
     host === '127.0.0.1'
   );
 
-  const isTrustedRequest = isNgrokRequest || (isDevelopmentEnvironment && isLocalhostRequest);
+  // For development environments, allow bypassing auth for certain cases
+  const isTrustedRequest = isNgrokRequest || isLocalhostRequest;
 
-  if (!token && !isTrustedRequest) {
+  // Try to get the NextAuth token
+  let token;
+  try {
+    token = await getToken({
+      req: request,
+      secret: process.env.AUTH_SECRET,
+      secureCookie: isProduction,
+    });
+  } catch (error) {
+    console.error('❌ Token verification error:', error);
+    // If token verification fails, redirect to guest auth
+    if (!isTrustedRequest) {
+      const redirectUrl = encodeURIComponent(request.url);
+      return NextResponse.redirect(
+        new URL(`/api/auth/guest?redirectUrl=${redirectUrl}`, request.url),
+      );
+    }
+  }
+
+  // Handle unauthenticated users
+  if (!token) {
+    // Allow trusted requests to continue without authentication for development
+    if (isTrustedRequest) {
+      console.log(`🔓 Allowing trusted request: ${host}${pathname}`);
+      return NextResponse.next();
+    }
+
+    // Redirect to guest authentication for production
+    console.log(`🔒 No token, redirecting to guest auth: ${pathname}`);
     const redirectUrl = encodeURIComponent(request.url);
-
     return NextResponse.redirect(
       new URL(`/api/auth/guest?redirectUrl=${redirectUrl}`, request.url),
     );
   }
 
-  // Allow trusted requests (ngrok/localhost) to continue even without token
-  if (!token && isTrustedRequest) {
-    console.log(`🔓 Allowing trusted request from ${host} to ${pathname}`);
-    return NextResponse.next();
-  }
-
+  // Handle authenticated users trying to access login/register
   const isGuest = guestRegex.test(token?.email ?? '');
-
   if (token && !isGuest && ['/login', '/register'].includes(pathname)) {
+    console.log(`↩️ Authenticated user accessing ${pathname}, redirecting to chat`);
     return NextResponse.redirect(new URL('/chat', request.url));
   }
 
+  // Allow the request to continue
+  console.log(`✅ Auth check passed: ${token.email?.slice(0, 15)}... → ${pathname}`);
   return NextResponse.next();
 }
 
