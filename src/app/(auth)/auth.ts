@@ -31,10 +31,18 @@ if (missingEnvVars.length > 0) {
   }
 }
 
+// Validate NEXTAUTH_URL for production
+if (process.env.NODE_ENV === 'production' && !process.env.NEXTAUTH_URL) {
+  console.warn('⚠️ NEXTAUTH_URL not set in production. This may cause redirect issues.');
+  console.warn('   Set NEXTAUTH_URL to your production domain (e.g., https://your-domain.com)');
+}
+
 console.log('🔐 Auth configuration loaded successfully:', {
   environment: process.env.NODE_ENV,
   hasAuthSecret: !!process.env.AUTH_SECRET,
   hasDatabase: !!process.env.POSTGRES_URL,
+  hasNextAuthUrl: !!process.env.NEXTAUTH_URL,
+  nextAuthUrl: process.env.NEXTAUTH_URL || 'not_set',
   hasNgrok: !!process.env.NGROK_URL,
 });
 

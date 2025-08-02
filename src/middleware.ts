@@ -27,6 +27,11 @@ export async function middleware(request: NextRequest) {
     return new Response('pong', { status: 200 });
   }
 
+  // Allow health checks without authentication
+  if (pathname.startsWith('/api/health')) {
+    return NextResponse.next();
+  }
+
   // Let NextAuth handle all auth routes without interference
   if (pathname.startsWith('/api/auth')) {
     return NextResponse.next();
@@ -154,6 +159,16 @@ export async function middleware(request: NextRequest) {
   // For development environments, allow bypassing auth for certain cases
   const isTrustedRequest = isNgrokRequest || isLocalhostRequest;
 
+  // Prevent redirect loops - if we're already being redirected FROM guest auth, allow it through
+  const referer = request.headers.get('referer');
+  const isFromGuestAuth = referer && referer.includes('/api/auth/guest');
+  const isFromSignIn = referer && referer.includes('/api/auth/signin');
+  
+  if (isFromGuestAuth || isFromSignIn) {
+    console.log(`🔄 Allowing request from auth redirect: ${pathname}`);
+    return NextResponse.next();
+  }
+
   // Try to get the NextAuth token
   let token;
   try {
@@ -164,12 +179,10 @@ export async function middleware(request: NextRequest) {
     });
   } catch (error) {
     console.error('❌ Token verification error:', error);
-    // If token verification fails, redirect to guest auth
-    if (!isTrustedRequest) {
-      const redirectUrl = encodeURIComponent(request.url);
-      return NextResponse.redirect(
-        new URL(`/api/auth/guest?redirectUrl=${redirectUrl}`, request.url),
-      );
+    // If token verification fails, allow through to prevent loops
+    if (isTrustedRequest || pathname === '/') {
+      console.log(`🔓 Token error, allowing through: ${pathname}`);
+      return NextResponse.next();
     }
   }
 
@@ -181,11 +194,22 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
+    // For production, only redirect to guest auth for specific routes
+    const shouldRedirectToAuth = pathname === '/' || 
+                                pathname.startsWith('/chat') || 
+                                pathname.startsWith('/deployment') ||
+                                pathname.startsWith('/auth-test');
+
+    if (!shouldRedirectToAuth) {
+      console.log(`🔓 Allowing access to public route: ${pathname}`);
+      return NextResponse.next();
+    }
+
     // Redirect to guest authentication for production
     console.log(`🔒 No token, redirecting to guest auth: ${pathname}`);
     const redirectUrl = encodeURIComponent(request.url);
     return NextResponse.redirect(
-      new URL(`/api/auth/guest?redirectUrl=${redirectUrl}`, request.url),
+      new URL(`/api/auth/signin/guest?callbackUrl=${redirectUrl}`, request.url),
     );
   }
 
@@ -203,18 +227,15 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/',
-    '/chat/:id',
-    '/api/:path*',
-    '/login',
-    '/register',
-
     /*
      * Match all request paths except for the ones starting with:
      * - _next/static (static files)
-     * - _next/image (image optimization files)
+     * - _next/image (image optimization files)  
      * - favicon.ico, sitemap.xml, robots.txt (metadata files)
+     * - /api/auth (NextAuth routes)
+     * - /api/health (health check)
+     * - /ping (test endpoint)
      */
-    '/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)',
+    '/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|api/auth|api/health|ping).*)',
   ],
 };
