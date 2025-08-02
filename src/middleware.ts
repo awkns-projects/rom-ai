@@ -5,6 +5,8 @@ import { extractAgentToken, verifyAgentToken, checkRateLimit, createAgentRespons
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const searchParams = request.nextUrl.searchParams;
+  const referer = request.headers.get('referer');
 
   // Handle CORS preflight requests for sub-agents
   if (request.method === 'OPTIONS') {
@@ -160,7 +162,6 @@ export async function middleware(request: NextRequest) {
   const isTrustedRequest = isNgrokRequest || isLocalhostRequest;
 
   // Prevent redirect loops - if we're already being redirected FROM guest auth, allow it through
-  const referer = request.headers.get('referer');
   const isFromGuestAuth = referer && (referer.includes('/api/auth/guest') || referer.includes('/api/auth/signin'));
   const isFromSignIn = referer && referer.includes('/api/auth/signin');
   
@@ -182,7 +183,7 @@ export async function middleware(request: NextRequest) {
     
     // If token verification fails due to configuration issues, 
     // allow through for specific routes to prevent infinite loops
-    if (isTrustedRequest || pathname === '/' || pathname.startsWith('/api/health')) {
+    if (isTrustedRequest || pathname === '/' || pathname.startsWith('/api/health') || pathname.startsWith('/chat')) {
       console.log(`🔓 Token error, allowing through for fallback: ${pathname}`);
       return NextResponse.next();
     }
@@ -200,36 +201,37 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    // For production, check if this is the home page and allow it to load
-    // even if there are auth configuration issues
-    if (pathname === '/') {
-      console.log(`🏠 Allowing home page to load without auth: ${pathname}`);
+    // Allow most routes to work without authentication
+    // Only protect specific sensitive routes
+    const protectedRoutes = [
+      '/deployment',
+      '/auth-test'
+    ];
+
+    const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
+
+    if (!isProtectedRoute) {
+      console.log(`🔓 Allowing public access to: ${pathname}`);
       return NextResponse.next();
     }
 
-    // For other protected routes, redirect to guest auth
-    const shouldRedirectToAuth = pathname.startsWith('/chat') || 
-                                pathname.startsWith('/deployment') ||
-                                pathname.startsWith('/auth-test');
+    // Check if we're already in an auth flow to prevent loops
+    const isInAuthFlow = pathname.startsWith('/api/auth/') ||
+                        searchParams.has('auth_fallback') ||
+                        searchParams.has('guest_fallback') ||
+                        searchParams.has('error') ||
+                        referer?.includes('/api/auth/');
 
-    if (!shouldRedirectToAuth) {
-      console.log(`🔓 Allowing access to public route: ${pathname}`);
+    if (isInAuthFlow) {
+      console.log(`🔄 Already in auth flow, allowing through: ${pathname}`);
       return NextResponse.next();
     }
 
-    // Try to redirect to guest authentication, but with error handling
-    console.log(`🔒 No token, attempting guest auth redirect: ${pathname}`);
-    try {
-      const callbackUrl = encodeURIComponent(request.url);
-      return NextResponse.redirect(
-        new URL(`/api/auth/guest?callbackUrl=${callbackUrl}`, request.url),
-      );
-    } catch (error) {
-      console.error('❌ Failed to redirect to guest auth:', error);
-      // Fallback: allow the request through and let the page handle auth errors
-      console.log(`🔓 Auth redirect failed, allowing through: ${pathname}`);
-      return NextResponse.next();
-    }
+    // For protected routes, redirect to login page instead of guest auth
+    console.log(`🔒 Protected route requires auth, redirecting to login: ${pathname}`);
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('callbackUrl', encodeURIComponent(request.url));
+    return NextResponse.redirect(loginUrl);
   }
 
   // Handle authenticated users trying to access login/register

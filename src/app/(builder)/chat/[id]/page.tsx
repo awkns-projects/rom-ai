@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 
 import { auth } from '@/app/(auth)/auth';
 import { Chat } from '@/components/chat';
@@ -21,7 +21,35 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
   const session = await auth();
 
   if (!session) {
-    redirect('/api/auth/guest');
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-green-950/20 border border-green-500/30 rounded-2xl p-8 text-center">
+          <div className="w-16 h-16 bg-green-500/10 border border-green-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <span className="text-green-400 text-2xl">💬</span>
+          </div>
+          <h1 className="text-2xl font-bold text-green-100 mb-4 font-mono">
+            Sign In to View Chat
+          </h1>
+          <p className="text-green-300/80 font-mono text-sm mb-6 leading-relaxed">
+            Sign in to view this conversation and access your chat history.
+          </p>
+          <div className="space-y-3">
+            <a 
+              href="/login" 
+              className="block w-full bg-green-600/20 border border-green-500/30 text-green-200 hover:bg-green-600/30 hover:border-green-500/50 px-6 py-3 rounded-xl font-mono transition-all duration-200"
+            >
+              Sign In
+            </a>
+            <a 
+              href="/" 
+              className="block w-full bg-gray-600/20 border border-gray-500/30 text-gray-200 hover:bg-gray-600/30 hover:border-gray-500/50 px-6 py-3 rounded-xl font-mono transition-all duration-200"
+            >
+              Back to Home
+            </a>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (chat.visibility === 'private') {
