@@ -232,11 +232,10 @@ pids/
       });
     }
 
-    // Vercel-optimized scripts with SQLite support
+    // Environment-aware scripts with improved SQLite support
     const baseScripts = {
-      dev: "npm run db:init && npm run db:generate && npm run db:push && next dev",
-      build: "npm run build:db && next build",
-      "build:db": "npm run db:init && npm run db:generate && npm run db:push",
+      dev: "npm run db:setup && next dev",
+      build: "npm run db:setup && next build",
       start: "next start",
       lint: "next lint",
       "db:generate": "prisma generate",
@@ -246,9 +245,10 @@ pids/
       "db:studio": "prisma studio",
       "db:seed": "tsx prisma/seed.ts",
       "db:init": "node scripts/init-sqlite.js",
+      "db:setup": "npm run db:init && npm run db:generate && npm run db:push",
       "db:reset": "prisma migrate reset --force",
-      postinstall: "npm run db:init && prisma generate",
-      "vercel-build": "npm run build:db && next build"
+      postinstall: "npm run db:init && npm run db:generate",
+      "vercel-build": "npm run db:setup && next build"
     };
 
     return JSON.stringify({
@@ -282,7 +282,9 @@ module.exports = nextConfig`;
     const { vercelConfig } = this.options;
     const aiSdkEnabled = vercelConfig?.aiSdkEnabled !== false;
 
-    let envContent = `# Database - SQLite (local development)
+    let envContent = `# Database - SQLite (automatically configured for environment)
+# Local development: file:./dev.db  
+# Vercel production: file:/tmp/dev.db
 DATABASE_URL="file:./dev.db"`;
 
     if (aiSdkEnabled) {
@@ -338,12 +340,20 @@ NEXT_PUBLIC_THEME_COLOR="emerald"  # Options: emerald, blue, purple, pink
 
   private generateEnvLocal(): string {
     return `# Local Development Environment
+# Database URL - automatically configured by init script
 DATABASE_URL="file:./dev.db"
 NODE_ENV=development
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
+# Security tokens (auto-generated)
+NEXTAUTH_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}"
+NEXTAUTH_URL="http://localhost:3000"
+CRON_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}"
+
+# Main app integration (required for agent communication)
+NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
+
 # These will be set automatically during deployment
-# NEXT_PUBLIC_MAIN_APP_URL=
 # NEXT_PUBLIC_DOCUMENT_ID=
 # NEXT_PUBLIC_AGENT_TOKEN=
 `;
@@ -353,7 +363,8 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
     return JSON.stringify({
       buildCommand: "npm run vercel-build",
       functions: {
-        "src/pages/api/cron/*.ts": { maxDuration: 300 }
+        "src/pages/api/cron/*.ts": { maxDuration: 300 },
+        "src/pages/api/models/*.ts": { maxDuration: 60 }
       },
       crons: [{
         path: "/api/cron/scheduler",
@@ -362,9 +373,15 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
       installCommand: "npm install",
       build: { 
         env: { 
-          PRISMA_GENERATE_DATAPROXY: "true",
-          DATABASE_URL: "file:/tmp/dev.db"
+          PRISMA_GENERATE_DATAPROXY: "false",
+          DATABASE_URL: "file:/tmp/dev.db",
+          NODE_ENV: "production"
         } 
+      },
+      runtime: { 
+        env: {
+          DATABASE_URL: "file:/tmp/dev.db"
+        }
       }
     }, null, 2);
   }
@@ -3292,12 +3309,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   private generateModelEndpoint(): string {
     return `import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '@/lib/prisma'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+
+const execAsync = promisify(exec);
+
+// Function to ensure database is initialized
+async function ensureDatabaseInit() {
+  try {
+    // Test database connection
+    await prisma.$queryRaw\`SELECT 1\`;
+  } catch (error) {
+    console.log('Database connection failed, attempting to initialize...');
+    
+    try {
+      // Run database initialization
+      await execAsync('npm run db:init');
+      await execAsync('npx prisma db push --accept-data-loss');
+      console.log('Database initialized successfully');
+    } catch (initError) {
+      console.error('Failed to initialize database:', initError);
+      throw new Error('Database initialization failed');
+    }
+  }
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { modelName, id } = req.query;
 
   if (!modelName || typeof modelName !== 'string') {
     return res.status(400).json({ error: 'Model name is required' });
+  }
+
+  // Ensure database is initialized before proceeding
+  try {
+    await ensureDatabaseInit();
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Database initialization failed',
+      details: 'Unable to initialize SQLite database'
+    });
   }
 
   // Convert PascalCase model name to camelCase for Prisma client access
@@ -4105,11 +4158,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   private generatePrismaClient(): string {
     return `import { PrismaClient } from '@prisma/client'
 
+// Function to get the correct database URL for the environment
+function getDatabaseUrl(): string {
+  // If DATABASE_URL is already set, use it
+  if (process.env.DATABASE_URL) {
+    return process.env.DATABASE_URL;
+  }
+
+  // Auto-configure based on environment
+  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    // Production/Vercel deployment - use /tmp directory
+    return 'file:/tmp/dev.db';
+  } else {
+    // Local development - use project directory
+    return 'file:./dev.db';
+  }
+}
+
+// Set the DATABASE_URL if not already set
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = getDatabaseUrl();
+}
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient()
+// Create Prisma client with connection configuration optimized for serverless
+export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+  datasources: {
+    db: {
+      url: getDatabaseUrl()
+    }
+  },
+  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error']
+})
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma`;
   }
@@ -4355,25 +4438,67 @@ ${modelSchemas}
     return `const fs = require('fs');
 const path = require('path');
 
-// Determine the correct database path for different environments
-let dbDir, dbPath;
-
-if (process.env.VERCEL) {
-  // Vercel deployment - use /tmp directory
-  dbDir = '/tmp';
-  dbPath = path.join(dbDir, 'dev.db');
-  console.log('🚀 Running on Vercel, using temporary database at:', dbPath);
-} else {
-  // Local development - use project directory
-  dbDir = path.join(__dirname, '..');
-  dbPath = path.join(dbDir, 'dev.db');
-  console.log('💻 Running locally, using database at:', dbPath);
+// Function to get the correct database path for the environment
+function getDatabasePath() {
+  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    // Production/Vercel deployment - use /tmp directory
+    return '/tmp/dev.db';
+  } else {
+    // Local development - use project directory
+    return path.join(__dirname, '..', 'dev.db');
+  }
 }
+
+// Function to update .env.local with correct DATABASE_URL
+function updateEnvFile(dbPath) {
+  const envLocalPath = path.join(__dirname, '..', '.env.local');
+  const databaseUrl = \`DATABASE_URL="file:\${dbPath}"\`;
+  
+  try {
+    let envContent = '';
+    
+    // Read existing .env.local if it exists
+    if (fs.existsSync(envLocalPath)) {
+      envContent = fs.readFileSync(envLocalPath, 'utf8');
+      
+      // Replace existing DATABASE_URL or add it
+      if (envContent.includes('DATABASE_URL=')) {
+        envContent = envContent.replace(/DATABASE_URL=.*/g, databaseUrl);
+      } else {
+        envContent += \`\n\${databaseUrl}\n\`;
+      }
+    } else {
+      // Create new .env.local file
+      envContent = \`# Auto-generated database configuration
+\${databaseUrl}
+\`;
+    }
+    
+    fs.writeFileSync(envLocalPath, envContent);
+    console.log('📝 Updated .env.local with DATABASE_URL:', databaseUrl);
+  } catch (error) {
+    console.warn('⚠️ Could not update .env.local:', error.message);
+  }
+}
+
+// Determine the correct database path for different environments
+const dbPath = getDatabasePath();
+const dbDir = path.dirname(dbPath);
+
+console.log(\`🗄️ Initializing SQLite database at: \${dbPath}\`);
 
 // Ensure the directory exists
 if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
-  console.log('📁 Created database directory:', dbDir);
+  try {
+    fs.mkdirSync(dbDir, { recursive: true });
+    console.log('📁 Created database directory:', dbDir);
+  } catch (error) {
+    console.error('❌ Failed to create database directory:', error);
+    // Don't exit on directory creation failure in serverless environments
+    if (!process.env.VERCEL) {
+      process.exit(1);
+    }
+  }
 }
 
 // Create empty SQLite database file if it doesn't exist
@@ -4383,20 +4508,27 @@ if (!fs.existsSync(dbPath)) {
     console.log('✅ SQLite database file created:', dbPath);
   } catch (error) {
     console.error('❌ Failed to create database file:', error);
-    process.exit(1);
+    // Don't exit on file creation failure in serverless environments
+    if (!process.env.VERCEL) {
+      process.exit(1);
+    }
   }
 } else {
   console.log('📋 SQLite database file already exists:', dbPath);
 }
 
-// Update DATABASE_URL environment variable for Prisma
-if (process.env.VERCEL) {
-  process.env.DATABASE_URL = \`file:\${dbPath}\`;
-  console.log('🔗 Updated DATABASE_URL for Vercel:', process.env.DATABASE_URL);
+// Update environment configuration for local development
+if (!process.env.VERCEL && !process.env.NODE_ENV === 'production') {
+  updateEnvFile(dbPath);
 }
+
+// Set runtime environment variable for this process
+process.env.DATABASE_URL = \`file:\${dbPath}\`;
+console.log('🔗 Set DATABASE_URL:', process.env.DATABASE_URL);
 
 console.log('🗄️ SQLite database initialization complete');`;
   }
+
   private generateGlobalStyles(): string {
     return `@tailwind base;
 @tailwind components;
@@ -4503,6 +4635,29 @@ The chat feature uses Vercel's AI SDK and provides:
 - "What actions can I run?" → AI explains available smart actions
 - "Check system status" → AI provides real-time health information
 - "How many schedules are active?" → AI counts and reports active tasks
+
+## 🗄️ Database Configuration
+
+This app uses **SQLite** with **Prisma ORM** and is optimized for both local development and Vercel serverless deployment:
+
+### Automatic Environment Detection
+- **Local Development**: Database stored as \`./dev.db\` in project root
+- **Vercel Production**: Database stored as \`/tmp/dev.db\` in serverless functions
+- **Environment Variables**: Automatically configured based on deployment context
+
+### Database Features
+- **Auto-Initialization**: Database file created automatically on startup
+- **Schema Sync**: Prisma schema synchronized on build/deploy
+- **CRUD Operations**: Full Create, Read, Update, Delete via REST API endpoints
+- **Error Handling**: Robust error handling for serverless environments
+- **Connection Pooling**: Optimized for serverless function lifecycle
+
+### Troubleshooting Database Issues
+If you encounter database connection errors:
+
+1. **Local Development**: Run \`npm run db:setup\` to reinitialize
+2. **Production**: Database automatically initializes on first request
+3. **Check Logs**: Review function logs in Vercel dashboard for detailed error info
 
 ## 🚀 Quick Start
 
