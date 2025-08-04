@@ -431,6 +431,19 @@ const InteractiveTestComponents = ({ steps, components, allModels, onTestResult,
   );
 };
 
+/**
+ * ActionMindMapEditor - Dynamic API Integration
+ * 
+ * 🚀 NEW SUB-AGENT API ROUTES:
+ * - Test Mode: Uses main app `/api/agent/test-steps` for pseudo step testing
+ * - Live Mode (Local): Uses sub-agent `/api/actions/${actionName}` - fetches code from main app, executes locally
+ * - Live Mode (Remote): Uses sub-agent `/api/trigger/action/${actionId}` - calls main app directly by ID
+ * 
+ * Benefits:
+ * - Local execution: Better performance, runs against sub-agent's SQLite
+ * - Remote execution: Always uses latest code from main app  
+ * - Dynamic fetching: No redeployments needed when actions change
+ */
 interface ActionMindMapEditorProps {
   action: AgentAction;
   onUpdate: (action: AgentAction) => void;
@@ -632,7 +645,18 @@ export const ActionMindMapEditor = memo(({
           availableModels: allModels,
           entityType: 'action',
           type: (action as any).type || 'mutation', // Default to mutation if type is not set
-          businessContext: `Generate pseudo steps for ${action.name}. Make it comprehensive and realistic for business operations.`
+          businessContext: `Generate pseudo steps for ${action.name}. Make it comprehensive and realistic for business operations. 
+
+🔗 PARAMETER CHAINING CONTEXT: This action may be used in automated schedules where its outputs can feed into other actions. Design steps that produce clear, useful outputs with descriptive field names (e.g., "customerId", "reportUrl", "processedData") that can be referenced by subsequent actions in a workflow chain.
+
+Consider common output patterns:
+- IDs for created/found records
+- Status indicators for process completion  
+- Data objects for further processing
+- File paths/URLs for generated content
+- Summary statistics for analysis
+
+Make the action self-contained but also chain-friendly.`
         }),
       });
 
@@ -687,7 +711,9 @@ export const ActionMindMapEditor = memo(({
           description: action.description || `Action to ${action.name}`,
           pseudoSteps: action.pseudoSteps,
           availableModels: allModels,
-          businessContext: `Generate user-friendly UI components for ${action.name}. Focus on making inputs intuitive (e.g., dropdowns instead of text fields for IDs). ${regenerationContext}`
+          businessContext: `Generate user-friendly UI components for ${action.name}. Focus on making inputs intuitive (e.g., dropdowns instead of text fields for IDs). ${regenerationContext}
+
+🔗 PARAMETER CHAINING CONTEXT: This action may receive inputs from previous actions in a schedule chain. Design UI components that can handle both user-provided inputs AND programmatic inputs from parameter references. Consider that some fields might be auto-populated from previous actions, so focus on the essential user inputs needed.`
         }),
       });
 
@@ -732,7 +758,9 @@ export const ActionMindMapEditor = memo(({
           uiComponents: action.uiComponentsDesign,
           availableModels: allModels,
           entityType: 'action',
-          businessContext: `Generate comprehensive, executable code for ${action.name} based on steps and UI components.`,
+          businessContext: `Generate comprehensive, executable code for ${action.name} based on steps and UI components. 
+
+🔗 PARAMETER CHAINING CONTEXT: This action will be used in automated schedules and may receive inputs from previous actions. Ensure the generated code can handle parameter inputs gracefully and produces clear, well-structured outputs that can be used by subsequent actions in a chain.`,
           enhancedAnalysis: action._internal?.enhancedAnalysis, // Include validated analysis
           testResults: nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult // Include test execution results
         }),
@@ -772,7 +800,7 @@ export const ActionMindMapEditor = memo(({
     }
   }, [action, onUpdate, allModels]);
 
-  const runTest = useCallback(async (inputParameters: any = {}) => {
+  const runTest = useCallback(async (inputParameters: any = {}, executionMode: 'local' | 'remote' = 'local') => {
     if (!action.pseudoSteps?.length) {
       alert('Please generate steps first');
       return;
@@ -781,22 +809,40 @@ export const ActionMindMapEditor = memo(({
     setIsRunningTest(true);
 
     try {
-      // Choose API endpoint based on mode
-      const apiEndpoint = isLiveMode ? '/api/agent/execute-action' : '/api/agent/test-steps';
-      const requestBody = isLiveMode ? {
-        // Live mode - execute real code with real data
-        documentId: documentId,
-        code: action.execute?.code?.script,
-        inputParameters: inputParameters,
-        envVars: {},
-        testMode: false
-      } : {
-        // Test mode - run pseudo steps with test data
-        steps: action.pseudoSteps,
-        inputParameters: inputParameters,
-        testMode: true,
-        enhancedAnalysis: action._internal?.enhancedAnalysis
-      };
+      // Choose API endpoint based on mode and execution preference
+      let apiEndpoint: string;
+      let requestBody: any;
+
+      if (isLiveMode) {
+        if (executionMode === 'remote' && action.id) {
+          // Remote execution - call main app directly by action ID
+          apiEndpoint = `/api/trigger/action/${action.id}`;
+          requestBody = {
+            input: inputParameters,
+            member: {
+              id: 'sub-agent-user',
+              role: 'admin',
+              email: 'sub-agent@deployed.app'
+            }
+          };
+        } else {
+          // Local execution - use dynamic action endpoint (fetches from main app, executes locally)
+          apiEndpoint = `/api/actions/${action.name}`;
+          requestBody = {
+            input: inputParameters,
+            credentials: {} // Will be fetched by the dynamic endpoint
+          };
+        }
+      } else {
+        // Test mode - run pseudo steps with test data (still use main app for testing)
+        apiEndpoint = '/api/agent/test-steps';
+        requestBody = {
+          steps: action.pseudoSteps,
+          inputParameters: inputParameters,
+          testMode: true,
+          enhancedAnalysis: action._internal?.enhancedAnalysis
+        };
+      }
 
       const response = await fetch(apiEndpoint, {
         method: 'POST',
@@ -811,38 +857,41 @@ export const ActionMindMapEditor = memo(({
       if (result.success) {
         // Update the node data with results
         const testResult = isLiveMode ? {
-          // Live mode result format - process real execution data
+          // Live mode result format - handle both local and remote execution
           success: true,
           steps: [], 
-          finalResult: `Live action executed successfully - ${result.changesCount || 0} database operations`,
+          finalResult: executionMode === 'remote' ? 
+            `Live action executed successfully on main app` :
+            `Live action executed successfully via sub-agent`,
           timestamp: Date.now(),
-          executionTime: result.executionTime || 0,
-          stepResults: (result.changeLog || []).map((change: any, index: number) => ({
-            stepId: `live-operation-${index}`,
-            step: `${change.operation?.charAt(0).toUpperCase() + change.operation?.slice(1) || 'Database Operation'} ${change.model || 'Record'}`,
-            type: change.operation || 'unknown',
+          executionTime: result.data?.executionTime || 0,
+          stepResults: result.data?.stepResults || [{
+            stepId: executionMode === 'remote' ? 'remote-execution' : 'dynamic-execution',
+            step: executionMode === 'remote' ? 
+              `Executed ${action.name} on main app by ID` :
+              `Executed ${action.name} via sub-agent dynamic endpoint`,
+            type: executionMode === 'remote' ? 'remote-action' : 'dynamic-action',
             result: {
               success: true,
-              message: change.description || `${change.operation} operation on ${change.model}`,
-              executionTime: Math.round((result.executionTime || 0) / (result.changeLog?.length || 1)),
-              // Convert live data to display format
-              created: change.operation === 'create' ? 1 : 0,
-              updated: change.operation === 'update' ? (change.affectedCount || 1) : 0,
-              found: change.operation === 'findMany' || change.operation === 'findUnique' ? (change.recordCount || change.affectedCount || 1) : 0,
-              record: change.recordData || change.data,
-              records: change.operation === 'findMany' ? (change.records || [change.recordData || change.data].filter(Boolean)) : undefined,
-              affectedRecords: change.affectedCount || 0,
-              model: change.model,
-              operation: change.operation
+              message: result.data?.message || 'Action executed successfully',
+              executionTime: result.data?.executionTime || 0,
+              executedLocally: executionMode === 'local' ? (result.data?.executedLocally || false) : false,
+              triggeredRemotely: executionMode === 'remote' ? (result.triggeredRemotely || true) : false,
+              usedCredentials: result.data?.usedCredentials || [],
+              actionName: result.data?.actionName || action.name,
+              actionId: executionMode === 'remote' ? action.id : undefined,
+              timestamp: result.data?.timestamp
             }
-          })),
+          }],
           isLiveRun: true,
-          // Additional live run metadata
-          databaseUpdated: result.databaseUpdated,
-          modelsAffected: result.modelsAffected || [],
-          totalChanges: result.changesCount || 0
+          // Execution metadata
+          executionMode: executionMode,
+          executedLocally: executionMode === 'local' ? (result.data?.executedLocally || false) : false,
+          triggeredRemotely: executionMode === 'remote' ? (result.triggeredRemotely || true) : false,
+          usedCredentials: result.data?.usedCredentials || [],
+          actionName: result.data?.actionName || action.name
         } : {
-          // Test mode result format  
+          // Test mode result format (still uses main app)
           success: true,
           steps: result.stepResults || [],
           finalResult: result.result || 'Action completed successfully',

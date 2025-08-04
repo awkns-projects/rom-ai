@@ -617,6 +617,18 @@ const AgentBuilderContent = memo(({
 
   // Extract deployment information from agent data
   const deploymentInfo = agentData.deployment || null;
+  
+  // DEBUG: Track deployment info changes
+  useEffect(() => {
+    console.log('🔍 UI DEBUG - Deployment info updated:', {
+      hasDeploymentInfo: !!deploymentInfo,
+      deploymentUrl: deploymentInfo?.deploymentUrl || 'none',
+      deploymentStatus: deploymentInfo?.status || 'none',
+      showViewLiveButton: !!(deploymentInfo && deploymentInfo.deploymentUrl),
+      agentName: agentData.name,
+      agentId: agentData.id
+    });
+  }, [deploymentInfo, agentData.name, agentData.id]);
 
   // Update metadata safely
   const updateMetadata = useCallback((updates: Partial<AgentArtifactMetadata>) => {
@@ -743,14 +755,29 @@ const AgentBuilderContent = memo(({
       
       if (result.success) {
         console.log('✅ Deployment successful:', result.deploymentResult);
+        console.log('🔍 MANUAL DEPLOYMENT DEBUG - Result details:', {
+          hasAgentData: !!result.agentData,
+          hasDeploymentResult: !!result.deploymentResult,
+          deploymentUrl: result.deploymentResult?.deploymentUrl || 'none',
+          agentHasDeployment: !!result.agentData?.deployment,
+          agentDeploymentUrl: result.agentData?.deployment?.deploymentUrl || 'none'
+        });
         
         // Update agent data with deployment info
         const updatedAgentData = result.agentData;
         setAgentData(updatedAgentData);
         
+        console.log('🔄 MANUAL DEPLOYMENT DEBUG - Agent data updated:', {
+          deploymentAdded: !!updatedAgentData.deployment,
+          deploymentUrl: updatedAgentData.deployment?.deploymentUrl || 'none',
+          deploymentStatus: updatedAgentData.deployment?.status || 'none'
+        });
+        
         // Save updated agent data
         const agentContent = JSON.stringify(updatedAgentData, null, 2);
         onSaveContent(agentContent, true);
+        
+        console.log('💾 MANUAL DEPLOYMENT DEBUG - Content saved to document');
         
         setDeploymentProgress('Deployment completed successfully!');
         
@@ -1652,18 +1679,22 @@ const AgentBuilderContent = memo(({
                   </ul>
                 </div>
               ) : (
-                // Agent is not deployed yet
-                <div className="p-4 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+                // Agent is being auto-deployed in background
+                <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="w-1 h-6 bg-gradient-to-b from-yellow-500 to-yellow-600 rounded-full" />
-                    <span className="text-yellow-200 font-medium font-mono">Ready for Deployment</span>
+                    <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-blue-600 rounded-full animate-pulse" />
+                    <span className="text-blue-200 font-medium font-mono">Auto-Deploying</span>
                   </div>
-                  <ul className="text-sm text-yellow-400 font-mono space-y-1 ml-4">
-                    <li>• Configure deployment environment</li>
-                    <li>• Set up database connections</li>
-                    <li>• Deploy agent to production</li>
-                    <li>• Monitor and manage your agent</li>
+                  <ul className="text-sm text-blue-400 font-mono space-y-1 ml-4">
+                    <li>• Configuring deployment environment</li>
+                    <li>• Setting up database connections</li>
+                    <li>• Deploying agent to production</li>
+                    <li>• Setting up monitoring</li>
                   </ul>
+                  <div className="flex items-center gap-2 text-blue-300/60 text-xs font-mono mt-3">
+                    <span className="animate-spin">⚡</span>
+                    <span>Deployment happens automatically after database generation</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -1676,49 +1707,35 @@ const AgentBuilderContent = memo(({
                 onClick={() => setShowDeploymentModal(false)}
                 className="btn-matrix border-green-500/30 hover:border-green-500/50 text-white hover:text-green-200 bg-transparent hover:bg-green-500/10"
               >
-                <span className="font-mono">Maybe Later</span>
+                <span className="font-mono">Close</span>
               </Button>
               
               {deploymentInfo?.deploymentUrl ? (
-                // Show different buttons for deployed agents
-                <>
-                  <Button
-                    onClick={deployAgent}
-                    className="btn-matrix bg-blue-600 hover:bg-blue-700 text-white font-bold"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono">Redeploy</span>
-                      <span>🔄</span>
-                    </div>
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      setShowDeploymentModal(false);
-                      // Navigate to deployment page with chatId
-                      const deploymentUrl = chatId 
-                        ? `/deployment?chatId=${chatId}`
-                        : '/deployment';
-                      router.push(deploymentUrl);
-                    }}
-                    className="btn-matrix bg-green-600 hover:bg-green-700 text-black font-bold"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono">Publish Agent</span>
-                      <span>🚀</span>
-                    </div>
-                  </Button>
-                </>
-              ) : (
-                // Show deploy button for new agents
+                // Show publish button for deployed agents
                 <Button
-                  onClick={deployAgent}
+                  onClick={() => {
+                    setShowDeploymentModal(false);
+                    // Navigate to deployment page with chatId
+                    const deploymentUrl = chatId 
+                      ? `/deployment?chatId=${chatId}`
+                      : '/deployment';
+                    router.push(deploymentUrl);
+                  }}
                   className="btn-matrix bg-green-600 hover:bg-green-700 text-black font-bold"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="font-mono">Deploy Agent</span>
+                    <span className="font-mono">Publish Agent</span>
                     <span>🚀</span>
                   </div>
                 </Button>
+              ) : (
+                // Auto-deployment info for new agents
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg px-4 py-2">
+                  <div className="flex items-center gap-2 text-blue-300 text-sm font-mono">
+                    <span className="animate-pulse">🤖</span>
+                    <span>Auto-deploying after database setup...</span>
+                  </div>
+                </div>
               )}
             </DialogFooter>
           )}
@@ -2110,6 +2127,23 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
       const agentData = typeof streamPart.content === 'string' 
         ? streamPart.content 
         : JSON.stringify(streamPart.content);
+      
+      // DEBUG: Check if deployment data is in the stream
+      try {
+        const parsedData = typeof streamPart.content === 'string' 
+          ? JSON.parse(streamPart.content)
+          : streamPart.content;
+        
+        console.log('🔍 STREAM DEBUG - Received agent-data:', {
+          hasDeployment: !!parsedData.deployment,
+          deploymentUrl: parsedData.deployment?.deploymentUrl || 'none',
+          deploymentStatus: parsedData.deployment?.status || 'none',
+          agentName: parsedData.name,
+          contentLength: agentData.length
+        });
+      } catch (error) {
+        console.warn('⚠️ STREAM DEBUG - Failed to parse agent data for debugging:', error);
+      }
       
       setArtifact((draftArtifact) => ({
         ...draftArtifact,

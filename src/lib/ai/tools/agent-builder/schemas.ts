@@ -66,7 +66,7 @@ export const unifiedActionsSchema = z.object({
     id: z.string().describe('Unique identifier for the action'),
     name: z.string().describe('Name of the action'),
     emoji: z.string().optional().describe('Single emoji that visually represents this action (e.g., ✉️ for email, 📊 for reports, 🔄 for sync)'),
-    description: z.string().describe('Detailed description of what this action does and its business purpose'),
+    description: z.string().describe('Detailed description of what this action does and its business purpose. CRITICAL: This action MUST accept batch input with items[] array structure.'),
     type: z.enum(['query', 'mutation']).describe('Action type - query for reading data, mutation for writing data'),
     role: z.enum(['admin', 'member']).describe('Role required to execute this action'),
     dataSource: z.object({
@@ -451,7 +451,17 @@ export const unifiedSchedulesSchema = z.object({
         duration: z.number().describe('Delay duration in milliseconds'),
         unit: z.enum(['seconds', 'minutes', 'hours']).describe('Unit for display purposes')
       }).optional().describe('Delay before executing this step'),
-      inputMapping: z.record(z.any()).optional().describe('How to map inputs to this action from previous steps'),
+      inputParams: z.record(z.union([
+        z.object({
+          type: z.literal('static'),
+          value: z.union([z.string(), z.number(), z.boolean(), z.object({}), z.array(z.union([z.string(), z.number(), z.boolean()]))]).describe('Static value to use as input')
+        }),
+        z.object({
+          type: z.literal('ref'),
+          fromActionIndex: z.number().describe('Index of previous step to reference (0-based)'),
+          outputKey: z.string().describe('Key from the referenced step output to use')
+        })
+      ])).optional().describe('Parameters for this action - can be static values or references to previous step outputs'),
       condition: z.object({
         type: z.enum(['always', 'if', 'unless']).describe('Condition type for executing this step'),
         expression: z.string().optional().describe('Conditional expression (future feature)')
@@ -745,8 +755,8 @@ export const enhancedActionCodeSchema = z.object({
         output: z.record(z.any()).describe('Action output data'),
         data: z.array(z.object({
           modelId: z.string(),
-          createdRecords: z.array(z.record(z.any())).optional(),
-          updatedRecords: z.array(z.record(z.any())).optional(),
+          createdRecords: z.array(z.record(z.union([z.string(), z.number(), z.boolean()]))).optional(),
+          updatedRecords: z.array(z.record(z.union([z.string(), z.number(), z.boolean()]))).optional(),
           deletedRecords: z.array(z.string()).optional()
         })).describe('Database operation results')
       }),

@@ -1,7 +1,9 @@
+import { NextRequest } from 'next/server';
 import { auth } from '@/app/(auth)/auth';
 import { ChatSDKError } from '@/lib/errors';
 import { saveUserApiKeys, deleteUserApiKeys, hasUserApiKeys } from '@/lib/db/api-keys';
 import { z } from 'zod';
+import { checkAuthentication, hasAgentPermission, getDocumentOwner } from '@/lib/auth-helpers';
 
 const apiKeySchema = z.object({
   provider: z.enum(['openai', 'xai']),
@@ -13,21 +15,38 @@ const deleteSchema = z.object({
 });
 
 // Get user's API key status with masked key previews
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const session = await auth();
+    const authResult = await checkAuthentication(request);
     
-    if (!session?.user?.id) {
+    if (!authResult.isAuthenticated) {
       return new ChatSDKError('unauthorized:auth').toResponse();
     }
 
-    const keyStatus = await hasUserApiKeys(session.user.id);
+    let userId: string;
+    
+    if (authResult.userType === 'user') {
+      userId = authResult.userId!;
+    } else {
+      // For agent requests, check read permission and get document owner
+      if (!hasAgentPermission(authResult.agent!.permissions, 'read')) {
+        return Response.json({ error: 'Insufficient permissions' }, { status: 403 });
+      }
+      
+      const documentOwner = await getDocumentOwner(authResult.agent!.documentId, authResult);
+      if (!documentOwner) {
+        return Response.json({ error: 'Document owner not found' }, { status: 404 });
+      }
+      userId = documentOwner;
+    }
+
+    const keyStatus = await hasUserApiKeys(userId);
     
     // If keys exist, get masked versions for display
     let maskedKeys = {};
     if (keyStatus.hasOpenaiKey || keyStatus.hasXaiKey) {
       const { getUserApiKeys } = await import('@/lib/db/api-keys');
-      const apiKeys = await getUserApiKeys(session.user.id);
+      const apiKeys = await getUserApiKeys(userId);
       
       maskedKeys = {
         openaiKeyPreview: apiKeys.openaiApiKey ? maskApiKey(apiKeys.openaiApiKey) : null,

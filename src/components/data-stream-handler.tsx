@@ -85,6 +85,13 @@ export function DataStreamHandler({ id }: { id: string }) {
               status: 'streaming',
             };
 
+          case 'agent-step':
+            // Agent building step update - set status to streaming
+            return {
+              ...draftArtifact,
+              status: 'streaming',
+            };
+
           case 'finish':
             return {
               ...draftArtifact,

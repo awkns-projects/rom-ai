@@ -40,14 +40,53 @@ import { ChatSDKError } from '../errors';
 // use the Drizzle adapter for Auth.js / NextAuth
 // https://authjs.dev/reference/adapter/drizzle
 
-// biome-ignore lint: Forbidden non-null assertion.
-const client = postgres(process.env.POSTGRES_URL!);
+// Enhanced database connection with error handling
+function createDatabaseConnection() {
+  const postgresUrl = process.env.POSTGRES_URL;
+  
+  if (!postgresUrl) {
+    console.error('❌ Database Error: POSTGRES_URL environment variable is not set');
+    console.error('📝 Required environment variables for production:');
+    console.error('   - POSTGRES_URL: PostgreSQL connection string');
+    console.error('   - AUTH_SECRET: NextAuth secret key');
+    throw new Error('POSTGRES_URL environment variable is required for database connection');
+  }
+
+  try {
+    const client = postgres(postgresUrl, {
+      onnotice: () => {}, // Suppress notices
+      max: 10, // Connection pool size
+      idle_timeout: 60, // Close idle connections after 60 seconds
+      connect_timeout: 30, // Connection timeout in seconds
+    });
+    
+    // Test the connection
+    console.log('🔌 Database connection configured successfully');
+    return client;
+  } catch (error) {
+    console.error('❌ Database connection failed:', error);
+    throw new ChatSDKError(
+      'bad_request:database',
+      `Database connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}
+
+const client = createDatabaseConnection();
 const db = drizzle(client);
 
 export async function getUser(email: string): Promise<Array<User>> {
   try {
-    return await db.select().from(user).where(eq(user.email, email));
+    console.log(`🔍 Looking up user: ${email.slice(0, 10)}...`);
+    const result = await db.select().from(user).where(eq(user.email, email));
+    console.log(`✅ User lookup completed: ${result.length} results found`);
+    return result;
   } catch (error) {
+    console.error('❌ Failed to get user by email:', {
+      email: email.slice(0, 10) + '...',
+      error: error instanceof Error ? error.message : error,
+      postgresUrl: process.env.POSTGRES_URL ? 'present' : 'missing',
+    });
     throw new ChatSDKError(
       'bad_request:database',
       'Failed to get user by email',
@@ -59,8 +98,16 @@ export async function createUser(email: string, password: string) {
   const hashedPassword = generateHashedPassword(password);
 
   try {
-    return await db.insert(user).values({ email, password: hashedPassword });
+    console.log(`👤 Creating regular user: ${email.slice(0, 10)}...`);
+    const result = await db.insert(user).values({ email, password: hashedPassword });
+    console.log('✅ Regular user created successfully');
+    return result;
   } catch (error) {
+    console.error('❌ Failed to create user:', {
+      email: email.slice(0, 10) + '...',
+      error: error instanceof Error ? error.message : error,
+      postgresUrl: process.env.POSTGRES_URL ? 'present' : 'missing',
+    });
     throw new ChatSDKError('bad_request:database', 'Failed to create user');
   }
 }
@@ -70,11 +117,20 @@ export async function createGuestUser() {
   const password = generateHashedPassword(generateUUID());
 
   try {
-    return await db.insert(user).values({ email, password }).returning({
+    console.log(`👻 Creating guest user: ${email}`);
+    const result = await db.insert(user).values({ email, password }).returning({
       id: user.id,
       email: user.email,
     });
+    console.log('✅ Guest user created successfully:', result[0]?.email);
+    return result;
   } catch (error) {
+    console.error('❌ Failed to create guest user:', {
+      email,
+      error: error instanceof Error ? error.message : error,
+      postgresUrl: process.env.POSTGRES_URL ? 'present' : 'missing',
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     throw new ChatSDKError(
       'bad_request:database',
       'Failed to create guest user',

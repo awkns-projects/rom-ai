@@ -23,7 +23,8 @@ import {
   Activity,
   TrendingUp,
   Cpu,
-  GitBranch
+  GitBranch,
+  AlertTriangle
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
@@ -1787,10 +1788,121 @@ function MobileAppDemo() {
   );
 }
 
+// Configuration Notice Component
+function ConfigurationNotice() {
+  const [showNotice, setShowNotice] = useState(false);
+  const [issueType, setIssueType] = useState<'auth_error' | 'domain_mismatch' | 'general'>('general');
+
+  useEffect(() => {
+    // Check if we're on the error page or have auth issues
+    const url = new URL(window.location.href);
+    const hasAuthError = url.pathname.includes('/api/auth/error') || 
+                        url.searchParams.has('error') ||
+                        url.searchParams.has('guest_fallback');
+    
+    // Check for domain mismatch (www vs non-www)
+    const isDomainMismatch = window.location.hostname.includes('www.rom.cards') || 
+                            window.location.hostname.includes('rom.cards');
+    
+    if (hasAuthError) {
+      setShowNotice(true);
+      if (url.pathname.includes('/api/auth/error')) {
+        setIssueType('auth_error');
+      } else if (isDomainMismatch && url.searchParams.get('error') === 'Configuration') {
+        setIssueType('domain_mismatch');
+      } else {
+        setIssueType('general');
+      }
+    }
+
+    // Also check if we came from an auth error redirect
+    if (document.referrer && document.referrer.includes('/api/auth/error')) {
+      setShowNotice(true);
+      setIssueType('auth_error');
+    }
+  }, []);
+
+  const getNoticeContent = () => {
+    switch (issueType) {
+      case 'domain_mismatch':
+        return {
+          title: 'Domain Configuration Issue Detected',
+          message: 'There\'s a mismatch between the www and non-www domain configuration. This should resolve automatically, but you can also try accessing the site with or without "www" prefix.',
+          suggestions: [
+            { label: 'Try www.rom.cards', action: () => window.location.href = 'https://www.rom.cards' },
+            { label: 'Try rom.cards', action: () => window.location.href = 'https://rom.cards' }
+          ]
+        };
+      case 'auth_error':
+        return {
+          title: 'Authentication System Temporarily Unavailable',
+          message: 'The authentication system is experiencing configuration issues. You can still browse the platform, but login and personalized features may be limited.',
+          suggestions: []
+        };
+      default:
+        return {
+          title: 'Temporary Configuration Issue',
+          message: 'We\'re experiencing a temporary configuration issue. You can still explore the platform below, but some features may be limited.',
+          suggestions: []
+        };
+    }
+  };
+
+  if (!showNotice) return null;
+
+  const content = getNoticeContent();
+
+  return (
+    <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 mb-8 backdrop-blur-sm">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <h3 className="text-orange-100 font-mono font-bold text-sm mb-2">
+            {content.title}
+          </h3>
+          <p className="text-orange-200/80 font-mono text-xs leading-relaxed mb-3">
+            {content.message}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <a 
+              href="/api/health" 
+              className="inline-flex items-center gap-1 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 text-orange-200 px-3 py-1 rounded-lg font-mono text-xs transition-colors"
+            >
+              <Activity className="w-3 h-3" />
+              System Status
+            </a>
+            <button 
+              onClick={() => window.location.reload()}
+              className="inline-flex items-center gap-1 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 text-orange-200 px-3 py-1 rounded-lg font-mono text-xs transition-colors"
+            >
+              <ArrowRight className="w-3 h-3" />
+              Retry
+            </button>
+            {content.suggestions.map((suggestion, index) => (
+              <button 
+                key={index}
+                onClick={suggestion.action}
+                className="inline-flex items-center gap-1 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 text-orange-200 px-3 py-1 rounded-lg font-mono text-xs transition-colors"
+              >
+                {suggestion.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function HomePage() {
   return (
     <div className="min-h-screen bg-black text-green-200 scroll-smooth">
       <Header />
+      
+      {/* Configuration Notice */}
+      <div className="max-w-7xl mx-auto px-4 pt-4">
+        <ConfigurationNotice />
+      </div>
       
       {/* Enhanced Hero Section */}
       <section id="home" className="scroll-mt-16">

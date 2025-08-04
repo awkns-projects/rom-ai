@@ -7,6 +7,78 @@ import { authConfig } from './auth.config';
 import { DUMMY_PASSWORD } from '@/lib/constants';
 import type { DefaultJWT } from 'next-auth/jwt';
 
+// Validate required environment variables
+const requiredEnvVars = {
+  AUTH_SECRET: process.env.AUTH_SECRET,
+  POSTGRES_URL: process.env.POSTGRES_URL,
+};
+
+const missingEnvVars = Object.entries(requiredEnvVars)
+  .filter(([key, value]) => !value)
+  .map(([key]) => key);
+
+if (missingEnvVars.length > 0) {
+  console.error('❌ Missing required environment variables for authentication:');
+  missingEnvVars.forEach(varName => {
+    console.error(`   - ${varName}`);
+  });
+  console.error('📝 Please set these environment variables:');
+  console.error('   - AUTH_SECRET: A secret key for JWT signing');
+  console.error('   - POSTGRES_URL: PostgreSQL connection string');
+  
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  }
+}
+
+// Enhanced production validation
+if (process.env.NODE_ENV === 'production') {
+  // Validate NEXTAUTH_URL for production
+  if (!process.env.NEXTAUTH_URL) {
+    console.error('❌ NEXTAUTH_URL is REQUIRED in production!');
+    console.error('   Set NEXTAUTH_URL to: https://rom.cards');
+    throw new Error('NEXTAUTH_URL must be set in production environment');
+  }
+
+  // Validate AUTH_SECRET length
+  if (process.env.AUTH_SECRET && process.env.AUTH_SECRET.length < 32) {
+    console.error('❌ AUTH_SECRET must be at least 32 characters long in production');
+    throw new Error('AUTH_SECRET too short for production use');
+  }
+
+  console.log('🔐 Production auth validation passed:', {
+    nextAuthUrl: process.env.NEXTAUTH_URL,
+    authSecretLength: process.env.AUTH_SECRET?.length,
+    hasDatabase: !!process.env.POSTGRES_URL,
+  });
+} else {
+  // Development warnings
+  if (!process.env.NEXTAUTH_URL) {
+    console.warn('⚠️ NEXTAUTH_URL not set in development. This may cause redirect issues.');
+    console.warn('   Set NEXTAUTH_URL to your development domain (e.g., http://localhost:3000)');
+  }
+}
+
+// Dynamic URL handling for production to handle both www and non-www
+const getAuthUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    // If NEXTAUTH_URL is set, use it, but also handle dynamic domains
+    const baseUrl = process.env.NEXTAUTH_URL || 'https://rom.cards';
+    // Normalize to non-www version for consistency
+    return baseUrl.replace('https://www.rom.cards', 'https://rom.cards');
+  }
+  return process.env.NEXTAUTH_URL || 'http://localhost:3000';
+};
+
+console.log('🔐 Auth configuration loaded successfully:', {
+  environment: process.env.NODE_ENV,
+  hasAuthSecret: !!process.env.AUTH_SECRET,
+  hasDatabase: !!process.env.POSTGRES_URL,
+  hasNextAuthUrl: !!process.env.NEXTAUTH_URL,
+  nextAuthUrl: process.env.NEXTAUTH_URL || 'not_set',
+  hasNgrok: !!process.env.NGROK_URL,
+});
+
 export type UserType = 'guest' | 'regular';
 
 declare module 'next-auth' {
@@ -162,22 +234,21 @@ const GoogleProvider = {
   }
 };
 
-// Custom GitHub OAuth provider (separate from NextAuth's built-in GitHub)
-const GitHubOAuthProvider = {
+// Custom GitHub provider
+const GitHubProvider = {
   id: 'github-oauth',
-  name: 'GitHub OAuth',
+  name: 'GitHub',
   type: 'oauth' as const,
   authorization: {
     url: 'https://github.com/login/oauth/authorize',
     params: {
-      scope: 'user:email repo read:org',
-      response_type: 'code'
+      scope: 'read:user user:email repo'
     }
   },
   token: 'https://github.com/login/oauth/access_token',
   userinfo: 'https://api.github.com/user',
-  clientId: process.env.GITHUB_OAUTH_CLIENT_ID,
-  clientSecret: process.env.GITHUB_OAUTH_CLIENT_SECRET,
+  clientId: process.env.GITHUB_CLIENT_ID,
+  clientSecret: process.env.GITHUB_CLIENT_SECRET,
   profile(profile: any) {
     return {
       id: profile.id.toString(),
@@ -203,17 +274,15 @@ const LinkedInProvider = {
     }
   },
   token: 'https://www.linkedin.com/oauth/v2/accessToken',
-  userinfo: 'https://api.linkedin.com/v2/people/~',
+  userinfo: 'https://api.linkedin.com/v2/people/~:(id,firstName,lastName,profilePicture(displayImage~:playableStreams))',
   clientId: process.env.LINKEDIN_CLIENT_ID,
   clientSecret: process.env.LINKEDIN_CLIENT_SECRET,
   profile(profile: any) {
-    const firstName = profile.localizedFirstName || '';
-    const lastName = profile.localizedLastName || '';
     return {
       id: profile.id,
-      name: `${firstName} ${lastName}`.trim(),
-      email: profile.emailAddress || `${profile.id}@linkedin.local`,
-      image: profile.profilePicture?.displayImage || null,
+      name: `${profile.firstName?.localized?.en_US || ''} ${profile.lastName?.localized?.en_US || ''}`.trim(),
+      email: null, // LinkedIn email requires separate API call
+      image: profile.profilePicture?.displayImage?.elements?.[0]?.identifiers?.[0]?.identifier,
       type: 'regular' as UserType
     };
   }
@@ -227,7 +296,6 @@ const NotionProvider = {
   authorization: {
     url: 'https://api.notion.com/v1/oauth/authorize',
     params: {
-      scope: 'read_content write_content',
       response_type: 'code'
     }
   },
@@ -238,13 +306,17 @@ const NotionProvider = {
   profile(profile: any) {
     return {
       id: profile.id,
-      name: profile.name || 'Notion User',
-      email: profile.person?.email || `${profile.id}@notion.local`,
+      name: profile.name,
+      email: profile.person?.email,
       image: profile.avatar_url,
       type: 'regular' as UserType
     };
   }
 };
+
+// Determine environment settings
+const isProduction = process.env.NODE_ENV === 'production';
+const isDevelopment = process.env.NODE_ENV === 'development';
 
 export const {
   handlers: { GET, POST },
@@ -253,37 +325,113 @@ export const {
   signOut,
 } = NextAuth({
   ...authConfig,
+  trustHost: true, // Allow dynamic host handling
+  
+  // Enhanced session and JWT configuration with production settings
+  session: {
+    strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+    updateAge: 24 * 60 * 60, // 24 hours
+  },
+  
+  jwt: {
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+
+  // Production-ready configuration with flexible URL handling
+  ...(process.env.NODE_ENV === 'production' && {
+    // Force HTTPS in production
+    useSecureCookies: true,
+    // Set the auth URL explicitly with normalization
+    url: getAuthUrl(),
+    // Allow cross-origin requests for www/non-www compatibility
+    allowCredentials: true,
+  }),
+  
+  // Environment-appropriate cookie settings
+  cookies: {
+    sessionToken: {
+      name: isProduction ? '__Secure-next-auth.session-token' : 'next-auth.session-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: isProduction,
+        domain: isProduction ? undefined : undefined, // Let browser handle domain
+      },
+    },
+    callbackUrl: {
+      name: isProduction ? '__Secure-next-auth.callback-url' : 'next-auth.callback-url',
+      options: {
+        sameSite: 'lax',
+        path: '/',
+        secure: isProduction,
+        domain: isProduction ? undefined : undefined,
+      },
+    },
+    csrfToken: {
+      name: isProduction ? '__Host-next-auth.csrf-token' : 'next-auth.csrf-token',
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: isProduction,
+        domain: isProduction ? undefined : undefined,
+      },
+    },
+  },
+  
   providers: [
     Credentials({
-      credentials: {},
+      id: 'credentials',
+      name: 'credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' }
+      },
       async authorize({ email, password }: any) {
-        const users = await getUser(email);
+        if (!email || !password) return null;
+        
+        try {
+          const users = await getUser(email);
 
-        if (users.length === 0) {
-          await compare(password, DUMMY_PASSWORD);
+          if (users.length === 0) {
+            await compare(password, DUMMY_PASSWORD);
+            return null;
+          }
+
+          const [user] = users;
+
+          if (!user.password) {
+            await compare(password, DUMMY_PASSWORD);
+            return null;
+          }
+
+          const passwordsMatch = await compare(password, user.password);
+
+          if (!passwordsMatch) return null;
+
+          return { ...user, type: 'regular' };
+        } catch (error) {
+          console.error('❌ Credentials auth failed:', error);
           return null;
         }
-
-        const [user] = users;
-
-        if (!user.password) {
-          await compare(password, DUMMY_PASSWORD);
-          return null;
-        }
-
-        const passwordsMatch = await compare(password, user.password);
-
-        if (!passwordsMatch) return null;
-
-        return { ...user, type: 'regular' };
       },
     }),
     Credentials({
       id: 'guest',
+      name: 'guest',
       credentials: {},
       async authorize() {
-        const [guestUser] = await createGuestUser();
-        return { ...guestUser, type: 'guest' };
+        try {
+          console.log('🎭 Creating guest user...');
+          const [guestUser] = await createGuestUser();
+          console.log('✅ Guest user created:', guestUser.email);
+          return { ...guestUser, type: 'guest' };
+        } catch (error) {
+          console.error('❌ Guest auth failed:', error);
+          throw error;
+        }
       },
     }),
     FacebookProvider({
@@ -291,23 +439,36 @@ export const {
       clientSecret: process.env.FACEBOOK_CLIENT_SECRET!,
       authorization: {
         params: {
-          scope: 'public_profile,pages_read_engagement'
-        }
-      }
+          scope: 'email,public_profile,pages_show_list,pages_read_engagement,pages_manage_posts,publish_to_groups',
+        },
+      },
+      profile(profile) {
+        return {
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          image: profile.picture?.data?.url,
+          type: 'regular' as UserType,
+        };
+      },
     }),
     GoogleProvider,
-    GitHubOAuthProvider,
+    GitHubProvider,
     LinkedInProvider,
     NotionProvider,
     InstagramProvider,
     ShopifyProvider,
     ThreadsProvider
   ],
+  
   callbacks: {
     async jwt({ token, user, account }) {
+      console.log('🔑 JWT callback:', { hasUser: !!user, hasAccount: !!account, tokenId: token.id });
+      
       if (user) {
         token.id = user.id as string;
         token.type = user.type;
+        console.log('💾 Stored user in token:', { id: token.id, type: token.type });
       }
 
       // Store account information for OAuth providers
@@ -322,27 +483,71 @@ export const {
           refresh_token: account.refresh_token,
           expires_at: account.expires_at
         });
+        
+        console.log('🔗 Stored OAuth account:', account.provider);
       }
 
       return token;
     },
+    
     async session({ session, token }) {
-      if (session.user) {
+      console.log('🎫 Session callback:', { hasSession: !!session.user, tokenId: token.id });
+      
+      if (session.user && token.id) {
         session.user.id = token.id;
         session.user.type = token.type;
+        console.log('✅ Session updated:', { id: session.user.id, type: session.user.type });
       }
 
       return session;
     },
+    
     async signIn({ user, account, profile }) {
+      console.log('🚪 SignIn callback:', { 
+        userId: user?.id, 
+        userType: user?.type,
+        provider: account?.provider,
+        accountType: account?.type 
+      });
+      
       // Handle OAuth sign-ins
       if (account?.type === 'oauth') {
-        // Here you could save OAuth tokens to your database
-        // For now, we'll allow all OAuth sign-ins
+        console.log('🔗 OAuth sign-in approved for:', account.provider);
         return true;
       }
       
+      console.log('✅ Credentials sign-in approved');
       return true;
+    },
+    
+    async redirect({ url, baseUrl }) {
+      console.log('↪️ Redirect callback:', { url, baseUrl });
+      
+      // Allows relative callback URLs
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      
+      // Allows callback URLs on the same origin
+      if (new URL(url).origin === baseUrl) return url;
+      
+      return baseUrl;
     }
   },
+  
+  events: {
+    async signIn(message) {
+      console.log('📝 SignIn event:', { 
+        user: message.user?.email, 
+        account: message.account?.provider,
+        isNewUser: message.isNewUser 
+      });
+    },
+    async signOut() {
+      console.log('📝 SignOut event triggered');
+    },
+    async session(message) {
+      console.log('📝 Session event:', { user: message.session?.user?.email });
+    },
+  },
+  
+  debug: isDevelopment,
 });

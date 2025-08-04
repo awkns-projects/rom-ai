@@ -21,6 +21,25 @@ interface MobileAppTemplateOptions {
 /**
  * Unified Mobile App Template Generator
  * Consolidates all file generation into one cohesive system
+ * 
+ * 🚀 NEW DYNAMIC ARCHITECTURE:
+ * 1. Dynamic Action Execution: /api/actions/[actionName] - fetches code from main app, executes locally
+ * 2. Direct Action Trigger: /api/trigger/action/[actionId] - calls main app directly by ID
+ * 3. Direct Schedule Trigger: /api/trigger/schedule/[scheduleId] - calls main app directly by ID  
+ * 4. Dynamic Cron Scheduler: /api/cron/scheduler - runs every minute, checks main app for schedules
+ * 5. Dynamic API Key Fetching: Chat interface fetches OpenAI/Grok/Anthropic keys from main app
+ * 6. Direct Model CRUD: /api/models/[modelName] + /api/models/[modelName]/[id] - SQLite/Prisma operations
+ * 7. Interactive Action UI: Modal-based action execution with input parameters and results display
+ * 
+ * Benefits: 
+ * - No redeployments needed for code changes
+ * - Always up-to-date actions and schedules
+ * - Local execution with fresh credentials
+ * - Centralized API key management
+ * - Direct database operations for optimal performance
+ * - Full CRUD operations with pagination and search
+ * - Interactive UI components like main app
+ * - No manual API key configuration required
  */
 export class MobileAppTemplate {
   private options: MobileAppTemplateOptions;
@@ -119,6 +138,9 @@ module.exports = {
 
     // Generate environment example for Vercel
     files['.env.example'] = this.generateEnvExample();
+    
+    // Generate local environment file with database URL
+    files['.env.local'] = this.generateEnvLocal();
 
     // Generate Vercel configuration
     files['vercel.json'] = this.generateVercelConfig();
@@ -210,11 +232,10 @@ pids/
       });
     }
 
-    // Vercel-optimized scripts with SQLite support
+    // Environment-aware scripts with improved SQLite support
     const baseScripts = {
-      dev: "npm run db:init && npm run db:generate && npm run db:push && next dev",
-      build: "npm run build:db && next build",
-      "build:db": "npm run db:generate && npm run db:deploy",
+      dev: "npm run db:setup && next dev",
+      build: "npm run db:setup && next build",
       start: "next start",
       lint: "next lint",
       "db:generate": "prisma generate",
@@ -224,9 +245,10 @@ pids/
       "db:studio": "prisma studio",
       "db:seed": "tsx prisma/seed.ts",
       "db:init": "node scripts/init-sqlite.js",
+      "db:setup": "npm run db:init && npm run db:generate && npm run db:push",
       "db:reset": "prisma migrate reset --force",
-      postinstall: "prisma generate",
-      "vercel-build": "npm run build:db && next build"
+      postinstall: "npm run db:init && npm run db:generate",
+      "vercel-build": "npm run db:setup && next build"
     };
 
     return JSON.stringify({
@@ -260,25 +282,39 @@ module.exports = nextConfig`;
     const { vercelConfig } = this.options;
     const aiSdkEnabled = vercelConfig?.aiSdkEnabled !== false;
 
-    let envContent = `# Database - SQLite (local development)
+    let envContent = `# Database - SQLite (automatically configured for environment)
+# Local development: file:./dev.db  
+# Vercel production: file:/tmp/dev.db
 DATABASE_URL="file:./dev.db"`;
 
     if (aiSdkEnabled) {
       envContent += `
 
-# AI Provider Configuration
-# Choose ONE provider and add the corresponding API key
-OPENAI_API_KEY="sk-your-openai-key-here"
-# OR
-ANTHROPIC_API_KEY="sk-ant-your-anthropic-key-here"
+# 🚀 AI Provider Configuration (Dynamic API Key Fetching)
+# API keys are automatically fetched from the main app - no local configuration needed!
+# The sub-agent will:
+# 1. First check user's saved API keys in main app (/api/user/api-keys)
+# 2. Fall back to agent-specific credentials (/api/agent-credentials-public)
+# 3. Support OpenAI, Anthropic, and Grok providers
 
-# Optional: AI Provider Selection (defaults to openai)
-AI_MODEL_PROVIDER="openai"    # openai | anthropic
+# Optional: Override AI Provider Selection (defaults to openai)
+AI_MODEL_PROVIDER="openai"    # openai | anthropic | grok
 AI_MODEL_NAME="gpt-4o-mini"   # For OpenAI: gpt-4o-mini, gpt-4o, gpt-3.5-turbo
-                              # For Anthropic: claude-3-haiku-20240307, claude-3-sonnet-20240229`;
+                              # For Anthropic: claude-3-haiku-20240307, claude-3-sonnet-20240229
+                              # For Grok: grok-beta
+
+# Only set these if you want to override the main app's API keys
+# OPENAI_API_KEY=""      # Leave empty - fetched from main app
+# ANTHROPIC_API_KEY=""   # Leave empty - fetched from main app  
+# GROK_API_KEY=""        # Leave empty - fetched from main app`;
     }
 
     envContent += `
+
+# Main App Integration (Required for agent communication)
+NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
+NEXT_PUBLIC_DOCUMENT_ID=""  # Your agent document ID from main app
+NEXT_PUBLIC_AGENT_KEY=""    # Your agent key for authentication
 
 # Security
 NEXTAUTH_SECRET="your-secret-here"
@@ -287,24 +323,66 @@ NEXTAUTH_URL="http://localhost:3000"
 # Cron security (for production)
 CRON_SECRET="your-cron-secret-here"
 
+# Application Configuration
+NEXT_PUBLIC_APP_NAME="${this.options.projectName}"
+NEXT_PUBLIC_APP_VERSION="1.0.0"
+
+# Optional: Custom branding
+NEXT_PUBLIC_BRAND_NAME="${this.options.projectName}"
+NEXT_PUBLIC_BRAND_DESCRIPTION="Smart agent powered by AI"
+NEXT_PUBLIC_THEME_COLOR="emerald"  # Options: emerald, blue, purple, pink
+
 # Optional: Custom environment variables
 # Add your project-specific variables here`;
 
     return envContent;
   }
 
+  private generateEnvLocal(): string {
+    return `# Local Development Environment
+# Database URL - automatically configured by init script
+DATABASE_URL="file:./dev.db"
+NODE_ENV=development
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Security tokens (auto-generated)
+NEXTAUTH_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}"
+NEXTAUTH_URL="http://localhost:3000"
+CRON_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}"
+
+# Main app integration (required for agent communication)
+NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
+
+# These will be set automatically during deployment
+# NEXT_PUBLIC_DOCUMENT_ID=
+# NEXT_PUBLIC_AGENT_TOKEN=
+`;
+  }
+
   private generateVercelConfig(): string {
     return JSON.stringify({
       buildCommand: "npm run vercel-build",
       functions: {
-        "src/pages/api/cron/*.ts": { maxDuration: 300 }
+        "src/pages/api/cron/*.ts": { maxDuration: 300 },
+        "src/pages/api/models/*.ts": { maxDuration: 60 }
       },
-      crons: this.options.schedules.map(schedule => ({
-        path: `/api/cron/${schedule.name}`,
-        schedule: schedule.interval?.pattern || '0 0 * * *'
-      })),
+      crons: [{
+        path: "/api/cron/scheduler",
+        schedule: "* * * * *" // Run every minute to check main app for schedules
+      }],
       installCommand: "npm install",
-      build: { env: { PRISMA_GENERATE_DATAPROXY: "true" } }
+      build: { 
+        env: { 
+          PRISMA_GENERATE_DATAPROXY: "false",
+          DATABASE_URL: "file:/tmp/dev.db",
+          NODE_ENV: "production"
+        } 
+      },
+      runtime: { 
+        env: {
+          DATABASE_URL: "file:/tmp/dev.db"
+        }
+      }
     }, null, 2);
   }
 
@@ -333,7 +411,8 @@ CRON_SECRET="your-cron-secret-here"
       'src/components/ScheduleCard.tsx': this.generateScheduleCardComponent(),
       'src/components/StatsCard.tsx': this.generateStatsCardComponent(),
       'src/components/ChatMessage.tsx': this.generateChatMessageComponent(),
-      'src/components/LoadingSpinner.tsx': this.generateLoadingSpinnerComponent()
+      'src/components/LoadingSpinner.tsx': this.generateLoadingSpinnerComponent(),
+      'src/components/ActionExecutionModal.tsx': this.generateActionExecutionModal()
     };
   }
 
@@ -344,31 +423,28 @@ CRON_SECRET="your-cron-secret-here"
     files['src/pages/api/health.ts'] = this.generateHealthEndpoint();
     files['src/pages/api/stats.ts'] = this.generateStatsEndpoint();
     files['src/pages/api/models/[modelName].ts'] = this.generateModelEndpoint();
+    files['src/pages/api/models/[modelName]/[id].ts'] = this.generateModelRecordEndpoint();
     files['src/pages/api/chat.ts'] = this.generateChatEndpoint();
 
-    // Action endpoints
-    this.options.actions.forEach(action => {
-      files[`src/pages/api/${action.name}.ts`] = this.generateActionEndpoint(action);
-    });
+    // Dynamic action execution endpoint (fetches from main app)
+    files['src/pages/api/actions/[actionName].ts'] = this.generateDynamicActionEndpoint();
 
-    // Cron endpoints
-    this.options.schedules.forEach(schedule => {
-      files[`src/pages/api/cron/${schedule.name}.ts`] = this.generateCronEndpoint(schedule);
-    });
+    // Direct action trigger endpoint (calls main app directly)
+    files['src/pages/api/trigger/action/[actionId].ts'] = this.generateDirectActionTriggerEndpoint();
 
-    // Vercel configuration
-    files['vercel.json'] = JSON.stringify({
-      buildCommand: "npm run vercel-build",
-      functions: {
-        "src/pages/api/cron/*.ts": { maxDuration: 300 }
-      },
-      crons: this.options.schedules.map(schedule => ({
-        path: `/api/cron/${schedule.name}`,
-        schedule: schedule.interval?.pattern || '0 0 * * *'
-      })),
-      installCommand: "npm install",
-      build: { env: { PRISMA_GENERATE_DATAPROXY: "true" } }
-    }, null, 2);
+    // Direct schedule trigger endpoint (calls main app directly)
+    files['src/pages/api/trigger/schedule/[scheduleId].ts'] = this.generateDirectScheduleTriggerEndpoint();
+
+    // Single cron endpoint that checks main app for schedules to run
+    files['src/pages/api/cron/scheduler.ts'] = this.generateDynamicCronEndpoint();
+
+    // Sub-agent's own API endpoints that call main app
+    files['src/pages/api/agent/actions.ts'] = this.generateActionsEndpoint();
+    files['src/pages/api/agent/schedules.ts'] = this.generateSchedulesEndpoint();
+    files['src/pages/api/agent/models.ts'] = this.generateModelsEndpoint();
+          files['src/pages/api/agent/config.ts'] = this.generateAgentConfigEndpoint();
+      files['src/pages/api/agent/data.ts'] = this.generateAgentDataEndpoint();
+      files['src/pages/api/agent/test-connection.ts'] = this.generateTestConnectionEndpoint();
 
     return files;
   }
@@ -378,15 +454,18 @@ CRON_SECRET="your-cron-secret-here"
       'src/lib/prisma.ts': this.generatePrismaClient(),
       'src/lib/api.ts': this.generateApiClient(),
       'src/lib/theme.ts': this.generateThemeSystem(),
+      'src/contexts/AgentContext.tsx': this.generateAgentContext(),
       'src/hooks/useApi.ts': this.generateApiHook(),
       'src/hooks/useMobile.ts': this.generateMobileHook(),
       'prisma/seed.ts': this.generateSeedFile(),
       'scripts/init-sqlite.js': this.generateSQLiteInitScript()
     };
 
-    // Only add schema if one was provided (it should come from main deployment)
+    // Add Prisma schema - use provided one (sanitized) or generate default
     if (this.options.prismaSchema) {
-      files['prisma/schema.prisma'] = this.options.prismaSchema;
+      files['prisma/schema.prisma'] = this.sanitizePrismaSchema(this.options.prismaSchema);
+    } else {
+      files['prisma/schema.prisma'] = this.generateDefaultPrismaSchema();
     }
 
     return files;
@@ -412,21 +491,13 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import MobileNav from './MobileNav';
 import { themes } from '@/lib/theme';
-import api from '@/lib/api';
+import { useAgent } from '@/contexts/AgentContext';
 
 interface LayoutProps {
   children: ReactNode;
   title?: string;
   agentName?: string;
   theme?: keyof typeof themes;
-}
-
-interface AgentConfig {
-  avatar?: any;
-  theme?: string;
-  name?: string;
-  description?: string;
-  domain?: string;
 }
 
 export default function Layout({ 
@@ -436,42 +507,24 @@ export default function Layout({
   theme = 'green' 
 }: LayoutProps) {
   const [isMobile, setIsMobile] = useState(true);
-  const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const router = useRouter();
+  
+  // Use the global agent context
+  const { config: agentConfig, loading, error } = useAgent();
   
   // Use agent config theme if available, fallback to props
   const selectedTheme = agentConfig?.theme || theme;
   const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
   const displayName = agentConfig?.name || agentName;
+  
+  // Extract avatar URL from config
+  const avatarUrl = agentConfig?.avatar?.uploadedImage || null;
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  // Fetch agent configuration from main app
-  useEffect(() => {
-    const fetchAgentConfig = async () => {
-      try {
-        const config = await api.getAgentConfiguration();
-        if (config) {
-          setAgentConfig(config);
-          
-          // Fetch avatar image URL
-          const avatarImageUrl = await api.getAvatarImageUrl();
-          if (avatarImageUrl) {
-            setAvatarUrl(avatarImageUrl);
-          }
-        }
-      } catch (error) {
-        console.error('Failed to load agent configuration:', error);
-      }
-    };
-
-    fetchAgentConfig();
   }, []);
 
   return (
@@ -483,19 +536,14 @@ export default function Layout({
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <div className={\`min-h-screen \${currentTheme.bgGradient || 'bg-gradient-to-br from-black via-green-950/30 to-emerald-950/20'} relative\`}>
-        {/* Background Pattern */}
-        <div className="fixed inset-0 opacity-10">
-          <div className={\`absolute inset-0 bg-[radial-gradient(circle_500px_at_50%_200px,\${currentTheme.foreground || '#22c55e'},transparent)]\`}></div>
-        </div>
-        
-        {/* Matrix-style animated background */}
-        <div className="fixed inset-0 opacity-5 pointer-events-none">
-          <div className={\`absolute inset-0 bg-[linear-gradient(90deg,transparent_24%,\${currentTheme.foreground || '#22c55e'}15_25%,transparent_26%,transparent_74%,\${currentTheme.foreground || '#22c55e'}15_75%,transparent_76%),linear-gradient(transparent_24%,\${currentTheme.foreground || '#22c55e'}15_25%,transparent_26%,transparent_74%,\${currentTheme.foreground || '#22c55e'}15_75%,transparent_76%)] bg-[size:50px_50px]\`}></div>
+      <div className={\`min-h-screen bg-black relative\`}>
+        {/* Subtle dark gradient overlay */}
+        <div className="fixed inset-0 pointer-events-none">
+          <div className={\`absolute inset-0 bg-gradient-to-br from-\${currentTheme.primary}-950/40 via-black to-\${currentTheme.primary}-950/20\`}></div>
         </div>
 
         {/* Main Content */}
-        <div className={\`relative z-10 \${isMobile ? 'pb-20' : ''}\`}>
+        <div className={\`relative z-10 \${isMobile ? 'pb-16' : ''}\`}>
           {/* Desktop Header */}
           {!isMobile && (
             <header className={\`\${currentTheme.bg} border-b \${currentTheme.border} sticky top-0 z-40\`}>
@@ -518,6 +566,7 @@ export default function Layout({
                     <div className={\`w-8 h-8 rounded-lg bg-gradient-to-br \${currentTheme.gradient} border \${currentTheme.border} \${avatarUrl ? 'hidden' : ''}\`}></div>
                     <h1 className={\`font-mono font-bold text-lg \${currentTheme.light}\`}>{displayName}</h1>
                   </div>
+                  
                   <nav className="flex items-center gap-6">
                     {[
                       { path: '/', icon: '🏠', label: 'Home' },
@@ -546,7 +595,7 @@ export default function Layout({
           )}
 
           {/* Page Content */}
-          <main className={\`\${isMobile ? 'max-w-md mx-auto' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}\`}>
+          <main className={\`\${isMobile ? 'max-w-sm mx-auto px-2' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}\`}>
             {children}
           </main>
         </div>
@@ -578,19 +627,19 @@ export default function MobileNav({ currentTheme }: MobileNavProps) {
   ];
 
   return (
-    <div className={\`fixed bottom-0 left-0 right-0 \${currentTheme.bg} border-t \${currentTheme.border} z-50\`}>
-      <div className="flex justify-around items-center py-2 px-4 max-w-md mx-auto">
+    <div className={\`fixed bottom-0 left-0 right-0 bg-black/90 border-t \${currentTheme.border} z-50\`}>
+      <div className="flex justify-around items-center py-1 px-2 max-w-sm mx-auto">
         {navItems.map((item) => (
           <button
             key={item.path}
             onClick={() => router.push(item.path)}
-            className={\`flex flex-col items-center gap-1 p-2 rounded-lg transition-all duration-200 min-w-0 flex-1 \${
+            className={\`flex flex-col items-center gap-1 p-1 rounded-lg transition-all duration-200 min-w-0 flex-1 \${
               router.pathname === item.path
-                ? \`\${currentTheme.bgActive} \${currentTheme.accent} scale-110\`
+                ? \`\${currentTheme.bgActive} \${currentTheme.accent}\`
                 : \`\${currentTheme.dim} hover:\${currentTheme.light} hover:\${currentTheme.bgHover}\`
             }\`}
           >
-            <span className={\`text-lg \${router.pathname === item.path ? 'scale-110' : ''} transition-transform\`}>
+            <span className={\`text-sm \${router.pathname === item.path ? 'scale-110' : ''} transition-transform\`}>
               {item.icon}
             </span>
             <span className="font-mono text-xs font-medium truncate">{item.label}</span>
@@ -610,6 +659,8 @@ import StatsCard from '@/components/StatsCard';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import api from '@/lib/api';
+import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
 
 export default function HomePage() {
   const router = useRouter();
@@ -621,6 +672,17 @@ export default function HomePage() {
     totalSchedules: ${schedules.length}
   });
   const [loading, setLoading] = useState(true);
+
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+  const displayName = agentConfig?.name || '${projectName}';
+  
+  // Extract avatar URL from config
+  const avatarUrl = agentConfig?.avatar?.uploadedImage || null;
 
   useEffect(() => {
     fetchStats();
@@ -642,48 +704,57 @@ export default function HomePage() {
       path: '/chat', 
       icon: '💬', 
       title: 'Chat with AI', 
-      desc: 'Ask questions or give commands',
-      color: 'bg-blue-500/15 border-blue-400/30 hover:bg-blue-500/25'
+      desc: 'Ask questions or give commands'
     },
     { 
       path: '/models', 
       icon: '🗃️', 
       title: 'View Data', 
-      desc: 'Manage your information',
-      color: 'bg-green-500/15 border-green-400/30 hover:bg-green-500/25'
+      desc: 'Manage your information'
     },
     { 
       path: '/actions', 
       icon: '⚡', 
       title: 'Execute Actions', 
-      desc: 'Run smart operations',
-      color: 'bg-yellow-500/15 border-yellow-400/30 hover:bg-yellow-500/25'
+      desc: 'Run smart operations'
     },
     { 
       path: '/schedules', 
       icon: '⏰', 
       title: 'Schedules', 
-      desc: 'Manage automated tasks',
-      color: 'bg-purple-500/15 border-purple-400/30 hover:bg-purple-500/25'
+      desc: 'Manage automated tasks'
     }
   ];
 
   return (
     <Layout title="${projectName}">
-      <div className="p-4 space-y-6">
+      <div className="p-2 space-y-3">
         {/* Hero Section */}
-        <div className="text-center space-y-4 pt-6">
+        <div className="text-center space-y-2 pt-3">
           <div className="flex justify-center">
-            <div className="p-4 bg-green-500/15 border border-green-400/30 rounded-2xl">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-400/20 to-emerald-400/20 border-2 border-green-400/30 flex items-center justify-center">
-                <span className="text-2xl text-green-400">🤖</span>
+            <div className={\`p-2 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
+              <div className={\`w-16 h-16 rounded-full bg-gradient-to-br \${currentTheme.gradient} border-2 \${currentTheme.borderActive} flex items-center justify-center overflow-hidden\`}>
+                {avatarUrl ? (
+                  <img 
+                    src={avatarUrl} 
+                    alt="Agent Avatar" 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to theme emoji if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      target.nextElementSibling?.classList.remove('hidden');
+                    }}
+                  />
+                ) : null}
+                <span className={\`text-xl \${currentTheme.accent} \${avatarUrl ? 'hidden' : ''}\`}>🤖</span>
               </div>
             </div>
           </div>
-          <div className="space-y-2">
-            <h1 className="font-mono font-bold text-2xl text-green-200">${projectName}</h1>
-            <p className="font-mono text-sm text-green-300/70 max-w-xs mx-auto leading-relaxed">
-              Your intelligent AI assistant powered by Agent Builder
+          <div className="space-y-1">
+            <h1 className={\`font-mono font-bold text-xl \${currentTheme.light}\`}>{displayName}</h1>
+            <p className={\`font-mono text-xs \${currentTheme.dim} max-w-xs mx-auto leading-tight\`}>
+              Your intelligent AI assistant
             </p>
           </div>
         </div>
@@ -692,38 +763,38 @@ export default function HomePage() {
         <StatsCard stats={stats} loading={loading} />
 
         {/* Quick Actions */}
-        <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
-          <h3 className="font-mono font-semibold text-sm text-green-200 mb-3">Quick Actions</h3>
-          <div className="grid grid-cols-1 gap-3">
+        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3\`}>
+          <h3 className={\`font-mono font-semibold text-xs \${currentTheme.light} mb-2\`}>Quick Actions</h3>
+          <div className="grid grid-cols-1 gap-2">
             {quickActions.map((action, i) => (
               <button
                 key={i}
                 onClick={() => router.push(action.path)}
-                className={\`w-full flex items-center gap-3 p-3 \${action.color} border rounded-lg transition-all duration-200 transform hover:scale-[1.02]\`}
+                className={\`w-full flex items-center gap-2 p-2 \${currentTheme.bg} border \${currentTheme.border} \${currentTheme.bgHover} rounded-lg transition-all duration-200\`}
               >
-                <span className="text-lg">{action.icon}</span>
+                <span className="text-sm">{action.icon}</span>
                 <div className="flex-1 text-left">
-                  <div className="font-mono text-sm text-green-200">{action.title}</div>
-                  <div className="font-mono text-xs text-green-300/70">{action.desc}</div>
+                  <div className={\`font-mono text-xs \${currentTheme.light}\`}>{action.title}</div>
+                  <div className={\`font-mono text-xs \${currentTheme.dim}\`}>{action.desc}</div>
                 </div>
-                <span className="text-xs text-green-300/70">→</span>
+                <span className={\`text-xs \${currentTheme.dim}\`}>→</span>
               </button>
             ))}
           </div>
         </div>
 
         {/* System Status */}
-        <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
+        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3\`}>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+            <div className="flex items-center gap-2">
+              <div className={\`w-2 h-2 \${currentTheme.accent.replace('text-', 'bg-')} rounded-full animate-pulse\`}></div>
               <div>
-                <div className="font-mono font-semibold text-sm text-green-200">System Status</div>
-                <div className="font-mono text-xs text-green-300/70">All systems operational</div>
+                <div className={\`font-mono font-semibold text-xs \${currentTheme.light}\`}>System Status</div>
+                <div className={\`font-mono text-xs \${currentTheme.dim}\`}>All systems operational</div>
               </div>
             </div>
-            <div className="px-2 py-1 bg-green-500/25 border border-green-400/50 rounded-lg">
-              <span className="font-mono text-xs text-green-400">LIVE</span>
+            <div className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg\`}>
+              <span className={\`font-mono text-xs \${currentTheme.accent}\`}>LIVE</span>
             </div>
           </div>
         </div>
@@ -737,9 +808,14 @@ export default function HomePage() {
   private generateAppPage(): string {
     return `import type { AppProps } from 'next/app';
 import '@/styles/globals.css';
+import { AgentProvider } from '@/contexts/AgentContext';
 
 export default function App({ Component, pageProps }: AppProps) {
-  return <Component {...pageProps} />;
+  return (
+    <AgentProvider>
+      <Component {...pageProps} />
+    </AgentProvider>
+  );
 }`;
   }
 
@@ -752,6 +828,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
 const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
 const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
+const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
 class ApiClient {
   private cachedCredentials: any = null;
@@ -796,21 +873,17 @@ class ApiClient {
         return { credentials: {}, agentConfig: {} };
       }
 
-      // Try public endpoint first for deployed agents, fallback to authenticated endpoint
-      let response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}&agentKey=\${AGENT_KEY}\`, {
+      // Use JWT token for authentication with main app
+      let response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public\`, {
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': \`Bearer \${AGENT_TOKEN}\`,
         },
       });
       
-      // If public endpoint fails, try the authenticated one
+      // Log error if authentication fails
       if (!response.ok) {
-        console.log('Public endpoint failed, trying authenticated endpoint...');
-        response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials?documentId=\${DOCUMENT_ID}&agentKey=\${AGENT_KEY}\`, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+        console.error('Agent authentication failed:', response.status, response.statusText);
       }
 
       if (!response.ok) {
@@ -843,15 +916,81 @@ class ApiClient {
     return this.request('/api/stats');
   }
 
-  async getModelRecords(modelName: string) {
-    return this.request(\`/api/models/\${modelName}\`);
+  // ========== MODEL CRUD OPERATIONS (Direct SQLite/Prisma) ==========
+  
+  // Get all records for a model with optional pagination and search
+  async getModelRecords(modelName: string, options?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }) {
+    const params = new URLSearchParams();
+    if (options?.page) params.append('page', options.page.toString());
+    if (options?.limit) params.append('limit', options.limit.toString());
+    if (options?.search) params.append('search', options.search);
+    if (options?.sortBy) params.append('sortBy', options.sortBy);
+    if (options?.sortOrder) params.append('sortOrder', options.sortOrder);
+    
+    const queryString = params.toString();
+    const endpoint = \`/api/models/\${modelName}\${queryString ? \`?\${queryString}\` : ''}\`;
+    
+    return this.request(endpoint);
+  }
+
+  // Get a single record by ID  
+  async getModelRecord(modelName: string, id: string) {
+    return this.request(\`/api/models/\${modelName}/\${id}\`);
+  }
+
+  // Create a new record
+  async createModelRecord(modelName: string, data: any) {
+    return this.request(\`/api/models/\${modelName}\`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Update an existing record
+  async updateModelRecord(modelName: string, id: string, data: any) {
+    return this.request(\`/api/models/\${modelName}/\${id}\`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Delete a record
+  async deleteModelRecord(modelName: string, id: string) {
+    return this.request(\`/api/models/\${modelName}/\${id}\`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Bulk operations for models
+  async bulkCreateModelRecords(modelName: string, records: any[]) {
+    // Note: This would require a separate endpoint for bulk operations
+    // For now, we'll create records one by one
+    const results = await Promise.allSettled(
+      records.map(record => this.createModelRecord(modelName, record))
+    );
+    
+    const successful = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
+    
+    return {
+      success: true,
+      created: successful,
+      failed: failed,
+      results: results
+    };
   }
 
   async executeAction(actionName: string, input: any) {
     // Get fresh credentials for action execution
     const { credentials } = await this.getCredentialsAndConfig();
     
-    return this.request(\`/api/\${actionName}\`, {
+    return this.request(\`/api/actions/\${actionName}\`, {
       method: 'POST',
       body: JSON.stringify({ 
         input,
@@ -864,6 +1003,22 @@ class ApiClient {
     return this.request('/api/health');
   }
 
+  // Direct action trigger (executes on main app)
+  async triggerActionOnMainApp(actionId: string, input: any = {}, member?: any) {
+    return this.request(\`/api/trigger/action/\${actionId}\`, {
+      method: 'POST',
+      body: JSON.stringify({ input, member }),
+    });
+  }
+
+  // Direct schedule trigger (executes on main app)
+  async triggerScheduleOnMainApp(scheduleId: string, force: boolean = false, member?: any) {
+    return this.request(\`/api/trigger/schedule/\${scheduleId}\`, {
+      method: 'POST',
+      body: JSON.stringify({ force, member }),
+    });
+  }
+
   // Call back to main app for agent configuration (using the new API)
   async getAgentConfiguration() {
     try {
@@ -871,6 +1026,49 @@ class ApiClient {
       return agentConfig || null;
     } catch (error) {
       console.error('Error fetching agent configuration:', error);
+      return null;
+    }
+  }
+
+  // Get complete agent data including personality for chat
+  async getAgentData() {
+    try {
+      if (!DOCUMENT_ID) {
+        console.warn('No document ID provided for agent data');
+        return null;
+      }
+
+      const response = await fetch(\`\${MAIN_APP_URL}/api/document?id=\${DOCUMENT_ID}\`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Agent-Key': AGENT_KEY,
+        },
+      });
+
+      if (!response.ok) {
+        console.error('Failed to fetch agent data:', response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      
+      if (data.success && data.document?.metadata) {
+        const metadata = data.document.metadata;
+        return {
+          name: metadata.name || '${this.options.projectName}',
+          description: metadata.description || '',
+          personality: metadata.personality || '',
+          theme: metadata.theme || 'green',
+          avatar: metadata.avatar || null,
+          models: metadata.models || [],
+          actions: metadata.actions || [],
+          schedules: metadata.schedules || []
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error fetching agent data:', error);
       return null;
     }
   }
@@ -914,10 +1112,10 @@ export default api;`;
     accent: 'text-green-400',
     light: 'text-green-200',
     dim: 'text-green-300/70',
-    bg: 'bg-green-500/15',
-    bgHover: 'hover:bg-green-500/25',
-    borderActive: 'border-green-400/50',
-    bgActive: 'bg-green-500/25',
+    bg: 'bg-green-500/25',
+    bgHover: 'hover:bg-green-500/35',
+    borderActive: 'border-green-400/60',
+    bgActive: 'bg-green-500/35',
     background: '#0a0f0a',
     foreground: '#22c55e'
   },
@@ -930,15 +1128,15 @@ export default api;`;
     accent: 'text-blue-400',
     light: 'text-blue-200',
     dim: 'text-blue-300/70',
-    bg: 'bg-blue-500/15',
-    bgHover: 'hover:bg-blue-500/25',
-    borderActive: 'border-blue-400/50',
-    bgActive: 'bg-blue-500/25',
+    bg: 'bg-blue-500/25',
+    bgHover: 'hover:bg-blue-500/35',
+    borderActive: 'border-blue-400/60',
+    bgActive: 'bg-blue-500/35',
     background: '#0a0f1a',
     foreground: '#3b82f6'
   },
   purple: {
-    name: 'Cosmic',
+    name: 'Royal',
     primary: 'purple',
     gradient: 'from-purple-400/20 via-violet-500/15 to-indigo-400/20',
     bgGradient: 'bg-gradient-to-br from-black via-purple-950/30 to-indigo-950/20',
@@ -946,12 +1144,28 @@ export default api;`;
     accent: 'text-purple-400',
     light: 'text-purple-200',
     dim: 'text-purple-300/70',
-    bg: 'bg-purple-500/15',
-    bgHover: 'hover:bg-purple-500/25',
-    borderActive: 'border-purple-400/50',
-    bgActive: 'bg-purple-500/25',
+    bg: 'bg-purple-500/25',
+    bgHover: 'hover:bg-purple-500/35',
+    borderActive: 'border-purple-400/60',
+    bgActive: 'bg-purple-500/35',
     background: '#0f0a1a',
     foreground: '#a855f7'
+  },
+  cyan: {
+    name: 'Cyber',
+    primary: 'cyan',
+    gradient: 'from-cyan-300/20 via-teal-400/15 to-emerald-300/20',
+    bgGradient: 'bg-gradient-to-br from-black via-cyan-950/30 to-teal-950/20',
+    border: 'border-cyan-400/30',
+    accent: 'text-cyan-300',
+    light: 'text-cyan-100',
+    dim: 'text-cyan-200/70',
+    bg: 'bg-cyan-500/25',
+    bgHover: 'hover:bg-cyan-500/35',
+    borderActive: 'border-cyan-400/60',
+    bgActive: 'bg-cyan-500/35',
+    background: '#0a1a1a',
+    foreground: '#06b6d4'
   },
   orange: {
     name: 'Sunset',
@@ -959,15 +1173,127 @@ export default api;`;
     gradient: 'from-orange-400/20 via-amber-500/15 to-yellow-400/20',
     bgGradient: 'bg-gradient-to-br from-black via-orange-950/30 to-amber-950/20',
     border: 'border-orange-400/30',
-    accent: 'text-orange-400',
-    light: 'text-orange-200',
-    dim: 'text-orange-300/70',
-    bg: 'bg-orange-500/15',
-    bgHover: 'hover:bg-orange-500/25',
-    borderActive: 'border-orange-400/50',
-    bgActive: 'bg-orange-500/25',
+    accent: 'text-orange-300',
+    light: 'text-orange-100',
+    dim: 'text-orange-200/70',
+    bg: 'bg-orange-500/25',
+    bgHover: 'hover:bg-orange-500/35',
+    borderActive: 'border-orange-400/60',
+    bgActive: 'bg-orange-500/35',
     background: '#1a0f0a',
     foreground: '#f97316'
+  },
+  pink: {
+    name: 'Neon',
+    primary: 'pink',
+    gradient: 'from-pink-400/20 via-rose-500/15 to-fuchsia-400/20',
+    bgGradient: 'bg-gradient-to-br from-black via-pink-950/30 to-fuchsia-950/20',
+    border: 'border-pink-400/30',
+    accent: 'text-pink-300',
+    light: 'text-pink-100',
+    dim: 'text-pink-200/70',
+    bg: 'bg-pink-500/25',
+    bgHover: 'hover:bg-pink-500/35',
+    borderActive: 'border-pink-400/60',
+    bgActive: 'bg-pink-500/35',
+    background: '#1a0a1a',
+    foreground: '#ec4899'
+  },
+  yellow: {
+    name: 'Golden',
+    primary: 'yellow',
+    gradient: 'from-yellow-300/20 via-amber-400/15 to-orange-300/20',
+    bgGradient: 'bg-gradient-to-br from-black via-yellow-950/30 to-amber-950/20',
+    border: 'border-yellow-400/30',
+    accent: 'text-yellow-300',
+    light: 'text-yellow-100',
+    dim: 'text-yellow-200/70',
+    bg: 'bg-yellow-500/25',
+    bgHover: 'hover:bg-yellow-500/35',
+    borderActive: 'border-yellow-400/60',
+    bgActive: 'bg-yellow-500/35',
+    background: '#1a1a0a',
+    foreground: '#eab308'
+  },
+  red: {
+    name: 'Fire',
+    primary: 'red',
+    gradient: 'from-red-400/20 via-rose-500/15 to-pink-400/20',
+    bgGradient: 'bg-gradient-to-br from-black via-red-950/30 to-rose-950/20',
+    border: 'border-red-400/30',
+    accent: 'text-red-300',
+    light: 'text-red-100',
+    dim: 'text-red-200/70',
+    bg: 'bg-red-500/25',
+    bgHover: 'hover:bg-red-500/35',
+    borderActive: 'border-red-400/60',
+    bgActive: 'bg-red-500/35',
+    background: '#1a0a0a',
+    foreground: '#ef4444'
+  },
+  indigo: {
+    name: 'Deep',
+    primary: 'indigo',
+    gradient: 'from-indigo-400/20 via-blue-600/15 to-slate-400/20',
+    bgGradient: 'bg-gradient-to-br from-black via-indigo-950/30 to-slate-950/20',
+    border: 'border-indigo-400/30',
+    accent: 'text-indigo-300',
+    light: 'text-indigo-100',
+    dim: 'text-indigo-200/70',
+    bg: 'bg-indigo-500/25',
+    bgHover: 'hover:bg-indigo-500/35',
+    borderActive: 'border-indigo-400/60',
+    bgActive: 'bg-indigo-500/35',
+    background: '#0a0a1a',
+    foreground: '#6366f1'
+  },
+  emerald: {
+    name: 'Emerald',
+    primary: 'emerald',
+    gradient: 'from-emerald-400/20 via-green-600/15 to-teal-400/20',
+    bgGradient: 'bg-gradient-to-br from-black via-emerald-950/30 to-green-950/20',
+    border: 'border-emerald-400/30',
+    accent: 'text-emerald-300',
+    light: 'text-emerald-100',
+    dim: 'text-emerald-200/70',
+    bg: 'bg-emerald-500/25',
+    bgHover: 'hover:bg-emerald-500/35',
+    borderActive: 'border-emerald-400/60',
+    bgActive: 'bg-emerald-500/35',
+    background: '#0a1a0f',
+    foreground: '#10b981'
+  },
+  teal: {
+    name: 'Teal',
+    primary: 'teal',
+    gradient: 'from-teal-400/20 via-cyan-600/15 to-blue-400/20',
+    bgGradient: 'bg-gradient-to-br from-black via-teal-950/30 to-cyan-950/20',
+    border: 'border-teal-400/30',
+    accent: 'text-teal-300',
+    light: 'text-teal-100',
+    dim: 'text-teal-200/70',
+    bg: 'bg-teal-500/25',
+    bgHover: 'hover:bg-teal-500/35',
+    borderActive: 'border-teal-400/60',
+    bgActive: 'bg-teal-500/35',
+    background: '#0a1a1a',
+    foreground: '#14b8a6'
+  },
+  rose: {
+    name: 'Rose',
+    primary: 'rose',
+    gradient: 'from-rose-400/20 via-pink-600/15 to-red-400/20',
+    bgGradient: 'bg-gradient-to-br from-black via-rose-950/30 to-pink-950/20',
+    border: 'border-rose-400/30',
+    accent: 'text-rose-300',
+    light: 'text-rose-100',
+    dim: 'text-rose-200/70',
+    bg: 'bg-rose-500/25',
+    bgHover: 'hover:bg-rose-500/35',
+    borderActive: 'border-rose-400/60',
+    bgActive: 'bg-rose-500/35',
+    background: '#1a0a0f',
+    foreground: '#f43f5e'
   }
 };
 
@@ -981,17 +1307,22 @@ export type Theme = typeof themes.green;`;
 import ModelCard from '@/components/ModelCard';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
 
 export default function ModelsPage() {
   const [modelsData, setModelsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const models = ${JSON.stringify(this.options.models.map(m => ({
-    name: m.name,
-    emoji: m.emoji || '📋',
-    description: m.description || 'Data model',
-    fields: m.fields || []
-  })), null, 2)};
+  const [models, setModels] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
   useEffect(() => {
     fetchModelData();
@@ -999,7 +1330,45 @@ export default function ModelsPage() {
 
   const fetchModelData = async () => {
     try {
-      const promises = models.map(async (model) => {
+      setLoading(true);
+      setError(null);
+      
+      // Call sub-agent's own API endpoint
+      const response = await fetch('/api/agent/models');
+      
+      if (!response.ok) {
+        throw new Error(\`Failed to fetch models: \${response.status}\`);
+      }
+      
+      const data = await response.json();
+      
+      let currentModels = [];
+      if (data.success && data.models) {
+        // Use models from sub-agent API
+        currentModels = data.models.map((model: any) => ({
+          name: model.name,
+          emoji: model.emoji || '📋',
+          description: model.description || 'Data model',
+          fields: model.fields || []
+        }));
+        
+        if (data.source === 'fallback') {
+          setError('Using cached models. Main app connection may be unavailable.');
+        }
+      } else {
+        // Fallback to static models
+        currentModels = ${JSON.stringify(this.options.models.map(m => ({
+          name: m.name,
+          emoji: m.emoji || '📋',
+          description: m.description || 'Data model',
+          fields: m.fields || []
+        })), null, 2)};
+      }
+      
+      setModels(currentModels);
+      
+      // Fetch data for each model
+      const promises = currentModels.map(async (model) => {
         try {
           const records = await api.getModelRecords(model.name);
           return { ...model, recordCount: records.length, records: records.slice(0, 3) };
@@ -1012,6 +1381,17 @@ export default function ModelsPage() {
       setModelsData(results);
     } catch (error) {
       console.error('Failed to fetch model data:', error);
+      setError('Failed to fetch model data from main app. Please check your connection.');
+      
+      // Fallback to static models
+      const fallbackModels = ${JSON.stringify(this.options.models.map(m => ({
+        name: m.name,
+        emoji: m.emoji || '📋',
+        description: m.description || 'Data model',
+        fields: m.fields || []
+      })), null, 2)};
+      setModels(fallbackModels);
+      setModelsData(fallbackModels.map(model => ({ ...model, recordCount: 0, records: [], error: true })));
     } finally {
       setLoading(false);
     }
@@ -1021,18 +1401,26 @@ export default function ModelsPage() {
     <Layout title="Data Models">
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-mono font-bold text-green-200">Data Models</h1>
-          <span className="text-sm font-mono text-green-300/70">
+          <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Data Models</h1>
+          <span className={\`text-sm font-mono \${currentTheme.dim}\`}>
             {models.length} model{models.length !== 1 ? 's' : ''}
           </span>
         </div>
 
+        {error && (
+          <div className="mb-4 p-4 bg-red-500/10 border border-red-400/20 rounded-xl">
+            <p className="font-mono text-sm text-red-300">
+              ⚠️ {error}
+            </p>
+          </div>
+        )}
+
         {loading ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-green-500/10 border border-green-400/20 rounded-xl p-4 animate-pulse">
-                <div className="h-6 bg-green-500/20 rounded w-1/3 mb-2"></div>
-                <div className="h-4 bg-green-500/20 rounded w-2/3"></div>
+              <div key={i} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4 animate-pulse\`}>
+                <div className={\`h-6 \${currentTheme.bg} rounded w-1/3 mb-2\`}></div>
+                <div className={\`h-4 \${currentTheme.bg} rounded w-2/3\`}></div>
               </div>
             ))}
           </div>
@@ -1045,8 +1433,8 @@ export default function ModelsPage() {
         ) : (
           <div className="text-center py-12">
             <div className="text-4xl mb-4">🗃️</div>
-            <h3 className="font-mono text-lg text-green-200 mb-2">No Models Found</h3>
-            <p className="font-mono text-sm text-green-300/70">
+            <h3 className={\`font-mono text-lg \${currentTheme.light} mb-2\`}>No Models Found</h3>
+            <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
               Your data models will appear here once they're created.
             </p>
           </div>
@@ -1188,55 +1576,125 @@ export default function ModelDetailPage() {
   private generateActionsPage(): string {
     return `import Layout from '@/components/Layout';
 import ActionCard from '@/components/ActionCard';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '@/lib/api';
+import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
 
 export default function ActionsPage() {
-  const [executingAction, setExecutingAction] = useState<string | null>(null);
-  const [results, setResults] = useState<Record<string, any>>({});
+  const [actions, setActions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const actions = ${JSON.stringify(this.options.actions.map(a => ({
-    id: a.id,
-    name: a.name,
-    emoji: a.emoji || '⚡',
-    description: a.description || 'Execute action',
-    type: a.type || 'query',
-    role: a.role || 'member'
-  })), null, 2)};
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
-  const executeAction = async (actionName: string) => {
+  useEffect(() => {
+    fetchActions();
+  }, []);
+
+  const fetchActions = async () => {
     try {
-      setExecutingAction(actionName);
-      setResults(prev => ({ ...prev, [actionName]: null }));
+      setLoading(true);
+      setError(null);
       
-      const result = await api.executeAction(actionName, {
-        // Default input - in a real app, this would come from a form
-        timestamp: new Date().toISOString(),
-        source: 'mobile-app'
-      });
+      // Call sub-agent's own API endpoint
+      const response = await fetch('/api/agent/actions');
       
-      setResults(prev => ({ ...prev, [actionName]: result }));
-    } catch (error) {
-      setResults(prev => ({ 
-        ...prev, 
-        [actionName]: { 
-          success: false, 
-          error: error instanceof Error ? error.message : 'Unknown error' 
-        } 
-      }));
+      if (!response.ok) {
+        throw new Error(\`Failed to fetch actions: \${response.status}\`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.actions) {
+        const formattedActions = data.actions.map((action: any) => ({
+          id: action.id || action.name,
+          name: action.name,
+          emoji: action.emoji || '⚡',
+          description: action.description || 'Execute action',
+          type: action.type || 'query',
+          role: action.role || 'member',
+          uiComponentsDesign: action.uiComponentsDesign || [],
+          pseudoSteps: action.pseudoSteps || []
+        }));
+        setActions(formattedActions);
+        
+        if (data.source === 'fallback') {
+          setError('Using cached actions. Main app connection may be unavailable.');
+        }
+      } else {
+        throw new Error('No actions data received');
+      }
+    } catch (err) {
+      console.error('Failed to fetch actions:', err);
+      setError('Failed to fetch actions. Please check your connection.');
+      
+      // Fallback to static actions
+      const fallbackActions = ${JSON.stringify(this.options.actions.map(a => ({
+        id: a.id,
+        name: a.name,
+        emoji: a.emoji || '⚡',
+        description: a.description || 'Execute action',
+        type: a.type || 'query',
+        role: a.role || 'member',
+        uiComponentsDesign: (a as any).uiComponentsDesign || [],
+        pseudoSteps: (a as any).pseudoSteps || []
+      })), null, 2)};
+      setActions(fallbackActions);
     } finally {
-      setExecutingAction(null);
+      setLoading(false);
     }
   };
+
+  if (loading) {
+    return (
+      <Layout title="Actions">
+        <div className="p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Smart Actions</h1>
+            <span className={\`text-sm font-mono \${currentTheme.dim}\`}>Loading...</span>
+          </div>
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4 animate-pulse\`}>
+                <div className={\`h-6 \${currentTheme.bg} rounded w-1/3 mb-2\`}></div>
+                <div className={\`h-4 \${currentTheme.bg} rounded w-2/3\`}></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout title="Actions">
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-mono font-bold text-green-200">Smart Actions</h1>
-          <span className="text-sm font-mono text-green-300/70">
+          <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Smart Actions</h1>
+          <span className={\`text-sm font-mono \${currentTheme.dim}\`}>
             {actions.length} action{actions.length !== 1 ? 's' : ''}
           </span>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-4 bg-red-500/10 border border-red-400/20 rounded-xl">
+            <p className="font-mono text-sm text-red-300">
+              ⚠️ {error}
+            </p>
+          </div>
+        )}
+
+        <div className={\`mb-4 p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
+          <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
+            💡 <strong>Interactive Actions:</strong> Click any action card to open the execution modal. 
+            Choose between local execution (runs on this sub-agent) or remote execution (runs on main app).
+          </p>
         </div>
 
         {actions.length > 0 ? (
@@ -1245,19 +1703,22 @@ export default function ActionsPage() {
               <ActionCard
                 key={action.id}
                 action={action}
-                isExecuting={executingAction === action.name}
-                result={results[action.name]}
-                onExecute={() => executeAction(action.name)}
               />
             ))}
           </div>
         ) : (
           <div className="text-center py-12">
             <div className="text-4xl mb-4">⚡</div>
-            <h3 className="font-mono text-lg text-green-200 mb-2">No Actions Available</h3>
-            <p className="font-mono text-sm text-green-300/70">
-              Smart actions will appear here once they're configured.
+            <h3 className={\`font-mono text-lg \${currentTheme.light} mb-2\`}>No Actions Available</h3>
+            <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
+              Smart actions will appear here once they're configured in the main app.
             </p>
+            <div className={\`mt-6 p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
+              <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
+                🚀 Actions are automatically synced from the main app. Create actions in the main app 
+                and they'll appear here for interactive execution.
+              </p>
+            </div>
           </div>
         )}
       </div>
@@ -1269,17 +1730,78 @@ export default function ActionsPage() {
   private generateSchedulesPage(): string {
     return `import Layout from '@/components/Layout';
 import ScheduleCard from '@/components/ScheduleCard';
+import { useEffect, useState } from 'react';
+import api from '@/lib/api';
+import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
 
 export default function SchedulesPage() {
-  const schedules = ${JSON.stringify(this.options.schedules.map(s => ({
-    id: s.id,
-    name: s.name,
-    emoji: s.emoji || '⏰',
-    description: s.description || 'Scheduled task',
-    pattern: s.interval?.pattern || '0 0 * * *',
-    active: s.interval?.active !== false,
-    nextRun: s.interval?.pattern ? 'Calculated from pattern' : 'Unknown'
-  })), null, 2)};
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+
+  useEffect(() => {
+    fetchSchedules();
+  }, []);
+
+  const fetchSchedules = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Call sub-agent's own API endpoint
+      const response = await fetch('/api/agent/schedules');
+      
+      if (!response.ok) {
+        throw new Error(\`Failed to fetch schedules: \${response.status}\`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.schedules) {
+        const formattedSchedules = data.schedules.map((schedule: any) => ({
+          id: schedule.id || schedule.name,
+          name: schedule.name,
+          emoji: schedule.emoji || '⏰',
+          description: schedule.description || 'Scheduled task',
+          pattern: schedule.interval?.pattern || '0 0 * * *',
+          active: schedule.interval?.active !== false,
+          nextRun: schedule.interval?.pattern ? 'Calculated from pattern' : 'Unknown'
+        }));
+        setSchedules(formattedSchedules);
+        
+        if (data.source === 'fallback') {
+          setError('Using cached schedules. Main app connection may be unavailable.');
+        }
+      } else {
+        throw new Error('No schedules data received');
+      }
+    } catch (err) {
+      console.error('Failed to fetch schedules:', err);
+      setError('Failed to fetch schedules. Please check your connection.');
+      
+      // Fallback to static schedules
+      const fallbackSchedules = ${JSON.stringify(this.options.schedules.map(s => ({
+        id: s.id,
+        name: s.name,
+        emoji: s.emoji || '⏰',
+        description: s.description || 'Scheduled task',
+        pattern: s.interval?.pattern || '0 0 * * *',
+        active: s.interval?.active !== false,
+        nextRun: s.interval?.pattern ? 'Calculated from pattern' : 'Unknown'
+      })), null, 2)};
+      setSchedules(fallbackSchedules);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getNextRunTime = (pattern: string) => {
     // Simple next run calculation - in a real app, use a cron library
@@ -1288,29 +1810,58 @@ export default function SchedulesPage() {
     return nextHour.toLocaleString();
   };
 
+  if (loading) {
+    return (
+      <Layout title="Schedules">
+        <div className="p-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Scheduled Tasks</h1>
+            <span className={\`text-sm font-mono \${currentTheme.dim}\`}>Loading...</span>
+          </div>
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4 animate-pulse\`}>
+                <div className={\`h-6 \${currentTheme.bg} rounded w-1/3 mb-2\`}></div>
+                <div className={\`h-4 \${currentTheme.bg} rounded w-2/3\`}></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout title="Schedules">
       <div className="p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-mono font-bold text-green-200">Scheduled Tasks</h1>
-          <span className="text-sm font-mono text-green-300/70">
+          <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Scheduled Tasks</h1>
+          <span className={\`text-sm font-mono \${currentTheme.dim}\`}>
             {schedules.filter(s => s.active).length}/{schedules.length} active
           </span>
         </div>
 
+        {error && (
+          <div className="mb-4 p-4 bg-red-500/10 border border-red-400/20 rounded-xl">
+            <p className="font-mono text-sm text-red-300">
+              ⚠️ {error}
+            </p>
+          </div>
+        )}
+
         {/* Summary Stats */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-3 text-center">
-            <div className="font-mono font-bold text-lg text-green-400">
+          <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3 text-center\`}>
+            <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>
               {schedules.length}
             </div>
-            <div className="font-mono text-xs text-green-300/70">Total Tasks</div>
+            <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Total Tasks</div>
           </div>
-          <div className="bg-blue-500/15 border border-blue-400/30 rounded-xl p-3 text-center">
-            <div className="font-mono font-bold text-lg text-blue-400">
+          <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3 text-center\`}>
+            <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>
               {schedules.filter(s => s.active).length}
             </div>
-            <div className="font-mono text-xs text-blue-300/70">Active Tasks</div>
+            <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Active Tasks</div>
           </div>
         </div>
 
@@ -1329,8 +1880,8 @@ export default function SchedulesPage() {
         ) : (
           <div className="text-center py-12">
             <div className="text-4xl mb-4">⏰</div>
-            <h3 className="font-mono text-lg text-green-200 mb-2">No Schedules</h3>
-            <p className="font-mono text-sm text-green-300/70">
+            <h3 className={\`font-mono text-lg \${currentTheme.light} mb-2\`}>No Schedules</h3>
+            <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
               Automated tasks will appear here once they're configured.
             </p>
           </div>
@@ -1345,31 +1896,49 @@ export default function SchedulesPage() {
     return `import Layout from '@/components/Layout';
 import ChatMessage from '@/components/ChatMessage';
 import { useChat } from '@ai-sdk/react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/router';
+import { useAgent } from '@/contexts/AgentContext';
 
 export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const [showQuickActions, setShowQuickActions] = useState(false);
+  
+  // Use global agent context
+  const { config: agentConfig } = useAgent();
   
   const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
     api: '/api/chat',
-    initialMessages: [
-      {
-        id: 'welcome',
-        role: 'assistant',
-        content: \`Hello! I'm your AI assistant for this agent app. I can help you with:
-
-• **Data Management**: View and analyze your ${this.options.models.length} data models
-• **Smart Actions**: Execute any of your ${this.options.actions.length} configured actions
-• **Task Scheduling**: Monitor your ${this.options.schedules.length} automated tasks
-• **System Status**: Check health and performance
-
-What would you like to explore first?\`
-      }
-    ],
+    initialMessages: [],
     onError: (error) => {
       console.error('Chat error:', error);
     }
   });
+
+  // Set personalized welcome message when agent config is loaded
+  useEffect(() => {
+    if (agentConfig && messages.length === 0) {
+      const personalizedWelcome = {
+        id: 'welcome',
+        role: 'assistant' as const,
+        content: \`Hello! I'm \${agentConfig.name || 'your AI assistant'}, and I'm here to help you with this agent app. \${agentConfig.description ? 'I\\'m ' + agentConfig.description + '.' : ''}
+
+I can help you with:
+• **Data Management**: View and manage your \${agentConfig.models?.length || ${this.options.models.length}} data models
+• **Smart Actions**: Execute any of your \${agentConfig.actions?.length || ${this.options.actions.length}} configured actions  
+• **Task Scheduling**: Monitor your \${agentConfig.schedules?.length || ${this.options.schedules.length}} automated tasks
+• **System Status**: Check health and performance
+
+What would you like to explore first?\`,
+        createdAt: new Date()
+      };
+      
+      // Add the welcome message to the chat
+      const event = new CustomEvent('chat-initial-message', { detail: personalizedWelcome });
+      window.dispatchEvent(event);
+    }
+  }, [agentConfig, messages.length]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1386,16 +1955,120 @@ What would you like to explore first?\`
     }
   };
 
+  // Smart input suggestions based on common patterns
+  const detectIntentAndSuggest = (text: string) => {
+    const lowerText = text.toLowerCase();
+    
+    // Action-related keywords
+    const actionKeywords = ['run', 'execute', 'trigger', 'start', 'perform', 'do', 'action'];
+    // Data-related keywords  
+    const dataKeywords = ['show', 'list', 'get', 'find', 'view', 'data', 'records', 'create', 'add', 'update', 'edit', 'delete', 'remove'];
+    
+    const hasActionIntent = actionKeywords.some(keyword => lowerText.includes(keyword));
+    const hasDataIntent = dataKeywords.some(keyword => lowerText.includes(keyword));
+    
+    return { hasActionIntent, hasDataIntent };
+  };
+
+  const getSuggestionButtons = () => {
+    const { hasActionIntent, hasDataIntent } = detectIntentAndSuggest(input);
+    
+    const suggestions = [];
+    
+    if (hasActionIntent) {
+      suggestions.push({
+        text: '⚡ Go to Actions Page',
+        action: () => router.push('/actions'),
+        color: 'bg-blue-500/20 border-blue-400/30 text-blue-200'
+      });
+    }
+    
+    if (hasDataIntent) {
+      suggestions.push({
+        text: '🗃️ Go to Data Models',
+        action: () => router.push('/models'),
+        color: 'bg-purple-500/20 border-purple-400/30 text-purple-200'
+      });
+    }
+    
+    return suggestions;
+  };
+
+  const quickActions = [
+    { 
+      icon: '🗃️', 
+      label: 'View Data Models', 
+      action: () => router.push('/models'),
+      description: 'Browse and manage your data'
+    },
+    { 
+      icon: '⚡', 
+      label: 'Execute Actions', 
+      action: () => router.push('/actions'),
+      description: 'Run smart actions'
+    },
+    { 
+      icon: '⏰', 
+      label: 'Check Schedules', 
+      action: () => router.push('/schedules'),
+      description: 'Monitor automated tasks'
+    },
+    { 
+      icon: '📊', 
+      label: 'System Status', 
+      action: () => {
+        handleInputChange({ target: { value: 'What is the current system status?' } } as any);
+        setShowQuickActions(false);
+      },
+      description: 'Get system health info'
+    }
+  ];
+
+  const suggestions = getSuggestionButtons();
+
   return (
     <Layout title="AI Chat">
       <div className="flex flex-col h-screen">
         {/* Header */}
         <div className="p-4 border-b border-green-400/30">
-          <h1 className="text-xl font-mono font-bold text-green-200">AI Assistant</h1>
-          <p className="text-sm font-mono text-green-300/70">
-            Powered by AI SDK • Ask questions about your data, actions, and schedules
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-mono font-bold text-green-200">
+                {agentConfig?.name || 'AI Assistant'}
+              </h1>
+              <p className="text-sm font-mono text-green-300/70">
+                {agentConfig?.description || 'Powered by AI SDK • Ask questions about your data, actions, and schedules'}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowQuickActions(!showQuickActions)}
+              className="p-2 bg-green-500/15 border border-green-400/30 rounded-lg text-green-200 hover:bg-green-500/25 transition-colors"
+            >
+              ⚡ Quick Actions
+            </button>
+          </div>
         </div>
+
+        {/* Quick Actions Panel */}
+        {showQuickActions && (
+          <div className="p-4 bg-green-500/10 border-b border-green-400/20">
+            <div className="grid grid-cols-2 gap-2">
+              {quickActions.map((action, index) => (
+                <button
+                  key={index}
+                  onClick={action.action}
+                  className="p-3 bg-green-500/15 border border-green-400/30 rounded-lg text-left hover:bg-green-500/25 transition-colors"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">{action.icon}</span>
+                    <span className="font-mono text-sm text-green-200">{action.label}</span>
+                  </div>
+                  <p className="text-xs font-mono text-green-300/70">{action.description}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -1437,6 +2110,24 @@ What would you like to explore first?\`
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Smart Suggestions */}
+        {suggestions.length > 0 && input.length > 10 && (
+          <div className="px-4 py-2 border-t border-green-400/20">
+            <div className="flex gap-2 flex-wrap">
+              <span className="text-xs font-mono text-green-300/70 self-center">Suggestions:</span>
+              {suggestions.map((suggestion, index) => (
+                <button
+                  key={index}
+                  onClick={suggestion.action}
+                  className={\`px-3 py-1 rounded-lg text-xs font-mono transition-colors \${suggestion.color}\`}
+                >
+                  {suggestion.text}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Input */}
         <div className="p-4 border-t border-green-400/30">
           <form onSubmit={handleSubmit} className="flex gap-2">
@@ -1444,7 +2135,7 @@ What would you like to explore first?\`
               value={input}
               onChange={handleInputChange}
               onKeyPress={handleKeyPress}
-              placeholder="Ask me anything about your agent..."
+              placeholder={\`Ask \${agentConfig?.name || 'me'} anything about your agent...\`}
               className="flex-1 p-3 bg-green-500/15 border border-green-400/30 rounded-lg text-green-200 font-mono text-sm placeholder-green-300/50 focus:outline-none focus:border-green-400/60 resize-none"
               rows={1}
               disabled={isLoading}
@@ -1475,7 +2166,10 @@ What would you like to explore first?\`
 }`;
   }
   private generateModelCardComponent(): string {
-    return `interface ModelCardProps {
+    return `import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
+
+interface ModelCardProps {
   model: {
     name: string;
     emoji?: string;
@@ -1486,23 +2180,30 @@ What would you like to explore first?\`
 }
 
 export default function ModelCard({ model }: ModelCardProps) {
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+
   return (
-    <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
+    <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
       <div className="flex items-center gap-3 mb-3">
         <span className="text-lg">{model.emoji || '📋'}</span>
         <div className="flex-1">
-          <h3 className="font-mono font-semibold text-sm text-green-200 capitalize">
+          <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light} capitalize\`}>
             {model.name}
           </h3>
-          <p className="font-mono text-xs text-green-300/70">
+          <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
             {model.description || \`Manage \${model.name} records\`}
           </p>
         </div>
         <div className="text-right">
-          <div className="font-mono font-semibold text-sm text-green-400">
+          <div className={\`font-mono font-semibold text-sm \${currentTheme.accent}\`}>
             {model.error ? '⚠️' : (model.recordCount || 0)}
           </div>
-          <div className="font-mono text-xs text-green-300/70">
+          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>
             {model.error ? 'Error' : 'records'}
           </div>
         </div>
@@ -1513,54 +2214,107 @@ export default function ModelCard({ model }: ModelCardProps) {
   }
 
   private generateActionCardComponent(): string {
-    return `interface ActionCardProps {
+    return `import { useState } from 'react';
+import ActionExecutionModal from './ActionExecutionModal';
+import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
+
+interface ActionCardProps {
   action: {
     id: string;
     name: string;
     emoji?: string;
     description?: string;
     type: string;
+    uiComponentsDesign?: any[];
+    pseudoSteps?: any[];
   };
-  isExecuting: boolean;
-  result?: any;
-  onExecute: () => void;
 }
 
-export default function ActionCard({ action, isExecuting, result, onExecute }: ActionCardProps) {
+export default function ActionCard({ action }: ActionCardProps) {
+  const [showModal, setShowModal] = useState(false);
+  const [lastResult, setLastResult] = useState<any>(null);
+  const [lastExecutionTime, setLastExecutionTime] = useState<string | null>(null);
+
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+
+  const handleActionComplete = (result: any) => {
+    setLastResult(result);
+    setLastExecutionTime(new Date().toLocaleString());
+    setShowModal(false);
+  };
+
   return (
-    <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
-      <div className="flex items-center gap-3 mb-3">
-        <span className="text-lg">{action.emoji || '⚡'}</span>
-        <div className="flex-1">
-          <h3 className="font-mono font-semibold text-sm text-green-200">
-            {action.name}
-          </h3>
-          <p className="font-mono text-xs text-green-300/70">
-            {action.description || \`Execute \${action.name}\`}
+    <>
+      <div 
+        className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4 cursor-pointer \${currentTheme.bgHover} transition-colors\`}
+        onClick={() => setShowModal(true)}
+      >
+        <div className="flex items-center gap-3 mb-3">
+          <span className="text-lg">{action.emoji || '⚡'}</span>
+          <div className="flex-1">
+            <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light}\`}>
+              {action.name}
+            </h3>
+            <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
+              {action.description || \`Execute \${action.name}\`}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1">
+            <span className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg font-mono text-xs \${currentTheme.light}\`}>
+              {action.type === 'query' ? '🔍 Query' : '⚡ Action'}
+            </span>
+            {lastExecutionTime && (
+              <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
+                Last: {lastExecutionTime.split(' ')[1]?.substring(0, 5)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Quick status indicator */}
+        {lastResult && (
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <div className={\`w-2 h-2 rounded-full \${
+              lastResult.success ? currentTheme.accent.replace('text-', 'bg-') : 'bg-red-400'
+            }\`} />
+            <span className={\`\${currentTheme.dim}\`}>
+              {lastResult.success ? 'Last execution successful' : 'Last execution failed'}
+            </span>
+          </div>
+        )}
+
+        {/* Click indicator */}
+        <div className={\`mt-3 pt-3 border-t \${currentTheme.border}\`}>
+          <p className={\`font-mono text-xs \${currentTheme.dim} text-center\`}>
+            Click to execute → 
           </p>
         </div>
-        <button
-          onClick={onExecute}
-          disabled={isExecuting}
-          className="px-3 py-2 bg-green-500/25 border border-green-400/50 rounded-lg font-mono text-xs text-green-200 hover:bg-green-500/35 disabled:opacity-50"
-        >
-          {isExecuting ? 'Running...' : 'Run'}
-        </button>
       </div>
-      {result && (
-        <div className="mt-3 p-2 bg-green-500/10 border border-green-400/20 rounded-lg">
-          <pre className="font-mono text-xs text-green-300 overflow-x-auto">
-            {JSON.stringify(result, null, 2)}
-          </pre>
-        </div>
+
+      {showModal && (
+        <ActionExecutionModal
+          action={action}
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          onComplete={handleActionComplete}
+        />
       )}
-    </div>
+    </>
   );
 }`;
   }
 
   private generateScheduleCardComponent(): string {
-    return `interface ScheduleCardProps {
+    return `import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
+
+interface ScheduleCardProps {
   schedule: {
     id: string;
     name: string;
@@ -1573,21 +2327,28 @@ export default function ActionCard({ action, isExecuting, result, onExecute }: A
 }
 
 export default function ScheduleCard({ schedule }: ScheduleCardProps) {
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+
   return (
-    <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
+    <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
       <div className="flex items-center gap-3 mb-3">
         <span className="text-lg">{schedule.emoji || '⏰'}</span>
         <div className="flex-1">
-          <h3 className="font-mono font-semibold text-sm text-green-200">
+          <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light}\`}>
             {schedule.name}
           </h3>
-          <p className="font-mono text-xs text-green-300/70">
+          <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
             {schedule.description || \`Scheduled: \${schedule.pattern}\`}
           </p>
         </div>
         <div className={\`px-2 py-1 rounded-lg border \${
           schedule.active 
-            ? 'bg-green-500/25 border-green-400/50 text-green-400' 
+            ? \`\${currentTheme.bgActive} \${currentTheme.borderActive} \${currentTheme.accent}\`
             : 'bg-gray-500/25 border-gray-400/50 text-gray-400'
         }\`}>
           <span className="font-mono text-xs">
@@ -1595,12 +2356,12 @@ export default function ScheduleCard({ schedule }: ScheduleCardProps) {
           </span>
         </div>
       </div>
-      <div className="font-mono text-xs text-green-300/70">
-        Pattern: <span className="text-green-300">{schedule.pattern}</span>
+      <div className={\`font-mono text-xs \${currentTheme.dim}\`}>
+        Pattern: <span className={\`\${currentTheme.light}\`}>{schedule.pattern}</span>
       </div>
       {schedule.nextRun && (
-        <div className="font-mono text-xs text-green-300/70 mt-1">
-          Next: <span className="text-green-300">{schedule.nextRun}</span>
+        <div className={\`font-mono text-xs \${currentTheme.dim} mt-1\`}>
+          Next: <span className={\`\${currentTheme.light}\`}>{schedule.nextRun}</span>
         </div>
       )}
     </div>
@@ -1609,7 +2370,10 @@ export default function ScheduleCard({ schedule }: ScheduleCardProps) {
   }
 
   private generateStatsCardComponent(): string {
-    return `interface StatsCardProps {
+    return `import { themes } from '@/lib/theme';
+import { useAgent } from '@/contexts/AgentContext';
+
+interface StatsCardProps {
   stats: {
     totalRecords: number;
     activeSchedules: number;
@@ -1621,16 +2385,23 @@ export default function ScheduleCard({ schedule }: ScheduleCardProps) {
 }
 
 export default function StatsCard({ stats, loading }: StatsCardProps) {
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
+  
+  // Use agent config theme if available, fallback to green
+  const selectedTheme = agentConfig?.theme || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+
   if (loading) {
     return (
-      <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
+      <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
         <div className="animate-pulse">
-          <div className="h-4 bg-green-500/20 rounded w-1/3 mb-3"></div>
+          <div className={\`h-4 \${currentTheme.bg} rounded w-1/3 mb-3\`}></div>
           <div className="grid grid-cols-2 gap-3">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="text-center">
-                <div className="h-6 bg-green-500/20 rounded w-8 mx-auto mb-1"></div>
-                <div className="h-3 bg-green-500/20 rounded w-12 mx-auto"></div>
+                <div className={\`h-6 \${currentTheme.bg} rounded w-8 mx-auto mb-1\`}></div>
+                <div className={\`h-3 \${currentTheme.bg} rounded w-12 mx-auto\`}></div>
               </div>
             ))}
           </div>
@@ -1640,24 +2411,24 @@ export default function StatsCard({ stats, loading }: StatsCardProps) {
   }
 
   return (
-    <div className="bg-green-500/15 border border-green-400/30 rounded-xl p-4">
-      <h3 className="font-mono font-semibold text-sm text-green-200 mb-3">System Overview</h3>
+    <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
+      <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light} mb-3\`}>System Overview</h3>
       <div className="grid grid-cols-2 gap-3">
         <div className="text-center">
-          <div className="font-mono font-bold text-lg text-green-400">{stats.totalRecords}</div>
-          <div className="font-mono text-xs text-green-300/70">Records</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.totalRecords}</div>
+          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Records</div>
         </div>
         <div className="text-center">
-          <div className="font-mono font-bold text-lg text-blue-400">{stats.activeSchedules}</div>
-          <div className="font-mono text-xs text-blue-300/70">Active Tasks</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.activeSchedules}</div>
+          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Active Tasks</div>
         </div>
         <div className="text-center">
-          <div className="font-mono font-bold text-lg text-yellow-400">{stats.totalModels}</div>
-          <div className="font-mono text-xs text-yellow-300/70">Models</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.totalModels}</div>
+          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Models</div>
         </div>
         <div className="text-center">
-          <div className="font-mono font-bold text-lg text-purple-400">{stats.totalActions}</div>
-          <div className="font-mono text-xs text-purple-300/70">Actions</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.totalActions}</div>
+          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Actions</div>
         </div>
       </div>
     </div>
@@ -1774,6 +2545,368 @@ export default function LoadingSpinner({ size = 'md', color = 'green' }: Loading
   );
 }`;
   }
+
+  private generateActionExecutionModal(): string {
+    return `import { useState, useEffect } from 'react';
+import api from '@/lib/api';
+import LoadingSpinner from './LoadingSpinner';
+
+interface ActionExecutionModalProps {
+  action: {
+    id: string;
+    name: string;
+    emoji?: string;
+    description?: string;
+    type: string;
+    uiComponentsDesign?: any[];
+    pseudoSteps?: any[];
+  };
+  isOpen: boolean;
+  onClose: () => void;
+  onComplete: (result: any) => void;
+}
+
+export default function ActionExecutionModal({ action, isOpen, onClose, onComplete }: ActionExecutionModalProps) {
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionMode, setExecutionMode] = useState<'local' | 'remote'>('local');
+  const [inputParameters, setInputParameters] = useState<Record<string, any>>({});
+  const [result, setResult] = useState<any>(null);
+  const [step, setStep] = useState<'input' | 'executing' | 'result'>('input');
+
+  // Generate mock UI components if none provided
+  const uiComponents = action.uiComponentsDesign || [
+    {
+      name: 'input',
+      type: 'text',
+      label: 'Input Data',
+      placeholder: 'Enter input for ' + action.name,
+      required: false,
+      defaultValue: ''
+    }
+  ];
+
+  // Initialize input parameters with default values
+  useEffect(() => {
+    const defaultInputs: Record<string, any> = {};
+    uiComponents.forEach(component => {
+      if (component.defaultValue !== undefined) {
+        defaultInputs[component.name] = component.defaultValue;
+      } else if (component.type === 'checkbox') {
+        defaultInputs[component.name] = false;
+      } else if (component.type === 'select' && component.options && component.options.length > 0) {
+        defaultInputs[component.name] = component.options[0].value;
+      } else {
+        defaultInputs[component.name] = '';
+      }
+    });
+    setInputParameters(defaultInputs);
+  }, [action.name]);
+
+  const executeAction = async () => {
+    setIsExecuting(true);
+    setStep('executing');
+    setResult(null);
+
+    try {
+      let actionResult;
+      
+      if (executionMode === 'local') {
+        // Execute action locally (fetches code from main app, runs on sub-agent)
+        actionResult = await api.executeAction(action.name, inputParameters);
+      } else {
+        // Execute action on main app directly
+        actionResult = await api.triggerActionOnMainApp(action.id, inputParameters);
+      }
+
+      setResult(actionResult);
+      setStep('result');
+      
+      // Notify parent component
+      onComplete(actionResult);
+    } catch (error) {
+      const errorResult = {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        executionMode
+      };
+      setResult(errorResult);
+      setStep('result');
+      onComplete(errorResult);
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const handleInputChange = (componentName: string, value: any) => {
+    setInputParameters(prev => ({
+      ...prev,
+      [componentName]: value
+    }));
+  };
+
+  const renderInputComponent = (component: any) => {
+    const value = inputParameters[component.name] || '';
+
+    switch (component.type) {
+      case 'select':
+        return (
+          <select
+            value={value}
+            onChange={(e) => handleInputChange(component.name, e.target.value)}
+            className="w-full p-3 bg-green-500/10 border border-green-400/30 rounded-lg text-green-200 font-mono text-sm focus:outline-none focus:border-green-400/50"
+          >
+            {(component.options || []).map((option: any, idx: number) => (
+              <option key={idx} value={option.value} className="bg-gray-800">
+                {option.label || option.value}
+              </option>
+            ))}
+          </select>
+        );
+      
+      case 'checkbox':
+        return (
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!value}
+              onChange={(e) => handleInputChange(component.name, e.target.checked)}
+              className="w-4 h-4 rounded border-green-400/30 bg-green-500/10 text-green-400 focus:ring-green-400/50"
+            />
+            <span className="font-mono text-sm text-green-200">
+              {component.label}
+            </span>
+          </label>
+        );
+      
+      case 'textarea':
+        return (
+          <textarea
+            value={value}
+            onChange={(e) => handleInputChange(component.name, e.target.value)}
+            placeholder={component.placeholder}
+            rows={4}
+            className="w-full p-3 bg-green-500/10 border border-green-400/30 rounded-lg text-green-200 font-mono text-sm focus:outline-none focus:border-green-400/50 resize-none"
+          />
+        );
+      
+      case 'number':
+        return (
+          <input
+            type="number"
+            value={value}
+            onChange={(e) => handleInputChange(component.name, parseFloat(e.target.value) || 0)}
+            placeholder={component.placeholder}
+            className="w-full p-3 bg-green-500/10 border border-green-400/30 rounded-lg text-green-200 font-mono text-sm focus:outline-none focus:border-green-400/50"
+          />
+        );
+      
+      default:
+        return (
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => handleInputChange(component.name, e.target.value)}
+            placeholder={component.placeholder}
+            className="w-full p-3 bg-green-500/10 border border-green-400/30 rounded-lg text-green-200 font-mono text-sm focus:outline-none focus:border-green-400/50"
+          />
+        );
+    }
+  };
+
+  const formatResult = (result: any) => {
+    if (!result) return 'No result';
+    
+    if (result.success) {
+      return {
+        status: 'Success',
+        message: result.message || 'Action executed successfully',
+        data: result.data || result,
+        executionTime: result.executionTime || 'N/A',
+        mode: result.executedLocally ? 'Local Execution' : 'Remote Execution'
+      };
+    } else {
+      return {
+        status: 'Error',
+        message: result.error || 'Action failed',
+        details: result.details || 'No additional details',
+        mode: executionMode === 'local' ? 'Local Execution' : 'Remote Execution'
+      };
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+      <div className="bg-gray-900 border border-green-400/30 rounded-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="p-4 border-b border-green-400/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-lg">{action.emoji || '⚡'}</span>
+              <div>
+                <h2 className="font-mono font-bold text-green-200">{action.name}</h2>
+                <p className="font-mono text-xs text-green-300/70">
+                  {action.description || \`Execute \${action.name}\`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              disabled={isExecuting}
+              className="p-2 hover:bg-green-500/20 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <span className="text-green-400 font-mono text-lg">×</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4">
+          {step === 'input' && (
+            <div className="space-y-4">
+              {/* Execution Mode Toggle */}
+              <div>
+                <label className="block font-mono text-sm text-green-300 mb-2">
+                  Execution Mode
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setExecutionMode('local')}
+                    className={\`flex-1 p-2 border rounded-lg font-mono text-xs transition-colors \${
+                      executionMode === 'local'
+                        ? 'bg-green-500/25 border-green-400/50 text-green-200'
+                        : 'bg-green-500/10 border-green-400/30 text-green-300/70 hover:bg-green-500/15'
+                    }\`}
+                  >
+                    🏠 Local Execution
+                  </button>
+                  <button
+                    onClick={() => setExecutionMode('remote')}
+                    className={\`flex-1 p-2 border rounded-lg font-mono text-xs transition-colors \${
+                      executionMode === 'remote'
+                        ? 'bg-blue-500/25 border-blue-400/50 text-blue-200'
+                        : 'bg-green-500/10 border-green-400/30 text-green-300/70 hover:bg-green-500/15'
+                    }\`}
+                  >
+                    ☁️ Remote Execution
+                  </button>
+                </div>
+                <p className="font-mono text-xs text-green-300/50 mt-1">
+                  {executionMode === 'local' 
+                    ? 'Runs on this sub-agent with local database'
+                    : 'Executes on main app with latest code'
+                  }
+                </p>
+              </div>
+
+              {/* Input Parameters */}
+              <div>
+                <label className="block font-mono text-sm text-green-300 mb-3">
+                  Input Parameters
+                </label>
+                <div className="space-y-3">
+                  {uiComponents.map((component, idx) => (
+                    <div key={idx}>
+                      <label className="block font-mono text-xs text-green-300/70 mb-1">
+                        {component.label || component.name}
+                        {component.required && <span className="text-red-400 ml-1">*</span>}
+                      </label>
+                      {renderInputComponent(component)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 'executing' && (
+            <div className="text-center py-8">
+              <LoadingSpinner size="lg" />
+              <p className="font-mono text-sm text-green-300 mt-4">
+                Executing {action.name}...
+              </p>
+              <p className="font-mono text-xs text-green-300/50 mt-1">
+                Mode: {executionMode === 'local' ? 'Local Execution' : 'Remote Execution'}
+              </p>
+            </div>
+          )}
+
+          {step === 'result' && result && (
+            <div className="space-y-4">
+              <div className="text-center">
+                <div className={\`text-4xl mb-2 \${result.success ? '🟢' : '🔴'}\`}>
+                  {result.success ? '✅' : '❌'}
+                </div>
+                <h3 className="font-mono text-lg text-green-200 mb-1">
+                  {result.success ? 'Success!' : 'Failed'}
+                </h3>
+              </div>
+
+              <div className="bg-green-500/10 border border-green-400/20 rounded-lg p-4">
+                <div className="space-y-3 font-mono text-sm">
+                  {Object.entries(formatResult(result)).map(([key, value]) => (
+                    <div key={key} className="flex justify-between items-start gap-3">
+                      <span className="text-green-300/70 capitalize">
+                        {key.replace(/([A-Z])/g, ' $1').trim()}:
+                      </span>
+                      <span className="text-green-200 text-right flex-1">
+                        {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-green-400/20">
+          {step === 'input' && (
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 p-3 border border-green-400/30 rounded-lg font-mono text-sm text-green-300 hover:bg-green-500/10 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executeAction}
+                disabled={isExecuting}
+                className="flex-1 p-3 bg-green-500/25 border border-green-400/50 rounded-lg font-mono text-sm text-green-200 hover:bg-green-500/35 disabled:opacity-50 transition-colors"
+              >
+                Execute Action
+              </button>
+            </div>
+          )}
+
+          {step === 'result' && (
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setStep('input');
+                  setResult(null);
+                }}
+                className="flex-1 p-3 border border-green-400/30 rounded-lg font-mono text-sm text-green-300 hover:bg-green-500/10 transition-colors"
+              >
+                Run Again
+              </button>
+              <button
+                onClick={onClose}
+                className="flex-1 p-3 bg-green-500/25 border border-green-400/50 rounded-lg font-mono text-sm text-green-200 hover:bg-green-500/35 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}`;
+  }
+
   private generateChatEndpoint(): string {
     const modelsContext = this.options.models.map(m => `${m.name} (${m.description || 'data model'})`).join(', ');
     const actionsContext = this.options.actions.map(a => `${a.name} (${a.description || 'action'})`).join(', ');
@@ -1784,28 +2917,158 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { streamText, convertToCoreMessages } from 'ai';
 import { z } from 'zod';
 
-// Configure AI provider based on environment
-function getAIModel() {
-  const provider = process.env.AI_MODEL_PROVIDER || 'openai';
-  const modelName = process.env.AI_MODEL_NAME || 'gpt-4o-mini';
-  
-  switch (provider) {
-    case 'anthropic':
-      if (!process.env.ANTHROPIC_API_KEY) {
-        throw new Error('ANTHROPIC_API_KEY is required for Anthropic provider');
+// Fetch API keys and model configuration from main app
+async function getAIModelWithApiKeys() {
+  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+  const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+  const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
+  const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+
+  try {
+    // First try to get user's API keys from main app
+    let response = await fetch(\`\${MAIN_APP_URL}/api/user/api-keys\`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+      },
+    });
+
+    let apiKeys = {};
+    if (response.ok) {
+      const data = await response.json();
+      if (data.success) {
+        apiKeys = data.apiKeys || {};
       }
-      return anthropic(modelName);
-    case 'openai':
-    default:
-      if (!process.env.OPENAI_API_KEY) {
-        throw new Error('OPENAI_API_KEY is required for OpenAI provider');
+    }
+
+    // If no user API keys, try to get agent credentials which might include API keys
+    if (!apiKeys.openai && !apiKeys.anthropic && !apiKeys.grok) {
+      response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public\`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.credentials) {
+          // Extract AI provider keys from credentials
+          if (data.credentials.openai_api_key) {
+            apiKeys.openai = data.credentials.openai_api_key;
+          }
+          if (data.credentials.anthropic_api_key) {
+            apiKeys.anthropic = data.credentials.anthropic_api_key;
+          }
+          if (data.credentials.grok_api_key) {
+            apiKeys.grok = data.credentials.grok_api_key;
+          }
+        }
       }
-      return openai(modelName);
+    }
+
+    // Determine which provider to use based on available keys
+    const provider = process.env.AI_MODEL_PROVIDER || 'openai';
+    const modelName = process.env.AI_MODEL_NAME || 'gpt-4o-mini';
+    
+    switch (provider) {
+      case 'anthropic':
+        if (!apiKeys.anthropic) {
+          throw new Error('Anthropic API key not found. Please configure your API keys in the main app.');
+        }
+        return anthropic(modelName, { apiKey: apiKeys.anthropic });
+      case 'grok':
+        if (!apiKeys.grok) {
+          throw new Error('Grok API key not found. Please configure your API keys in the main app.');
+        }
+        return openai(modelName, { 
+          apiKey: apiKeys.grok,
+          baseURL: 'https://api.x.ai/v1'
+        });
+      case 'openai':
+      default:
+        if (!apiKeys.openai) {
+          throw new Error('OpenAI API key not found. Please configure your API keys in the main app.');
+        }
+        return openai(modelName, { apiKey: apiKeys.openai });
+    }
+  } catch (error) {
+    console.error('Failed to get AI model configuration:', error);
+    throw new Error('Failed to configure AI model. Please check your API keys in the main app.');
   }
 }
 
-// System prompt with agent context
-const systemPrompt = \`You are an AI assistant for a smart agent application called "${this.options.projectName}".
+// Fetch agent data including personality directly from main app
+async function getAgentData() {
+  try {
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+
+    if (!DOCUMENT_ID) {
+      throw new Error('No document ID configured');
+    }
+
+    // Call main app directly to get agent document data
+    const response = await fetch(\`\${MAIN_APP_URL}/api/document?id=\${DOCUMENT_ID}\`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+        'X-Agent-Token': AGENT_TOKEN,
+        'X-Document-ID': DOCUMENT_ID,
+      },
+    });
+
+    if (!response.ok) {
+      console.warn('Main app call failed, using fallback');
+      throw new Error(\`API call failed: \${response.status}\`);
+    }
+
+    const data = await response.json();
+    
+    if (data.success && data.document?.metadata) {
+      const metadata = data.document.metadata;
+      return {
+        name: metadata.name || '${this.options.projectName}',
+        description: metadata.description || '',
+        personality: metadata.personality || '',
+        theme: metadata.theme || 'green',
+        avatar: metadata.avatar || null,
+        models: metadata.models || [],
+        actions: metadata.actions || [],
+        schedules: metadata.schedules || []
+      };
+    }
+    
+    throw new Error('No valid document data in response');
+  } catch (error) {
+    console.error('Error fetching agent data from main app:', error);
+    
+    // Fallback to static data
+    return {
+      name: '${this.options.projectName}',
+      description: 'Agent application',
+      personality: 'helpful and professional',
+      theme: 'green',
+      avatar: null,
+      models: ${JSON.stringify(this.options.models)},
+      actions: ${JSON.stringify(this.options.actions)},
+      schedules: ${JSON.stringify(this.options.schedules)}
+    };
+  }
+}
+
+// Build system prompt with fallback data (frontend has real agent data via context)
+async function buildSystemPrompt() {
+  const baseName = "${this.options.projectName}";
+  const personality = "helpful and professional";
+  const description = "A smart AI agent application";
+  
+  return \`You are an AI assistant for "\${baseName}", a smart agent application.
+
+**Agent Description:** \${description}
+
+**Your Personality:** \${personality}
 
 **About this agent:**
 - **Data Models (${this.options.models.length})**: ${this.options.models.map(m => m.name).join(', ')}
@@ -1813,24 +3076,35 @@ const systemPrompt = \`You are an AI assistant for a smart agent application cal
 - **Scheduled Tasks (${this.options.schedules.length})**: ${this.options.schedules.map(s => s.name).join(', ')}
 
 **Your capabilities:**
-1. **Data Analysis**: Help users understand and query their data models
-2. **Action Execution**: Guide users through executing smart actions
+1. **Data Management & CRUD**: Help users view, create, update, and delete records in their data models
+2. **Action Execution**: Guide users through executing smart actions with proper parameters
 3. **Task Management**: Assist with scheduled task monitoring and configuration
 4. **System Insights**: Provide status updates and performance insights
+5. **Conversational Support**: Answer questions and provide guidance
 
-**Response style:**
+**Response Guidelines:**
+- Embody the personality described above in all your responses
 - Be helpful, concise, and technical when needed
-- Use emojis sparingly but effectively
-- Provide actionable suggestions
+- Use emojis sparingly but effectively to match your personality
+- Provide actionable suggestions with clear next steps
 - Reference specific models, actions, or schedules when relevant
 - Format code or data clearly with markdown
+- When users want to perform actions or CRUD operations, guide them to the appropriate UI
 
 **Available context:**
 - Models: ${modelsContext}
 - Actions: ${actionsContext}
 - Schedules: ${schedulesContext}
 
-Always be ready to help with queries about data, actions, schedules, or general system operations.\`;
+**Smart Detection:**
+Detect user intent and respond appropriately:
+- **Action Request**: If user wants to execute an action, suggest using the Actions page
+- **Data CRUD**: If user wants to manage data, suggest using the Models/Data page
+- **General Questions**: Answer conversationally while maintaining your personality
+- **System Status**: Provide insights about the agent's current state
+
+Always be ready to help with queries about data, actions, schedules, or general system operations while maintaining your unique personality.\`;
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -1844,7 +3118,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Messages array is required' });
     }
 
-    const model = getAIModel();
+    const model = await getAIModelWithApiKeys();
+    const systemPrompt = await buildSystemPrompt();
     
     const result = await streamText({
       model,
@@ -2001,13 +3276,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     };
 
     // Try to get actual record counts from each model
-    ${this.options.models.map(model => `
+    ${this.options.models.map(model => {
+      const camelCaseModelName = model.name.charAt(0).toLowerCase() + model.name.slice(1);
+      return `
     try {
-      const ${model.name.toLowerCase()}Count = await prisma.${model.name.toLowerCase()}.count();
-      stats.totalRecords += ${model.name.toLowerCase()}Count;
+      const ${camelCaseModelName}Count = await prisma.${camelCaseModelName}.count();
+      stats.totalRecords += ${camelCaseModelName}Count;
     } catch (error) {
       console.log('Model ${model.name} not yet available:', error.message);
-    }`).join('')}
+    }`;
+    }).join('')}
 
     res.status(200).json({ success: true, data: stats });
   } catch (error) {
@@ -2031,67 +3309,445 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   private generateModelEndpoint(): string {
     return `import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '@/lib/prisma'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+
+const execAsync = promisify(exec);
+
+// Function to ensure database is initialized
+async function ensureDatabaseInit() {
+  try {
+    // Test database connection
+    await prisma.$queryRaw\`SELECT 1\`;
+  } catch (error) {
+    console.log('Database connection failed, attempting to initialize...');
+    
+    try {
+      // Run database initialization
+      await execAsync('npm run db:init');
+      await execAsync('npx prisma db push --accept-data-loss');
+      console.log('Database initialized successfully');
+    } catch (initError) {
+      console.error('Failed to initialize database:', initError);
+      throw new Error('Database initialization failed');
+    }
+  }
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { modelName } = req.query;
+  const { modelName, id } = req.query;
 
   if (!modelName || typeof modelName !== 'string') {
     return res.status(400).json({ error: 'Model name is required' });
   }
 
+  // Ensure database is initialized before proceeding
   try {
-    if (req.method === 'GET') {
-      // Get all records from the model
-      const records = await (prisma as any)[modelName.toLowerCase()].findMany({
-        take: 100,
-        orderBy: { createdAt: 'desc' }
-      });
-      
-      res.status(200).json({ success: true, data: records });
-    } else if (req.method === 'POST') {
-      // Create a new record
-      const record = await (prisma as any)[modelName.toLowerCase()].create({
-        data: req.body
-      });
-      
-      res.status(201).json({ success: true, data: record });
-    } else {
-      res.status(405).json({ error: 'Method not allowed' });
+    await ensureDatabaseInit();
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Database initialization failed',
+      details: 'Unable to initialize SQLite database'
+    });
+  }
+
+  // Convert PascalCase model name to camelCase for Prisma client access
+  const camelCaseModelName = modelName.charAt(0).toLowerCase() + modelName.slice(1);
+  const modelClient = (prisma as any)[camelCaseModelName];
+  
+  if (!modelClient) {
+    console.error(\`Model '\${modelName}' (camelCase: '\${camelCaseModelName}') not found in Prisma client\`);
+    console.error('Available models:', Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_')));
+    return res.status(404).json({ 
+      error: \`Model '\${modelName}' not found\`,
+      details: \`Attempted to access '\${camelCaseModelName}' on Prisma client\`,
+      availableModels: Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_'))
+    });
+  }
+
+  try {
+    switch (req.method) {
+      case 'GET':
+        if (id && typeof id === 'string') {
+          // Get single record by ID
+          const record = await modelClient.findUnique({
+            where: { id }
+          });
+          
+          if (!record) {
+            return res.status(404).json({ error: 'Record not found' });
+          }
+          
+          res.status(200).json({ success: true, data: record });
+        } else {
+          // Get all records with optional filtering and pagination
+          const { page = '1', limit = '100', search, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+          const pageNum = parseInt(page as string, 10);
+          const limitNum = parseInt(limit as string, 10);
+          const skip = (pageNum - 1) * limitNum;
+
+          let where = {};
+          if (search && typeof search === 'string') {
+            // Dynamic search - try to search across text fields that might exist
+            // This is a basic implementation that attempts common field names
+            const searchConditions = [];
+            
+            try {
+              // Get a sample record to see what fields exist
+              const sampleRecord = await modelClient.findFirst();
+              if (sampleRecord) {
+                const stringFields = Object.keys(sampleRecord).filter(key => 
+                  typeof sampleRecord[key] === 'string' && 
+                  !['id', 'createdAt', 'updatedAt'].includes(key)
+                );
+                
+                stringFields.forEach(field => {
+                  searchConditions.push({ [field]: { contains: search, mode: 'insensitive' } });
+                });
+              }
+            } catch (error) {
+              // Fallback to common field names if schema inspection fails
+              const commonFields = ['name', 'title', 'description', 'label'];
+              commonFields.forEach(field => {
+                searchConditions.push({ [field]: { contains: search, mode: 'insensitive' } });
+              });
+            }
+            
+            if (searchConditions.length > 0) {
+              where = { OR: searchConditions };
+            }
+          }
+
+          const [records, total] = await Promise.all([
+            modelClient.findMany({
+              where,
+              skip,
+              take: limitNum,
+              orderBy: { [sortBy as string]: sortOrder }
+            }),
+            modelClient.count({ where })
+          ]);
+          
+          res.status(200).json({ 
+            success: true, 
+            data: records,
+            pagination: {
+              page: pageNum,
+              limit: limitNum,
+              total,
+              pages: Math.ceil(total / limitNum)
+            }
+          });
+        }
+        break;
+
+      case 'POST':
+        // Create a new record
+        const createData = req.body;
+        if (!createData || typeof createData !== 'object') {
+          return res.status(400).json({ error: 'Invalid data provided' });
+        }
+
+        const newRecord = await modelClient.create({
+          data: createData
+        });
+        
+        res.status(201).json({ success: true, data: newRecord });
+        break;
+
+      case 'PUT':
+      case 'PATCH':
+        // Update a record
+        if (!id || typeof id !== 'string') {
+          return res.status(400).json({ error: 'Record ID is required for update' });
+        }
+
+        const updateData = req.body;
+        if (!updateData || typeof updateData !== 'object') {
+          return res.status(400).json({ error: 'Invalid data provided' });
+        }
+
+        // Check if record exists
+        const existingRecord = await modelClient.findUnique({
+          where: { id }
+        });
+
+        if (!existingRecord) {
+          return res.status(404).json({ error: 'Record not found' });
+        }
+
+        const updatedRecord = await modelClient.update({
+          where: { id },
+          data: updateData
+        });
+        
+        res.status(200).json({ success: true, data: updatedRecord });
+        break;
+
+      case 'DELETE':
+        // Delete a record
+        if (!id || typeof id !== 'string') {
+          return res.status(400).json({ error: 'Record ID is required for deletion' });
+        }
+
+        // Check if record exists
+        const recordToDelete = await modelClient.findUnique({
+          where: { id }
+        });
+
+        if (!recordToDelete) {
+          return res.status(404).json({ error: 'Record not found' });
+        }
+
+        await modelClient.delete({
+          where: { id }
+        });
+        
+        res.status(200).json({ success: true, message: 'Record deleted successfully' });
+        break;
+
+      default:
+        res.status(405).json({ error: 'Method not allowed' });
     }
   } catch (error) {
     console.error(\`Error with model \${modelName}:\`, error);
+    
+    // Handle Prisma-specific errors
+    if (error.code === 'P2002') {
+      return res.status(409).json({ 
+        success: false, 
+        error: 'Unique constraint violation',
+        details: 'A record with this data already exists'
+      });
+    } else if (error.code === 'P2025') {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Record not found',
+        details: 'The record you are trying to access does not exist'
+      });
+    }
+    
     res.status(500).json({ 
       success: false, 
       error: \`Failed to access model \${modelName}\`,
-      details: error.message 
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 }`;
   }
 
-  private generateActionEndpoint(action: AgentAction): string {
+  private generateModelRecordEndpoint(): string {
     return `import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '@/lib/prisma'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== '${action.type === 'query' ? 'GET' : 'POST'}') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  const { modelName, id } = req.query;
+
+  if (!modelName || typeof modelName !== 'string') {
+    return res.status(400).json({ error: 'Model name is required' });
+  }
+
+  if (!id || typeof id !== 'string') {
+    return res.status(400).json({ error: 'Record ID is required' });
+  }
+
+  // Convert PascalCase model name to camelCase for Prisma client access
+  const camelCaseModelName = modelName.charAt(0).toLowerCase() + modelName.slice(1);
+  const modelClient = (prisma as any)[camelCaseModelName];
+  
+  if (!modelClient) {
+    console.error(\`Model '\${modelName}' (camelCase: '\${camelCaseModelName}') not found in Prisma client\`);
+    console.error('Available models:', Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_')));
+    return res.status(404).json({ 
+      error: \`Model '\${modelName}' not found\`,
+      details: \`Attempted to access '\${camelCaseModelName}' on Prisma client\`,
+      availableModels: Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_'))
+    });
   }
 
   try {
-    console.log('🚀 Executing action: ${action.name}');
+    switch (req.method) {
+      case 'GET':
+        // Get single record by ID
+        const record = await modelClient.findUnique({
+          where: { id }
+        });
+        
+        if (!record) {
+          return res.status(404).json({ error: 'Record not found' });
+        }
+        
+        res.status(200).json({ success: true, data: record });
+        break;
+
+      case 'PUT':
+      case 'PATCH':
+        // Update a record
+        const updateData = req.body;
+        if (!updateData || typeof updateData !== 'object') {
+          return res.status(400).json({ error: 'Invalid data provided' });
+        }
+
+        // Check if record exists first
+        const existingRecord = await modelClient.findUnique({
+          where: { id }
+        });
+
+        if (!existingRecord) {
+          return res.status(404).json({ error: 'Record not found' });
+        }
+
+        const updatedRecord = await modelClient.update({
+          where: { id },
+          data: updateData
+        });
+        
+        res.status(200).json({ success: true, data: updatedRecord });
+        break;
+
+      case 'DELETE':
+        // Delete a record
+        const recordToDelete = await modelClient.findUnique({
+          where: { id }
+        });
+
+        if (!recordToDelete) {
+          return res.status(404).json({ error: 'Record not found' });
+        }
+
+        await modelClient.delete({
+          where: { id }
+        });
+        
+        res.status(200).json({ success: true, message: 'Record deleted successfully' });
+        break;
+
+      default:
+        res.status(405).json({ error: 'Method not allowed' });
+    }
+  } catch (error) {
+    console.error(\`Error with model \${modelName} record \${id}:\`, error);
     
-    // Extract input and credentials from request
-    const { input, credentials = {} } = req.body || {};
+    // Handle Prisma-specific errors
+    if (error.code === 'P2002') {
+      return res.status(409).json({ 
+        success: false, 
+        error: 'Unique constraint violation',
+        details: 'A record with this data already exists'
+      });
+    } else if (error.code === 'P2025') {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Record not found',
+        details: 'The record you are trying to access does not exist'
+      });
+    }
     
-    // Initialize external API credentials for action execution
-    const externalApiCredentials = credentials;
-    console.log('🔑 Using credentials for external APIs:', Object.keys(externalApiCredentials));
+    res.status(500).json({ 
+      success: false, 
+      error: \`Failed to access model \${modelName} record\`,
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+}`;
+  }
+
+  private generateDynamicActionEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next'
+import { prisma } from '@/lib/prisma'
+
+// Fetch action definition from main app
+async function getActionFromMainApp(actionName: string) {
+  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+  const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+  const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
+  const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+
+  try {
+    // Call main app to get action definition
+    let response = await fetch(\`\${MAIN_APP_URL}/api/agent/execute-action\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+      },
+      body: JSON.stringify({
+        actionName: actionName,
+        getDefinitionOnly: true // Only fetch definition, don't execute
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(\`Failed to fetch action definition: \${response.status}\`);
+    }
+
+    const data = await response.json();
+    return data.success ? data.action : null;
+  } catch (error) {
+    console.error('Failed to fetch action from main app:', error);
+    throw error;
+  }
+}
+
+// Fetch credentials from main app
+async function getCredentials() {
+  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+  const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+  const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
+  const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+
+  try {
+    let response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public\`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+      },
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      return data.success ? data.credentials : {};
+    }
+  } catch (error) {
+    console.error('Failed to fetch credentials:', error);
+  }
+  return {};
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { actionName } = req.query;
+
+  if (!actionName || typeof actionName !== 'string') {
+    return res.status(400).json({ error: 'Action name is required' });
+  }
+
+  try {
+    console.log('🚀 Executing dynamic action:', actionName);
+    
+    // Fetch action definition from main app
+    const action = await getActionFromMainApp(actionName);
+    if (!action) {
+      return res.status(404).json({ error: \`Action '\${actionName}' not found\` });
+    }
+
+    // Verify HTTP method matches action type
+    const expectedMethod = action.type === 'query' ? 'GET' : 'POST';
+    if (req.method !== expectedMethod) {
+      return res.status(405).json({ error: \`Method not allowed. Expected \${expectedMethod}\` });
+    }
+
+    // Extract input and get credentials
+    const { input } = req.body || {};
+    const credentials = await getCredentials();
+    
+    console.log('🔑 Using credentials for external APIs:', Object.keys(credentials));
     
     // Mock member object for action execution
     const member = {
       id: 'demo-user',
-      role: 'admin', // Default to admin for deployed apps
+      role: 'admin',
       email: 'demo@example.com'
     };
     
@@ -2102,90 +3758,171 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     };
     
-    ${action.execute?.code?.script ? `
-    // Execute the generated action code
-    const actionCode = \`${action.execute.code.script.replace(/`/g, '\\`').replace(/\$/g, '\\$')}\`;
-    const envVars = { ...externalApiCredentials, ...process.env };
+    let result;
     
-    // Create function from action code and execute it
-    const actionFunction = new Function('database', 'input', 'member', 'ai', 'envVars', \`
-      \${actionCode}
-      return executeAction(database, input, member, ai, envVars);
-    \`);
+    if (action.execute?.code?.script) {
+      // Execute the fetched action code against local SQLite database
+      const actionCode = action.execute.code.script;
+      const envVars = { ...credentials, ...process.env };
+      
+      // Create function from action code and execute it
+      const actionFunction = new Function('database', 'input', 'member', 'ai', 'envVars', \`
+        \${actionCode}
+        return executeAction(database, input, member, ai, envVars);
+      \`);
+      
+      result = await actionFunction(prisma, input, member, ai, envVars);
+    } else {
+      // Basic fallback execution logic
+      result = {
+        actionName: actionName,
+        type: action.type || 'query',
+        description: action.description || 'Dynamic action',
+        input: input,
+        success: true,
+        timestamp: new Date().toISOString(),
+        usedCredentials: Object.keys(credentials),
+        executedLocally: true
+      };
+    }
     
-    const result = await actionFunction(prisma, input, member, ai, envVars);
-    ` : `
-    // Basic action execution logic
-    ${action.type === 'query' ? `
-    // Query action - get data
-    const result = {
-      actionName: '${action.name}',
-      type: 'query',
-      description: '${action.description || 'Query action'}',
-      data: [], // Replace with actual query logic
-      timestamp: new Date().toISOString(),
-      usedCredentials: Object.keys(externalApiCredentials)
-    };` : `
-    // Mutation action - modify data  
-    const result = {
-      actionName: '${action.name}',
-      type: 'mutation',
-      description: '${action.description || 'Mutation action'}',
-      input: input,
-      success: true,
-      timestamp: new Date().toISOString(),
-      usedCredentials: Object.keys(externalApiCredentials)
-    };`}`}
-    
-    console.log(\`✅ Action '\${action.name}' completed successfully\`);
+    console.log(\`✅ Dynamic action '\${actionName}' completed successfully\`);
     res.status(200).json({ success: true, data: result });
     
   } catch (error) {
-    console.error(\`❌ Error executing action '\${action.name}':\`, error);
+    console.error(\`❌ Error executing dynamic action '\${actionName}':\`, error);
     res.status(500).json({ 
       success: false, 
       error: error instanceof Error ? error.message : 'Internal server error',
-      actionName: '${action.name}'
+      actionName: actionName
     });
   }
 }`;
   }
 
-  private generateCronEndpoint(schedule: AgentSchedule): string {
-    // Handle both old and new schedule formats
-    const scheduleData = schedule as any; // Cast to access new properties
-    const steps = scheduleData.steps || [];
-    const triggerPattern = scheduleData.trigger?.pattern || schedule.interval?.pattern || '* * * * *';
-    
+  private generateDynamicCronEndpoint(): string {
     return `import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '@/lib/prisma'
+
+// Get schedules from sub-agent's own API (which calls main app)
+async function getSchedulesToRun() {
+  try {
+    // Call sub-agent's own schedules API
+    const response = await fetch('http://localhost:3000/api/agent/schedules');
+
+    if (!response.ok) {
+      console.log('Failed to get schedules from sub-agent API:', response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    
+    if (data.success && data.schedules) {
+      // Filter schedules that should run now
+      const now = new Date();
+      const schedulesToRun = [];
+      
+      for (const schedule of data.schedules) {
+        if (schedule.interval?.active && schedule.interval?.pattern) {
+          // Simple check - in a real app, use a proper cron parser
+          // For now, run all active schedules every minute
+          schedulesToRun.push(schedule);
+        }
+      }
+      
+      return schedulesToRun;
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Failed to get schedules from sub-agent API:', error);
+    return [];
+  }
+}
 
 // Fetch credentials from main app
 async function getCredentials() {
   const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
   const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-  const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
+  const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
   try {
-    // Try public endpoint first for deployed agents
-    let response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}&agentKey=\${AGENT_KEY}\`);
-    
-    // If public endpoint fails, try the authenticated one
-    if (!response.ok) {
-      console.log('Public endpoint failed, trying authenticated endpoint...');
-      response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials?documentId=\${DOCUMENT_ID}&agentKey=\${AGENT_KEY}\`);
-    }
+    const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+        'X-Agent-Token': AGENT_TOKEN,
+        'X-Document-ID': DOCUMENT_ID,
+      },
+    });
     
     if (response.ok) {
       const data = await response.json();
       return data.success ? data.credentials : {};
-    } else {
-      console.error('Failed to fetch credentials:', response.status);
     }
   } catch (error) {
-    console.error('Failed to fetch credentials for cron job:', error);
+    console.error('Failed to fetch credentials:', error);
   }
   return {};
+}
+
+// Execute a schedule's steps locally
+async function executeScheduleSteps(schedule: any, credentials: any) {
+  const stepResults = [];
+  const steps = schedule.steps || [];
+
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    try {
+      console.log(\`Executing step \${i + 1}: \${step.description || step.name}\`);
+      
+      // Call the main app to execute the step's action
+      const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+      const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+      
+      const actionResponse = await fetch(\`\${MAIN_APP_URL}/api/agent/execute-action\`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+        },
+        body: JSON.stringify({
+          actionId: step.actionId,
+          input: step.input || {},
+          credentials: credentials
+        }),
+      });
+      
+      const actionResult = await actionResponse.json();
+      stepResults.push({
+        step: i + 1,
+        actionId: step.actionId,
+        success: actionResult.success,
+        result: actionResult.data
+      });
+      
+      // Add delay if specified
+      if (step.delay?.duration) {
+        await new Promise(resolve => setTimeout(resolve, step.delay.duration));
+      }
+      
+    } catch (stepError) {
+      console.error(\`Error in step \${i + 1}:\`, stepError);
+      stepResults.push({
+        step: i + 1,
+        actionId: step.actionId,
+        success: false,
+        error: stepError instanceof Error ? stepError.message : 'Unknown error'
+      });
+      
+      // Stop execution if step is configured to stop on error
+      if (step.onError?.action === 'stop') {
+        break;
+      }
+    }
+  }
+
+  return stepResults;
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -2199,87 +3936,220 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    console.log('🕐 Running scheduled task: ${schedule.name}');
+    console.log('🕐 Checking for schedules to run...');
+    
+    // Get schedules that need to run from main app
+    const schedulesToRun = await getSchedulesToRun();
+    
+    if (schedulesToRun.length === 0) {
+      console.log('✅ No schedules need to run at this time');
+      return res.status(200).json({ 
+        success: true, 
+        message: 'No schedules to run',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    console.log(\`🔄 Found \${schedulesToRun.length} schedule(s) to run\`);
     
     // Get credentials for external API calls
     const credentials = await getCredentials();
-    console.log('🔑 Retrieved credentials for schedule:', Object.keys(credentials));
+    console.log('🔑 Retrieved credentials for schedules:', Object.keys(credentials));
     
-         ${steps?.length ? `
-     // Execute schedule steps in sequence
-     const stepResults = [];
-     
-     ${steps.map((step: any, index: number) => `
-    // Execute Step ${index + 1}: ${step.name || `Step ${index + 1}`}
-    try {
-      console.log('Executing step ${index + 1}: ${step.description || step.name}');
-      
-      // Call the associated action with credentials
-      const actionResponse = await fetch(\`\${process.env.VERCEL_URL || 'http://localhost:3000'}/api/${step.actionId}\`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          input: {}, // Add any step-specific input here
-          credentials: credentials
-        }),
-      });
-      
-      const actionResult = await actionResponse.json();
-      stepResults.push({
-        step: ${index + 1},
-        actionId: '${step.actionId}',
-        success: actionResult.success,
-        result: actionResult.data
-      });
-      
-      // Add delay if specified
-      ${step.delay?.duration ? `await new Promise(resolve => setTimeout(resolve, ${step.delay.duration}));` : ''}
-      
-    } catch (stepError) {
-      console.error(\`Error in step ${index + 1}:\`, stepError);
-      stepResults.push({
-        step: ${index + 1},
-        actionId: '${step.actionId}',
-        success: false,
-        error: stepError.message
-      });
-      
-      ${step.onError?.action === 'stop' ? `throw stepError;` : '// Continue to next step'}
-    }`).join('\n    ')}
+    const results = [];
     
-         const result = {
-       scheduleName: '${schedule.name}',
-       description: '${schedule.description || 'Scheduled task'}',
-       pattern: '${triggerPattern}',
-       executedAt: new Date().toISOString(),
-       success: true,
-       stepResults: stepResults,
-       totalSteps: ${steps.length},
-       completedSteps: stepResults.filter(r => r.success).length
-     };
-    ` : `
-         // Basic schedule execution logic (no steps defined)
-     const result = {
-       scheduleName: '${schedule.name}',
-       description: '${schedule.description || 'Scheduled task'}',
-       pattern: '${triggerPattern}',
-       executedAt: new Date().toISOString(),
-       success: true,
-       data: [], // Replace with actual scheduled task logic
-       usedCredentials: Object.keys(credentials)
-     };`}
+    // Execute each schedule
+    for (const schedule of schedulesToRun) {
+      try {
+        console.log(\`🚀 Executing schedule: \${schedule.name}\`);
+        
+        let stepResults = [];
+        if (schedule.steps && schedule.steps.length > 0) {
+          stepResults = await executeScheduleSteps(schedule, credentials);
+        }
+        
+        const result = {
+          scheduleName: schedule.name,
+          description: schedule.description || 'Scheduled task',
+          pattern: schedule.trigger?.pattern || schedule.interval?.pattern || '* * * * *',
+          executedAt: new Date().toISOString(),
+          success: true,
+          stepResults: stepResults,
+          totalSteps: stepResults.length,
+          completedSteps: stepResults.filter(r => r.success).length,
+          executedLocally: true
+        };
+        
+        results.push(result);
+        console.log(\`✅ Schedule '\${schedule.name}' completed successfully\`);
+        
+      } catch (scheduleError) {
+        console.error(\`❌ Error executing schedule '\${schedule.name}':\`, scheduleError);
+        results.push({
+          scheduleName: schedule.name,
+          success: false,
+          error: scheduleError instanceof Error ? scheduleError.message : 'Unknown error',
+          executedAt: new Date().toISOString()
+        });
+      }
+    }
     
-    console.log(\`✅ Scheduled task completed: \${schedule.name}\`);
-    res.status(200).json({ success: true, data: result });
+    console.log(\`✅ Completed \${results.length} schedule(s)\`);
+    res.status(200).json({ 
+      success: true, 
+      data: results,
+      summary: {
+        totalSchedules: results.length,
+        successfulSchedules: results.filter(r => r.success).length,
+        timestamp: new Date().toISOString()
+      }
+    });
     
   } catch (error) {
-    console.error(\`❌ Error in scheduled task \${schedule.name}:\`, error);
+    console.error('❌ Error in dynamic scheduler:', error);
     res.status(500).json({ 
       success: false, 
       error: error instanceof Error ? error.message : 'Internal server error',
-      scheduleName: '${schedule.name}'
+      timestamp: new Date().toISOString()
+    });
+  }
+}`;
+  }
+
+  private generateDirectActionTriggerEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next'
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { actionId } = req.query;
+
+  if (!actionId || typeof actionId !== 'string') {
+    return res.status(400).json({ error: 'Action ID is required' });
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    console.log('🔗 Triggering action directly on main app:', actionId);
+    
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+    const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
+    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+    
+    // Extract input from request body
+    const { input = {}, member } = req.body || {};
+    
+    // Call main app to execute action directly
+    const response = await fetch(\`\${MAIN_APP_URL}/api/agent/execute-action\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+      },
+      body: JSON.stringify({
+        actionId: actionId,
+        input: input,
+        member: member || {
+          id: 'sub-agent-user',
+          role: 'admin',
+          email: 'sub-agent@deployed.app'
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(\`Main app responded with status: \${response.status}\`);
+    }
+
+    const result = await response.json();
+    
+    console.log('✅ Action executed successfully on main app');
+    res.status(200).json({
+      success: true,
+      data: result.data,
+      triggeredRemotely: true,
+      actionId: actionId,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Error triggering action on main app:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to trigger action',
+      actionId: actionId
+    });
+  }
+}`;
+  }
+
+  private generateDirectScheduleTriggerEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next'
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const { scheduleId } = req.query;
+
+  if (!scheduleId || typeof scheduleId !== 'string') {
+    return res.status(400).json({ error: 'Schedule ID is required' });
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    console.log('🔗 Triggering schedule directly on main app:', scheduleId);
+    
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+    const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
+    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+    
+    // Extract any additional parameters from request body
+    const { member, force = false } = req.body || {};
+    
+    // Call main app to execute schedule directly
+    const response = await fetch(\`\${MAIN_APP_URL}/api/agent/execute-schedule\`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+      },
+      body: JSON.stringify({
+        scheduleId: scheduleId,
+        force: force, // Force execution even if not scheduled
+        member: member || {
+          id: 'sub-agent-user',
+          role: 'admin',
+          email: 'sub-agent@deployed.app'
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(\`Main app responded with status: \${response.status}\`);
+    }
+
+    const result = await response.json();
+    
+    console.log('✅ Schedule executed successfully on main app');
+    res.status(200).json({
+      success: true,
+      data: result.data,
+      triggeredRemotely: true,
+      scheduleId: scheduleId,
+      forced: force,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Error triggering schedule on main app:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to trigger schedule',
+      scheduleId: scheduleId
     });
   }
 }`;
@@ -2288,11 +4158,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   private generatePrismaClient(): string {
     return `import { PrismaClient } from '@prisma/client'
 
+// Function to get the correct database URL for the environment
+function getDatabaseUrl(): string {
+  // If DATABASE_URL is already set, use it
+  if (process.env.DATABASE_URL) {
+    return process.env.DATABASE_URL;
+  }
+
+  // Auto-configure based on environment
+  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    // Production/Vercel deployment - use /tmp directory
+    return 'file:/tmp/dev.db';
+  } else {
+    // Local development - use project directory
+    return 'file:./dev.db';
+  }
+}
+
+// Set the DATABASE_URL if not already set
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = getDatabaseUrl();
+}
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient()
+// Create Prisma client with connection configuration optimized for serverless
+export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+  datasources: {
+    db: {
+      url: getDatabaseUrl()
+    }
+  },
+  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error']
+})
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma`;
   }
@@ -2370,7 +4270,7 @@ async function main() {
   ${this.options.models.map(model => `
   // TODO: Add seed data for ${model.name}
   // Example:
-  // const sample${model.name} = await prisma.${model.name.toLowerCase()}.createMany({
+  // const sample${model.name} = await prisma.${model.name.charAt(0).toLowerCase() + model.name.slice(1)}.createMany({
   //   data: [
   //     // Add your sample data here based on your ${model.name} model fields
   //   ]
@@ -2390,22 +4290,245 @@ main()
   })`;
   }
 
+  private sanitizePrismaSchema(schema: string): string {
+    try {
+      // Fix common relation issues that cause validation errors
+      let sanitizedSchema = schema;
+      
+      // 1. Remove problematic one-to-one relations without @unique
+      // Pattern: fieldName ModelName @relation(fields: [fieldId], references: [id])
+      // where fieldId is not marked as @unique
+      const relationPattern = /(\w+)\s+(\w+)\s*@relation\(fields:\s*\[(\w+)\],\s*references:\s*\[[^\]]+\]\)/g;
+      
+      sanitizedSchema = sanitizedSchema.replace(relationPattern, (match, fieldName, modelName, foreignKeyField) => {
+        // Check if the foreign key field has @unique constraint
+        const uniquePattern = new RegExp(`${foreignKeyField}\\s+\\w+[^\\n]*@unique`, 'g');
+        const hasUnique = uniquePattern.test(sanitizedSchema);
+        
+        if (!hasUnique) {
+          // For now, remove the relation attribute to avoid validation errors
+          // Keep just the field without the relation
+          console.log(`Sanitizing relation: Removed @relation from ${fieldName} -> ${modelName} (missing @unique on ${foreignKeyField})`);
+          return `${fieldName} ${modelName}?`;
+        }
+        
+        return match;
+      });
+      
+      // 2. Ensure foreign key fields are optional if they have relations (but NOT ID fields)
+      const foreignKeyPattern = /(\w+Id)\s+(String|Int)(\s+@unique)?(?!\s*@id)/g;
+      sanitizedSchema = sanitizedSchema.replace(foreignKeyPattern, (match, fieldName, type, unique) => {
+        // Don't make ID fields optional - they must be required
+        if (match.includes('@id')) {
+          return match;
+        }
+        
+        if (unique) {
+          return `${fieldName} ${type}?${unique}`;
+        } else {
+          return `${fieldName} ${type}?`;
+        }
+      });
+      
+      // 3. Fix any ID fields that were accidentally made optional
+      const idFieldPattern = /(\w+)\s+(String|Int)\?\s+@id/g;
+      sanitizedSchema = sanitizedSchema.replace(idFieldPattern, (match, fieldName, type) => {
+        console.log(`Fixing ID field: Removing ? from ${fieldName} (ID fields must be required)`);
+        return `${fieldName} ${type} @id`;
+      });
+      
+      // 4. Add note about sanitization
+      if (sanitizedSchema !== schema) {
+        sanitizedSchema += '\n\n// Note: Schema was sanitized to remove problematic relations during deployment.';
+      }
+      
+      return sanitizedSchema;
+    } catch (error) {
+      console.error('Error sanitizing Prisma schema:', error);
+      // Fallback to generating a clean default schema
+      return this.generateDefaultPrismaSchema();
+    }
+  }
+
+  private generateDefaultPrismaSchema(): string {
+    const modelSchemas = this.options.models.map(model => {
+      // Check if model has an explicit ID field
+      const hasIdField = model.fields.some((field: any) => field.isId);
+      
+      let fieldsArray = [...model.fields];
+      
+      // Add default ID field if none exists
+      if (!hasIdField) {
+        fieldsArray.unshift({
+          name: 'id',
+          type: 'String',
+          isId: true,
+          required: true,
+          unique: false
+        });
+      }
+      
+      const fields = fieldsArray.map((field: any) => {
+        let prismaType = 'String';
+        switch (field.type.toLowerCase()) {
+          case 'int':
+          case 'integer':
+            prismaType = 'Int';
+            break;
+          case 'float':
+          case 'decimal':
+            prismaType = 'Float';
+            break;
+          case 'boolean':
+          case 'bool':
+            prismaType = 'Boolean';
+            break;
+          case 'datetime':
+          case 'date':
+            prismaType = 'DateTime';
+            break;
+          default:
+            prismaType = 'String';
+        }
+
+        const modifiers = [];
+        if (field.isId) {
+          // ID fields are ALWAYS required (no ?)
+          modifiers.push('@id @default(cuid())');
+        } else {
+          // Make all non-ID fields optional for flexibility
+          if (!field.required) modifiers.push('?');
+          
+          // Handle unique constraints carefully
+          if (field.unique && !field.isId) {
+            modifiers.push('@unique');
+          }
+        }
+
+        return `  ${field.name} ${prismaType}${modifiers.length > 0 ? ' ' + modifiers.join(' ') : ''}`;
+      }).join('\n');
+
+      return `model ${model.name} {
+${fields}
+  createdAt DateTime? @default(now())
+  updatedAt DateTime? @updatedAt
+}`;
+    }).join('\n\n');
+
+    return `// This file was auto-generated based on your agent models
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+${modelSchemas}
+
+// Note: This schema is automatically generated.
+// Any manual changes will be overwritten on next deployment.
+// Relations are simplified to avoid validation errors.
+`;
+  }
+
   private generateSQLiteInitScript(): string {
     return `const fs = require('fs');
 const path = require('path');
 
-const dbPath = path.join(__dirname, '..', 'dev.db');
+// Function to get the correct database path for the environment
+function getDatabasePath() {
+  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
+    // Production/Vercel deployment - use /tmp directory
+    return '/tmp/dev.db';
+  } else {
+    // Local development - use project directory
+    return path.join(__dirname, '..', 'dev.db');
+  }
+}
+
+// Function to update .env.local with correct DATABASE_URL
+function updateEnvFile(dbPath) {
+  const envLocalPath = path.join(__dirname, '..', '.env.local');
+  const databaseUrl = \`DATABASE_URL="file:\${dbPath}"\`;
+  
+  try {
+    let envContent = '';
+    
+    // Read existing .env.local if it exists
+    if (fs.existsSync(envLocalPath)) {
+      envContent = fs.readFileSync(envLocalPath, 'utf8');
+      
+      // Replace existing DATABASE_URL or add it
+      if (envContent.includes('DATABASE_URL=')) {
+        envContent = envContent.replace(/DATABASE_URL=.*/g, databaseUrl);
+      } else {
+        envContent += \`\n\${databaseUrl}\n\`;
+      }
+    } else {
+      // Create new .env.local file
+      envContent = \`# Auto-generated database configuration
+\${databaseUrl}
+\`;
+    }
+    
+    fs.writeFileSync(envLocalPath, envContent);
+    console.log('📝 Updated .env.local with DATABASE_URL:', databaseUrl);
+  } catch (error) {
+    console.warn('⚠️ Could not update .env.local:', error.message);
+  }
+}
+
+// Determine the correct database path for different environments
+const dbPath = getDatabasePath();
+const dbDir = path.dirname(dbPath);
+
+console.log(\`🗄️ Initializing SQLite database at: \${dbPath}\`);
+
+// Ensure the directory exists
+if (!fs.existsSync(dbDir)) {
+  try {
+    fs.mkdirSync(dbDir, { recursive: true });
+    console.log('📁 Created database directory:', dbDir);
+  } catch (error) {
+    console.error('❌ Failed to create database directory:', error);
+    // Don't exit on directory creation failure in serverless environments
+    if (!process.env.VERCEL) {
+      process.exit(1);
+    }
+  }
+}
 
 // Create empty SQLite database file if it doesn't exist
 if (!fs.existsSync(dbPath)) {
-  fs.writeFileSync(dbPath, '');
-  console.log('✅ SQLite database file created: dev.db');
+  try {
+    fs.writeFileSync(dbPath, '');
+    console.log('✅ SQLite database file created:', dbPath);
+  } catch (error) {
+    console.error('❌ Failed to create database file:', error);
+    // Don't exit on file creation failure in serverless environments
+    if (!process.env.VERCEL) {
+      process.exit(1);
+    }
+  }
 } else {
-  console.log('📋 SQLite database file already exists: dev.db');
+  console.log('📋 SQLite database file already exists:', dbPath);
 }
 
-console.log('🗄️ SQLite database ready for development');`;
+// Update environment configuration for local development
+if (!process.env.VERCEL && !process.env.NODE_ENV === 'production') {
+  updateEnvFile(dbPath);
+}
+
+// Set runtime environment variable for this process
+process.env.DATABASE_URL = \`file:\${dbPath}\`;
+console.log('🔗 Set DATABASE_URL:', process.env.DATABASE_URL);
+
+console.log('🗄️ SQLite database initialization complete');`;
   }
+
   private generateGlobalStyles(): string {
     return `@tailwind base;
 @tailwind components;
@@ -2512,6 +4635,29 @@ The chat feature uses Vercel's AI SDK and provides:
 - "What actions can I run?" → AI explains available smart actions
 - "Check system status" → AI provides real-time health information
 - "How many schedules are active?" → AI counts and reports active tasks
+
+## 🗄️ Database Configuration
+
+This app uses **SQLite** with **Prisma ORM** and is optimized for both local development and Vercel serverless deployment:
+
+### Automatic Environment Detection
+- **Local Development**: Database stored as \`./dev.db\` in project root
+- **Vercel Production**: Database stored as \`/tmp/dev.db\` in serverless functions
+- **Environment Variables**: Automatically configured based on deployment context
+
+### Database Features
+- **Auto-Initialization**: Database file created automatically on startup
+- **Schema Sync**: Prisma schema synchronized on build/deploy
+- **CRUD Operations**: Full Create, Read, Update, Delete via REST API endpoints
+- **Error Handling**: Robust error handling for serverless environments
+- **Connection Pooling**: Optimized for serverless function lifecycle
+
+### Troubleshooting Database Issues
+If you encounter database connection errors:
+
+1. **Local Development**: Run \`npm run db:setup\` to reinitialize
+2. **Production**: Database automatically initializes on first request
+3. **Check Logs**: Review function logs in Vercel dashboard for detailed error info
 
 ## 🚀 Quick Start
 
@@ -2646,6 +4792,625 @@ The chat will work immediately with your AI provider.
 ---
 
 **Built with Vercel AI SDK** 🤖 | **Mobile-First Design** 📱 | **Production Ready** 🚀`;
+  }
+
+  // Sub-agent API endpoints that call main app
+  private generateActionsEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next'
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+
+    console.log('🔗 Actions API calling main app:', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
+
+    // Call main app to get agent configuration
+    const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+        'X-Agent-Token': AGENT_TOKEN,
+        'X-Document-ID': DOCUMENT_ID,
+      },
+    });
+
+    console.log('🔗 Main app response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('🔗 Main app error:', errorText);
+      throw new Error(\`Failed to fetch from main app: \${response.status} - \${errorText}\`);
+    }
+
+    const data = await response.json();
+    console.log('🔗 Main app data received:', { success: data.success, hasActions: !!data.agentConfig?.actions });
+    
+    if (data.success && data.agentConfig?.actions) {
+      res.status(200).json({
+        success: true,
+        actions: data.agentConfig.actions
+      });
+    } else {
+      // Fallback to static actions
+      console.log('🔗 Using fallback actions');
+      const fallbackActions = ${JSON.stringify(this.options.actions)};
+      res.status(200).json({
+        success: true,
+        actions: fallbackActions,
+        source: 'fallback'
+      });
+    }
+  } catch (error) {
+    console.error('🔗 Error fetching actions:', error);
+    
+    // Return fallback actions on error
+    const fallbackActions = ${JSON.stringify(this.options.actions)};
+    res.status(200).json({
+      success: true,
+      actions: fallbackActions,
+      source: 'fallback',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}`;
+  }
+
+  private generateSchedulesEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next'
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+
+    console.log('🔗 Schedules API calling main app:', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
+
+    // Call main app to get agent configuration
+    const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+        'X-Agent-Token': AGENT_TOKEN,
+        'X-Document-ID': DOCUMENT_ID,
+      },
+    });
+
+    console.log('🔗 Main app response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('🔗 Main app error:', errorText);
+      throw new Error(\`Failed to fetch from main app: \${response.status} - \${errorText}\`);
+    }
+
+    const data = await response.json();
+    console.log('🔗 Main app data received:', { success: data.success, hasSchedules: !!data.agentConfig?.schedules });
+    
+    if (data.success && data.agentConfig?.schedules) {
+      res.status(200).json({
+        success: true,
+        schedules: data.agentConfig.schedules
+      });
+    } else {
+      // Fallback to static schedules
+      console.log('🔗 Using fallback schedules');
+      const fallbackSchedules = ${JSON.stringify(this.options.schedules)};
+      res.status(200).json({
+        success: true,
+        schedules: fallbackSchedules,
+        source: 'fallback'
+      });
+    }
+  } catch (error) {
+    console.error('🔗 Error fetching schedules:', error);
+    
+    // Return fallback schedules on error
+    const fallbackSchedules = ${JSON.stringify(this.options.schedules)};
+    res.status(200).json({
+      success: true,
+      schedules: fallbackSchedules,
+      source: 'fallback',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}`;
+  }
+
+  private generateModelsEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next'
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+
+    console.log('🔗 Models API calling main app:', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
+
+    // Call main app to get agent configuration
+    const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+        'X-Agent-Token': AGENT_TOKEN,
+        'X-Document-ID': DOCUMENT_ID,
+      },
+    });
+
+    console.log('🔗 Main app response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('🔗 Main app error:', errorText);
+      throw new Error(\`Failed to fetch from main app: \${response.status} - \${errorText}\`);
+    }
+
+    const data = await response.json();
+    console.log('🔗 Main app data received:', { success: data.success, hasModels: !!data.agentConfig?.models });
+    
+    if (data.success && data.agentConfig?.models) {
+      res.status(200).json({
+        success: true,
+        models: data.agentConfig.models
+      });
+    } else {
+      // Fallback to static models
+      console.log('🔗 Using fallback models');
+      const fallbackModels = ${JSON.stringify(this.options.models)};
+      res.status(200).json({
+        success: true,
+        models: fallbackModels,
+        source: 'fallback'
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching models:', error);
+    
+    // Return fallback models on error
+    const fallbackModels = ${JSON.stringify(this.options.models)};
+    res.status(200).json({
+      success: true,
+      models: fallbackModels,
+      source: 'fallback',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}`;
+  }
+
+  private generateAgentConfigEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next'
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+
+    console.log('🔗 Config API calling main app:', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
+
+    // Call main app to get full agent configuration
+    const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+        'X-Agent-Token': AGENT_TOKEN,
+        'X-Document-ID': DOCUMENT_ID,
+      },
+    });
+
+    console.log('🔗 Main app response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('🔗 Main app error:', errorText);
+      throw new Error(\`Failed to fetch from main app: \${response.status} - \${errorText}\`);
+    }
+
+    const data = await response.json();
+    console.log('🔗 Main app data received:', { 
+      success: data.success, 
+      hasConfig: !!data.agentConfig,
+      hasAvatar: !!data.agentConfig?.avatar,
+      avatarType: data.agentConfig?.avatar?.type,
+      theme: data.agentConfig?.theme,
+      name: data.agentConfig?.name
+    });
+    
+    if (data.success && data.agentConfig) {
+      // Ensure we're returning the complete config with proper structure
+      const config = {
+        name: data.agentConfig.name || '${this.options.projectName}',
+        description: data.agentConfig.description || 'Agent application',
+        theme: data.agentConfig.theme || 'green',
+        avatar: data.agentConfig.avatar || null,
+        domain: data.agentConfig.domain || null,
+        models: data.agentConfig.models || [],
+        actions: data.agentConfig.actions || [],
+        schedules: data.agentConfig.schedules || []
+      };
+      
+      console.log('✅ Returning config to sub-agent:', {
+        name: config.name,
+        theme: config.theme,
+        hasAvatar: !!config.avatar,
+        avatarType: config.avatar?.type
+      });
+      
+      res.status(200).json({
+        success: true,
+        config
+      });
+    } else {
+      // Fallback configuration
+      console.log('⚠️ Using fallback config - main app data not available');
+      const fallbackConfig = {
+        name: '${this.options.projectName}',
+        description: 'Agent application',
+        theme: 'green',
+        avatar: null,
+        domain: null,
+        models: ${JSON.stringify(this.options.models)},
+        actions: ${JSON.stringify(this.options.actions)},
+        schedules: ${JSON.stringify(this.options.schedules)}
+      };
+      
+      console.log('📋 Fallback config:', {
+        name: fallbackConfig.name,
+        theme: fallbackConfig.theme,
+        hasAvatar: !!fallbackConfig.avatar
+      });
+      
+      res.status(200).json({
+        success: true,
+        config: fallbackConfig,
+        source: 'fallback'
+      });
+    }
+  } catch (error) {
+    console.error('❌ Error fetching agent config:', error);
+    
+    // Return fallback config on error
+    console.log('🔄 Using error fallback config');
+    const fallbackConfig = {
+      name: '${this.options.projectName}',
+      description: 'Agent application',
+      theme: 'green',
+      avatar: null,
+      domain: null,
+      models: ${JSON.stringify(this.options.models)},
+      actions: ${JSON.stringify(this.options.actions)},
+      schedules: ${JSON.stringify(this.options.schedules)}
+    };
+    
+    console.log('🔄 Error fallback config:', {
+      name: fallbackConfig.name,
+      theme: fallbackConfig.theme,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    
+    res.status(200).json({
+      success: true,
+      config: fallbackConfig,
+      source: 'error-fallback',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}`;
+  }
+
+  private generateAgentDataEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next'
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+
+    console.log('🔗 Data API calling main app:', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
+
+    if (!DOCUMENT_ID) {
+      return res.status(400).json({ error: 'No document ID configured' });
+    }
+
+    // Call main app to get agent document data
+    const response = await fetch(\`\${MAIN_APP_URL}/api/document?id=\${DOCUMENT_ID}\`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+        'X-Agent-Token': AGENT_TOKEN,
+        'X-Document-ID': DOCUMENT_ID,
+      },
+    });
+
+    console.log('🔗 Main app response status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('🔗 Main app error:', errorText);
+      throw new Error(\`Failed to fetch from main app: \${response.status} - \${errorText}\`);
+    }
+
+    const data = await response.json();
+    console.log('🔗 Main app data received:', { success: data.success, hasDocument: !!data.document });
+    
+    if (data.success && data.document?.metadata) {
+      const metadata = data.document.metadata;
+      const agentData = {
+        name: metadata.name || '${this.options.projectName}',
+        description: metadata.description || '',
+        personality: metadata.personality || '',
+        theme: metadata.theme || 'green',
+        avatar: metadata.avatar || null,
+        models: metadata.models || [],
+        actions: metadata.actions || [],
+        schedules: metadata.schedules || []
+      };
+      
+      res.status(200).json({
+        success: true,
+        data: agentData
+      });
+    } else {
+      // Fallback data
+      const fallbackData = {
+        name: '${this.options.projectName}',
+        description: 'Agent application',
+        personality: '',
+        theme: 'green',
+        avatar: null,
+        models: ${JSON.stringify(this.options.models)},
+        actions: ${JSON.stringify(this.options.actions)},
+        schedules: ${JSON.stringify(this.options.schedules)}
+      };
+      
+      res.status(200).json({
+        success: true,
+        data: fallbackData,
+        source: 'fallback'
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching agent data:', error);
+    
+    // Return fallback data on error
+    const fallbackData = {
+      name: '${this.options.projectName}',
+      description: 'Agent application',
+      personality: '',
+      theme: 'green',
+      avatar: null,
+      models: ${JSON.stringify(this.options.models)},
+      actions: ${JSON.stringify(this.options.actions)},
+      schedules: ${JSON.stringify(this.options.schedules)}
+    };
+    
+    res.status(200).json({
+      success: true,
+      data: fallbackData,
+      source: 'fallback',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}`;
+  }
+
+  private generateAgentContext(): string {
+    return `import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+
+interface AgentConfig {
+  name: string;
+  description: string;
+  theme: string;
+  avatar: any;
+  domain?: string;
+  models: any[];
+  actions: any[];
+  schedules: any[];
+}
+
+interface AgentContextType {
+  config: AgentConfig | null;
+  loading: boolean;
+  error: string | null;
+  refetchConfig: () => Promise<void>;
+}
+
+const AgentContext = createContext<AgentContextType | undefined>(undefined);
+
+export const useAgent = (): AgentContextType => {
+  const context = useContext(AgentContext);
+  if (context === undefined) {
+    throw new Error('useAgent must be used within an AgentProvider');
+  }
+  return context;
+};
+
+interface AgentProviderProps {
+  children: ReactNode;
+}
+
+export const AgentProvider: React.FC<AgentProviderProps> = ({ children }) => {
+  const [config, setConfig] = useState<AgentConfig | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchConfig = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('🔧 AgentProvider: Fetching agent config...');
+      const response = await fetch('/api/agent/config');
+      
+      if (!response.ok) {
+        throw new Error(\`Failed to fetch config: \${response.status}\`);
+      }
+      
+      const data = await response.json();
+      console.log('🔧 AgentProvider: Config response:', data);
+      
+      if (data.success && data.config) {
+        console.log('✅ AgentProvider: Setting config:', {
+          name: data.config.name,
+          theme: data.config.theme,
+          hasAvatar: !!data.config.avatar,
+          avatarType: data.config.avatar?.type
+        });
+        setConfig(data.config);
+      } else {
+        console.error('❌ AgentProvider: Invalid config response:', data);
+        throw new Error('Invalid config response');
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      console.error('❌ AgentProvider: Error fetching config:', errorMessage);
+      setError(errorMessage);
+      
+      // Set fallback config
+      const fallbackConfig: AgentConfig = {
+        name: '${this.options.projectName}',
+        description: 'Agent application',
+        theme: 'green',
+        avatar: null,
+        models: [],
+        actions: [],
+        schedules: []
+      };
+      setConfig(fallbackConfig);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refetchConfig = async () => {
+    await fetchConfig();
+  };
+
+  useEffect(() => {
+    fetchConfig();
+  }, []);
+
+  const value: AgentContextType = {
+    config,
+    loading,
+    error,
+    refetchConfig
+  };
+
+  return (
+    <AgentContext.Provider value={value}>
+      {children}
+    </AgentContext.Provider>
+  );
+};`;
+  }
+
+  private generateTestConnectionEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next'
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+
+    console.log('🔗 Testing connection to main app:', { 
+      MAIN_APP_URL, 
+      DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', 
+      hasToken: !!AGENT_TOKEN 
+    });
+
+    // Test authenticated endpoint
+    const authResponse = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+        'X-Agent-Token': AGENT_TOKEN,
+        'X-Document-ID': DOCUMENT_ID,
+      },
+    }).catch(error => {
+      console.error('❌ Auth test failed:', error);
+      return null;
+    });
+
+    const authOk = authResponse?.ok;
+    
+    let authData = null;
+    if (authOk) {
+      try {
+        authData = await authResponse.json();
+      } catch (e) {
+        console.error('❌ Failed to parse auth response:', e);
+      }
+    }
+
+    const result = {
+      success: true,
+      tests: {
+        authentication: {
+          status: authOk ? 'pass' : 'fail',
+          response: authOk ? 'Authentication successful' : 'Authentication failed'
+        },
+        dataRetrieval: {
+          status: (authData?.success && authData?.agentConfig) ? 'pass' : 'fail',
+          response: (authData?.success && authData?.agentConfig) ? 'Agent data retrieved' : 'Failed to retrieve agent data',
+          hasAvatar: !!authData?.agentConfig?.avatar,
+          theme: authData?.agentConfig?.theme || 'not found',
+          name: authData?.agentConfig?.name || 'not found'
+        }
+      },
+      environment: {
+        MAIN_APP_URL,
+        hasDocumentId: !!DOCUMENT_ID,
+        hasAgentToken: !!AGENT_TOKEN
+      },
+      debug: authData?.debug || null
+    };
+
+    console.log('🔍 Connection test results:', result);
+    
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('❌ Test connection error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      tests: {
+        authentication: { status: 'error', response: 'Test failed with error' },
+        dataRetrieval: { status: 'error', response: 'Test failed with error' }
+      }
+    });
+  }
+}`;
   }
 }
 

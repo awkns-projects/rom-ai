@@ -114,17 +114,35 @@ export function Chat({
       mutate(unstable_serialize(getChatHistoryPaginationKey));
     },
     onError: (error) => {
+      console.warn('Chat error occurred:', error);
+      
       if (error instanceof ChatSDKError) {
         // Check if this is a rate limit error
         if (error.type === 'rate_limit' && error.surface === 'chat') {
           setShowRateLimitModal(true);
+        } else if (error.type === 'offline' && error.surface === 'chat') {
+          // Handle network failures after idle - show helpful message
+          toast({
+            type: 'error',
+            description: 'Connection lost. Please check your internet and try again.',
+          });
         } else {
           toast({
             type: 'error',
             description: error.message,
           });
         }
+      } else {
+        // Handle any other unexpected errors
+        toast({
+          type: 'error',
+          description: 'Something went wrong. Please try again.',
+        });
       }
+      
+      // Note: useChat should automatically reset status to 'idle' on error,
+      // but we log this for debugging in case it doesn't
+      console.log('Current status after error:', status);
     },
   });
 
@@ -182,6 +200,26 @@ export function Chat({
 
   const [attachments, setAttachments] = useState<Array<Attachment>>([]);
   const isArtifactVisible = useArtifactSelector((state) => state.isVisible);
+
+  // Backup recovery mechanism for stuck 'submitted' status
+  useEffect(() => {
+    if (status === 'submitted') {
+      const timer = setTimeout(() => {
+        if (status === 'submitted') {
+          console.warn('Status has been "submitted" for 30 seconds, this may indicate a network issue after idle.');
+          console.warn('User can refresh the page or try submitting again to recover.');
+          
+          // Show a more helpful error message
+          toast({
+            type: 'error',
+            description: 'Request seems stuck. Please refresh the page and try again.',
+          });
+        }
+      }, 30000); // 30 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [status]);
 
   useAutoResume({
     autoResume,

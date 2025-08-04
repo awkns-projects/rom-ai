@@ -22,6 +22,7 @@ export interface Step3Input {
 
 export interface Step3Output {
   schedules: AgentSchedule[];
+  implementationComplexity: 'low' | 'medium' | 'high';
 }
 
 /**
@@ -81,6 +82,17 @@ export async function executeStep3ScheduleGeneration(
     console.log('📅 Generating schedules with Step 0 context...');
     console.log(`📊 Step 0 Schedule Analysis: ${step0Analysis.schedules.filter(s => s.operation === 'create').length} new schedules, ${step0Analysis.schedules.filter(s => s.operation === 'update').length} schedule updates`);
     console.log(`⏱️ Schedule Details: ${step0Analysis.schedules.length} total schedules identified in analysis`);
+    
+    // Log available actions for schedule generation
+    console.log(`🎯 Available Actions from Step 2: ${actionGeneration.actions?.length || 0} actions`);
+    if (actionGeneration.actions && actionGeneration.actions.length > 0) {
+      console.log(`🔗 Action IDs that schedules can reference:`);
+      actionGeneration.actions.forEach((action: any, index: number) => {
+        console.log(`   ${index + 1}. "${action.id}" - ${action.name} (${action.type || 'query'})`);
+      });
+    } else {
+      console.warn(`⚠️ No actions available from Step 2 - schedules will have limited functionality`);
+    }
 
     // Note: generateSchedules gets actual schedule requirements from Step 0 analysis 
     // and uses actions from Step 2 to create action chains
@@ -91,13 +103,29 @@ export async function executeStep3ScheduleGeneration(
     });
 
     const result: Step3Output = {
-      schedules: schedulesResult.schedules
+      schedules: schedulesResult.schedules,
+      implementationComplexity: schedulesResult.schedules.length > 3 ? 'high' : schedulesResult.schedules.length > 1 ? 'medium' : 'low'
     };
+
+    // Validate action connections
+    const availableActionIds = new Set((actionGeneration.actions || []).map((a: any) => a.id));
+    const schedulesWithSteps = result.schedules.filter((s: any) => s.steps && s.steps.length > 0);
+    const totalSteps = result.schedules.reduce((sum: number, s: any) => sum + (s.steps?.length || 0), 0);
+    const validSteps = result.schedules.reduce((sum: number, s: any) => 
+      sum + (s.steps?.filter((step: any) => step.actionId && availableActionIds.has(step.actionId)).length || 0), 0
+    );
 
     console.log('✅ STEP 3: Schedule generation completed successfully');
     console.log(`⏰ Schedule Summary:
 - Generated Schedules: ${result.schedules.length}
+- Schedules with Action Steps: ${schedulesWithSteps.length}
+- Total Action Steps: ${totalSteps}
+- Valid Action References: ${validSteps}/${totalSteps} (${totalSteps > 0 ? Math.round((validSteps/totalSteps) * 100) : 0}%)
 - Step 0 Schedule Context: ${step0Analysis.schedules.length} total (${step0Analysis.schedules.filter(s => s.operation === 'create').length} new, ${step0Analysis.schedules.filter(s => s.operation === 'update').length} updates)`);
+
+    if (validSteps < totalSteps) {
+      console.warn(`⚠️ ${totalSteps - validSteps} schedule steps reference invalid or missing action IDs`);
+    }
 
     return result;
     
@@ -140,7 +168,18 @@ export function validateStep3Output(output: Step3Output): boolean {
  * Extract schedule insights for downstream steps
  */
 export function extractScheduleInsights(output: Step3Output) {
+  const schedulesWithSteps = output.schedules.filter((s: any) => s.steps && s.steps.length > 0);
+  const totalSteps = output.schedules.reduce((sum: number, s: any) => sum + (s.steps?.length || 0), 0);
+  const stepsWithActionIds = output.schedules.reduce((sum: number, s: any) => 
+    sum + (s.steps?.filter((step: any) => step.actionId).length || 0), 0
+  );
+  
   return {
-    scheduleCount: output.schedules.length
+    scheduleCount: output.schedules.length,
+    schedulesWithActionSteps: schedulesWithSteps.length,
+    totalActionSteps: totalSteps,
+    stepsWithActionIds: stepsWithActionIds,
+    actionConnectionRate: totalSteps > 0 ? stepsWithActionIds / totalSteps : 0,
+    implementationComplexity: output.schedules.length > 3 ? 'high' : output.schedules.length > 1 ? 'medium' : 'low'
   };
 } 

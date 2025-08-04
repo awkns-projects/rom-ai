@@ -792,16 +792,18 @@ ${isIncrementalUpdate ? `
 `}6. ALL envVars fields must be arrays (use empty array [] if no env vars needed)
 7. Provide meaningful names, descriptions, and emojis for each action
 8. Code should be production-ready with proper error handling
+9. CRITICAL BATCH INPUT REQUIREMENT: ALL actions MUST accept input in format { items: Array<parameters> } NOT single-item inputs
 
 ACTION STRUCTURE REQUIREMENTS:
 - id: unique identifier
 - name: clear, descriptive name
 - emoji: single relevant emoji
-- description: detailed business purpose
+- description: detailed business purpose (must note batch input requirement)
 - type: 'Create' or 'Update'
 - role: 'admin' or 'member'
 - dataSource.customFunction.envVars: MUST be array (empty [] if none needed)
 - execute.code.envVars: MUST be array (empty [] if none needed)
+- ALL ACTIONS: Must process input.items[] arrays, never single-item inputs
 
 Generate exactly ${expectedActionCount} actions that solve real business problems.`;
 
@@ -1348,58 +1350,123 @@ MINDMAP EDITOR REQUIREMENTS - MUST INCLUDE:
    - Add error handling (stop, continue, or retry)
    - Steps should logically connect to create a workflow
    - DO NOT create placeholder or fake action IDs - only use real ones
+
+🔗 PARAMETER CHAINING REQUIREMENTS:
+3. inputParams: Use the advanced parameter chaining system:
+   - Static parameters: { "paramName": { "type": "static", "value": "someValue" } }
+   - Reference parameters: { "paramName": { "type": "ref", "fromActionIndex": 0, "outputKey": "resultId" } }
+   - Chain actions by referencing outputs from previous steps
+   - Use meaningful parameter names that describe the data flow
+   - Consider what each action outputs and how it can feed into the next action
    
-3. Include helpful defaults:
+4. Include helpful defaults:
    - Set condition.type to 'always' for most steps
    - Add delays of 1-5 seconds between steps
    - Use 'stop' for error handling unless continuation makes sense
 
-EXAMPLE MINDMAP STRUCTURE:
-For a "Daily Customer Report" schedule (using real action IDs):
+EXAMPLE MINDMAP STRUCTURE WITH PARAMETER CHAINING:
+For a "Daily Customer Report" schedule:
 - trigger: { type: 'cron', pattern: '0 9 * * *', timezone: 'UTC', active: false }
 - steps: [
     { 
       id: 'step_1', 
-      actionId: '[USE REAL ACTION ID FROM STEP 2 LIST]', 
+      actionId: "${(availableActions && availableActions.length > 0) ? availableActions[0].id : 'action_example_123'}", 
       name: 'Fetch Customer Data',
       delay: { duration: 0, unit: 'seconds' },
-      condition: { type: 'always' }
+      condition: { type: 'always' },
+      inputParams: {
+        "dateRange": { "type": "static", "value": "last_24_hours" },
+        "includeInactive": { "type": "static", "value": false }
+      }
     },
     { 
       id: 'step_2', 
-      actionId: '[USE REAL ACTION ID FROM STEP 2 LIST]', 
+      actionId: "${(availableActions && availableActions.length > 1) ? availableActions[1].id : (availableActions && availableActions.length > 0) ? availableActions[0].id : 'action_example_456'}", 
       name: 'Generate Report',
       delay: { duration: 2000, unit: 'seconds' }, 
       onError: { action: 'stop' },
-      condition: { type: 'always' }
+      condition: { type: 'always' },
+      inputParams: {
+        "customerData": { "type": "ref", "fromActionIndex": 0, "outputKey": "customers" },
+        "reportFormat": { "type": "static", "value": "pdf" },
+        "recipientEmail": { "type": "ref", "fromActionIndex": 0, "outputKey": "adminEmail" }
+      }
     },
     { 
       id: 'step_3', 
-      actionId: '[USE REAL ACTION ID FROM STEP 2 LIST]', 
-      name: 'Send Email Report',
+      actionId: "${(availableActions && availableActions.length > 2) ? availableActions[2].id : (availableActions && availableActions.length > 0) ? availableActions[0].id : 'action_example_789'}", 
+      name: 'Send Admin Notification',
       delay: { duration: 1000, unit: 'seconds' }, 
       onError: { action: 'continue' },
-      condition: { type: 'always' }
+      condition: { type: 'always' },
+      inputParams: {
+        "recipientEmail": { "type": "ref", "fromActionIndex": 0, "outputKey": "adminEmail" },
+        "reportUrl": { "type": "ref", "fromActionIndex": 1, "outputKey": "downloadUrl" },
+        "emailTemplate": { "type": "static", "value": "admin_report_notification" }
+      }
     }
   ]
 
-CRITICAL: Steps MUST reference actionId fields that correspond to ACTUAL existing actions generated in Step 2. Do NOT create placeholder or fake action IDs. Only use the real action IDs provided in the "AVAILABLE ACTIONS FROM STEP 2" list. If no actions are available, the schedule should have minimal steps but still use proper structure.
+🔗 CHAINING EXAMPLES:
+- Step 1 outputs: { "customers": [...], "totalCount": 45, "adminEmail": "admin@company.com" }
+- Step 2 inputs: Uses customers data from Step 1, static reportFormat, and adminEmail from Step 1
+- This creates a seamless data flow where each action builds on the previous one
+
+CRITICAL ACTION ID REQUIREMENTS:
+- ONLY use action IDs from the "AVAILABLE ACTIONS FROM STEP 2" list above
+- Each actionId must EXACTLY match one of the IDs listed (copy the exact string)
+- Do NOT create new action IDs or use placeholders
+- If you need to repeat actions in multiple steps, that's allowed
+- If no actions are available, create minimal schedules with fewer steps
+
+ACTION ID FORMAT: The action IDs look like "action_1234567890_abc123def" - use the EXACT strings from the list above.
 
 Generate exactly ${expectedScheduleCount} schedules that solve real business automation needs with complete mindmap data.`;
 
   try {
-  const result = await generateObject({
-    model,
-    schema: unifiedSchedulesSchema,
-    messages: [
-      {
-          role: 'system',
-        content: systemPrompt
+    let result;
+    
+    try {
+      result = await generateObject({
+        model,
+        schema: unifiedSchedulesSchema,
+        messages: [
+          {
+              role: 'system',
+            content: systemPrompt
+          }
+        ],
+          temperature: 0.4,
+          maxTokens: 6000
+        });
+    } catch (schemaError: any) {
+      console.error('❌ Schema validation failed, trying fallback approach:', schemaError);
+      
+      // Fallback: Use generateText and try to parse JSON manually
+      const { generateText } = await import('ai');
+      
+      const textResult = await generateText({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt + '\n\nIMPORTANT: Return your response as valid JSON that matches this structure:\n{\n  "schedules": [\n    {\n      "id": "string",\n      "name": "string", \n      "emoji": "string",\n      "description": "string",\n      "role": "admin" | "member",\n      "trigger": {\n        "type": "cron" | "interval" | "date" | "manual",\n        "pattern": "string (for cron)",\n        "active": false\n      },\n      "steps": [\n        {\n          "id": "string",\n          "actionId": "string", \n          "name": "string",\n          "delay": { "duration": 1000, "unit": "seconds" },\n          "condition": { "type": "always" }\n        }\n      ]\n    }\n  ]\n}'
+          }
+        ],
+        temperature: 0.4,
+        maxTokens: 6000
+      });
+      
+      try {
+        const parsedResult = JSON.parse(textResult.text);
+        result = { object: parsedResult };
+        console.log('✅ Successfully parsed fallback JSON response');
+      } catch (parseError) {
+        console.error('❌ Failed to parse fallback JSON response:', parseError);
+        console.error('Raw response:', textResult.text);
+        throw new Error(`Both schema validation and JSON parsing failed. Schema error: ${schemaError?.message || 'Unknown schema error'}`);
       }
-    ],
-      temperature: 0.4,
-      maxTokens: 6000
-    });
+    }
 
     if (!result?.object?.schedules) {
       console.error('❌ No schedules generated');
@@ -1408,18 +1475,54 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
 
     console.log(`✅ Generated ${result.object.schedules.length} schedules`);
 
+    // Get available action IDs for validation
+    const availableActionIds = new Set((availableActions || []).map(action => action.id));
+    console.log(`🔍 Available action IDs for validation: [${Array.from(availableActionIds).join(', ')}]`);
+
     // Validate and fix the schedules
-    const fixedSchedules = result.object.schedules.map((schedule: any, index: number) => ({
-      ...schedule,
-      id: schedule.id || `schedule_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      name: schedule.name || 'Unnamed Schedule',
-      description: schedule.description || schedule.name || 'No description provided',
-      type: schedule.type || 'query',
-      role: schedule.role || 'admin',
-      interval: schedule.interval || {
-        pattern: schedule.frequency || 'daily',
-        value: 1
-      },
+    const fixedSchedules = result.object.schedules.map((schedule: any, index: number) => {
+      // Validate and fix action IDs in steps
+      const validatedSteps = (schedule.steps || []).map((step: any, stepIndex: number) => {
+        if (step.actionId && !availableActionIds.has(step.actionId)) {
+          console.warn(`⚠️ Invalid actionId "${step.actionId}" in schedule "${schedule.name}", step "${step.name}". Available IDs: [${Array.from(availableActionIds).join(', ')}]`);
+          
+          // Try to fix by using the first available action ID
+          if (availableActionIds.size > 0) {
+            const firstAvailableActionId = Array.from(availableActionIds)[0];
+            console.log(`🔧 Fixing step "${step.name}" to use valid actionId: "${firstAvailableActionId}"`);
+            step.actionId = firstAvailableActionId;
+          } else {
+            console.warn(`❌ No available actions to fix step "${step.name}" - removing step`);
+            return null; // Will be filtered out
+          }
+        } else if (step.actionId) {
+          console.log(`✅ Valid actionId "${step.actionId}" in step "${step.name}"`);
+        }
+        
+        return {
+          ...step,
+          id: step.id || `step_${stepIndex + 1}`,
+          delay: step.delay || { duration: 1000, unit: 'seconds' },
+          condition: step.condition || { type: 'always' }
+        };
+      }).filter(Boolean); // Remove null steps
+
+      return {
+        ...schedule,
+        id: schedule.id || `schedule_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: schedule.name || 'Unnamed Schedule',
+        description: schedule.description || schedule.name || 'No description provided',
+        type: schedule.type || 'query',
+        role: schedule.role || 'admin',
+        steps: validatedSteps,
+        trigger: schedule.trigger || {
+          type: 'manual',
+          active: false
+        },
+        interval: schedule.interval || {
+          pattern: schedule.frequency || 'daily',
+          value: 1
+        },
       // dataSource: schedule.dataSource || {
       //   type: 'custom',
       //   customFunction: {
@@ -1480,7 +1583,17 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
       //   fields: {},
       //   fieldsToUpdate: undefined
       // }
-    }));
+      };
+    });
+
+    // Log validation results
+    const totalSteps = fixedSchedules.reduce((sum: number, schedule: any) => sum + (schedule.steps?.length || 0), 0);
+    const validSteps = fixedSchedules.reduce((sum: number, schedule: any) => sum + (schedule.steps?.filter((s: any) => s.actionId && availableActionIds.has(s.actionId)).length || 0), 0);
+    console.log(`📊 Schedule Validation Summary: ${validSteps}/${totalSteps} steps have valid action IDs`);
+    
+    if (validSteps < totalSteps) {
+      console.warn(`⚠️ ${totalSteps - validSteps} steps had invalid action IDs and were fixed or removed`);
+    }
 
     // Handle incremental updates by merging with existing schedules
     if (isIncrementalUpdate && existingAgent?.schedules) {
@@ -1496,10 +1609,66 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
     };
   }
 
-    console.log(`✅ Generated ${fixedSchedules.length} new schedules`);
+    // Final validation to ensure all schedules meet minimum requirements
+    const validatedSchedules = fixedSchedules.filter((schedule: any) => {
+      const isValid = schedule.name && schedule.description && schedule.trigger && 
+                     schedule.id && schedule.role;
+      
+      if (!isValid) {
+        console.warn(`⚠️ Filtering out invalid schedule: ${schedule.name || 'Unnamed'}`);
+        console.warn(`Missing fields: ${JSON.stringify({
+          name: !schedule.name,
+          description: !schedule.description, 
+          trigger: !schedule.trigger,
+          id: !schedule.id,
+          role: !schedule.role
+        })}`);
+      }
+      
+      return isValid;
+    });
+
+    console.log(`✅ Generated ${validatedSchedules.length} validated schedules (${fixedSchedules.length - validatedSchedules.length} filtered out)`);
+
+    // If no valid schedules were generated, create a minimal default schedule
+    if (validatedSchedules.length === 0) {
+      console.warn('⚠️ No valid schedules generated, creating default schedule');
+      
+      const defaultSchedule = {
+        id: `schedule_${Date.now()}_default`,
+        name: 'Daily Status Check',
+        emoji: '⏰',
+        description: 'A default daily schedule for system monitoring and basic automation',
+        type: 'query' as const,
+        role: 'admin' as const,
+        interval: {
+          pattern: '0 9 * * *', // 9 AM daily
+          active: false
+        },
+        trigger: {
+          type: 'cron' as const,
+          pattern: '0 9 * * *', // 9 AM daily
+          active: false
+        },
+        steps: availableActions && availableActions.length > 0 ? [
+          {
+            id: 'step_1',
+            actionId: availableActions[0].id,
+            name: 'Execute Daily Check',
+            delay: { duration: 1000, unit: 'seconds' as const },
+            condition: { type: 'always' as const }
+          }
+        ] : [],
+        createdAt: new Date().toISOString()
+      };
+      
+      return {
+        schedules: [defaultSchedule]
+      };
+    }
 
   return {
-    schedules: fixedSchedules
+    schedules: validatedSchedules
   };
     
   } catch (error) {
@@ -3398,6 +3567,13 @@ ${availableModels.map(model => `
 
 ${businessContext ? `BUSINESS CONTEXT: ${businessContext}` : ''}
 
+🚨 CRITICAL BATCH PROCESSING REQUIREMENTS:
+
+1. **NEVER REQUIRE SINGLE-ITEM SELECTION**: Do not create workflows that require users to manually pick one specific item to process
+2. **START WITH BATCH OPERATIONS**: Always begin with operations that scan all items or use filters to select multiple items
+3. **USE FILTERING INSTEAD OF SELECTION**: Instead of "select a customer", use "filter customers by criteria"
+4. **PROCESS ARRAYS BY DEFAULT**: Design steps that naturally work with multiple items at once
+
 Create a logical sequence of pseudo code steps that accomplish the goal. Each step should:
 
 1. **Input/Output Clarity**: Define exactly what data goes in and what comes out
@@ -3406,18 +3582,45 @@ Create a logical sequence of pseudo code steps that accomplish the goal. Each st
 4. **AI Operations**: Use AI for analysis, decision making, or data processing when needed
 5. **Business Logic**: Include validation, calculations, and business rules
 6. **Error Handling**: Consider what could go wrong and how to handle it
-7. **Realistic Workflow**: Follow a logical business process flow
+7. **Batch-First Workflow**: Always start with scanning/filtering operations, never single-item selection
 
-STEP TYPES TO USE:
-- Database find unique: Get one specific record
-- Database find many: Get multiple records with criteria
-- Database create: Create new records
-- Database update unique: Update one specific record
-- Database update many: Update multiple records
-- Database delete unique: Delete one specific record
-- Database delete many: Delete multiple records
-- call external api: Make API calls to external services (Shopify, payment processors, etc.)
-- ai analysis: Use AI for analysis, decision making, or data processing
+STEP TYPES TO USE (PRIORITIZED FOR BATCH PROCESSING):
+
+**PREFERRED (Batch-Friendly):**
+- Database find many: Get multiple records with criteria/filters (USE THIS FIRST)
+- Database update many: Update multiple records based on criteria
+- Database delete many: Delete multiple records based on criteria
+- Database create many: Create multiple new records
+- call external api: Make API calls to external services (can handle batch data)
+- ai analysis: Use AI for analysis, decision making, or data processing (can analyze arrays)
+
+**USE SPARINGLY (Only when absolutely necessary):**
+- Database find unique: Get one specific record (only if you already have a unique identifier)
+- Database update unique: Update one specific record (only if updating based on unique key)
+- Database delete unique: Delete one specific record (only if deleting by unique key)
+- Database create: Create single new record (prefer create many when possible)
+
+**BATCH PROCESSING PATTERNS:**
+
+✅ GOOD PATTERNS:
+- Step 1: "Database find many" → Find all customers matching criteria
+- Step 1: "Database find many" → Find all products with low inventory
+- Step 1: "call external api" → Fetch all orders from Shopify
+- Step 1: "Database find many" → Get all pending notifications
+
+❌ BAD PATTERNS (AVOID):
+- Step 1: "Database find unique" → Get one specific customer (requires user to pick)
+- Step 1: User selects a product from list
+- Step 1: Pick one order to process
+- Any step that requires manual single-item selection
+
+**WORKFLOW DESIGN PRINCIPLES:**
+
+1. **Start with Filters**: Begin with filtering criteria (date ranges, status, categories, etc.)
+2. **Process Collections**: Work with arrays/lists of items throughout the workflow
+3. **Batch Operations**: Update/create/delete multiple items in single operations
+4. **Smart Defaults**: Use reasonable default filters if none provided
+5. **Scalable Design**: Ensure the workflow works whether processing 1 item or 1000 items
 
 **CRITICAL FIELD TYPE RULES**:
 When defining field types, follow these EXACT patterns:
@@ -3436,16 +3639,16 @@ When defining field types, follow these EXACT patterns:
 
 **RELATIONSHIP FIELD EXAMPLES**:
 ${availableModels.map(model => `
-- To reference a ${model.name} record: type = "${model.name}"
+- To reference a ${model.name}: type = "${model.name}"
 - To reference a ${model.name} by ID: type = "${model.name}Id"
 `).join('')}
 
 **IMPORTANT**: When you see field names like "leadId", "customerId", "orderId", etc., the type should be "${availableModels.map(m => m.name).find(name => name.toLowerCase() === 'lead') ? 'LeadId' : 'ModelNameId'}", NOT "String"!
 
 For ${type} operations:
-${type === 'mutation' ? '- Focus on data validation, creation/updating, and confirmation steps' : '- Focus on finding existing records, reading data, and presenting results'}
+${type === 'mutation' ? '- Focus on batch data validation, creation/updating multiple items, and bulk confirmation steps' : '- Focus on finding multiple records with filters, reading collections of data, and presenting aggregated results'}
 
-Generate 3-7 logical steps that would accomplish this ${entityType}'s purpose. Be specific about database model relationships and connections.
+Generate 3-7 logical steps that would accomplish this ${entityType}'s purpose using BATCH PROCESSING PATTERNS. Be specific about database model relationships and connections.
 
 **EXAMPLE FIELD PATTERNS**:
 ❌ WRONG: { name: "leadId", type: "String" }
@@ -3454,7 +3657,18 @@ Generate 3-7 logical steps that would accomplish this ${entityType}'s purpose. B
 ❌ WRONG: { name: "customer", type: "String" }
 ✅ CORRECT: { name: "customer", type: "Customer" }
 
-Follow these patterns exactly to ensure proper relationship detection!`;
+**BATCH PROCESSING EXAMPLES**:
+❌ WRONG WORKFLOW:
+Step 1: Database find unique → Get single customer (requires manual selection)
+Step 2: Process that one customer
+
+✅ CORRECT WORKFLOW:
+Step 1: Database find many → Get all customers matching filter criteria (status, date range, etc.)
+Step 2: Process all found customers in batch
+
+REMEMBER: Every workflow must start with batch operations or filtering - NEVER require users to manually pick single items!
+
+`;
 
   const pseudoStepsSchema = z.object({
     steps: z.array(z.object({
@@ -3659,6 +3873,31 @@ export async function generateUIComponents(
   
   const model = await getAgentBuilderModel();
 
+  // Check if step 1 actually requires any input fields (only step 1 matters for UI)
+  const step1InputFields = pseudoSteps[0]?.inputFields || [];
+  const hasRequiredInputs = step1InputFields.length > 0;
+  
+  console.log(`📋 Step 1 input field analysis: ${step1InputFields.length} input fields found, hasRequiredInputs: ${hasRequiredInputs}`);
+
+  // If no inputs are required, generate minimal or no UI components
+  if (!hasRequiredInputs) {
+    console.log(`✅ No input fields required for "${name}" - generating minimal trigger UI`);
+    
+    return [{
+      id: `trigger_${Date.now()}`,
+      stepNumber: 1,
+      type: 'checkbox' as const,
+      label: 'Execute Action',
+      name: 'executeAction',
+      description: `Click to trigger the "${name}" action. No additional input is required.`,
+      required: false,
+      placeholder: '',
+      options: undefined,
+      validation: undefined,
+      defaultValue: 'false'
+    }];
+  }
+
   const systemPrompt = `You are a UX expert creating interactive UI components for testing business actions.
 
 ACTION DETAILS:
@@ -3680,45 +3919,85 @@ ${availableModels.map(model => `
 
 ${businessContext ? `BUSINESS CONTEXT: ${businessContext}` : ''}
 
-Create user-friendly interactive components for testing this action. **CRITICAL REQUIREMENT**: Make inputs intuitive by using dropdowns instead of text fields for IDs and relations.
+REQUIRED INPUT FIELDS TO HANDLE (STEP 1 ONLY):
+${step1InputFields.map(field => `- ${field.name} (${field.type}${field.relationModel ? ` -> ${field.relationModel}` : ''}) - Required: ${field.required || false}`).join('\n')}
 
-**MANDATORY UI RULES**:
+🚨 CRITICAL BATCH PROCESSING UI REQUIREMENTS:
 
-1. **ID Fields = Dropdowns (NOT text inputs)**:
-   - ANY field ending in "Id" (productId, customerId, userId, etc.) → MUST be "select" type
-   - ANY field with relationModel → MUST be "select" type  
-   - Generate 3-7 realistic options with proper IDs (e.g., "cust-001", "prod-abc-123")
-   - Include descriptive labels for each option
+1. **NEVER CREATE SINGLE-ITEM SELECTION UIs**: Do not create dropdowns or forms that require users to manually pick one specific item to process
+2. **DESIGN FOR FILTERING AND BATCH OPERATIONS**: Create UI components that allow users to set filters and criteria for selecting multiple items
+3. **USE FILTER INTERFACES**: Instead of "select a customer" dropdown, create "filter customers by criteria" interfaces
+4. **SUPPORT BATCH INPUT**: Design components that naturally work with multiple items at once
 
-2. **Smart Input Types**:
-   - Email fields → "email" type
-   - Phone fields → "phone" type  
-   - Dates → "date" type
-   - Numbers → "number" type with realistic ranges
-   - Long descriptions → "textarea" type
-   - Simple text → "input" type
-   - Booleans → "checkbox" type
+Create user-friendly interactive components for testing this action. **CRITICAL REQUIREMENT**: Make inputs intuitive by focusing on filtering and batch operations.
 
-3. **Realistic Mock Data for Dropdowns**:
-   - Customer IDs: "cust-001", "cust-002", etc. with names like "Acme Corp", "TechCorp Inc"
-   - Product IDs: "prod-abc-123", "prod-xyz-456" with names like "Premium Widget", "Starter Package"
-   - User IDs: "user-admin-001", "user-sales-002" with names like "John Smith (Admin)", "Sarah Wilson (Sales)"
-   - Order IDs: "ord-2024-001", "ord-2024-002" 
-   - Use business-appropriate naming that matches the domain context
+**MANDATORY BATCH-FIRST UI RULES**:
 
-4. **User Experience**:
-   - Clear, descriptive labels (not just field names)
-   - Helpful descriptions explaining what each field does
-   - Logical grouping and ordering of fields
-   - Required field indicators
+1. **FILTERING OVER SELECTION**:
+   - Instead of single-item dropdowns → Create filter criteria inputs
+   - Date range pickers for filtering by time periods
+   - Status/category dropdowns for filtering by attributes
+   - Search/text inputs for filtering by names or descriptions
+   - Number range inputs for filtering by quantities/amounts
 
-**EXAMPLES**:
-- Field "customerId" → type: "select", options: [{"value": "cust-001", "label": "Acme Corp", "description": "Enterprise customer since 2020"}]
-- Field "productId" → type: "select", options: [{"value": "prod-wid-001", "label": "Premium Widget Pro", "description": "$299.99 - Best selling widget"}]
-- Field "email" → type: "email", placeholder: "user@company.com"
-- Field "description" → type: "textarea", placeholder: "Enter detailed description..."
+2. **BATCH OPERATION INPUTS**:
+   - Multi-select components for choosing multiple categories/statuses
+   - Checkbox groups for selecting multiple criteria
+   - Date range pickers instead of single dates
+   - Quantity/limit inputs for "process top N items"
+   - "Select All" / "Select None" options where appropriate
 
-Remember: Users should NEVER have to type random IDs. Always provide them as dropdown selections with meaningful labels.`;
+3. **SMART FILTER COMPONENTS**:
+   - Status filters → "select" type with multiple=true, options like ["active", "pending", "completed"]
+   - Date filters → "date" type for start/end ranges
+   - Category filters → "select" type with multiple=true for various categories
+   - Search filters → "input" type with placeholder like "Search by name, email, etc."
+   - Amount filters → "number" type with min/max ranges
+
+4. **REALISTIC FILTER OPTIONS**:
+   - Status filters: ["active", "inactive", "pending", "completed", "draft"]
+   - Category filters: ["premium", "standard", "trial", "enterprise"]
+   - Priority filters: ["high", "medium", "low", "urgent"]
+   - Date ranges: "last 7 days", "last 30 days", "custom range"
+   - Use business-appropriate filter values that match the domain context
+
+5. **User Experience for Batch Operations**:
+   - Clear, descriptive labels explaining what will be filtered/processed
+   - Helpful descriptions explaining the batch operation scope
+   - Preview/count indicators showing how many items match filters
+   - Default filter values that make sense for the business use case
+
+**EXAMPLES OF GOOD BATCH UI DESIGN**:
+
+❌ WRONG (Single-item selection):
+- Field "customerId" → type: "select", single customer dropdown
+
+✅ CORRECT (Batch filtering):
+- Field "customerSegment" → type: "select", multiple: true, options: ["enterprise", "sme", "startup"]
+- Field "customerStatus" → type: "select", multiple: true, options: ["active", "inactive", "trial"]
+- Field "registrationDateFrom" → type: "date", label: "Registered after"
+- Field "registrationDateTo" → type: "date", label: "Registered before"
+
+❌ WRONG (Single order processing):
+- Field "orderId" → type: "select", single order dropdown
+
+✅ CORRECT (Batch order processing):
+- Field "orderStatus" → type: "select", multiple: true, options: ["pending", "confirmed", "shipped"]
+- Field "orderDateFrom" → type: "date", label: "Orders from"
+- Field "orderDateTo" → type: "date", label: "Orders until"
+- Field "minimumAmount" → type: "number", label: "Minimum order value"
+
+**UI COMPONENT TYPES FOR BATCH OPERATIONS**:
+- Filter by status/category → "select" type with multiple: true
+- Filter by date range → "date" type (create pairs for from/to)
+- Filter by amount/quantity → "number" type with range inputs
+- Search/text filters → "input" type with search placeholders
+- Boolean filters → "checkbox" type for include/exclude options
+- Long filter descriptions → "textarea" type for complex criteria
+
+REMEMBER: Every UI component should support batch operations and filtering - NEVER require users to manually pick single items!
+
+`;
 
   const uiComponentsSchema = z.object({
     components: z.array(z.object({
@@ -3876,23 +4155,42 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    - One-to-One: use single field reference
    - One-to-Many: use array on "many" side
    - Many-to-Many: use explicit join table or implicit relations
-   - **CRITICAL ONE-TO-ONE RELATION RULE:** A one-to-one relation must use unique fields on the defining side. Either add an \`@unique\` attribute to the field (e.g., \`productId String? @unique\`), or change the relation to one-to-many.
    
-   Example:
+   **🚨 CRITICAL RELATION RULE:** 
+   - ONLY ONE SIDE of a relation should have \`fields\` and \`references\` in the @relation attribute
+   - The side WITHOUT the foreign key should NOT have \`fields\` and \`references\`
+   - If both sides have \`fields\` and \`references\`, Prisma will throw a validation error
+   
+   **CORRECT Example:**
    \`\`\`
    model User {
      id       String   @id @default(cuid())
      email    String?  @unique
-     posts    Post[]
+     posts    Post[]   // NO @relation here - this is correct
    }
 
    model Post {
      id       String @id @default(cuid())
      title    String?
      authorId String?
-     author   User?   @relation(fields: [authorId], references: [id])
+     author   User?   @relation(fields: [authorId], references: [id])  // ONLY here
    }
    \`\`\`
+   
+   **WRONG Example (causes validation error):**
+   \`\`\`
+   model User {
+     posts    Post[]   @relation(fields: [id], references: [authorId])  // ❌ WRONG
+   }
+
+   model Post {
+     author   User?    @relation(fields: [authorId], references: [id])  // ❌ WRONG - both have fields/references
+   }
+   \`\`\`
+   
+   **One-to-One Relations:**
+   - Must use \`@unique\` on the foreign key field
+   - Example: \`userId String? @unique\` and \`user User? @relation(fields: [userId], references: [id])\`
 
 6. **CRITICAL FIELD REQUIREMENTS:**
    - ONLY id fields should be required (no ? suffix)
@@ -3954,7 +4252,8 @@ Return ONLY the complete Prisma schema as a single string, starting with the gen
   
   if (validation.valid) {
     console.log('✅ Prisma schema generation complete and validated');
-    return initialSchema;
+    // Use the fixed schema if available (contains relation fixes)
+    return validation.result?.fixedSchema || initialSchema;
   } else {
     console.log('❌ Initial schema validation failed, attempting to regenerate...');
     const validatedSchema = await retrySchemaGenerationWithValidation(
@@ -4159,7 +4458,8 @@ Return ONLY the complete merged Prisma schema as a single string.`;
   
   if (validation.valid) {
     console.log('✅ AI schema merging complete with operation-aware processing and validated');
-    return initialMergedSchema;
+    // Use the fixed schema if available (contains relation fixes)
+    return validation.result?.fixedSchema || initialMergedSchema;
   } else {
     console.log('❌ Initial merged schema validation failed, attempting to regenerate...');
     const validatedMergedSchema = await retrySchemaGenerationWithValidation(
@@ -4757,7 +5057,132 @@ function generateBasicPrismaSchema(models: AgentModel[]): string {
  */
 async function validatePrismaSchema(schemaString: string): Promise<{ valid: boolean; error?: string; result?: any }> {
   console.log('⚠️ Schema validation temporarily disabled due to WASM dependency issues');
-  return { valid: true, result: { validationMethod: 'disabled' } };
+  
+  // Apply basic relation fixes since full validation is disabled
+  const fixedSchema = fixBidirectionalRelations(schemaString);
+  
+  return { 
+    valid: true, 
+    result: { 
+      validationMethod: 'basic-fixes-applied',
+      fixedSchema: fixedSchema 
+    } 
+  };
+}
+
+/**
+ * Fix common bidirectional relation issues where both sides have fields/references
+ */
+function fixBidirectionalRelations(schema: string): string {
+  console.log('🔧 Applying basic relation fixes...');
+  
+  // Split schema into lines for easier processing
+  const lines = schema.split('\n');
+  const models: { [key: string]: string[] } = {};
+  let currentModel = '';
+  
+  // Parse models and their fields
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    if (line.startsWith('model ') && line.includes('{')) {
+      currentModel = line.split(' ')[1];
+      models[currentModel] = [];
+    } else if (line === '}') {
+      currentModel = '';
+    } else if (currentModel && line.includes('@relation')) {
+      models[currentModel].push(line);
+    }
+  }
+  
+  // Find bidirectional relations and fix them
+  const relationFields: { [key: string]: { model: string; field: string; line: string; hasFieldsReferences: boolean } } = {};
+  
+  // First pass: identify all relation fields
+  for (const [modelName, modelLines] of Object.entries(models)) {
+    for (const line of modelLines) {
+      const match = line.match(/(\w+)\s+(\w+)(\[\])?\s*@relation/);
+      if (match) {
+        const fieldName = match[1];
+        const relatedModel = match[2].replace('[]', '');
+        const hasFieldsReferences = line.includes('fields:') && line.includes('references:');
+        
+        const relationKey = `${modelName}-${relatedModel}`;
+        const reverseKey = `${relatedModel}-${modelName}`;
+        
+        relationFields[relationKey] = {
+          model: modelName,
+          field: fieldName,
+          line: line,
+          hasFieldsReferences
+        };
+      }
+    }
+  }
+  
+  // Second pass: fix bidirectional issues
+  const relationsToFix = new Set<string>();
+  
+  for (const [relationKey, relation] of Object.entries(relationFields)) {
+    const [model1, model2] = relationKey.split('-');
+    const reverseKey = `${model2}-${model1}`;
+    const reverseRelation = relationFields[reverseKey];
+    
+    if (reverseRelation && relation.hasFieldsReferences && reverseRelation.hasFieldsReferences) {
+      console.log(`🔧 Found bidirectional relation issue: ${relationKey} and ${reverseKey}`);
+      
+      // Keep the relation on the model that likely has the foreign key (usually the "many" side or the dependent model)
+      // Simple heuristic: if one field is an array, keep the relation on the non-array side
+      const relationIsArray = relation.line.includes('[]');
+      const reverseIsArray = reverseRelation.line.includes('[]');
+      
+      if (relationIsArray && !reverseIsArray) {
+        // Keep relation on the reverse side (non-array)
+        relationsToFix.add(`${relation.model}:${relation.field}`);
+      } else if (!relationIsArray && reverseIsArray) {
+        // Keep relation on the relation side (non-array)
+        relationsToFix.add(`${reverseRelation.model}:${reverseRelation.field}`);
+      } else {
+        // Both are same type, use alphabetical order for consistency
+        if (model1 < model2) {
+          relationsToFix.add(`${relation.model}:${relation.field}`);
+        } else {
+          relationsToFix.add(`${reverseRelation.model}:${reverseRelation.field}`);
+        }
+      }
+    }
+  }
+  
+  // Apply fixes to the schema
+  let fixedSchema = schema;
+  for (const relationToFix of relationsToFix) {
+    const [modelName, fieldName] = relationToFix.split(':');
+    
+    // Remove fields and references from this relation
+    const regex = new RegExp(
+      `(\\s+${fieldName}\\s+\\w+\\[?\\]?\\s*@relation\\()([^)]+)(\\))`,
+      'g'
+    );
+    
+    fixedSchema = fixedSchema.replace(regex, (match, prefix, content, suffix) => {
+      // Remove fields and references arguments
+      const cleanContent = content
+        .replace(/,?\s*fields:\s*\[[^\]]+\]/g, '')
+        .replace(/,?\s*references:\s*\[[^\]]+\]/g, '')
+        .replace(/^,\s*/, '') // Remove leading comma
+        .replace(/,\s*$/, '') // Remove trailing comma
+        .replace(/,\s*,/g, ','); // Remove double commas
+      
+      console.log(`🔧 Fixed relation: ${fieldName} in ${modelName}`);
+      return `${prefix}${cleanContent}${suffix}`;
+    });
+  }
+  
+  if (relationsToFix.size > 0) {
+    console.log(`✅ Applied ${relationsToFix.size} relation fixes`);
+  }
+  
+  return fixedSchema;
 }
 
 /**
