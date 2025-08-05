@@ -245,7 +245,8 @@ pids/
       "db:studio": "prisma studio",
       "db:seed": "tsx prisma/seed.ts",
       "db:init": "node scripts/init-sqlite.js",
-      "db:setup": "npm run db:init && npm run db:push",
+      "db:setup": "npm run db:init && npm run db:push-with-env",
+      "db:push-with-env": "node -e \"const path = require('path'); const dbPath = process.env.VERCEL || process.env.NODE_ENV === 'production' ? '/tmp/dev.db' : path.join(process.cwd(), 'dev.db'); const { execSync } = require('child_process'); execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit', env: { ...process.env, DATABASE_URL: 'file:' + dbPath } });\"",
       "db:reset": "prisma migrate reset --force",
       postinstall: "npm run db:generate",
       "vercel-build": "npm run db:setup && next build"
@@ -363,19 +364,23 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
     return JSON.stringify({
       buildCommand: "npm run vercel-build",
       functions: {
-        "src/pages/api/cron/*.ts": { maxDuration: 300 },
-        "src/pages/api/models/*.ts": { maxDuration: 60 }
+        "src/app/api/**/*.ts": { maxDuration: 60 },
+        "src/pages/api/**/*.ts": { maxDuration: 60 }
       },
       crons: [{
-        path: "/api/cron/scheduler",
-        schedule: "* * * * *" // Run every minute to check main app for schedules
+        path: "/api/cron/scheduler", 
+        schedule: "* * * * *"
       }],
       installCommand: "npm install",
-      build: { 
-        env: { 
-          PRISMA_GENERATE_DATAPROXY: "false",
+      build: {
+        env: {
+          DATABASE_URL: "file:/tmp/dev.db",
+          PRISMA_GENERATE_DATAPROXY: "false", 
           NODE_ENV: "production"
-        } 
+        }
+      },
+      env: {
+        DATABASE_URL: "file:/tmp/dev.db"
       }
     }, null, 2);
   }
@@ -4275,7 +4280,29 @@ function createSQLiteDB() {
     console.log('📋 SQLite database file already exists:', dbPath);
   }
   
-  // Update DATABASE_URL environment variable for this process
+  // Write DATABASE_URL to .env for subsequent commands
+  const envPath = path.join(process.cwd(), '.env');
+  const databaseUrl = \`DATABASE_URL="file:\${dbPath}"\`;
+  
+  try {
+    let envContent = '';
+    if (fs.existsSync(envPath)) {
+      envContent = fs.readFileSync(envPath, 'utf8');
+      if (envContent.includes('DATABASE_URL=')) {
+        envContent = envContent.replace(/DATABASE_URL=.*/g, databaseUrl);
+      } else {
+        envContent += \`\n\${databaseUrl}\n\`;
+      }
+    } else {
+      envContent = \`\${databaseUrl}\n\`;
+    }
+    fs.writeFileSync(envPath, envContent);
+    console.log('📝 Updated .env with DATABASE_URL for Prisma');
+  } catch (error) {
+    console.warn('⚠️ Could not update .env file:', error.message);
+  }
+  
+  // Also set for current process
   process.env.DATABASE_URL = \`file:\${dbPath}\`;
   console.log('🔗 DATABASE_URL set to:', process.env.DATABASE_URL);
 }
