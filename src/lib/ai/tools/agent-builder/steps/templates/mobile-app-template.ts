@@ -232,10 +232,10 @@ pids/
       });
     }
 
-    // Ultra-minimal scripts - prisma db push includes generate automatically
+    // ULTIMATE minimal scripts - prisma db push does EVERYTHING (creates file + schema + client)
     const baseScripts = {
-      dev: "node scripts/init-sqlite.js && prisma db push --accept-data-loss && next dev",
-      build: "node scripts/init-sqlite.js && prisma db push --accept-data-loss && next build",
+      dev: "prisma db push --accept-data-loss && next dev",
+      build: "prisma db push --accept-data-loss && next build",
       start: "next start",
       lint: "next lint"
     };
@@ -443,8 +443,7 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
       'src/contexts/AgentContext.tsx': this.generateAgentContext(),
       'src/hooks/useApi.ts': this.generateApiHook(),
       'src/hooks/useMobile.ts': this.generateMobileHook(),
-      'prisma/seed.ts': this.generateSeedFile(),
-      'scripts/init-sqlite.js': this.generateSQLiteInitScript()
+      'prisma/seed.ts': this.generateSeedFile()
     };
 
     // Add Prisma schema - use provided one (sanitized) or generate default
@@ -4228,49 +4227,7 @@ ${modelSchemas}
 `;
   }
 
-  private generateSQLiteInitScript(): string {
-    return `const fs = require('fs');
-const path = require('path');
 
-// Clean SQLite file creation - Vercel handles DATABASE_URL via config
-function createSQLiteDB() {
-  // Get database path from DATABASE_URL (set by Vercel config or local .env)
-  const databaseUrl = process.env.DATABASE_URL || 'file:./dev.db';
-  const dbPath = databaseUrl.replace('file:', '');
-  
-  console.log(\`🗄️ Creating SQLite database file at: \${dbPath}\`);
-  console.log(\`🔗 Using DATABASE_URL: \${databaseUrl}\`);
-  
-  // Create database directory if needed
-  const dbDir = path.dirname(dbPath);
-  if (!fs.existsSync(dbDir)) {
-    try {
-      fs.mkdirSync(dbDir, { recursive: true });
-      console.log('📁 Created database directory:', dbDir);
-    } catch (error) {
-      console.error('❌ Failed to create database directory:', error);
-      if (!process.env.VERCEL) process.exit(1);
-    }
-  }
-  
-  // Create empty SQLite database file if it doesn't exist
-  if (!fs.existsSync(dbPath)) {
-    try {
-      fs.writeFileSync(dbPath, '');
-      console.log('✅ SQLite database file created:', dbPath);
-    } catch (error) {
-      console.error('❌ Failed to create database file:', error);
-      if (!process.env.VERCEL) process.exit(1);
-    }
-  } else {
-    console.log('📋 SQLite database file already exists:', dbPath);
-  }
-}
-
-// Initialize the database
-createSQLiteDB();
-console.log('🗄️ SQLite database initialization complete');`;
-  }
 
   private generateGlobalStyles(): string {
     return `@tailwind base;
