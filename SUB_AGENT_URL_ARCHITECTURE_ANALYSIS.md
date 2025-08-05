@@ -200,13 +200,13 @@ Add startup checks to ensure all required environment variables are present.
 ```
 Main App → Agent Builder → Sub-Agent Deployment
 ```
-1. **Action Creation**: User defines actions in main app with parameters, steps, and UI components
-2. **Action Storage**: Actions stored in main app's agent configuration (metadata)
+1. **Action Creation**: User defines actions in main app with parameters, steps, UI components, and executable code
+2. **Action Storage**: Actions stored in main app's agent configuration (metadata + code)
 3. **Action Deployment**: Sub-agent receives action definitions during deployment
 
-#### Action Execution Flow
+#### Action Execution Flow (CORRECTED)
 ```
-Sub-Agent UI → Action Modal → Local API → Main App API → External Services
+Sub-Agent UI → Action Modal → Local API → Fetch Code from Main App → Execute Locally → External Services
 ```
 
 **Detailed Steps:**
@@ -214,14 +214,28 @@ Sub-Agent UI → Action Modal → Local API → Main App API → External Servic
 2. **Modal Display**: `ActionExecutionModal` shows action parameters and description
 3. **Parameter Input**: User fills in required parameters via generated form
 4. **Local API Call**: Frontend calls `/api/actions/trigger-action/[actionId]`
-5. **Main App Execution**: Sub-agent API calls `${MAIN_APP_URL}/api/agent/execute-action`
-6. **External Service**: Main app executes action with credentials and parameters
-7. **Result Display**: Results shown in modal with success/error status
+5. **Code Fetch**: Sub-agent API calls `${MAIN_APP_URL}/api/agent/actions` to get action code and configuration
+6. **Credential Fetch**: Sub-agent API calls `${MAIN_APP_URL}/api/agent-credentials-public` to get API keys
+7. **Local Execution**: Sub-agent executes the action code locally with credentials and parameters
+8. **External Service**: Action code calls external APIs (Shopify, Stripe, etc.) directly from sub-agent
+9. **Result Display**: Results shown in modal with success/error status
+10. **Logging**: Execution details logged to SQLite database
 
-#### Action API Endpoints
-- **Configuration**: `/api/agent/actions` → `${MAIN_APP_URL}/api/agent-credentials-public`
-- **Execution**: `/api/actions/trigger-action/[actionId]` → `${MAIN_APP_URL}/api/agent/execute-action`
-- **Dynamic**: `/api/actions/[actionName]` → `${MAIN_APP_URL}/api/agent/execute-action`
+#### Action API Endpoints (CORRECTED)
+- **Configuration & Code**: `/api/agent/actions` → `${MAIN_APP_URL}/api/agent/actions` (get action definitions + code)
+- **Credentials**: `/api/agent/credentials` → `${MAIN_APP_URL}/api/agent-credentials-public` (get API keys)
+- **Local Execution**: `/api/actions/trigger-action/[actionId]` → Execute locally with fetched code
+- **Dynamic Execution**: `/api/actions/[actionName]` → Execute locally with fetched code
+
+#### UI ↔ API Interaction for Actions
+```
+Actions Page (/actions):
+├── Load: GET /api/agent/actions → Display action cards
+├── Click Action → Open ActionExecutionModal
+├── Fill Parameters → Show dynamic form based on action.uiComponents
+├── Execute → POST /api/actions/trigger-action/[actionId] with parameters
+└── Results → Display success/error + execution logs
+```
 
 ### ⏰ Schedules System
 
@@ -229,40 +243,124 @@ Sub-Agent UI → Action Modal → Local API → Main App API → External Servic
 ```
 Main App → Agent Builder → Sub-Agent Deployment → Vercel Cron
 ```
-1. **Schedule Creation**: User defines schedules with cron patterns and action sequences
-2. **Schedule Storage**: Schedules stored in main app's agent configuration
-3. **Cron Registration**: Vercel cron job registered to call `/api/cron/scheduler`
+1. **Schedule Creation**: User defines schedules with cron patterns and action chain sequences
+2. **Schedule Storage**: Schedules stored in main app's agent configuration (action chains)
+3. **Cron Registration**: Vercel cron job registered to call `/api/cron/scheduler` every minute
 
-#### Schedule Execution Flow
+#### Schedule Execution Flow (CORRECTED)
 ```
-Vercel Cron → Cron API → Self-Call → Main App API → Action Execution
+Vercel Cron → Cron API → Fetch Schedules → Check Timing → Fetch Action Code → Execute Action Chain Locally → Log Results
 ```
 
 **Detailed Steps:**
 1. **Cron Trigger**: Vercel calls `/api/cron/scheduler` every minute
-2. **Schedule Fetch**: Cron API calls `${APP_URL}/api/agent/schedules` (self-call)
-3. **Schedule Filter**: Determines which schedules should run based on cron patterns
-4. **Credential Fetch**: Gets API keys/tokens from `${MAIN_APP_URL}/api/agent-credentials-public`
-5. **Action Execution**: For each schedule step, calls `${MAIN_APP_URL}/api/agent/execute-action`
-6. **Result Logging**: Logs execution results and timestamps
+2. **Schedule Fetch**: Cron API calls `${MAIN_APP_URL}/api/agent/schedules` to get all schedule definitions
+3. **Previous Run Check**: For each schedule, check SQLite `schedule_executions` table for last run time
+4. **Timing Evaluation**: Compare current time vs last run + cron pattern to determine if execution is needed
+5. **Schedule Filter**: Only process schedules that should run now based on timing logic
+6. **Action Code Fetch**: For each action in the schedule chain, fetch code from `${MAIN_APP_URL}/api/agent/actions`
+7. **Credential Fetch**: Get API keys/tokens from `${MAIN_APP_URL}/api/agent-credentials-public`
+8. **Local Action Chain Execution**: Execute each action in sequence locally with parameters and delays
+9. **Step Logging**: Log each action execution result to SQLite `action_execution_logs` table
+10. **Schedule Completion**: Log overall schedule completion to SQLite `schedule_executions` table
+11. **Error Handling**: Stop chain execution if action fails (configurable per action)
 
-#### Schedule API Endpoints
-- **Configuration**: `/api/agent/schedules` → `${MAIN_APP_URL}/api/agent-credentials-public`
-- **Cron Execution**: `/api/cron/scheduler` → `${APP_URL}/api/agent/schedules` (self-call)
-- **Direct Trigger**: `/api/schedules/trigger-schedule/[scheduleId]` → `${MAIN_APP_URL}/api/agent/execute-schedule`
+#### Schedule Timing Logic (CRITICAL)
+```javascript
+// Pseudo-code for schedule timing check
+function shouldScheduleRun(schedule, lastRunTime) {
+  const now = new Date();
+  const cronPattern = schedule.interval.pattern; // e.g., "*/5 * * * *" (every 5 minutes)
+  
+  if (!lastRunTime) {
+    return true; // First run
+  }
+  
+  const nextRunTime = calculateNextRun(lastRunTime, cronPattern);
+  return now >= nextRunTime;
+}
 
-### 📊 Models System (CRUD Operations)
+function calculateNextRun(lastRun, cronPattern) {
+  // Parse cron pattern and calculate next execution time
+  // Examples:
+  // "* * * * *" = every minute
+  // "*/5 * * * *" = every 5 minutes  
+  // "0 * * * *" = every hour
+  // "0 9 * * *" = every day at 9 AM
+}
+```
+
+#### Schedule Database Schema (Required)
+```sql
+-- Store schedule execution history
+CREATE TABLE schedule_executions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  schedule_id TEXT NOT NULL,
+  schedule_name TEXT NOT NULL,
+  started_at DATETIME NOT NULL,
+  completed_at DATETIME,
+  status TEXT NOT NULL, -- 'running', 'completed', 'failed'
+  total_actions INTEGER NOT NULL,
+  successful_actions INTEGER NOT NULL,
+  failed_actions INTEGER NOT NULL,
+  error_message TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Store individual action execution logs
+CREATE TABLE action_execution_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  schedule_execution_id INTEGER,
+  action_id TEXT NOT NULL,
+  action_name TEXT NOT NULL,
+  step_number INTEGER NOT NULL,
+  input_parameters TEXT, -- JSON
+  started_at DATETIME NOT NULL,
+  completed_at DATETIME,
+  status TEXT NOT NULL, -- 'running', 'completed', 'failed'
+  result_data TEXT, -- JSON
+  error_message TEXT,
+  execution_time_ms INTEGER,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (schedule_execution_id) REFERENCES schedule_executions(id)
+);
+```
+
+#### Schedule API Endpoints (CORRECTED)
+- **Schedule Definitions**: Cron calls `${MAIN_APP_URL}/api/agent/schedules` (get schedule configurations)
+- **Action Code**: Cron calls `${MAIN_APP_URL}/api/agent/actions` (get action code for each step)
+- **Credentials**: Cron calls `${MAIN_APP_URL}/api/agent-credentials-public` (get API keys)
+- **Execution History**: Local SQLite queries to `schedule_executions` and `action_execution_logs`
+- **Cron Endpoint**: `/api/cron/scheduler` → Execute locally with fetched schedules and action code
+- **Manual Trigger**: `/api/schedules/trigger-schedule/[scheduleId]` → Execute specific schedule manually
+
+#### UI ↔ API Interaction for Schedules
+```
+Schedules Page (/schedules):
+├── Load: GET /api/agent/schedules → Display schedule cards with next run times
+├── Manual Trigger: POST /api/schedules/trigger-schedule/[scheduleId]
+├── View Logs: GET /api/schedules/[scheduleId]/executions → Show execution history
+└── Real-time Updates: WebSocket or polling for live execution status
+
+Schedule Execution Logs:
+├── Overall Schedule: schedule_executions table
+├── Individual Actions: action_execution_logs table  
+├── Timing Data: start/end times, duration, success/failure
+└── Error Details: full error messages and stack traces
+```
+
+### 📊 Models System (CRUD Operations) ✅ CORRECT
 
 #### Model Definition Flow
 ```
 Main App → Agent Builder → Sub-Agent → Prisma Schema → SQLite Database
 ```
-1. **Model Definition**: User defines data models with fields and relationships
-2. **Schema Generation**: Prisma schema generated with model definitions
-3. **Database Creation**: SQLite database created with `prisma db push`
+1. **Model Definition**: User defines data models with fields and relationships in main app
+2. **Schema Generation**: Prisma schema generated with model definitions during deployment
+3. **Database Creation**: SQLite database created with `prisma db push` during build
 4. **Client Generation**: Prisma client generated for type-safe database access
 
-#### Model CRUD Flow
+#### Model CRUD Flow (LOCAL OPERATIONS ONLY)
 ```
 Sub-Agent UI → Local API → Prisma Client → SQLite Database
 ```
@@ -272,58 +370,98 @@ Sub-Agent UI → Local API → Prisma Client → SQLite Database
 ##### Read Operations (GET):
 1. **UI Request**: User visits `/models/[modelName]` page
 2. **API Call**: Frontend calls `/api/models/[modelName]` with pagination/search params
-3. **Database Query**: API uses `prisma[modelName].findMany()` with filters
+3. **Database Query**: API uses `prisma[modelName].findMany()` with filters directly on local SQLite
 4. **Result Display**: Records displayed in cards with field values
 
 ##### Create Operations (POST):
 1. **Form Submission**: User submits create form on model detail page
-2. **API Call**: Frontend calls `/api/models/[modelName]` with POST method
-3. **Database Insert**: API uses `prisma[modelName].create()` with form data
-4. **Result Update**: New record added to UI list
+2. **API Call**: Frontend calls `/api/models/[modelName]` with POST method and data
+3. **Database Insert**: API uses `prisma[modelName].create()` with form data directly to local SQLite
+4. **Result Update**: New record added to UI list immediately
 
 ##### Update Operations (PUT):
-1. **Edit Trigger**: User clicks edit on record card
-2. **API Call**: Frontend calls `/api/models/[modelName]/[id]` with PUT method
-3. **Database Update**: API uses `prisma[modelName].update()` with new data
-4. **Result Refresh**: Updated record shown in UI
+1. **Edit Trigger**: User clicks edit on record card  
+2. **API Call**: Frontend calls `/api/models/[modelName]/[id]` with PUT method and updated data
+3. **Database Update**: API uses `prisma[modelName].update()` with new data directly to local SQLite
+4. **Result Refresh**: Updated record shown in UI immediately
 
 ##### Delete Operations (DELETE):
 1. **Delete Trigger**: User clicks delete button
 2. **API Call**: Frontend calls `/api/models/[modelName]/[id]` with DELETE method
-3. **Database Delete**: API uses `prisma[modelName].delete()` 
-4. **UI Update**: Record removed from display
+3. **Database Delete**: API uses `prisma[modelName].delete()` directly from local SQLite
+4. **UI Update**: Record removed from display immediately
 
-#### Model API Endpoints
-- **Configuration**: `/api/agent/models` → `${MAIN_APP_URL}/api/agent-credentials-public`
-- **CRUD Operations**: `/api/models/[modelName]` → Direct SQLite via Prisma
-- **Individual Records**: `/api/models/[modelName]/[id]` → Direct SQLite via Prisma
+#### Model API Endpoints (LOCAL ONLY)
+- **Model List Configuration**: `/api/agent/models` → `${MAIN_APP_URL}/api/agent-credentials-public` (get model definitions for UI)
+- **CRUD Operations**: `/api/models/[modelName]` → **Direct SQLite via Prisma** (no main app calls)
+- **Individual Records**: `/api/models/[modelName]/[id]` → **Direct SQLite via Prisma** (no main app calls)
 
-### 💬 Chat System
+#### UI ↔ API Interaction for Models
+```
+Models Page (/models):
+├── Load: GET /api/agent/models → Get model definitions from main app for UI display
+├── Model List: Display cards for each model with record counts
+├── Click Model → Navigate to /models/[modelName]
+
+Model Detail Page (/models/[modelName]):
+├── Load Records: GET /api/models/[modelName]?page=1&limit=10 → Direct SQLite query
+├── Search: GET /api/models/[modelName]?search=term → Direct SQLite query with filters
+├── Create Record: POST /api/models/[modelName] with JSON body → Direct SQLite insert
+├── Update Record: PUT /api/models/[modelName]/[id] with JSON body → Direct SQLite update  
+├── Delete Record: DELETE /api/models/[modelName]/[id] → Direct SQLite delete
+└── Real-time Updates: Immediate UI refresh after each operation
+```
+
+**IMPORTANT**: Models system is fully autonomous and does NOT call main app for data operations - only for initial configuration.
+
+### 💬 Chat System ✅ MOSTLY CORRECT
 
 #### Chat Configuration Flow
 ```
 Main App → API Keys → Sub-Agent → AI Model Selection
 ```
 1. **API Key Fetch**: Sub-agent gets OpenAI/Anthropic keys from main app
-2. **Model Selection**: Chooses model based on availability and configuration
+2. **Model Selection**: Chooses model based on availability and configuration  
 3. **Context Setup**: Loads agent configuration, models, actions, and schedules as context
 
 #### Chat Execution Flow
 ```
-Sub-Agent UI → Chat API → AI Provider → Streaming Response
+Sub-Agent UI → Chat API → Fetch Keys → AI Provider → Streaming Response
 ```
 
 **Detailed Steps:**
 1. **Message Input**: User types message in chat interface
-2. **Context Building**: API builds context with agent metadata and capabilities
-3. **AI Provider Call**: Calls OpenAI/Anthropic with streaming enabled
-4. **Response Streaming**: AI response streamed back to frontend in real-time
-5. **Message Storage**: Messages stored in local state (not persisted)
+2. **API Key Fetch**: Chat API calls `${MAIN_APP_URL}/api/user/api-keys` to get OpenAI/Anthropic keys
+3. **Agent Context Fetch**: Chat API calls `${MAIN_APP_URL}/api/agent-credentials-public` for agent metadata
+4. **Context Building**: API builds context with agent name, description, models, actions, and schedules
+5. **AI Provider Call**: Calls OpenAI/Anthropic with streaming enabled and full context
+6. **Response Streaming**: AI response streamed back to frontend in real-time
+7. **Message Storage**: Messages stored in local state (⚠️ NOT persisted - lost on refresh)
 
-#### Chat API Endpoints
-- **Chat Streaming**: `/api/chat` → OpenAI/Anthropic APIs
-- **Credential Fetch**: `${MAIN_APP_URL}/api/user/api-keys` for AI API keys
+#### Chat API Endpoints ✅ CORRECT
+- **Chat Streaming**: `/api/chat` → Fetch keys → OpenAI/Anthropic APIs
+- **API Key Fetch**: `${MAIN_APP_URL}/api/user/api-keys` for AI API keys
 - **Agent Context**: `${MAIN_APP_URL}/api/agent-credentials-public` for agent metadata
+
+#### UI ↔ API Interaction for Chat
+```
+Chat Page (/chat):
+├── Load: Initialize useChat hook with /api/chat endpoint
+├── Message Input: Type message and press enter
+├── Send: POST /api/chat with message history
+├── Stream Response: Receive AI response in real-time chunks
+├── Display: Show conversation history in chat bubbles
+└── ⚠️ Issue: Messages lost on page refresh (not persisted)
+
+Chat Context Built:
+├── Agent Name: From main app configuration
+├── Agent Description: From main app configuration  
+├── Available Models: List of data models and their purposes
+├── Available Actions: List of actions and their capabilities
+└── Available Schedules: List of scheduled tasks and their functions
+```
+
+**IMPROVEMENT NEEDED**: Chat messages should be persisted to SQLite for conversation history.
 
 ### 🔄 Cross-Component Integration
 
@@ -345,32 +483,55 @@ Deployment → Environment Variables → API Headers → Main App Validation
 3. **Headers**: Passed in Authorization, X-Agent-Token, X-Document-ID
 4. **Validation**: Main app validates tokens and returns appropriate data
 
-## Current Issues to Fix
+## Critical Issues to Fix
 
-### 1. Inconsistent Self-Referencing
-**Issue**: Some APIs use hardcoded localhost URLs  
+### 1. ❌ CRITICAL: Wrong Action Execution Pattern
+**Current Issue**: Actions call main app for execution  
+**Should Be**: Fetch action code from main app, execute locally in sub-agent  
+**Impact**: Violates the autonomous sub-agent architecture  
+**Solution**: Implement local action code execution with fetched credentials
+
+### 2. ❌ CRITICAL: Missing Schedule Timing Logic  
+**Current Issue**: No proper cron timing evaluation logic  
+**Should Be**: Check last run time vs cron pattern to determine if schedule should run  
+**Impact**: Schedules may run too frequently or not at all  
+**Solution**: Implement `shouldScheduleRun()` function with cron pattern parsing
+
+### 3. ❌ CRITICAL: Missing Schedule Execution Logging
+**Current Issue**: No database tables for tracking schedule and action execution history  
+**Should Be**: Complete logging of all executions with timing and results  
+**Impact**: No visibility into what schedules ran and their outcomes  
+**Solution**: Add `schedule_executions` and `action_execution_logs` tables
+
+### 4. ❌ CRITICAL: Inconsistent Self-Referencing URLs
+**Current Issue**: Cron scheduler uses hardcoded `localhost:3000`  
+**Should Be**: Dynamic URL resolution using `VERCEL_URL` or `NEXT_PUBLIC_APP_URL`  
 **Impact**: Breaks in production Vercel environment  
-**Solution**: Use dynamic URL resolution
+**Solution**: Use `getAppUrl()` helper function
 
-### 2. Missing Error Handling  
-**Issue**: No fallback when main app is unreachable  
-**Impact**: Sub-agent becomes completely non-functional  
-**Solution**: Graceful degradation with cached data
+### 5. ⚠️ Missing Action Code Storage/Execution
+**Current Issue**: No mechanism to fetch and execute action code locally  
+**Should Be**: Fetch action code from main app and execute with local credentials  
+**Impact**: Actions cannot run autonomously in sub-agent  
+**Solution**: Implement action code fetching and local execution engine
 
-### 3. Credential Refresh
-**Issue**: No automatic token refresh mechanism  
-**Impact**: Authentication failures over time  
-**Solution**: Implement token refresh logic
+### 6. ⚠️ Chat Messages Not Persisted
+**Current Issue**: Chat conversations lost on page refresh  
+**Should Be**: Store chat history in SQLite database  
+**Impact**: Poor user experience, conversations not saved  
+**Solution**: Add chat persistence with message history tables
 
-### 4. Chat Persistence
-**Issue**: Chat messages not persisted to database
-**Impact**: Conversations lost on page refresh
-**Solution**: Store chat history in SQLite
+### 7. ⚠️ Missing Real-time Schedule Status
+**Current Issue**: No real-time sync between cron executions and UI  
+**Should Be**: Live updates of schedule execution status  
+**Impact**: Users don't see execution results immediately  
+**Solution**: Add WebSocket or polling for live execution updates
 
-### 5. Real-time Updates
-**Issue**: No real-time sync between cron executions and UI
-**Impact**: Users don't see schedule execution results immediately
-**Solution**: Add WebSocket or polling for live updates
+### 8. ⚠️ No Error Fallback Mechanisms
+**Current Issue**: Sub-agent fails completely when main app is unreachable  
+**Should Be**: Graceful degradation with cached data  
+**Impact**: Sub-agent becomes non-functional during main app outages  
+**Solution**: Implement caching and offline operation modes
 
 ## Recommended Fixes
 
@@ -402,9 +563,57 @@ Store chat history, execution logs, and schedule results in SQLite for better us
 
 ## Summary
 
-The sub-agent app architecture correctly separates concerns between:
-- **Main App APIs**: For orchestration, configuration, and execution
-- **Local APIs**: For CRUD operations and internal management
-- **Self-Reference APIs**: For internal communication (needs fixing)
+### Corrected Sub-Agent Architecture Understanding
 
-Each component (Actions, Schedules, Models, Chat) has a clear data flow pattern, but some issues need addressing for production reliability. The main issue is inconsistent URL resolution for self-referencing calls, which breaks the app in production environments. 
+The sub-agent app should operate with **maximum autonomy** while fetching configuration and credentials from the main app:
+
+#### ✅ **Correct Architecture Patterns:**
+
+**Models System**: ✅ **Fully Local**
+- Configuration from main app → Local CRUD operations → Direct SQLite via Prisma
+- No main app calls for data operations
+
+**Actions System**: ❌ **Needs Major Correction**  
+- **Current**: Sub-agent calls main app to execute actions
+- **Should Be**: Fetch action code + credentials from main app → Execute locally in sub-agent
+- **Benefit**: Autonomous execution, reduced latency, better reliability
+
+**Schedules System**: ❌ **Needs Major Correction**
+- **Current**: Basic cron without proper timing logic or logging
+- **Should Be**: Proper cron timing evaluation + action chain execution + comprehensive logging
+- **Critical**: Must check last run time vs cron pattern to prevent over-execution
+
+**Chat System**: ✅ **Mostly Correct**
+- Fetch API keys from main app → Execute AI calls locally → Stream responses
+- **Minor Issue**: Messages not persisted to SQLite
+
+#### 🎯 **Key Architectural Principles:**
+
+1. **Fetch Configuration Once**: Get definitions, code, and credentials from main app
+2. **Execute Everything Locally**: Run actions, schedules, and chat in sub-agent  
+3. **Store Results Locally**: Use SQLite for all execution logs and data
+4. **Minimal Main App Dependency**: Only for configuration and credentials, not execution
+
+#### ❌ **Critical Issues Identified:**
+
+1. **Actions execute remotely instead of locally** (violates autonomy)
+2. **Schedule timing logic missing** (may run incorrectly)  
+3. **No execution logging system** (no visibility into what happened)
+4. **Hardcoded URLs break production deployment**
+5. **Missing action code fetching and execution engine**
+
+#### 🚀 **Implementation Priority:**
+
+**Phase 1 (Critical)**:
+1. Fix action execution to be local with fetched code
+2. Implement proper schedule timing logic with database tracking
+3. Add schedule and action execution logging tables
+4. Fix URL resolution for production deployment
+
+**Phase 2 (Important)**:
+1. Add chat message persistence  
+2. Implement real-time schedule status updates
+3. Add error fallback mechanisms
+4. Optimize performance and reliability
+
+The corrected architecture will make sub-agents truly autonomous, reliable, and production-ready while maintaining seamless integration with the main orchestrator app. 
