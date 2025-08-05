@@ -1346,7 +1346,7 @@ MINDMAP EDITOR REQUIREMENTS - MUST INCLUDE:
 2. steps: Create 2-4 action chain steps that reference ACTUAL existing actions:
    - Each step MUST reference a real actionId from the "AVAILABLE ACTIONS FROM STEP 2" list above
    - Each step should have a unique ID (step_1, step_2, etc.)
-   - Include meaningful delays between steps (1-5 seconds: 1000-5000 milliseconds)
+   - Include meaningful delays between steps using allowed units: 'seconds', 'minutes', or 'hours' (e.g., 1-5 seconds)
    - Add error handling (stop, continue, or retry)
    - Steps should logically connect to create a workflow
    - DO NOT create placeholder or fake action IDs - only use real ones
@@ -1361,8 +1361,9 @@ MINDMAP EDITOR REQUIREMENTS - MUST INCLUDE:
    
 4. Include helpful defaults:
    - Set condition.type to 'always' for most steps
-   - Add delays of 1-5 seconds between steps
+   - Add delays using ONLY these allowed units: 'seconds', 'minutes', or 'hours' (1-5 seconds recommended)
    - Use 'stop' for error handling unless continuation makes sense
+   - IMPORTANT: delay.unit must be one of: 'seconds', 'minutes', 'hours' (NOT milliseconds)
 
 EXAMPLE MINDMAP STRUCTURE WITH PARAMETER CHAINING:
 For a "Daily Customer Report" schedule:
@@ -1383,7 +1384,7 @@ For a "Daily Customer Report" schedule:
       id: 'step_2', 
       actionId: "${(availableActions && availableActions.length > 1) ? availableActions[1].id : (availableActions && availableActions.length > 0) ? availableActions[0].id : 'action_example_456'}", 
       name: 'Generate Report',
-      delay: { duration: 2000, unit: 'seconds' }, 
+      delay: { duration: 2, unit: 'seconds' }, 
       onError: { action: 'stop' },
       condition: { type: 'always' },
       inputParams: {
@@ -1396,7 +1397,7 @@ For a "Daily Customer Report" schedule:
       id: 'step_3', 
       actionId: "${(availableActions && availableActions.length > 2) ? availableActions[2].id : (availableActions && availableActions.length > 0) ? availableActions[0].id : 'action_example_789'}", 
       name: 'Send Admin Notification',
-      delay: { duration: 1000, unit: 'seconds' }, 
+      delay: { duration: 1, unit: 'seconds' }, 
       onError: { action: 'continue' },
       condition: { type: 'always' },
       inputParams: {

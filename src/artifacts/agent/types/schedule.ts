@@ -58,7 +58,7 @@ export interface ActionChainStep {
   name: string; // Display name for this step
   description?: string;
   delay?: {
-    duration: number; // in milliseconds
+    duration: number; // duration in the specified unit
     unit: 'seconds' | 'minutes' | 'hours';
   };
   // Updated to use ParamValue system for parameter chaining

@@ -448,8 +448,8 @@ export const unifiedSchedulesSchema = z.object({
       name: z.string().describe('Display name for this step'),
       description: z.string().optional().describe('Description of what this step does'),
       delay: z.object({
-        duration: z.number().describe('Delay duration in milliseconds'),
-        unit: z.enum(['seconds', 'minutes', 'hours']).describe('Unit for display purposes')
+        duration: z.number().describe('Delay duration in the specified unit (e.g., 30 for 30 seconds)'),
+        unit: z.enum(['seconds', 'minutes', 'hours']).describe('Time unit for the delay - MUST be one of: seconds, minutes, hours')
       }).optional().describe('Delay before executing this step'),
       inputParams: z.record(z.union([
         z.object({
@@ -469,7 +469,7 @@ export const unifiedSchedulesSchema = z.object({
       onError: z.object({
         action: z.enum(['stop', 'continue', 'retry']).describe('What to do if this step fails'),
         retryCount: z.number().optional().describe('Number of retries if action is retry'),
-        retryDelay: z.number().optional().describe('Delay between retries in milliseconds')
+        retryDelay: z.number().optional().describe('Delay between retries in seconds')
       }).optional().describe('Error handling configuration for this step')
     })).describe('Chain of action steps to execute in order'),
     
