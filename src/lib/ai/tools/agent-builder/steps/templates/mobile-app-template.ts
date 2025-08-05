@@ -232,24 +232,12 @@ pids/
       });
     }
 
-    // Environment-aware scripts with improved SQLite support
+    // Ultra-minimal scripts - prisma db push includes generate automatically
     const baseScripts = {
-      dev: "npm run db:setup && next dev",
-      build: "npm run db:setup && next build",
+      dev: "node scripts/init-sqlite.js && prisma db push --accept-data-loss && next dev",
+      build: "node scripts/init-sqlite.js && prisma db push --accept-data-loss && next build",
       start: "next start",
-      lint: "next lint",
-      "db:generate": "prisma generate",
-      "db:push": "prisma db push --accept-data-loss",
-      "db:deploy": "prisma migrate deploy",
-      "db:migrate": "prisma migrate dev",
-      "db:studio": "prisma studio",
-      "db:seed": "tsx prisma/seed.ts",
-      "db:init": "node scripts/init-sqlite.js",
-      "db:setup": "npm run db:init && npm run db:push-with-env",
-      "db:push-with-env": "node -e \"const path = require('path'); const dbPath = process.env.VERCEL || process.env.NODE_ENV === 'production' ? '/tmp/dev.db' : path.join(process.cwd(), 'dev.db'); const { execSync } = require('child_process'); execSync('npx prisma db push --accept-data-loss', { stdio: 'inherit', env: { ...process.env, DATABASE_URL: 'file:' + dbPath } });\"",
-      "db:reset": "prisma migrate reset --force",
-      postinstall: "npm run db:generate",
-      "vercel-build": "npm run db:setup && next build"
+      lint: "next lint"
     };
 
     return JSON.stringify({
@@ -362,7 +350,6 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
 
   private generateVercelConfig(): string {
     return JSON.stringify({
-      buildCommand: "npm run vercel-build",
       functions: {
         "src/app/api/**/*.ts": { maxDuration: 60 },
         "src/pages/api/**/*.ts": { maxDuration: 60 }
@@ -371,7 +358,6 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
         path: "/api/cron/scheduler", 
         schedule: "* * * * *"
       }],
-      installCommand: "npm install",
       build: {
         env: {
           DATABASE_URL: "file:/tmp/dev.db",
@@ -4246,16 +4232,16 @@ ${modelSchemas}
     return `const fs = require('fs');
 const path = require('path');
 
-// Simple SQLite initialization following Next.js + Prisma tutorial pattern
+// Clean SQLite file creation - Vercel handles DATABASE_URL via config
 function createSQLiteDB() {
-  // Determine database path based on environment
-  const dbPath = process.env.VERCEL || process.env.NODE_ENV === 'production' 
-    ? '/tmp/dev.db'  // Vercel serverless environment
-    : path.join(process.cwd(), 'dev.db');  // Local development
+  // Get database path from DATABASE_URL (set by Vercel config or local .env)
+  const databaseUrl = process.env.DATABASE_URL || 'file:./dev.db';
+  const dbPath = databaseUrl.replace('file:', '');
   
-  console.log(\`🗄️ Initializing SQLite database at: \${dbPath}\`);
+  console.log(\`🗄️ Creating SQLite database file at: \${dbPath}\`);
+  console.log(\`🔗 Using DATABASE_URL: \${databaseUrl}\`);
   
-  // Create database directory if needed (mainly for Vercel /tmp)
+  // Create database directory if needed
   const dbDir = path.dirname(dbPath);
   if (!fs.existsSync(dbDir)) {
     try {
@@ -4279,32 +4265,6 @@ function createSQLiteDB() {
   } else {
     console.log('📋 SQLite database file already exists:', dbPath);
   }
-  
-  // Write DATABASE_URL to .env for subsequent commands
-  const envPath = path.join(process.cwd(), '.env');
-  const databaseUrl = \`DATABASE_URL="file:\${dbPath}"\`;
-  
-  try {
-    let envContent = '';
-    if (fs.existsSync(envPath)) {
-      envContent = fs.readFileSync(envPath, 'utf8');
-      if (envContent.includes('DATABASE_URL=')) {
-        envContent = envContent.replace(/DATABASE_URL=.*/g, databaseUrl);
-      } else {
-        envContent += \`\n\${databaseUrl}\n\`;
-      }
-    } else {
-      envContent = \`\${databaseUrl}\n\`;
-    }
-    fs.writeFileSync(envPath, envContent);
-    console.log('📝 Updated .env with DATABASE_URL for Prisma');
-  } catch (error) {
-    console.warn('⚠️ Could not update .env file:', error.message);
-  }
-  
-  // Also set for current process
-  process.env.DATABASE_URL = \`file:\${dbPath}\`;
-  console.log('🔗 DATABASE_URL set to:', process.env.DATABASE_URL);
 }
 
 // Initialize the database
