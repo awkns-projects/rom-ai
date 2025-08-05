@@ -245,9 +245,9 @@ pids/
       "db:studio": "prisma studio",
       "db:seed": "tsx prisma/seed.ts",
       "db:init": "node scripts/init-sqlite.js",
-      "db:setup": "npm run db:init && npm run db:generate && npm run db:push",
+      "db:setup": "npm run db:init && npm run db:push",
       "db:reset": "prisma migrate reset --force",
-      postinstall: "npm run db:init && npm run db:generate",
+      postinstall: "npm run db:generate",
       "vercel-build": "npm run db:setup && next build"
     };
 
@@ -374,14 +374,8 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
       build: { 
         env: { 
           PRISMA_GENERATE_DATAPROXY: "false",
-          DATABASE_URL: "file:/tmp/dev.db",
           NODE_ENV: "production"
         } 
-      },
-      runtime: { 
-        env: {
-          DATABASE_URL: "file:/tmp/dev.db"
-        }
       }
     }, null, 2);
   }
@@ -391,14 +385,15 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
 
 
   private generatePages(): Record<string, string> {
+    // Use App Router structure following Next.js + Prisma tutorial pattern
     return {
-      'src/pages/_app.tsx': this.generateAppPage(),
-      'src/pages/index.tsx': this.generateHomePage(),
-      'src/pages/models/index.tsx': this.generateModelsListPage(),
-      'src/pages/models/[modelName].tsx': this.generateModelDetailPage(),
-      'src/pages/actions/index.tsx': this.generateActionsPage(),
-      'src/pages/schedules/index.tsx': this.generateSchedulesPage(),
-      'src/pages/chat/index.tsx': this.generateChatPage()
+      'src/app/layout.tsx': this.generateLayoutComponent(),
+      'src/app/page.tsx': this.generateHomePage(),
+      'src/app/models/page.tsx': this.generateModelsListPage(),
+      'src/app/models/[modelName]/page.tsx': this.generateModelDetailPage(),
+      'src/app/actions/page.tsx': this.generateActionsPage(),
+      'src/app/schedules/page.tsx': this.generateSchedulesPage(),
+      'src/app/chat/page.tsx': this.generateChatPage()
     };
   }
 
@@ -463,7 +458,7 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
 
     // Add Prisma schema - use provided one (sanitized) or generate default
     if (this.options.prismaSchema) {
-      files['prisma/schema.prisma'] = this.sanitizePrismaSchema(this.options.prismaSchema);
+      files['prisma/schema.prisma'] = (this.options.prismaSchema);
     } else {
       files['prisma/schema.prisma'] = this.generateDefaultPrismaSchema();
     }
@@ -654,13 +649,9 @@ export default function MobileNav({ currentTheme }: MobileNavProps) {
   private generateHomePage(): string {
     const { projectName, models, actions, schedules } = this.options;
     
-    return `import Layout from '@/components/Layout';
-import StatsCard from '@/components/StatsCard';
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
-import api from '@/lib/api';
-import { themes } from '@/lib/theme';
-import { useAgent } from '@/contexts/AgentContext';
+    return `// Server Component following Next.js + Prisma tutorial pattern
+import { prisma } from '@/lib/prisma';
+import Link from 'next/link';
 
 export default function HomePage() {
   const router = useRouter();
@@ -3309,48 +3300,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   private generateModelEndpoint(): string {
     return `import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '@/lib/prisma'
-import { exec } from 'child_process'
-import { promisify } from 'util'
-
-const execAsync = promisify(exec);
-
-// Function to ensure database is initialized
-async function ensureDatabaseInit() {
-  try {
-    // Test database connection
-    await prisma.$queryRaw\`SELECT 1\`;
-  } catch (error) {
-    console.log('Database connection failed, attempting to initialize...');
-    
-    try {
-      // Run database initialization
-      await execAsync('npm run db:init');
-      await execAsync('npx prisma db push --accept-data-loss');
-      console.log('Database initialized successfully');
-    } catch (initError) {
-      console.error('Failed to initialize database:', initError);
-      throw new Error('Database initialization failed');
-    }
-  }
-}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { modelName, id } = req.query;
+  const { modelName } = req.query;
 
   if (!modelName || typeof modelName !== 'string') {
     return res.status(400).json({ error: 'Model name is required' });
-  }
-
-  // Ensure database is initialized before proceeding
-  try {
-    await ensureDatabaseInit();
-  } catch (error) {
-    console.error('Database initialization error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      error: 'Database initialization failed',
-      details: 'Unable to initialize SQLite database'
-    });
   }
 
   // Convert PascalCase model name to camelCase for Prisma client access
@@ -3370,167 +3325,92 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     switch (req.method) {
       case 'GET':
-        if (id && typeof id === 'string') {
-          // Get single record by ID
-          const record = await modelClient.findUnique({
-            where: { id }
-          });
-          
-          if (!record) {
-            return res.status(404).json({ error: 'Record not found' });
-          }
-          
-          res.status(200).json({ success: true, data: record });
-        } else {
-          // Get all records with optional filtering and pagination
-          const { page = '1', limit = '100', search, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
-          const pageNum = parseInt(page as string, 10);
-          const limitNum = parseInt(limit as string, 10);
-          const skip = (pageNum - 1) * limitNum;
-
-          let where = {};
-          if (search && typeof search === 'string') {
-            // Dynamic search - try to search across text fields that might exist
-            // This is a basic implementation that attempts common field names
-            const searchConditions = [];
-            
-            try {
-              // Get a sample record to see what fields exist
-              const sampleRecord = await modelClient.findFirst();
-              if (sampleRecord) {
-                const stringFields = Object.keys(sampleRecord).filter(key => 
-                  typeof sampleRecord[key] === 'string' && 
-                  !['id', 'createdAt', 'updatedAt'].includes(key)
-                );
-                
-                stringFields.forEach(field => {
-                  searchConditions.push({ [field]: { contains: search, mode: 'insensitive' } });
-                });
+        // Get all records with optional pagination and filtering
+        const { page = 1, limit = 10, search, ...filters } = req.query;
+        const skip = (Number(page) - 1) * Number(limit);
+        
+        // Build where clause for search and filters
+        let where = {};
+        
+        // Add search functionality if search parameter is provided
+        if (search && typeof search === 'string') {
+          // Simple search implementation - search by ID for now
+          // In a real implementation, you would want to configure searchable fields per model
+          try {
+            where = {
+              ...where,
+              id: {
+                contains: search,
+                mode: 'insensitive'
               }
-            } catch (error) {
-              // Fallback to common field names if schema inspection fails
-              const commonFields = ['name', 'title', 'description', 'label'];
-              commonFields.forEach(field => {
-                searchConditions.push({ [field]: { contains: search, mode: 'insensitive' } });
-              });
-            }
-            
-            if (searchConditions.length > 0) {
-              where = { OR: searchConditions };
-            }
+            };
+          } catch (error) {
+            // If search fails, continue without search filtering
+            console.warn('Search functionality not available for this model');
           }
-
-          const [records, total] = await Promise.all([
-            modelClient.findMany({
-              where,
-              skip,
-              take: limitNum,
-              orderBy: { [sortBy as string]: sortOrder }
-            }),
-            modelClient.count({ where })
-          ]);
-          
-          res.status(200).json({ 
-            success: true, 
-            data: records,
-            pagination: {
-              page: pageNum,
-              limit: limitNum,
-              total,
-              pages: Math.ceil(total / limitNum)
-            }
-          });
         }
-        break;
+        
+        // Add other filters
+        Object.keys(filters).forEach(key => {
+          if (key !== 'page' && key !== 'limit' && key !== 'search') {
+            where = { ...where, [key]: filters[key] };
+          }
+        });
+
+        const [records, total] = await Promise.all([
+          modelClient.findMany({
+            where,
+            skip,
+            take: Number(limit),
+            orderBy: { id: 'desc' }
+          }),
+          modelClient.count({ where })
+        ]);
+
+        return res.status(200).json({
+          success: true,
+          data: records,
+          pagination: {
+            page: Number(page),
+            limit: Number(limit),
+            total,
+            pages: Math.ceil(total / Number(limit))
+          }
+        });
 
       case 'POST':
-        // Create a new record
+        // Create new record
         const createData = req.body;
+        
         if (!createData || typeof createData !== 'object') {
-          return res.status(400).json({ error: 'Invalid data provided' });
+          return res.status(400).json({ 
+            error: 'Invalid request body',
+            details: 'Request body must be a valid JSON object'
+          });
         }
 
         const newRecord = await modelClient.create({
           data: createData
         });
-        
-        res.status(201).json({ success: true, data: newRecord });
-        break;
 
-      case 'PUT':
-      case 'PATCH':
-        // Update a record
-        if (!id || typeof id !== 'string') {
-          return res.status(400).json({ error: 'Record ID is required for update' });
-        }
-
-        const updateData = req.body;
-        if (!updateData || typeof updateData !== 'object') {
-          return res.status(400).json({ error: 'Invalid data provided' });
-        }
-
-        // Check if record exists
-        const existingRecord = await modelClient.findUnique({
-          where: { id }
+        return res.status(201).json({
+          success: true,
+          data: newRecord,
+          message: \`\${modelName} created successfully\`
         });
-
-        if (!existingRecord) {
-          return res.status(404).json({ error: 'Record not found' });
-        }
-
-        const updatedRecord = await modelClient.update({
-          where: { id },
-          data: updateData
-        });
-        
-        res.status(200).json({ success: true, data: updatedRecord });
-        break;
-
-      case 'DELETE':
-        // Delete a record
-        if (!id || typeof id !== 'string') {
-          return res.status(400).json({ error: 'Record ID is required for deletion' });
-        }
-
-        // Check if record exists
-        const recordToDelete = await modelClient.findUnique({
-          where: { id }
-        });
-
-        if (!recordToDelete) {
-          return res.status(404).json({ error: 'Record not found' });
-        }
-
-        await modelClient.delete({
-          where: { id }
-        });
-        
-        res.status(200).json({ success: true, message: 'Record deleted successfully' });
-        break;
 
       default:
-        res.status(405).json({ error: 'Method not allowed' });
+        res.setHeader('Allow', ['GET', 'POST']);
+        return res.status(405).json({ 
+          error: \`Method \${req.method} not allowed\`,
+          allowedMethods: ['GET', 'POST']
+        });
     }
-  } catch (error) {
-    console.error(\`Error with model \${modelName}:\`, error);
+  } catch (error: any) {
+    console.error(\`Database operation failed for model \${modelName}:\`, error);
     
-    // Handle Prisma-specific errors
-    if (error.code === 'P2002') {
-      return res.status(409).json({ 
-        success: false, 
-        error: 'Unique constraint violation',
-        details: 'A record with this data already exists'
-      });
-    } else if (error.code === 'P2025') {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Record not found',
-        details: 'The record you are trying to access does not exist'
-      });
-    }
-    
-    res.status(500).json({ 
-      success: false, 
+    return res.status(500).json({
+      success: false,
       error: \`Failed to access model \${modelName}\`,
       details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
@@ -3609,6 +3489,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       case 'DELETE':
         // Delete a record
+        if (!id || typeof id !== 'string') {
+          return res.status(400).json({ error: 'Record ID is required for deletion' });
+        }
+
+        // Check if record exists
         const recordToDelete = await modelClient.findUnique({
           where: { id }
         });
@@ -4156,45 +4041,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   private generatePrismaClient(): string {
-    return `import { PrismaClient } from '@prisma/client'
+    return `import { PrismaClient } from "@prisma/client";
 
-// Function to get the correct database URL for the environment
-function getDatabaseUrl(): string {
-  // If DATABASE_URL is already set, use it
-  if (process.env.DATABASE_URL) {
-    return process.env.DATABASE_URL;
-  }
+// Simple Prisma client singleton pattern following Next.js best practices
+const prismaClientSingleton = () => {
+  return new PrismaClient({
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error']
+  });
+};
 
-  // Auto-configure based on environment
-  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-    // Production/Vercel deployment - use /tmp directory
-    return 'file:/tmp/dev.db';
-  } else {
-    // Local development - use project directory
-    return 'file:./dev.db';
-  }
-}
+declare const globalThis: {
+  prismaGlobal: ReturnType<typeof prismaClientSingleton>;
+} & typeof global;
 
-// Set the DATABASE_URL if not already set
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = getDatabaseUrl();
-}
+export const prisma = globalThis.prismaGlobal ?? prismaClientSingleton();
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
-
-// Create Prisma client with connection configuration optimized for serverless
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  datasources: {
-    db: {
-      url: getDatabaseUrl()
-    }
-  },
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error']
-})
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma`;
+if (process.env.NODE_ENV !== "production") globalThis.prismaGlobal = prisma`;
   }
 
   private generateApiHook(): string {
@@ -4290,65 +4152,7 @@ main()
   })`;
   }
 
-  private sanitizePrismaSchema(schema: string): string {
-    try {
-      // Fix common relation issues that cause validation errors
-      let sanitizedSchema = schema;
-      
-      // 1. Remove problematic one-to-one relations without @unique
-      // Pattern: fieldName ModelName @relation(fields: [fieldId], references: [id])
-      // where fieldId is not marked as @unique
-      const relationPattern = /(\w+)\s+(\w+)\s*@relation\(fields:\s*\[(\w+)\],\s*references:\s*\[[^\]]+\]\)/g;
-      
-      sanitizedSchema = sanitizedSchema.replace(relationPattern, (match, fieldName, modelName, foreignKeyField) => {
-        // Check if the foreign key field has @unique constraint
-        const uniquePattern = new RegExp(`${foreignKeyField}\\s+\\w+[^\\n]*@unique`, 'g');
-        const hasUnique = uniquePattern.test(sanitizedSchema);
-        
-        if (!hasUnique) {
-          // For now, remove the relation attribute to avoid validation errors
-          // Keep just the field without the relation
-          console.log(`Sanitizing relation: Removed @relation from ${fieldName} -> ${modelName} (missing @unique on ${foreignKeyField})`);
-          return `${fieldName} ${modelName}?`;
-        }
-        
-        return match;
-      });
-      
-      // 2. Ensure foreign key fields are optional if they have relations (but NOT ID fields)
-      const foreignKeyPattern = /(\w+Id)\s+(String|Int)(\s+@unique)?(?!\s*@id)/g;
-      sanitizedSchema = sanitizedSchema.replace(foreignKeyPattern, (match, fieldName, type, unique) => {
-        // Don't make ID fields optional - they must be required
-        if (match.includes('@id')) {
-          return match;
-        }
-        
-        if (unique) {
-          return `${fieldName} ${type}?${unique}`;
-        } else {
-          return `${fieldName} ${type}?`;
-        }
-      });
-      
-      // 3. Fix any ID fields that were accidentally made optional
-      const idFieldPattern = /(\w+)\s+(String|Int)\?\s+@id/g;
-      sanitizedSchema = sanitizedSchema.replace(idFieldPattern, (match, fieldName, type) => {
-        console.log(`Fixing ID field: Removing ? from ${fieldName} (ID fields must be required)`);
-        return `${fieldName} ${type} @id`;
-      });
-      
-      // 4. Add note about sanitization
-      if (sanitizedSchema !== schema) {
-        sanitizedSchema += '\n\n// Note: Schema was sanitized to remove problematic relations during deployment.';
-      }
-      
-      return sanitizedSchema;
-    } catch (error) {
-      console.error('Error sanitizing Prisma schema:', error);
-      // Fallback to generating a clean default schema
-      return this.generateDefaultPrismaSchema();
-    }
-  }
+
 
   private generateDefaultPrismaSchema(): string {
     const modelSchemas = this.options.models.map(model => {
@@ -4418,7 +4222,6 @@ ${fields}
     return `// This file was auto-generated based on your agent models
 generator client {
   provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -4438,94 +4241,47 @@ ${modelSchemas}
     return `const fs = require('fs');
 const path = require('path');
 
-// Function to get the correct database path for the environment
-function getDatabasePath() {
-  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-    // Production/Vercel deployment - use /tmp directory
-    return '/tmp/dev.db';
-  } else {
-    // Local development - use project directory
-    return path.join(__dirname, '..', 'dev.db');
-  }
-}
-
-// Function to update .env.local with correct DATABASE_URL
-function updateEnvFile(dbPath) {
-  const envLocalPath = path.join(__dirname, '..', '.env.local');
-  const databaseUrl = \`DATABASE_URL="file:\${dbPath}"\`;
+// Simple SQLite initialization following Next.js + Prisma tutorial pattern
+function createSQLiteDB() {
+  // Determine database path based on environment
+  const dbPath = process.env.VERCEL || process.env.NODE_ENV === 'production' 
+    ? '/tmp/dev.db'  // Vercel serverless environment
+    : path.join(process.cwd(), 'dev.db');  // Local development
   
-  try {
-    let envContent = '';
-    
-    // Read existing .env.local if it exists
-    if (fs.existsSync(envLocalPath)) {
-      envContent = fs.readFileSync(envLocalPath, 'utf8');
-      
-      // Replace existing DATABASE_URL or add it
-      if (envContent.includes('DATABASE_URL=')) {
-        envContent = envContent.replace(/DATABASE_URL=.*/g, databaseUrl);
-      } else {
-        envContent += \`\n\${databaseUrl}\n\`;
-      }
-    } else {
-      // Create new .env.local file
-      envContent = \`# Auto-generated database configuration
-\${databaseUrl}
-\`;
-    }
-    
-    fs.writeFileSync(envLocalPath, envContent);
-    console.log('📝 Updated .env.local with DATABASE_URL:', databaseUrl);
-  } catch (error) {
-    console.warn('⚠️ Could not update .env.local:', error.message);
-  }
-}
-
-// Determine the correct database path for different environments
-const dbPath = getDatabasePath();
-const dbDir = path.dirname(dbPath);
-
-console.log(\`🗄️ Initializing SQLite database at: \${dbPath}\`);
-
-// Ensure the directory exists
-if (!fs.existsSync(dbDir)) {
-  try {
-    fs.mkdirSync(dbDir, { recursive: true });
-    console.log('📁 Created database directory:', dbDir);
-  } catch (error) {
-    console.error('❌ Failed to create database directory:', error);
-    // Don't exit on directory creation failure in serverless environments
-    if (!process.env.VERCEL) {
-      process.exit(1);
+  console.log(\`🗄️ Initializing SQLite database at: \${dbPath}\`);
+  
+  // Create database directory if needed (mainly for Vercel /tmp)
+  const dbDir = path.dirname(dbPath);
+  if (!fs.existsSync(dbDir)) {
+    try {
+      fs.mkdirSync(dbDir, { recursive: true });
+      console.log('📁 Created database directory:', dbDir);
+    } catch (error) {
+      console.error('❌ Failed to create database directory:', error);
+      if (!process.env.VERCEL) process.exit(1);
     }
   }
-}
-
-// Create empty SQLite database file if it doesn't exist
-if (!fs.existsSync(dbPath)) {
-  try {
-    fs.writeFileSync(dbPath, '');
-    console.log('✅ SQLite database file created:', dbPath);
-  } catch (error) {
-    console.error('❌ Failed to create database file:', error);
-    // Don't exit on file creation failure in serverless environments
-    if (!process.env.VERCEL) {
-      process.exit(1);
+  
+  // Create empty SQLite database file if it doesn't exist
+  if (!fs.existsSync(dbPath)) {
+    try {
+      fs.writeFileSync(dbPath, '');
+      console.log('✅ SQLite database file created:', dbPath);
+    } catch (error) {
+      console.error('❌ Failed to create database file:', error);
+      if (!process.env.VERCEL) process.exit(1);
     }
+  } else {
+    console.log('📋 SQLite database file already exists:', dbPath);
   }
-} else {
-  console.log('📋 SQLite database file already exists:', dbPath);
+  
+  // Update DATABASE_URL environment variable for this process
+  process.env.DATABASE_URL = \`file:\${dbPath}\`;
+  console.log('🔗 DATABASE_URL set to:', process.env.DATABASE_URL);
 }
 
-// Update environment configuration for local development
-if (!process.env.VERCEL && !process.env.NODE_ENV === 'production') {
-  updateEnvFile(dbPath);
-}
-
-// Set runtime environment variable for this process
-process.env.DATABASE_URL = \`file:\${dbPath}\`;
-console.log('🔗 Set DATABASE_URL:', process.env.DATABASE_URL);
-
+// Initialize the database
+createSQLiteDB();
 console.log('🗄️ SQLite database initialization complete');`;
   }
 
