@@ -868,53 +868,65 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
   }
 
   // Generate OAuth authorization URL with proper parameters
-  const generateOAuthUrl = (providerId: string): string | null => {
-    const provider = oauthProviders.find(p => p.id === providerId)
-    if (!provider) return null
+  const generateOAuthUrl = async (providerId: string): Promise<string | null> => {
+    try {
+      const provider = oauthProviders.find(p => p.id === providerId)
+      if (!provider) {
+        console.error(`OAuth provider not found: ${providerId}`)
+        return null
+      }
 
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
-    const redirectUri = `${baseUrl}/api/oauth/${providerId}/callback`
-    const state = Math.random().toString(36).substring(2, 15) // Simple state for CSRF protection
+      // For Shopify, we need to prompt for shop domain
+      let shopDomain: string | undefined
+      if (providerId === 'shopify') {
+        const shopDomainInput = prompt('Enter your Shopify store domain (e.g., your-store.myshopify.com):')
+        if (!shopDomainInput) return null
+        shopDomain = shopDomainInput
+      }
 
-    const params = new URLSearchParams({
-      client_id: process.env[`${providerId.toUpperCase()}_CLIENT_ID`] || 'demo-client-id',
-      redirect_uri: redirectUri,
-      scope: provider.scopes.join(','),
-      response_type: 'code',
-      state: state
-    })
+      // Get current chat ID from URL if available
+      const currentChatId = typeof window !== 'undefined' 
+        ? window.location.pathname.match(/\/chat\/([^\/\?]+)/)?.[1] 
+        : null;
 
-    // Store state in session storage for verification
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem(`oauth_state_${providerId}`, state)
-    }
+      // Call server-side API to generate OAuth URL
+      const response = await fetch('/api/oauth/generate-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          providerId,
+          shopDomain,
+          documentId,
+          chatId: currentChatId
+        })
+      })
 
-    // Handle provider-specific URL patterns
-    switch (providerId) {
-      case 'shopify':
-        // Shopify requires shop domain - we'll prompt for it
-        const shopDomain = prompt('Enter your Shopify store domain (e.g., your-store.myshopify.com):')
-        if (!shopDomain) return null
-        return `https://${shopDomain}/admin/oauth/authorize?${params.toString()}`
-      
-      case 'instagram':
-        return `https://api.instagram.com/oauth/authorize?${params.toString()}`
-      
-      case 'facebook':
-        return `https://www.facebook.com/v18.0/dialog/oauth?${params.toString()}`
-      
-      case 'threads':
-        return `https://threads.net/oauth/authorize?${params.toString()}`
-      
-      default:
-        return `${provider.authUrl}?${params.toString()}`
+      if (!response.ok) {
+        const error = await response.json()
+        console.error('Failed to generate OAuth URL:', error)
+        return null
+      }
+
+      const { authUrl, state } = await response.json()
+
+      // Store state in session storage for verification
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(`oauth_state_${providerId}`, state)
+      }
+
+      return authUrl
+    } catch (error) {
+      console.error('Error generating OAuth URL:', error)
+      return null
     }
   }
 
   const handleOAuthLogin = async (providerId: string) => {
     console.log(`Initiating ${providerId} OAuth...`)
     
-    const authUrl = generateOAuthUrl(providerId)
+    const authUrl = await generateOAuthUrl(providerId)
     if (!authUrl) {
       console.error(`Failed to generate OAuth URL for ${providerId}`)
       return

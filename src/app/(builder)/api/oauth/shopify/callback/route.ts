@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/app/(auth)/auth';
+import { handleOAuthCallback, createOAuthCallbackData } from '@/lib/oauth-callback-handler';
 import { z } from 'zod';
 import crypto from 'crypto';
 
@@ -59,7 +60,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify HMAC signature for security
-    if (!verifyShopifyHmac(params, process.env.SHOPIFY_CLIENT_SECRET!)) {
+    const shopifySecret = process.env.SHOPIFY_CLIENT_SECRET;
+    if (!shopifySecret) {
+      console.error('SHOPIFY_CLIENT_SECRET is not set');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+    
+    if (!verifyShopifyHmac(params, shopifySecret)) {
       return NextResponse.json({ error: 'Invalid HMAC signature' }, { status: 400 });
     }
 
@@ -70,14 +77,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Exchange authorization code for access token
+    const shopifyClientId = process.env.SHOPIFY_CLIENT_ID;
+    if (!shopifyClientId) {
+      console.error('SHOPIFY_CLIENT_ID is not set');
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+    
     const tokenResponse = await fetch(`https://${shopDomain}/admin/oauth/access_token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        client_id: process.env.SHOPIFY_CLIENT_ID!,
-        client_secret: process.env.SHOPIFY_CLIENT_SECRET!,
+        client_id: shopifyClientId,
+        client_secret: shopifySecret,
         code: validatedParams.code
       })
     });
@@ -108,36 +121,32 @@ export async function GET(request: NextRequest) {
 
     const shopData = await shopResponse.json();
 
-    // Create OAuth connection object
-    const oauthConnection = {
-      provider: 'shopify' as const,
-      accessToken: tokenData.access_token,
-      refreshToken: undefined, // Shopify doesn't use refresh tokens
-      expiresAt: undefined, // Shopify tokens don't expire unless revoked
-      userId: shopData.shop.id.toString(),
-      username: shopData.shop.name,
-      storeUrl: shopDomain,
-      isActive: true,
-      connectedAt: new Date().toISOString(),
-      // Additional Shopify-specific data
-      shopInfo: {
-        name: shopData.shop.name,
-        email: shopData.shop.email,
-        domain: shopData.shop.domain,
-        currency: shopData.shop.currency,
-        timezone: shopData.shop.iana_timezone,
-        plan: shopData.shop.plan_name
-      },
-      scopes: tokenData.scope?.split(',') || []
-    };
-
-    // Store the connection in session storage or database
-    // For now, we'll redirect with the connection data
-    const connectionData = encodeURIComponent(JSON.stringify(oauthConnection));
-    
-    return NextResponse.redirect(
-      new URL(`/chat?oauth_success=shopify&connection=${connectionData}`, request.url)
+    // Create OAuth callback data
+    const callbackData = createOAuthCallbackData(
+      'shopify',
+      shopData.shop.id.toString(),
+      tokenData.access_token,
+      {
+        username: shopData.shop.name,
+        refreshToken: undefined, // Shopify doesn't use refresh tokens
+        expiresAt: undefined, // Shopify tokens don't expire unless revoked
+        scopes: tokenData.scope?.split(',') || [],
+        providerData: {
+          shopInfo: {
+            name: shopData.shop.name,
+            email: shopData.shop.email,
+            domain: shopData.shop.domain,
+            currency: shopData.shop.currency,
+            timezone: shopData.shop.iana_timezone,
+            plan: shopData.shop.plan_name
+          },
+          storeUrl: shopDomain
+        }
+      }
     );
+
+    // Handle OAuth callback and save to database
+    return await handleOAuthCallback(request, 'shopify', callbackData);
 
   } catch (error) {
     console.error('Shopify OAuth callback error:', error);

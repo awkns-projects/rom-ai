@@ -39,7 +39,7 @@ const resetDatabase = async () => {
     console.log('⏳ Running migrations to recreate tables...');
     
     const start = Date.now();
-    await migrate(db, { migrationsFolder: './lib/db/migrations' });
+    await migrate(db, { migrationsFolder: './src/lib/db/migrations' });
     const end = Date.now();
 
     console.log('✅ Database reset completed successfully in', end - start, 'ms');

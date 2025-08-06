@@ -88,7 +88,7 @@ export const document = pgTable(
   },
   (table) => {
     return {
-      pk: primaryKey({ columns: [table.id, table.createdAt] }),
+      pk: primaryKey({ columns: [table.id] }),
     };
   },
 );
@@ -100,7 +100,6 @@ export const suggestion = pgTable(
   {
     id: uuid('id').notNull().defaultRandom(),
     documentId: uuid('documentId').notNull(),
-    documentCreatedAt: timestamp('documentCreatedAt').notNull(),
     originalText: text('originalText').notNull(),
     suggestedText: text('suggestedText').notNull(),
     description: text('description'),
@@ -113,8 +112,8 @@ export const suggestion = pgTable(
   (table) => ({
     pk: primaryKey({ columns: [table.id] }),
     documentRef: foreignKey({
-      columns: [table.documentId, table.documentCreatedAt],
-      foreignColumns: [document.id, document.createdAt],
+      columns: [table.documentId],
+      foreignColumns: [document.id],
     }),
   }),
 );
