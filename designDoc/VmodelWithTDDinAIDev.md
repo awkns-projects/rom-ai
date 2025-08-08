@@ -363,7 +363,7 @@ def main():
 # Multi-agent Archi
 
 ### Agents 
-```
+
 | Agent                         | API Route                            | 職責                  | 輸入                                                | 輸出                         |
 | ----------------------------- | ------------------------------------ | ------------------- | ------------------------------------------------- | -------------------------- |
 | **需求分析 Agent** (`RA`)         | `/api/agents/requirements`           | 分析用戶需求，輸出需求規格書      | 使用者需求文字                                           | `requirements.json`        |
@@ -380,7 +380,7 @@ def main():
 | **Validator Agent (Phase 4)** | `/api/agents/validator-module`       | 驗證模組設計與單元測試對應性      | `module_design.md` + `unit_tests.py`              | `pass/fail`                |
 | **開發 Agent** (`DEV`)          | `/api/agents/development`            | 撰寫程式碼               | `module_design.md`                                | `codebase/`                |
 | **測試執行 Agent** (`RUN`)        | `/api/agents/run-tests`              | 執行單元、整合、系統、驗收測試     | `codebase/`                                       | 測試結果報告                     |
-```
+
 
 ### Interactions
 ```mermaid
