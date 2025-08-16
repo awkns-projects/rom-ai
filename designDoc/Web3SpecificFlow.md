@@ -3,8 +3,6 @@
 
 ### High-level Design of Main App
 
-The application is a sophisticated AI-powered chat and agent building platform built with Next.js 15, featuring a modular architecture with real-time capabilities and multi-modal interactions.
-
 ```mermaid
 flowchart TD
     subgraph Frontend["Frontend System"]
@@ -97,61 +95,6 @@ flowchart TD
     Blockchain -->|Mainnet Networks| Deployed
 ```
 
-#### Core System Modules
-
-**Frontend System:**
-- User interface and navigation
-- Avatar management and customization
-- Chat interface with real-time messaging
-- Multi-modal input/output support
-
-**Backend System:**
-- API layer and request handling
-- Authentication and authorization
-- Credential management and encryption
-- External service integrations
-
-**Agent Builder System:**
-- V-Model TDD approach for agent generation
-- Multi-phase development pipeline
-- Quality metrics and testing
-- Real-time progress tracking
-
-**Chat System:**
-- Conversational AI interface
-- Message history and persistence
-- Multi-modal interactions
-- Real-time streaming responses
-
-**Artifact System:**
-- Code generation with Python runtime
-- Image generation and processing
-- Text and document processing
-- Spreadsheet and data processing
-
-**AI System:**
-- AI model integration (OpenAI, xAI)
-- Tool execution and function calling
-- Python runtime for code execution
-- Real-time streaming capabilities
-
-**Data Layer:**
-- Database management and persistence
-- Caching and performance optimization
-- File storage and management
-- Session and state management
-
-**Test Execution Environment:**
-- **Unit Testing**: Test runner, framework, mock providers, and coverage reporting
-- **Integration Testing**: Testnet integration, smart contract testing, wallet testing, and gas optimization
-- **Test Infrastructure**: Testnet providers, test wallets, test data management, and monitoring
-
-**External Systems:**
-- OAuth provider integrations
-- Social media API connections
-- Deployed agent management
-- Third-party service integrations
-- Blockchain network integrations (testnet and mainnet)
 
 
 ---
@@ -242,6 +185,140 @@ flowchart TD
     Web3Integration -->|Provide Web3 Services| Frontend
 ```
 
+
+
+
+
+---
+
+### UI Integration Flow:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI
+    participant AgentSystem
+    participant GeneratedCode
+    participant Blockchain
+
+    User->>UI: Request Web3 App Generation
+    UI->>AgentSystem: Trigger Agent Pipeline
+    AgentSystem->>AgentSystem: Execute All Agents
+    AgentSystem->>GeneratedCode: Deploy Generated Code
+    GeneratedCode->>UI: Integrate Web3 Components
+    UI->>User: Display Web3 App Interface
+    User->>UI: Interact with Web3 Features
+    UI->>GeneratedCode: Execute Web3 Operations
+    GeneratedCode->>Blockchain: Smart Contract Interactions
+    Blockchain->>GeneratedCode: Transaction Results
+    GeneratedCode->>UI: Update UI State
+    UI->>User: Display Results
+```
+
+
+---
+
+
+### Data Flow of AI Generated App
+
+```mermaid
+flowchart LR
+    subgraph Client["AI-Generated Frontend"]
+        UI["React/Next.js UI"]
+        Wallet["Web3 Wallet Integration"]
+    end
+
+    subgraph Backend["AI-Generated Backend"]
+        API["REST/GraphQL API"]
+        Service["Service Layer"]
+        DB["Database (Prisma)"]
+        Web3Service["Web3 Service Layer"]
+    end
+
+    subgraph Blockchain["Blockchain Network"]
+        SC["Smart Contracts"]
+        Event["Contract Events"]
+        RPC["RPC Provider"]
+    end
+
+    UI -->|HTTP Requests| API
+    UI -->|Direct Web3 Calls| Wallet
+    Wallet -->|Transaction Signing| SC
+    API -->|Business Logic| Service
+    Service -->|Data Operations| DB
+    Service -->|Contract Interactions| Web3Service
+    Web3Service -->|RPC Calls| RPC
+    RPC -->|Contract State| SC
+    Event -->|WebSocket/Event Stream| Web3Service
+    Web3Service -->|Event Processing| Service
+    Service -->|State Updates| DB
+    DB -->|Data Response| API
+    API -->|UI Updates| UI
+```
+
+
+
+### Interactions Between the Agents
+
+```mermaid
+flowchart TD
+    subgraph PHASE_1["Phase 1: Web3 Requirements & Contract Analysis"]
+        RA[RA-W3: Requirements Analysis]
+        ABI_FETCH[ABI-FETCH: Contract Detection]
+        ABI_ANALYZE[ABI-ANALYZE: Interface Analysis]
+        VAL_RA[VAL-RA: Requirements Validation]
+        VAL_ABI[VAL-ABI: ABI Validation]
+    end
+
+    subgraph PHASE_2["Phase 2: System & Architecture Design"]
+        SDA[SDA-W3: System Design]
+        ADA[ADA-W3: Architecture Design]
+        VAL_SDA[VAL-SDA: System Validation]
+        VAL_ADA[VAL-ADA: Architecture Validation]
+    end
+
+    subgraph PHASE_3["Phase 3: Module Design & Development"]
+        MDA[MDA-W3: Module Design]
+        DEV[DEV-W3: Development]
+        VAL_MDA[VAL-MDA: Module Validation]
+        VAL_DEV[VAL-DEV: Code Validation]
+    end
+
+    subgraph PHASE_4["Phase 4: Testing & Validation"]
+        QA[QA-W3: Testing]
+        RUN[RUN: Test Execution]
+    end
+
+    %% Phase 1 Flow
+    RA --> VAL_RA
+    VAL_RA -->|PASS| ABI_FETCH
+    VAL_RA -->|FAIL| RA
+    ABI_FETCH --> VAL_ABI
+    VAL_ABI -->|PASS| ABI_ANALYZE
+    VAL_ABI -->|FAIL| ABI_FETCH
+
+    %% Phase 2 Flow
+    ABI_ANALYZE --> SDA
+    SDA --> VAL_SDA
+    VAL_SDA -->|PASS| ADA
+    VAL_SDA -->|FAIL| SDA
+    ADA --> VAL_ADA
+    VAL_ADA -->|PASS| MDA
+    VAL_ADA -->|FAIL| ADA
+
+    %% Phase 3 Flow
+    MDA --> VAL_MDA
+    VAL_MDA -->|PASS| DEV
+    VAL_MDA -->|FAIL| MDA
+    DEV --> VAL_DEV
+    VAL_DEV -->|PASS| QA
+    VAL_DEV -->|FAIL| DEV
+
+    %% Phase 4 Flow
+    QA --> RUN
+    RUN -->|Test Results| QA
+```
+---
 
 ---
 
@@ -411,85 +488,10 @@ flowchart TD
     Blockchain --> ABI_FETCH
     Explorers --> ABI_FETCH
 ```
-
-**Agent Builder Features:**
-- **V-Model TDD Pipeline**: 5-phase multi-agent architecture with Test-Driven Development
-- **Multi-Agent Orchestration**: Agent registry, progress tracking, error handling, and validation
-- **Web3 Integration**: Smart contract ABI detection, analysis, and blockchain integration
-- **Quality Control**: Multi-layer validation, intelligent merging, and quality assurance
-- **External Integration**: AI providers, database, Vercel deployment, and blockchain networks
-- **Real-time Progress**: Live updates with detailed metrics and test results
-
-
-
----
-
-### UI Integration Flow:
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant UI
-    participant AgentSystem
-    participant GeneratedCode
-    participant Blockchain
-
-    User->>UI: Request Web3 App Generation
-    UI->>AgentSystem: Trigger Agent Pipeline
-    AgentSystem->>AgentSystem: Execute All Agents
-    AgentSystem->>GeneratedCode: Deploy Generated Code
-    GeneratedCode->>UI: Integrate Web3 Components
-    UI->>User: Display Web3 App Interface
-    User->>UI: Interact with Web3 Features
-    UI->>GeneratedCode: Execute Web3 Operations
-    GeneratedCode->>Blockchain: Smart Contract Interactions
-    Blockchain->>GeneratedCode: Transaction Results
-    GeneratedCode->>UI: Update UI State
-    UI->>User: Display Results
-```
-
-
 ---
 
 
-### Data Flow of AI Generated App
-
-```mermaid
-flowchart LR
-    subgraph Client["AI-Generated Frontend"]
-        UI["React/Next.js UI"]
-        Wallet["Web3 Wallet Integration"]
-    end
-
-    subgraph Backend["AI-Generated Backend"]
-        API["REST/GraphQL API"]
-        Service["Service Layer"]
-        DB["Database (Prisma)"]
-        Web3Service["Web3 Service Layer"]
-    end
-
-    subgraph Blockchain["Blockchain Network"]
-        SC["Smart Contracts"]
-        Event["Contract Events"]
-        RPC["RPC Provider"]
-    end
-
-    UI -->|HTTP Requests| API
-    UI -->|Direct Web3 Calls| Wallet
-    Wallet -->|Transaction Signing| SC
-    API -->|Business Logic| Service
-    Service -->|Data Operations| DB
-    Service -->|Contract Interactions| Web3Service
-    Web3Service -->|RPC Calls| RPC
-    RPC -->|Contract State| SC
-    Event -->|WebSocket/Event Stream| Web3Service
-    Web3Service -->|Event Processing| Service
-    Service -->|State Updates| DB
-    DB -->|Data Response| API
-    API -->|UI Updates| UI
-```
-
-### 2. Roles and Responsibilities of Each Agents
+### Roles and Responsibilities of Each Agents
 
 | Agent ID | Name | Role | Input | Output | Web3 Specific Responsibilities |
 |----------|------|------|-------|--------|--------------------------------|
@@ -503,66 +505,6 @@ flowchart LR
 | **QA-W3** | Testing Agent | Test Web3 functionality | `codebase/` | Test reports | Test contract interactions, transaction flows, event handling |
 | **VAL-* ** | Validator Agents | Validate each phase output | Phase input + output | Validation reports | Ensure Web3 security, gas optimization, error handling |
 
-### Interactions Between the Agents
-
-```mermaid
-flowchart TD
-    subgraph PHASE_1["Phase 1: Web3 Requirements & Contract Analysis"]
-        RA[RA-W3: Requirements Analysis]
-        ABI_FETCH[ABI-FETCH: Contract Detection]
-        ABI_ANALYZE[ABI-ANALYZE: Interface Analysis]
-        VAL_RA[VAL-RA: Requirements Validation]
-        VAL_ABI[VAL-ABI: ABI Validation]
-    end
-
-    subgraph PHASE_2["Phase 2: System & Architecture Design"]
-        SDA[SDA-W3: System Design]
-        ADA[ADA-W3: Architecture Design]
-        VAL_SDA[VAL-SDA: System Validation]
-        VAL_ADA[VAL-ADA: Architecture Validation]
-    end
-
-    subgraph PHASE_3["Phase 3: Module Design & Development"]
-        MDA[MDA-W3: Module Design]
-        DEV[DEV-W3: Development]
-        VAL_MDA[VAL-MDA: Module Validation]
-        VAL_DEV[VAL-DEV: Code Validation]
-    end
-
-    subgraph PHASE_4["Phase 4: Testing & Validation"]
-        QA[QA-W3: Testing]
-        RUN[RUN: Test Execution]
-    end
-
-    %% Phase 1 Flow
-    RA --> VAL_RA
-    VAL_RA -->|PASS| ABI_FETCH
-    VAL_RA -->|FAIL| RA
-    ABI_FETCH --> VAL_ABI
-    VAL_ABI -->|PASS| ABI_ANALYZE
-    VAL_ABI -->|FAIL| ABI_FETCH
-
-    %% Phase 2 Flow
-    ABI_ANALYZE --> SDA
-    SDA --> VAL_SDA
-    VAL_SDA -->|PASS| ADA
-    VAL_SDA -->|FAIL| SDA
-    ADA --> VAL_ADA
-    VAL_ADA -->|PASS| MDA
-    VAL_ADA -->|FAIL| ADA
-
-    %% Phase 3 Flow
-    MDA --> VAL_MDA
-    VAL_MDA -->|PASS| DEV
-    VAL_MDA -->|FAIL| MDA
-    DEV --> VAL_DEV
-    VAL_DEV -->|PASS| QA
-    VAL_DEV -->|FAIL| DEV
-
-    %% Phase 4 Flow
-    QA --> RUN
-    RUN -->|Test Results| QA
-```
 
 ---
 
