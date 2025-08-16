@@ -1208,6 +1208,115 @@ class VALABIAgent extends BaseValidatorAgent {
   }
 }
 ```
+---
+
+### Main App Integration Strategy
+
+
+```mermaid
+flowchart TD
+    subgraph MainApp["Main Application (Next.js)"]
+        UI[User Interface]
+        Chat[Chat System]
+        Auth[Authentication]
+        UserDB[(User Database)]
+        FileStorage[File Storage]
+    end
+
+    subgraph AgentOrchestrator["Agent Orchestrator Service"]
+        PipelineManager[Pipeline Manager]
+        StageCoordinator[Stage Coordinator]
+        ProgressTracker[Progress Tracker]
+        AgentRegistry[Agent Registry]
+    end
+
+    subgraph AgentServices["Independent Agent Services"]
+        subgraph Analysis["Analysis Services"]
+            RA_Service[RA-W3 Service]
+            ABI_FETCH_Service[ABI-FETCH Service]
+            ABI_ANALYZE_Service[ABI-ANALYZE Service]
+        end
+        
+        subgraph Design["Design Services"]
+            SDA_Service[SDA-W3 Service]
+            ADA_Service[ADA-W3 Service]
+            MDA_Service[MDA-W3 Service]
+        end
+        
+        subgraph Implementation["Implementation Services"]
+            DEV_Service[DEV-W3 Service]
+        end
+        
+        subgraph QA["QA Services"]
+            QA_RA_Service[QA-RA Service]
+            QA_ABI_Service[QA-ABI Service]
+            QA_SDA_Service[QA-SDA Service]
+            QA_ADA_Service[QA-ADA Service]
+            QA_MDA_Service[QA-MDA Service]
+            QA_DEV_Service[QA-DEV Service]
+            QA_FINAL_Service[QA-FINAL Service]
+        end
+        
+        subgraph Validators["Validator Services"]
+            VAL_RA_Service[VAL-RA Service]
+            VAL_ABI_Service[VAL-ABI Service]
+            VAL_SDA_Service[VAL-SDA Service]
+            VAL_ADA_Service[VAL-ADA Service]
+            VAL_MDA_Service[VAL-MDA Service]
+            VAL_DEV_Service[VAL-DEV Service]
+        end
+    end
+
+    subgraph SharedInfrastructure["Shared Infrastructure"]
+        MessageQueue[Message Queue<br/>Redis/RabbitMQ]
+        SharedDB[(Shared Database<br/>Pipeline State)]
+        SharedStorage[Shared Storage<br/>Test Artifacts]
+        Monitoring[Monitoring & Logging]
+    end
+
+    subgraph External["External Services"]
+        AI_Providers[AI Providers]
+        Blockchain[Blockchain Networks]
+        Explorers[Blockchain Explorers]
+        Deployment[Deployment Platforms]
+    end
+
+    %% Main App Integration
+    UI -->|User Request| Chat
+    Chat -->|Web3 Generation Request| AgentOrchestrator
+    AgentOrchestrator -->|Pipeline Status| Chat
+    Chat -->|Real-time Updates| UI
+
+    %% Agent Orchestrator Communication
+    AgentOrchestrator -->|Stage Execution| AgentServices
+    AgentServices -->|Results| AgentOrchestrator
+    AgentOrchestrator -->|Pipeline State| SharedDB
+    AgentOrchestrator -->|Messages| MessageQueue
+
+    %% Agent Services Communication
+    AgentServices -->|Async Messages| MessageQueue
+    AgentServices -->|Test Artifacts| SharedStorage
+    AgentServices -->|External APIs| External
+
+    %% Main App Data Access
+    MainApp -->|User Data| UserDB
+    MainApp -->|Generated Files| FileStorage
+    MainApp -->|Pipeline Status| SharedDB
+    MainApp -->|Test Results| SharedStorage
+```
+
+### Benefits for Main App
+
+1. **Simplified Main App**: Focus on UI/UX, user management, and chat
+2. **Independent Scaling**: Scale agents based on demand without affecting main app
+3. **Technology Flexibility**: Use different languages/frameworks for agents
+4. **Fault Tolerance**: Agent failures don't crash the main app
+5. **Cost Optimization**: Scale agents independently
+6. **Development Velocity**: Develop agents in parallel
+7. **Security**: Isolate sensitive operations
+
+
+---
 
 ### **Implementation Phases**
 
@@ -1241,3 +1350,4 @@ class VALABIAgent extends BaseValidatorAgent {
 - Security hardening
 - Documentation
 
+---
