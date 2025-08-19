@@ -66,6 +66,16 @@ export interface Step0AOutput {
     requiresExternalApi: boolean;
     apiConflictResolution?: string; // If multiple APIs detected, explanation of which one was chosen
   };
+
+  // User role and access control analysis
+  userAccessAnalysis: {
+    appType: 'admin_only' | 'both_roles'; // Either admin-only or both admin+member access
+    requiresAuthentication: boolean; // Whether the app needs user login
+    adminFeatures: string[]; // Features that require admin access
+    memberFeatures: string[]; // Features available to regular members (only if both_roles)
+    sharedFeatures: string[]; // Features available to both roles (only if both_roles)
+    userDataScoping: 'user_scoped' | 'shared_data' | 'mixed'; // Whether data is user-specific or shared
+  };
   
   // Feature imagination
   featureRequirements: {
@@ -128,6 +138,13 @@ export interface Step0BOutput {
     requiredScopes: string[];
     priority: 'primary' | 'secondary'; // Indicate primary vs secondary APIs
   }>;
+
+  // User access control and role-based design
+  userAccess: {
+    appType: 'admin_only' | 'both_roles';
+    requiresAuthentication: boolean;
+    userDataScoping: 'user_scoped' | 'shared_data' | 'mixed';
+  };
   
   // Enhanced arrays with operation tracking
   models: Array<{
@@ -155,6 +172,7 @@ export interface Step0BOutput {
     purpose: string;
     type: 'query' | 'mutation';
     operation: 'create' | 'update';
+    userRole: 'admin' | 'member' | 'both'; // Which user role can execute this action
     updateDescription?: string; // Only present when operation is 'update'
   }>;
   
@@ -227,21 +245,30 @@ ANALYSIS FOCUS:
    - What scopes/permissions would be required for each API?
    - IMPORTANT: Agents can connect to MULTIPLE external APIs simultaneously
 
-3. IDENTIFY BUSINESS FEATURES:
+3. ANALYZE USER ROLES AND ACCESS CONTROL:
+   - Who will use this application? (admin only, or both admin and members)
+   - Does this require user authentication and login?
+   - What features need admin privileges? (user management, system settings, data export, etc.)
+   - What features are for regular members? (view data, basic operations, personal dashboards)
+   - What features can both roles access? (chat, reports, basic views)
+   - Is the data user-scoped (each user sees only their data) or shared (everyone sees the same data)?
+   - Note: Authentication will be simple session-based login when needed
+
+4. IDENTIFY BUSINESS FEATURES:
    - What are the 3-5 core features needed?
    - What 2-3 additional features would add value?
    - What user experience improvements are required?
    - What business rules must be enforced?
    - What integrations might be needed?
 
-4. EXTRACT SEMANTIC REQUIREMENTS:
+5. EXTRACT SEMANTIC REQUIREMENTS:
    - What business entities/concepts need to be represented?
    - What business processes need to happen?
    - What manual actions do users need to perform?
    - What automated schedules need to run?
    - Focus on WHAT needs to be done, not HOW
 
-5. AGENT DETAILS:
+6. AGENT DETAILS:
    - Suggest an appropriate agent name
    - Provide a clear agent description
    - Identify the business domain
@@ -281,6 +308,15 @@ Be focused on business value and user needs. Don't worry about technical impleme
           primaryApi: z.string().nullable(),
           requiresExternalApi: z.boolean(),
           apiConflictResolution: z.string().optional()
+        }),
+
+        userAccessAnalysis: z.object({
+          appType: z.enum(['admin_only', 'both_roles']),
+          requiresAuthentication: z.boolean(),
+          adminFeatures: z.array(z.string()).max(5),
+          memberFeatures: z.array(z.string()).max(5),
+          sharedFeatures: z.array(z.string()).max(3),
+          userDataScoping: z.enum(['user_scoped', 'shared_data', 'mixed'])
         }),
         
         featureRequirements: z.object({
@@ -341,6 +377,14 @@ EXTERNAL API DETECTION:
 - Prioritize APIs based on their importance to the core functionality
 - If no external API is mentioned, set requiresExternalApi to false and primaryApi to null
 
+USER ACCESS ANALYSIS:
+- Determine who will use this application (admin only, or both admin and members)
+- Analyze if the request implies user authentication (login, permissions, user-specific data)
+- Identify features that require admin privileges (management, settings, system-wide operations)
+- Identify features for regular members (personal data, basic operations, limited access)
+- Determine if data should be user-scoped (each user sees only their data) or shared
+- Note: Authentication will be simple session-based when needed
+
 ${existingAgent ? 'Focus on what NEW functionality is needed beyond what already exists.' : 'This is a new system - identify all requirements from scratch.'}`
         }
       ],
@@ -398,7 +442,18 @@ For "update" operations, provide updateDescription explaining what changes are n
 
 TECHNICAL SPECIFICATION REQUIREMENTS:
 
-0. EXTERNAL API INTEGRATION:
+0. USER ACCESS CONTROL DESIGN:
+   - Based on Phase A userAccessAnalysis, determine the app type and authentication requirements
+   - App Type Analysis:
+     * 'admin_only': Only administrators can access, all features are admin-level
+     * 'both_roles': Mixed access with admin and member features, different permissions
+   - Data Scoping Strategy:
+     * 'user_scoped': Each user sees only their own data (personal dashboards, user-specific records)
+     * 'shared_data': All users see the same data (shared reports, public information)
+     * 'mixed': Some data is user-scoped, some is shared
+   - Authentication: Simple session-based login when authentication is required
+
+1. EXTERNAL API INTEGRATION:
    - Based on the Phase A analysis, determine if external API integration is needed
    - MULTIPLE APIs are supported - design the agent to work with ALL identified APIs
    - Connection types (prefer OAuth when available, fallback to API key):
@@ -505,6 +560,12 @@ Convert the semantic requirements into concrete technical specifications with pr
           requiredScopes: z.array(z.string()).max(5),
           priority: z.enum(['primary', 'secondary'])
         })).max(5), // Support up to 5 external APIs
+
+        userAccess: z.object({
+          appType: z.enum(['admin_only', 'both_roles']),
+          requiresAuthentication: z.boolean(),
+          userDataScoping: z.enum(['user_scoped', 'shared_data', 'mixed'])
+        }),
         
         models: z.array(z.object({
           name: z.string(),
@@ -531,6 +592,7 @@ Convert the semantic requirements into concrete technical specifications with pr
           purpose: z.string().describe('Complete workflow description including external API integration and business logic'),
           type: z.enum(['query', 'mutation']),
           operation: z.enum(['create', 'update']),
+          userRole: z.enum(['admin', 'member', 'both']).describe('Which user role can execute this action'),
           updateDescription: z.string().optional()
         })).min(3).max(7).describe('Business process actions that integrate external APIs and orchestrate workflows - NOT basic CRUD operations'),
         
@@ -682,6 +744,11 @@ Generate 3-5 business process actions that represent complete workflows integrat
       agentName: phaseAOutput.agentName,
       agentDescription: phaseAOutput.agentDescription,
       domain: phaseAOutput.domain,
+      userAccess: {
+        appType: phaseAOutput.userAccessAnalysis.appType,
+        requiresAuthentication: phaseAOutput.userAccessAnalysis.requiresAuthentication,
+        userDataScoping: phaseAOutput.userAccessAnalysis.userDataScoping
+      },
       phaseAAnalysis: phaseAOutput
     };
 

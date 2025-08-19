@@ -9,7 +9,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from '@
 import { CrossIcon, PlusIcon } from '@/components/icons';
 import { StepFieldEditor } from './StepFieldEditor';
 import { ModelExecutionChangesViewer } from './ModelExecutionChangesViewer';
+import { AuthenticationStatus } from './AuthenticationStatus';
 import type { AgentAction, EnvVar, PseudoCodeStep, StepField, AgentModel, UIComponent, TestCase } from '../../types';
+import { getStepCategory, getStepCategoryInfo, getStepTypeDisplay } from '../../types/action';
 import { generateNewId } from '../../utils';
 
 interface InteractiveTestComponentsProps {
@@ -20,6 +22,8 @@ interface InteractiveTestComponentsProps {
   isRunningTest: boolean;
   onRunTest: (inputParameters: any) => void;
   isLiveMode?: boolean;
+  action?: AgentAction;
+  documentId?: string;
 }
 
 const BusinessTestResults = ({ result, onShowDetails, isLiveMode = false }: { result: any; onShowDetails?: () => void; isLiveMode?: boolean }) => {
@@ -104,23 +108,81 @@ const BusinessTestResults = ({ result, onShowDetails, isLiveMode = false }: { re
            </div>
          )}
 
-         {/* Performance Summary */}
-         <div className="flex justify-center gap-6 mt-4 pt-3 border-t border-emerald-500/10">
-           <div className="flex items-center gap-1 text-emerald-300 text-xs">
-             <span>⚡</span>
-             <span>{result.executionTime}ms</span>
-           </div>
-           <div className="flex items-center gap-1 text-emerald-300 text-xs">
-             <span>📊</span>
-             <span>{businessMetrics.totalSteps} steps</span>
-           </div>
-           {businessMetrics.aiAnalyses > 0 && (
-             <div className="flex items-center gap-1 text-emerald-300 text-xs">
-               <span>🤖</span>
-               <span>{businessMetrics.aiAnalyses} AI</span>
-             </div>
-           )}
-         </div>
+                 {/* Performance Summary */}
+        <div className="flex justify-center gap-6 mt-4 pt-3 border-t border-emerald-500/10">
+          <div className="flex items-center gap-1 text-emerald-300 text-xs">
+            <span>⚡</span>
+            <span>{result.executionTime}ms</span>
+          </div>
+          <div className="flex items-center gap-1 text-emerald-300 text-xs">
+            <span>📊</span>
+            <span>{businessMetrics.totalSteps} steps</span>
+          </div>
+          {businessMetrics.aiAnalyses > 0 && (
+            <div className="flex items-center gap-1 text-emerald-300 text-xs">
+              <span>🤖</span>
+              <span>{businessMetrics.aiAnalyses} AI</span>
+            </div>
+          )}
+        </div>
+
+        {/* Real Code Testing Summary */}
+        {result.realCodeTesting && result.summary && (
+          <div className="mt-4 pt-3 border-t border-emerald-500/10">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-emerald-400 text-sm">🧪</span>
+              <span className="text-emerald-300 text-sm font-medium">Real Code Testing</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-emerald-500/5 p-2 rounded border border-emerald-500/10 text-center">
+                <div className="text-emerald-400 text-lg font-bold">{result.summary.passedSteps}/{result.summary.totalSteps}</div>
+                <div className="text-emerald-300 text-xs">Steps Passed</div>
+              </div>
+              <div className="bg-blue-500/5 p-2 rounded border border-blue-500/10 text-center">
+                <div className="text-blue-400 text-lg font-bold">{Math.round(result.summary.successRate)}%</div>
+                <div className="text-blue-300 text-xs">Success Rate</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step Execution Logs (for both test and live modes) */}
+        {((isLiveMode && result.stepExecutionLogs) || (!isLiveMode && result.stepResults)) && (
+          <div className="mt-4 pt-3 border-t border-emerald-500/10">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-emerald-400 text-sm">📝</span>
+              <span className="text-emerald-300 text-sm font-medium">
+                {isLiveMode ? 'Live Action Execution Logs' : 'Test Step Execution Logs'}
+              </span>
+            </div>
+            <div className="bg-black/20 rounded p-2 max-h-32 overflow-y-auto">
+              {isLiveMode ? (
+                // Live mode: Show logger.info/error messages from action execution
+                result.stepExecutionLogs?.map((log: any, index: number) => (
+                  <div key={index} className={`text-xs font-mono ${log.level === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>
+                    [{log.step}] {log.message}
+                  </div>
+                ))
+              ) : (
+                // Test mode: Show step-by-step test results with log messages
+                result.stepResults?.map((stepResult: any, index: number) => (
+                  <div key={index} className={`text-xs font-mono ${stepResult.status === 'error' || stepResult.status === 'failed' ? 'text-red-300' : 'text-blue-300'}`}>
+                    [Step {stepResult.stepNumber || index + 1}] {stepResult.logMessage || stepResult.description || `${stepResult.type} completed`}
+                    {stepResult.status && (
+                      <span className={`ml-2 px-1 rounded text-xs ${
+                        stepResult.status === 'passed' || stepResult.status === 'completed' ? 'bg-green-500/20 text-green-300' :
+                        stepResult.status === 'failed' || stepResult.status === 'error' ? 'bg-red-500/20 text-red-300' :
+                        'bg-yellow-500/20 text-yellow-300'
+                      }`}>
+                        {stepResult.status}
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
          
 
       </div>
@@ -151,22 +213,68 @@ const getBusinessStepDescription = (step: any): string => {
 
   // Handle test mode operations (pseudo steps)
   switch (step.type) {
-    case 'Database find unique':
+    // Prisma Database Operations
+    case 'findUnique':
+    case 'findUniqueOrThrow':
+    case 'findFirst':
+    case 'findFirstOrThrow':
       return `Found the specific ${step.description?.toLowerCase() || 'record'}`;
-    case 'Database find many':
+    case 'findMany':
       return `Searched for ${step.description?.toLowerCase() || 'records'}`;
-    case 'Database create':
+    case 'create':
+    case 'createMany':
+    case 'createManyAndReturn':
       return `Created new ${step.description?.toLowerCase() || 'record'}`;
-    case 'Database update unique':
-    case 'Database update many':
+    case 'update':
+    case 'updateMany':
+    case 'upsert':
       return `Updated ${step.description?.toLowerCase() || 'record'}`;
-    case 'Database delete unique':
-    case 'Database delete many':
+    case 'delete':
+    case 'deleteMany':
       return `Removed ${step.description?.toLowerCase() || 'record'}`;
-    case 'call external api':
+    case 'count':
+      return `Counted ${step.description?.toLowerCase() || 'records'}`;
+    case 'aggregate':
+    case 'groupBy':
+      return `Aggregated ${step.description?.toLowerCase() || 'data'}`;
+    case '$transaction':
+      return `Executed transaction for ${step.description?.toLowerCase() || 'operations'}`;
+    case '$executeRaw':
+    case '$queryRaw':
+      return `Executed raw SQL for ${step.description?.toLowerCase() || 'data'}`;
+    // External API Operations
+    case 'api call get':
+    case 'api call post':
+    case 'api call put':
+    case 'api call delete':
+    case 'api call patch':
       return `Connected to external service for ${step.description?.toLowerCase() || 'data'}`;
+    case 'graphql query':
+    case 'graphql mutation':
+    case 'graphql subscription':
+      return `Executed GraphQL for ${step.description?.toLowerCase() || 'data'}`;
+    // AI Operations
     case 'ai analysis':
       return `AI analyzed ${step.description?.toLowerCase() || 'data'}`;
+    case 'ai generate object':
+    case 'ai generate text':
+    case 'ai generate image':
+      return `AI generated ${step.description?.toLowerCase() || 'content'}`;
+    // JavaScript Data Operations
+    case 'map':
+    case 'filter':
+    case 'reduce':
+    case 'find':
+    case 'sort':
+      return `Processed ${step.description?.toLowerCase() || 'data'} array`;
+    case 'parse json':
+    case 'stringify json':
+      return `Converted ${step.description?.toLowerCase() || 'data'} format`;
+    case 'validate data':
+      return `Validated ${step.description?.toLowerCase() || 'data'}`;
+    case 'transform data':
+    case 'merge objects':
+      return `Transformed ${step.description?.toLowerCase() || 'data'}`;
     default:
       return step.step || step.description || 'Operation completed';
   }
@@ -217,7 +325,7 @@ const getBusinessResultSummary = (result: any): string => {
   return result.message || 'Operation completed';
 };
 
-const InteractiveTestComponents = ({ steps, components, allModels, onTestResult, isRunningTest, onRunTest, isLiveMode = false }: InteractiveTestComponentsProps) => {
+const InteractiveTestComponents = ({ steps, components, allModels, onTestResult, isRunningTest, onRunTest, isLiveMode = false, action, documentId }: InteractiveTestComponentsProps) => {
   const [testInputs, setTestInputs] = useState<Record<string, any>>({});
 
   // Initialize testInputs with default values when components change
@@ -308,6 +416,15 @@ const InteractiveTestComponents = ({ steps, components, allModels, onTestResult,
           <div className={`font-mono text-sm font-semibold ${isLiveMode ? 'text-emerald-300' : 'text-blue-300'}`}>
             {isLiveMode ? '🚀 Run Your Live Action' : '🧪 Test Your Action'}
           </div>
+          
+          {/* Authentication Status for Live Mode */}
+          {isLiveMode && action && (
+            <AuthenticationStatus 
+              documentId={documentId} 
+              action={action}
+            />
+          )}
+          
           <div className={`font-mono text-xs text-center mb-4 ${isLiveMode ? 'text-emerald-400/70' : 'text-blue-400/70'}`}>
             This action doesn't require user inputs. Click below to {isLiveMode ? 'run it with real data' : 'test it with mock data'}.
           </div>
@@ -342,6 +459,61 @@ const InteractiveTestComponents = ({ steps, components, allModels, onTestResult,
       <div className={`font-mono text-sm font-semibold ${isLiveMode ? 'text-emerald-300' : 'text-blue-300'}`}>
         {isLiveMode ? '🚀 Live Action Interface' : '🧪 Test Action Interface'}
       </div>
+      
+      {/* Authentication Status for Live Mode */}
+      {isLiveMode && action && (
+        <AuthenticationStatus 
+          documentId={documentId} 
+          action={action}
+        />
+      )}
+
+      {/* Action Input Fields (from Step 1) */}
+      {action && action.pseudoSteps && action.pseudoSteps.length > 0 && action.pseudoSteps[0].inputFields && action.pseudoSteps[0].inputFields.length > 0 && (
+        <div className={`p-4 rounded-lg border ${isLiveMode ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-blue-500/5 border-blue-500/20'}`}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className={isLiveMode ? 'text-emerald-400' : 'text-blue-400'}>📝</span>
+            <span className={`font-medium ${isLiveMode ? 'text-emerald-300' : 'text-blue-300'}`}>Action Input Fields</span>
+          </div>
+          <div className="space-y-3">
+            {action.pseudoSteps[0].inputFields.map((field, index) => (
+              <div key={index} className={`bg-black/20 p-3 rounded border ${isLiveMode ? 'border-emerald-500/10' : 'border-blue-500/10'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className={`font-medium text-sm ${isLiveMode ? 'text-emerald-300' : 'text-blue-300'}`}>{field.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-mono px-2 py-1 rounded ${isLiveMode ? 'text-emerald-400 bg-emerald-500/10' : 'text-blue-400 bg-blue-500/10'}`}>
+                      {field.type}
+                    </span>
+                    {field.required && (
+                      <span className="text-red-400 text-xs">Required</span>
+                    )}
+                  </div>
+                </div>
+                {field.description && (
+                  <p className={`text-xs opacity-80 mb-2 ${isLiveMode ? 'text-emerald-200' : 'text-blue-200'}`}>{field.description}</p>
+                )}
+                <input
+                  type="text"
+                  placeholder={`Enter ${field.name}...`}
+                  className={`w-full bg-black/30 border rounded px-3 py-2 text-sm focus:outline-none ${
+                    isLiveMode 
+                      ? 'border-emerald-500/20 text-emerald-200 placeholder-emerald-400/50 focus:border-emerald-400' 
+                      : 'border-blue-500/20 text-blue-200 placeholder-blue-400/50 focus:border-blue-400'
+                  }`}
+                  onChange={(e) => {
+                    // Store input values in a way that doesn't modify the field object
+                    // This will be handled by the existing component value tracking system
+                    const inputEvent = new CustomEvent('fieldValueChange', {
+                      detail: { fieldName: field.name, value: e.target.value }
+                    });
+                    e.target.dispatchEvent(inputEvent);
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       {/* Render AI-generated UI components */}
       {components.map(component => (
@@ -496,6 +668,7 @@ export const ActionMindMapEditor = memo(({
   const [showTestModal, setShowTestModal] = useState(false);
   const [editingStep, setEditingStep] = useState<{ step: PseudoCodeStep; index: number } | null>(null);
   const [isLiveMode, setIsLiveMode] = useState(false); // Track if we're in live run mode
+  const [isRegeneratingSteps, setIsRegeneratingSteps] = useState(false); // Track step regeneration
 
 
   const [animatingConnection, setAnimatingConnection] = useState<string | null>(null);
@@ -634,6 +807,43 @@ export const ActionMindMapEditor = memo(({
     ));
 
     try {
+      // Step 1: Determine action type using AI if not already set
+      let actionType = action.type;
+      if (!actionType) {
+        console.log('🧠 Determining action type from description...');
+        const typeResponse = await fetch('/api/agent/generate-steps', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: action.name,
+            description: action.description || `Action to ${action.name}`,
+            availableModels: allModels,
+            entityType: 'action',
+            type: 'mutation', // Default, but AI will determine the actual type
+            documentId: documentId,
+            businessContext: `Analyze this action and determine if it should be a 'query' (reads/analyzes data only) or 'mutation' (creates/updates/deletes data): ${action.description}`
+          })
+        });
+        
+        if (typeResponse.ok) {
+          const typeData = await typeResponse.json();
+          // Extract the determined type from the first step or use heuristics
+          actionType = action.description?.toLowerCase().includes('create') || 
+                      action.description?.toLowerCase().includes('update') || 
+                      action.description?.toLowerCase().includes('delete') || 
+                      action.description?.toLowerCase().includes('save') ||
+                      action.description?.toLowerCase().includes('send') ||
+                      action.description?.toLowerCase().includes('generate') ? 'mutation' : 'query';
+          
+          // Update the action with the determined type
+          onUpdate({ ...action, type: actionType });
+        } else {
+          actionType = 'mutation'; // Default fallback
+        }
+      }
+      
+      console.log(`🎯 Using action type: ${actionType}`);
+
       const response = await fetch('/api/agent/generate-steps', {
         method: 'POST',
         headers: {
@@ -644,19 +854,23 @@ export const ActionMindMapEditor = memo(({
           description: action.description || `Action to ${action.name}`,
           availableModels: allModels,
           entityType: 'action',
-          type: (action as any).type || 'mutation', // Default to mutation if type is not set
-          businessContext: `Generate pseudo steps for ${action.name}. Make it comprehensive and realistic for business operations. 
+          type: actionType, // Use the determined action type
+          documentId: documentId, // Pass document ID for OAuth/credentials access
+          businessContext: `Generate comprehensive, executable steps for ${action.name}. Create detailed steps with:
+
+🔗 ENHANCED STEP REQUIREMENTS:
+- Realistic mock input/output data for testing
+- Actual executable code for each step
+- Proper authentication handling for external APIs
+- Comprehensive error handling and retry logic
+- Step dependencies and data flow management
+- Detailed logging messages for execution tracking
 
 🔗 PARAMETER CHAINING CONTEXT: This action may be used in automated schedules where its outputs can feed into other actions. Design steps that produce clear, useful outputs with descriptive field names (e.g., "customerId", "reportUrl", "processedData") that can be referenced by subsequent actions in a workflow chain.
 
-Consider common output patterns:
-- IDs for created/found records
-- Status indicators for process completion  
-- Data objects for further processing
-- File paths/URLs for generated content
-- Summary statistics for analysis
+🔗 EXTERNAL API VALIDATION: Ensure only ONE type of external API is used (e.g., only Gmail OR only Shopify, not both). Multiple calls to the same API are allowed.
 
-Make the action self-contained but also chain-friendly.`
+Make the action self-contained, thoroughly tested, and chain-friendly with production-ready code.`
         }),
       });
 
@@ -666,20 +880,134 @@ Make the action self-contained but also chain-friendly.`
         
         onUpdate({
           ...action,
+          type: actionType, // Use the determined action type
           pseudoSteps: generatedSteps,
-          _internal: data._internal // Store enhanced analysis for real testing
+          externalApiProvider: data.externalApiProvider,
+          testCode: data.testCode,
+          executionLogs: data.executionLogs,
+          _internal: {
+            ...data._internal,
+            apiValidation: data._internal?.apiValidation
+          }
         });
+
+        // Show API validation warning if multiple providers detected
+        if (data._internal?.apiValidation && !data._internal.apiValidation.isValid) {
+          alert(`⚠️ External API Validation Warning:\nMultiple API providers detected: ${data._internal.apiValidation.conflictingProviders?.join(', ')}\n\nActions can only use ONE external API provider. Please modify your description to use only one API service.`);
+        }
       } else {
         const errorData = await response.json();
-        alert(`Failed to generate pseudo steps: ${errorData.error || 'Unknown error'}`);
+        if (errorData.conflictingProviders) {
+          alert(`❌ External API Error:\n${errorData.details}\n\nPlease modify your action to use only one external API provider.`);
+        } else {
+          alert(`Failed to generate enhanced steps: ${errorData.error || 'Unknown error'}`);
+        }
       }
     } catch (error) {
-      console.error('Error generating pseudo steps:', error);
-      alert('Error generating pseudo steps. Please try again.');
+      console.error('Error generating enhanced steps:', error);
+      alert('Error generating enhanced steps. Please try again.');
     } finally {
       setIsGeneratingSteps(false);
     }
-  }, [action, onUpdate, allModels, animateConnection]);
+  }, [action, onUpdate, allModels, animateConnection, documentId]);
+
+  // Regenerate all steps after editing a step description
+  const regenerateStepsAfterEdit = useCallback(async () => {
+    if (!action.name.trim()) {
+      alert('Please enter an action name first');
+      return;
+    }
+
+    setIsRegeneratingSteps(true);
+    
+    // Update steps node to processing state
+    setNodes(prev => prev.map(node => 
+      node.id === 'steps' ? { ...node, status: 'processing', content: 'AI is regenerating steps with your edits...' } : node
+    ));
+
+    try {
+      const response = await fetch('/api/agent/generate-steps', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: action.name,
+          description: action.description || `Action to ${action.name}`,
+          availableModels: allModels,
+          entityType: 'action',
+          type: action.type || 'mutation',
+          documentId: documentId,
+          businessContext: `Regenerate comprehensive, executable steps for ${action.name} with updated step descriptions. Create detailed steps with:
+
+🔗 ENHANCED STEP REQUIREMENTS:
+- Realistic mock input/output data for testing
+- Actual executable code for each step
+- Proper authentication handling for external APIs
+- Comprehensive error handling and retry logic
+- Step dependencies and data flow management
+- Detailed logging messages for execution tracking
+
+🔗 PARAMETER CHAINING CONTEXT: This action may be used in automated schedules where its outputs can feed into other actions. Design steps that produce clear, useful outputs with descriptive field names.
+
+🔗 EXTERNAL API VALIDATION: Ensure only ONE type of external API is used. Multiple calls to the same API are allowed.
+
+Make the action self-contained, thoroughly tested, and chain-friendly with production-ready code.`
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const generatedSteps = data.pseudoSteps || [];
+        
+        onUpdate({
+          ...action,
+          type: action.type || 'mutation',
+          pseudoSteps: generatedSteps,
+          externalApiProvider: data.externalApiProvider,
+          testCode: data.testCode,
+          executionLogs: data.executionLogs,
+          _internal: {
+            ...data._internal,
+            apiValidation: data._internal?.apiValidation
+          }
+        });
+
+        // Update nodes
+        setNodes(prev => prev.map(node => {
+          if (node.id === 'steps') {
+            return {
+              ...node,
+              status: 'complete',
+              content: `${generatedSteps.length} steps regenerated`,
+              data: { steps: generatedSteps }
+            };
+          }
+          return node;
+        }));
+
+        // Show API validation alert if needed
+        if (data._internal?.apiValidation?.hasConflict) {
+          alert(`⚠️ Multiple External APIs Detected: ${data._internal.apiValidation.conflictingProviders.join(', ')}. Please ensure only one type of external API is used per action.`);
+        }
+
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to regenerate steps');
+      }
+    } catch (error) {
+      console.error('Step regeneration failed:', error);
+      alert(`Failed to regenerate steps: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Reset steps node status
+      setNodes(prev => prev.map(node => 
+        node.id === 'steps' ? { ...node, status: 'ready', content: 'Click to regenerate steps' } : node
+      ));
+    } finally {
+      setIsRegeneratingSteps(false);
+      setEditingStep(null); // Close the editing modal
+    }
+  }, [action, onUpdate, allModels, documentId]);
 
   const generateUIComponentsFromSteps = useCallback(async (isRegeneration = false) => {
     if (!action.pseudoSteps?.length) {
@@ -754,13 +1082,16 @@ Make the action self-contained but also chain-friendly.`
         body: JSON.stringify({
           name: action.name,
           description: action.description || `Action to ${action.name}`,
+          type: action.type || 'mutation', // Include action type
           pseudoSteps: action.pseudoSteps,
           uiComponents: action.uiComponentsDesign,
           availableModels: allModels,
           entityType: 'action',
           businessContext: `Generate comprehensive, executable code for ${action.name} based on steps and UI components. 
 
-🔗 PARAMETER CHAINING CONTEXT: This action will be used in automated schedules and may receive inputs from previous actions. Ensure the generated code can handle parameter inputs gracefully and produces clear, well-structured outputs that can be used by subsequent actions in a chain.`,
+🔗 PARAMETER CHAINING CONTEXT: This action will be used in automated schedules and may receive inputs from previous actions. Ensure the generated code can handle parameter inputs gracefully and produces clear, well-structured outputs that can be used by subsequent actions in a chain.
+
+🎯 ACTION TYPE: This is a ${action.type || 'mutation'} action - ${action.type === 'query' ? 'it should only read/analyze data' : 'it can create/update/delete data'}.`,
           enhancedAnalysis: action._internal?.enhancedAnalysis, // Include validated analysis
           testResults: nodes.find(n => n.id === 'ui-components')?.data?.lastTestResult // Include test execution results
         }),
@@ -773,8 +1104,6 @@ Make the action self-contained but also chain-friendly.`
         onUpdate({
           ...action,
           execute: {
-            ...action.execute,
-            type: 'code',
             code: {
               script: data.code || '',
               envVars: data.envVars || []
@@ -814,34 +1143,70 @@ Make the action self-contained but also chain-friendly.`
       let requestBody: any;
 
       if (isLiveMode) {
+        // Determine if we're in main app or sub-agent app
+        const isMainApp = !window.location.hostname.includes('vercel.app') || 
+                         window.location.hostname.includes('rom.cards') ||
+                         window.location.hostname.includes('localhost');
+        
+        // Get sub-agent URL from document metadata or environment
+        const getSubAgentUrl = () => {
+          // For now, construct from document ID (this should be set from deployment metadata)
+          // In a real implementation, this would come from the document's deployment info
+          if (documentId) {
+            return `https://agent-${documentId}.vercel.app`;
+          }
+          // Fallback for testing
+          return 'https://example-agent.vercel.app';
+        };
+        
         if (executionMode === 'remote' && action.id) {
           // Remote execution - call main app directly by action ID
           apiEndpoint = `/api/trigger/action/${action.id}`;
           requestBody = {
             input: inputParameters,
             member: {
-              id: 'sub-agent-user',
+              id: 'sub-agent-user', 
               role: 'admin',
               email: 'sub-agent@deployed.app'
             }
           };
         } else {
-          // Local execution - use dynamic action endpoint (fetches from main app, executes locally)
-          apiEndpoint = `/api/actions/${action.name}`;
+          // Local execution - call sub-agent's dynamic endpoint
+          if (isMainApp && documentId) {
+            // We're in main app, need to call sub-agent's endpoint
+            const subAgentUrl = getSubAgentUrl();
+            apiEndpoint = `${subAgentUrl}/api/actions/${action.name}`;
+          } else {
+            // We're in sub-agent app, call local endpoint
+            apiEndpoint = `/api/actions/${action.name}`;
+          }
+          
           requestBody = {
             input: inputParameters,
             credentials: {} // Will be fetched by the dynamic endpoint
           };
         }
       } else {
-        // Test mode - run pseudo steps with test data (still use main app for testing)
-        apiEndpoint = '/api/agent/test-steps';
-        requestBody = {
-          steps: action.pseudoSteps,
-          inputParameters: inputParameters,
-          testMode: true,
-          enhancedAnalysis: action._internal?.enhancedAnalysis
-        };
+        // Test mode - run actual testCode from pseudo steps with mockInput validation
+        const hasTestCode = action.pseudoSteps?.some(step => step.testCode);
+        
+        if (hasTestCode) {
+          // Use real step testing with actual testCode
+          apiEndpoint = '/api/agent/test-actual-steps';
+          requestBody = {
+            steps: action.pseudoSteps,
+            inputParameters: inputParameters
+          };
+        } else {
+          // Fallback to mock testing for older actions
+          apiEndpoint = '/api/agent/test-steps';
+          requestBody = {
+            steps: action.pseudoSteps,
+            inputParameters: inputParameters,
+            testMode: true,
+            enhancedAnalysis: action._internal?.enhancedAnalysis
+          };
+        }
       }
 
       const response = await fetch(apiEndpoint, {
@@ -891,13 +1256,16 @@ Make the action self-contained but also chain-friendly.`
           usedCredentials: result.data?.usedCredentials || [],
           actionName: result.data?.actionName || action.name
         } : {
-          // Test mode result format (still uses main app)
+          // Test mode result format - handle both real and mock testing
           success: true,
           steps: result.stepResults || [],
           finalResult: result.result || 'Action completed successfully',
           timestamp: result.timestamp,
           executionTime: result.executionTime || 0,
-          stepResults: result.stepResults
+          stepResults: result.stepResults,
+          testMode: result.testMode || 'mock-testing',
+          summary: result.summary, // For real code testing
+          realCodeTesting: result.testMode === 'real-code-testing'
         };
 
         setNodes(prev => prev.map(node => 
@@ -998,6 +1366,26 @@ Make the action self-contained but also chain-friendly.`
               />
             </div>
             <div className="space-y-2">
+              <Label className="text-blue-300 font-mono text-sm">🎯 Action Type <span className="text-gray-500 text-xs">(AI-determined)</span></Label>
+              <div className="bg-black/30 border border-blue-500/30 rounded-md px-3 py-2 text-blue-200 text-sm font-mono">
+                {action.type ? (
+                  <div className="flex items-center gap-2">
+                    <span>{action.type === 'mutation' ? '🔧' : '📊'}</span>
+                    <div>
+                      <div className="font-medium capitalize">{action.type}</div>
+                      <div className="text-xs text-blue-400/70">
+                        {action.type === 'mutation' ? 'Creates, updates, or deletes data' : 'Reads, analyzes, or searches data'}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-gray-500 text-xs">
+                    Type will be determined by AI based on your description
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="action-description" className="text-blue-300 font-mono text-sm">📝 Vision & Purpose</Label>
               <Textarea
                 id="action-description"
@@ -1035,9 +1423,15 @@ Make the action self-contained but also chain-friendly.`
                       <div className="text-blue-300 font-mono font-semibold">
                         Step {index + 1}
                       </div>
-                      <div className="px-2 py-1 rounded text-xs font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                        {step.type}
-                      </div>
+                      {(() => {
+                        const category = getStepCategory(step.type);
+                        const categoryInfo = getStepCategoryInfo(category);
+                        return (
+                          <div className={`px-2 py-1 rounded text-xs font-mono ${categoryInfo.bgColor} ${categoryInfo.color} border ${categoryInfo.borderColor}`}>
+                            {categoryInfo.icon} {categoryInfo.label}: {step.type}
+                          </div>
+                        );
+                      })()}
                     </div>
                     
                     {/* Action Buttons */}
@@ -1079,23 +1473,94 @@ Make the action self-contained but also chain-friendly.`
                     {step.description || 'Click to add description...'}
                   </div>
 
-                  {/* Input/Output Row */}
-                  {(step.inputFields?.length || step.outputFields?.length) ? (
-                    <div className="flex items-center gap-4 text-xs text-blue-400/70">
-                      {step.inputFields?.length > 0 && (
-                        <span className="flex items-center gap-1">
-                          <span>📥</span>
-                          <span>{step.inputFields.length} input{step.inputFields.length > 1 ? 's' : ''}</span>
+                  {/* Enhanced Step Information */}
+                  <div className="space-y-2">
+                    {/* Dependencies */}
+                    {step.dependsOn && step.dependsOn.length > 0 && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-yellow-400">🔗 Depends on:</span>
+                        <span className="text-yellow-300/70">
+                          {step.dependsOn.join(', ')}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Authentication */}
+                    {(step.oauthTokens || step.apiKeys) && (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-orange-400">🔐 Auth:</span>
+                        {step.oauthTokens && (
+                          <span className="bg-orange-500/20 text-orange-300 px-2 py-1 rounded">
+                            OAuth ({step.oauthTokens.provider})
+                          </span>
+                        )}
+                        {step.apiKeys && (
+                          <span className="bg-purple-500/20 text-purple-300 px-2 py-1 rounded">
+                            API Key ({step.apiKeys.provider})
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Mock Data Preview */}
+                    {(step.mockInput || step.mockOutput) && (
+                      <div className="space-y-1">
+                        {step.mockInput && Object.keys(step.mockInput).length > 0 && (
+                          <div className="text-xs">
+                            <span className="text-cyan-400">📊 Mock Input:</span>
+                            <div className="text-cyan-300/70 font-mono bg-black/30 p-2 rounded mt-1 max-h-16 overflow-hidden">
+                              {JSON.stringify(step.mockInput, null, 2).substring(0, 100)}...
+                            </div>
+                          </div>
+                        )}
+                        {step.mockOutput && Object.keys(step.mockOutput).length > 0 && (
+                          <div className="text-xs">
+                            <span className="text-cyan-400">📈 Mock Output:</span>
+                            <div className="text-cyan-300/70 font-mono bg-black/30 p-2 rounded mt-1 max-h-16 overflow-hidden">
+                              {JSON.stringify(step.mockOutput, null, 2).substring(0, 100)}...
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Code Status Indicators */}
+                    <div className="flex items-center gap-2 text-xs">
+                      {step.actualCode && (
+                        <span className="bg-green-500/20 text-green-300 px-2 py-1 rounded flex items-center gap-1">
+                          ✓ Code
                         </span>
                       )}
-                      {step.outputFields?.length > 0 && (
-                        <span className="flex items-center gap-1">
-                          <span>📤</span>
-                          <span>{step.outputFields.length} output{step.outputFields.length > 1 ? 's' : ''}</span>
+                      {step.testCode && (
+                        <span className="bg-blue-500/20 text-blue-300 px-2 py-1 rounded flex items-center gap-1">
+                          ✓ Test
+                        </span>
+                      )}
+                      {step.errorHandling && (
+                        <span className="bg-red-500/20 text-red-300 px-2 py-1 rounded flex items-center gap-1">
+                          ✓ Error Handling
                         </span>
                       )}
                     </div>
-                  ) : null}
+
+                    {/* Input/Output Row */}
+                    {(step.inputFields?.length || step.outputFields?.length) ? (
+                      <div className="flex items-center gap-4 text-xs text-blue-400/70">
+                        {step.inputFields?.length > 0 && (
+                          <span className="flex items-center gap-1">
+                            <span>📥</span>
+                            <span>{step.inputFields.length} input{step.inputFields.length > 1 ? 's' : ''}</span>
+                          </span>
+                        )}
+                        {step.outputFields?.length > 0 && (
+                          <span className="flex items-center gap-1">
+                            <span>📤</span>
+                            <span>{step.outputFields.length} output{step.outputFields.length > 1 ? 's' : ''}</span>
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1104,9 +1569,9 @@ Make the action self-contained but also chain-friendly.`
             <Button
               onClick={(e) => {
                 e.stopPropagation();
-                const newStep = {
+                const newStep: PseudoCodeStep = {
                   id: generateNewId('step', action.pseudoSteps || []),
-                  type: 'Database find many' as const,
+                  type: 'findMany' as const,
                   description: '',
                   inputFields: [{
                     id: generateNewId('field', []),
@@ -1125,7 +1590,13 @@ Make the action self-contained but also chain-friendly.`
                     required: false,
                     list: false,
                     description: ''
-                  }]
+                  }],
+                  mockInput: {},
+                  mockOutput: {},
+                  testCode: '',
+                  actualCode: '',
+                  logMessage: `Step executing: `,
+                  stepOrder: (action.pseudoSteps?.length || 0) + 1
                 };
                 const updatedSteps = [...(action.pseudoSteps || []), newStep];
                 onUpdate({ ...action, pseudoSteps: updatedSteps });
@@ -1325,11 +1796,28 @@ Make the action self-contained but also chain-friendly.`
               <span className="text-blue-400 text-lg md:text-xl">🧠</span>
             </div>
             <div>
-              <h3 className="text-lg md:text-xl font-bold text-blue-200 font-mono">
-                {isMobile ? 'Mind Flow' : 'Action Mind Map'}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg md:text-xl font-bold text-blue-200 font-mono">
+                  {action.name || (isMobile ? 'Mind Flow' : 'Action Mind Map')}
+                </h3>
+                {action.type && (
+                  <span className={`px-2 py-1 rounded text-xs font-mono border ${
+                    action.type === 'mutation' 
+                      ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' 
+                      : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                  }`}>
+                    {action.type === 'mutation' ? '🔧 MUTATION' : '📊 QUERY'}
+                  </span>
+                )}
+              </div>
               <p className="text-blue-400 text-xs md:text-sm font-mono">
-                {isMobile ? 'Idea → Steps → Test & Create' : 'Simple flow from idea to working action'}
+                {action.name ? (
+                  action.type === 'mutation' 
+                    ? 'Creates, updates, or deletes data' 
+                    : 'Reads, analyzes, or searches data'
+                ) : (
+                  isMobile ? 'Idea → Steps → Test & Create' : 'Simple flow from idea to working action'
+                )}
               </p>
             </div>
           </div>
@@ -1526,6 +2014,8 @@ Make the action self-contained but also chain-friendly.`
                  allModels={allModels}
                  isRunningTest={isRunningTest}
                  isLiveMode={isLiveMode}
+                 action={action}
+                 documentId={documentId}
                  onRunTest={(inputParameters) => {
                    runTest(inputParameters);
                  }}
@@ -2050,41 +2540,24 @@ Make the action self-contained but also chain-friendly.`
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-black/95 border border-blue-500/20">
           <DialogHeader>
             <DialogTitle className="text-blue-300 font-mono text-lg">
-              ✏️ Edit Step {editingStep ? editingStep.index + 1 : ''}
+              ✏️ Edit Step {editingStep ? editingStep.index + 1 : ''} Description
             </DialogTitle>
+            <div className="text-sm text-amber-400 font-mono mt-2">
+              💡 Only the description can be edited. All steps will be regenerated with new AI analysis.
+            </div>
           </DialogHeader>
           
           {editingStep && (
             <div className="space-y-6 mt-4">
-              {/* Step Type */}
+              {/* Step Type (Read-only) */}
               <div className="space-y-2">
-                <Label className="text-blue-300 font-mono text-sm">Type</Label>
-                <Select
-                  value={editingStep.step.type}
-                  onValueChange={(value: "Database find unique" | "Database find many" | "Database update unique" | "Database update many" | "Database create" | "Database create many" | "Database delete unique" | "Database delete many" | "call external api" | "ai analysis") => {
-                    const updatedSteps = action.pseudoSteps?.map(s => 
-                      s.id === editingStep.step.id ? { ...s, type: value } : s
-                    ) || [];
-                    onUpdate({ ...action, pseudoSteps: updatedSteps });
-                    setEditingStep({ ...editingStep, step: { ...editingStep.step, type: value } });
-                  }}
-                >
-                  <SelectTrigger className="bg-black/50 border-blue-500/30 text-blue-200 text-sm font-mono">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-black border-blue-500/30">
-                    <SelectItem value="Database find unique" className="text-blue-200 font-mono">Database find unique</SelectItem>
-                    <SelectItem value="Database find many" className="text-blue-200 font-mono">Database find many</SelectItem>
-                    <SelectItem value="Database update unique" className="text-blue-200 font-mono">Database update unique</SelectItem>
-                    <SelectItem value="Database update many" className="text-blue-200 font-mono">Database update many</SelectItem>
-                    <SelectItem value="Database create" className="text-blue-200 font-mono">Database create</SelectItem>
-                    <SelectItem value="Database create many" className="text-blue-200 font-mono">Database create many</SelectItem>
-                    <SelectItem value="Database delete unique" className="text-blue-200 font-mono">Database delete unique</SelectItem>
-                    <SelectItem value="Database delete many" className="text-blue-200 font-mono">Database delete many</SelectItem>
-                    <SelectItem value="call external api" className="text-blue-200 font-mono">Call External API</SelectItem>
-                    <SelectItem value="ai analysis" className="text-blue-200 font-mono">AI Analysis</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-blue-300 font-mono text-sm">Type (Read-only)</Label>
+                <div className="p-3 rounded-lg bg-gray-800/50 border border-gray-600/30 text-gray-300 font-mono text-sm">
+                  {editingStep.step.type}
+                </div>
+                <div className="text-xs text-gray-400 font-mono">
+                  ℹ️ Step type is automatically determined when regenerating steps
+                </div>
               </div>
 
               {/* Step Description */}
@@ -2093,54 +2566,74 @@ Make the action self-contained but also chain-friendly.`
                 <Textarea
                   value={editingStep.step.description}
                   onChange={(e) => {
-                    const updatedSteps = action.pseudoSteps?.map(s => 
-                      s.id === editingStep.step.id ? { ...s, description: e.target.value } : s
-                    ) || [];
-                    onUpdate({ ...action, pseudoSteps: updatedSteps });
+                    // Only update local editing state, don't save to action yet
                     setEditingStep({ ...editingStep, step: { ...editingStep.step, description: e.target.value } });
                   }}
                   placeholder="Describe what this step does..."
                   className="bg-black/50 border-blue-500/30 text-blue-200 font-mono text-sm min-h-[80px] resize-none"
                 />
-              </div>
-
-              {/* Input Fields */}
-              <div className="space-y-3">
-                <Label className="text-blue-300 font-mono text-sm">📥 Input Fields</Label>
-                <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/20">
-                  <StepFieldEditor
-                    fields={editingStep.step.inputFields || []}
-                    onFieldsChange={(fields) => {
-                      const updatedSteps = action.pseudoSteps?.map(s => 
-                        s.id === editingStep.step.id ? { ...s, inputFields: fields } : s
-                      ) || [];
-                      onUpdate({ ...action, pseudoSteps: updatedSteps });
-                      setEditingStep({ ...editingStep, step: { ...editingStep.step, inputFields: fields } });
-                    }}
-                    label=""
-                    color="blue"
-                    allModels={allModels}
-                  />
+                <div className="text-xs text-amber-400 font-mono">
+                  ⚠️ Changing the description will regenerate ALL steps with new AI analysis
                 </div>
               </div>
 
-              {/* Output Fields */}
+              {/* Input Fields (Read-only) */}
               <div className="space-y-3">
-                <Label className="text-blue-300 font-mono text-sm">📤 Output Fields</Label>
-                <div className="p-4 rounded-lg bg-blue-500/5 border border-blue-500/20">
-                  <StepFieldEditor
-                    fields={editingStep.step.outputFields || []}
-                    onFieldsChange={(fields) => {
-                      const updatedSteps = action.pseudoSteps?.map(s => 
-                        s.id === editingStep.step.id ? { ...s, outputFields: fields } : s
-                      ) || [];
-                      onUpdate({ ...action, pseudoSteps: updatedSteps });
-                      setEditingStep({ ...editingStep, step: { ...editingStep.step, outputFields: fields } });
-                    }}
-                    label=""
-                    color="blue"
-                    allModels={allModels}
-                  />
+                <Label className="text-blue-300 font-mono text-sm">📥 Input Fields (Read-only)</Label>
+                <div className="p-4 rounded-lg bg-gray-800/20 border border-gray-600/30">
+                  {editingStep.step.inputFields && editingStep.step.inputFields.length > 0 ? (
+                    <div className="space-y-2">
+                      {editingStep.step.inputFields.map((field, index) => (
+                        <div key={index} className="flex items-center gap-3 p-2 rounded bg-gray-800/30 border border-gray-600/20">
+                          <div className="text-gray-300 font-mono text-sm flex-1">
+                            <span className="text-blue-300">{field.name}</span>
+                            <span className="text-gray-400 ml-2">({field.type})</span>
+                            {field.required && <span className="text-red-400 ml-1">*</span>}
+                          </div>
+                          {field.description && (
+                            <div className="text-xs text-gray-400 flex-2">{field.description}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-gray-400 font-mono text-sm text-center py-4">
+                      No input fields defined
+                    </div>
+                  )}
+                  <div className="text-xs text-gray-400 font-mono mt-3">
+                    ℹ️ Input fields are automatically determined when regenerating steps
+                  </div>
+                </div>
+              </div>
+
+              {/* Output Fields (Read-only) */}
+              <div className="space-y-3">
+                <Label className="text-blue-300 font-mono text-sm">📤 Output Fields (Read-only)</Label>
+                <div className="p-4 rounded-lg bg-gray-800/20 border border-gray-600/30">
+                  {editingStep.step.outputFields && editingStep.step.outputFields.length > 0 ? (
+                    <div className="space-y-2">
+                      {editingStep.step.outputFields.map((field, index) => (
+                        <div key={index} className="flex items-center gap-3 p-2 rounded bg-gray-800/30 border border-gray-600/20">
+                          <div className="text-gray-300 font-mono text-sm flex-1">
+                            <span className="text-blue-300">{field.name}</span>
+                            <span className="text-gray-400 ml-2">({field.type})</span>
+                            {field.required && <span className="text-red-400 ml-1">*</span>}
+                          </div>
+                          {field.description && (
+                            <div className="text-xs text-gray-400 flex-2">{field.description}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-gray-400 font-mono text-sm text-center py-4">
+                      No output fields defined
+                    </div>
+                  )}
+                  <div className="text-xs text-gray-400 font-mono mt-3">
+                    ℹ️ Output fields are automatically determined when regenerating steps
+                  </div>
                 </div>
               </div>
 
@@ -2150,14 +2643,28 @@ Make the action self-contained but also chain-friendly.`
                   variant="outline"
                   onClick={() => setEditingStep(null)}
                   className="text-gray-400 border-gray-500/30"
+                  disabled={isRegeneratingSteps}
                 >
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => setEditingStep(null)}
+                  onClick={async () => {
+                    // Update the action description to include the edited step description
+                    const updatedDescription = `${action.description || action.name}\n\nStep ${editingStep.index + 1}: ${editingStep.step.description}`;
+                    
+                    // Update the action with the new description
+                    onUpdate({
+                      ...action,
+                      description: updatedDescription
+                    });
+                    
+                    // Trigger regeneration of all steps
+                    await regenerateStepsAfterEdit();
+                  }}
                   className="btn-matrix px-6"
+                  disabled={isRegeneratingSteps}
                 >
-                  ✅ Save Changes
+                  {isRegeneratingSteps ? "🤖 Regenerating..." : "🔄 Regenerate All Steps"}
                 </Button>
               </div>
             </div>

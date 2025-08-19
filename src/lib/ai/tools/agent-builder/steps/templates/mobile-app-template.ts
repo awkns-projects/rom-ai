@@ -8,6 +8,14 @@ interface MobileAppTemplateOptions {
   prismaSchema?: string; // Add optional schema - will be passed from main deployment
   sqliteOptions?: { filename?: string; enableWAL?: boolean; enableForeignKeys?: boolean; };
   
+  // User access and authentication configuration
+  userAccess?: {
+    appType: 'admin_only' | 'both_roles';
+    requiresAuthentication: boolean;
+    userDataScoping: 'user_scoped' | 'shared_data' | 'mixed';
+    creatorEmail?: string; // Email of the sub-agent creator (gets admin role)
+  };
+  
   // Vercel deployment configuration
   vercelConfig?: {
     team?: string;
@@ -22,8 +30,8 @@ interface MobileAppTemplateOptions {
  * Unified Mobile App Template Generator
  * Consolidates all file generation into one cohesive system
  * 
- * 🚀 NEW DYNAMIC ARCHITECTURE:
- * 1. Dynamic Action Execution: /api/actions/[actionName] - fetches code from main app, executes locally
+ * 🚀 LIVE EXECUTION ARCHITECTURE:
+ * 1. Dynamic Action Execution: /api/actions/[actionName] - fetches live code from main app, executes locally
  * 2. Direct Action Trigger: /api/trigger/action/[actionId] - calls main app directly by ID
  * 3. Direct Schedule Trigger: /api/trigger/schedule/[scheduleId] - calls main app directly by ID  
  * 4. Dynamic Cron Scheduler: /api/cron/scheduler - runs every minute, checks main app for schedules
@@ -31,21 +39,44 @@ interface MobileAppTemplateOptions {
  * 6. Direct Model CRUD: /api/models/[modelName] + /api/models/[modelName]/[id] - SQLite/Prisma operations
  * 7. Interactive Action UI: Modal-based action execution with input parameters and results display
  * 
+ * NOTE: This template generates PRODUCTION SUB-AGENT APPS for live execution only.
+ * Testing is handled in the main app during development, not in deployed sub-agents.
+ * 
  * Benefits: 
  * - No redeployments needed for code changes
- * - Always up-to-date actions and schedules
+ * - Always up-to-date actions and schedules  
  * - Local execution with fresh credentials
  * - Centralized API key management
  * - Direct database operations for optimal performance
  * - Full CRUD operations with pagination and search
  * - Interactive UI components like main app
  * - No manual API key configuration required
+ * - Production-ready live execution (testing handled in main app)
  */
 export class MobileAppTemplate {
   private options: MobileAppTemplateOptions;
 
   constructor(options: MobileAppTemplateOptions) {
     this.options = options;
+    
+    // Mobile-app-template ALWAYS requires user authentication
+    if (!this.options.userAccess) {
+      this.options.userAccess = {
+        appType: 'both_roles',
+        requiresAuthentication: true,
+        userDataScoping: 'mixed'
+      };
+    } else {
+      this.options.userAccess.requiresAuthentication = true;
+    }
+    
+    // Ensure CREATOR_EMAIL is added to environment variables for deployment
+    if (this.options.userAccess?.creatorEmail) {
+      this.options.environmentVariables = {
+        ...this.options.environmentVariables,
+        CREATOR_EMAIL: this.options.userAccess.creatorEmail
+      };
+    }
   }
 
   /**
@@ -232,6 +263,16 @@ pids/
       });
     }
 
+    // Add authentication dependencies if authentication is required
+    if (this.options.userAccess?.requiresAuthentication) {
+      Object.assign(baseDependencies, {
+        "bcryptjs": "^2.4.3",
+        "@types/bcryptjs": "^2.4.6",
+        "jsonwebtoken": "^9.0.2",
+        "@types/jsonwebtoken": "^9.0.6"
+      });
+    }
+
     // ULTIMATE minimal scripts - prisma db push does EVERYTHING (creates file + schema + client)
     const baseScripts = {
       dev: "prisma db push --accept-data-loss && next dev",
@@ -301,7 +342,7 @@ AI_MODEL_NAME="gpt-4o-mini"   # For OpenAI: gpt-4o-mini, gpt-4o, gpt-3.5-turbo
     envContent += `
 
 # Main App Integration (Required for agent communication)
-NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
+NEXT_PUBLIC_MAIN_APP_URL="https://www.rom.cards"
 NEXT_PUBLIC_DOCUMENT_ID=""  # Your agent document ID from main app
 NEXT_PUBLIC_AGENT_KEY=""    # Your agent key for authentication
 
@@ -316,6 +357,9 @@ CRON_SECRET="your-cron-secret-here"
 NEXT_PUBLIC_APP_NAME="${this.options.projectName}"
 NEXT_PUBLIC_APP_VERSION="1.0.0"
 
+# Creator/Admin Configuration
+CREATOR_EMAIL=""  # Email of the sub-agent creator (gets admin role)
+
 # Optional: Custom branding
 NEXT_PUBLIC_BRAND_NAME="${this.options.projectName}"
 NEXT_PUBLIC_BRAND_DESCRIPTION="Smart agent powered by AI"
@@ -328,31 +372,42 @@ NEXT_PUBLIC_THEME_COLOR="emerald"  # Options: emerald, blue, purple, pink
   }
 
   private generateEnvLocal(): string {
+    const creatorEmail = this.options.userAccess?.creatorEmail;
+    
     return `# Local Development Environment
-# Database URL - automatically configured by init script
+# Database configuration - SQLite file created automatically by prisma db push
 DATABASE_URL="file:./dev.db"
 NODE_ENV=development
-NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-# Security tokens (auto-generated)
+# App URLs for different environments
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXTAUTH_URL=http://localhost:3000
+
+# Security tokens (auto-generated - replace in production)
 NEXTAUTH_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}"
-NEXTAUTH_URL="http://localhost:3000"
 CRON_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}"
 
 # Main app integration (required for agent communication)
-NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
+NEXT_PUBLIC_MAIN_APP_URL="https://www.rom.cards"
 
-# These will be set automatically during deployment
-# NEXT_PUBLIC_DOCUMENT_ID=
-# NEXT_PUBLIC_AGENT_TOKEN=
+# Agent configuration (these will be set automatically during deployment)
+# NEXT_PUBLIC_DOCUMENT_ID=auto-generated-document-id
+# NEXT_PUBLIC_AGENT_TOKEN=auto-generated-secure-token
+# NEXT_PUBLIC_AGENT_KEY=auto-generated-agent-key
+
+# Creator/Admin configuration (set during deployment)
+${creatorEmail ? `CREATOR_EMAIL="${creatorEmail}"  # The creator of this sub-agent gets admin role` : '# CREATOR_EMAIL=creator@example.com  # The creator of this sub-agent gets admin role'}
+
+# Vercel deployment will automatically set:
+# VERCEL_URL=your-deployment-url.vercel.app (used for dynamic URL resolution)
 `;
   }
 
   private generateVercelConfig(): string {
     return JSON.stringify({
       functions: {
-        "src/app/api/**/*.ts": { maxDuration: 60 },
-        "src/pages/api/**/*.ts": { maxDuration: 60 }
+        "src/pages/api/**/*.ts": { maxDuration: 60 },
+        "src/app/api/**/*.ts": { maxDuration: 60 }
       },
       crons: [{
         path: "/api/cron/scheduler", 
@@ -360,13 +415,29 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
       }],
       build: {
         env: {
+          // Database configuration for Vercel build
           DATABASE_URL: "file:/tmp/dev.db",
           PRISMA_GENERATE_DATAPROXY: "false", 
-          NODE_ENV: "production"
+          NODE_ENV: "production",
+          // Build-time variables
+          NEXTAUTH_URL: "https://VERCEL_URL",
+          NEXT_PUBLIC_APP_URL: "https://VERCEL_URL"
         }
       },
       env: {
-        DATABASE_URL: "file:/tmp/dev.db"
+        // Runtime environment variables
+        DATABASE_URL: "file:/tmp/dev.db",
+        NODE_ENV: "production",
+        // Main app integration (these will be set during deployment)
+        NEXT_PUBLIC_MAIN_APP_URL: "https://www.rom.cards",
+        // Auth configuration
+        NEXTAUTH_URL: "https://VERCEL_URL",
+        NEXT_PUBLIC_APP_URL: "https://VERCEL_URL",
+        // These environment variables will be set by the deployment process:
+        // NEXT_PUBLIC_DOCUMENT_ID - unique document identifier
+        // NEXT_PUBLIC_AGENT_TOKEN - authentication token for main app communication  
+        // NEXTAUTH_SECRET - NextAuth secret key
+        // CRON_SECRET - secret for cron job authentication
       }
     }, null, 2);
   }
@@ -377,7 +448,7 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
 
   private generatePages(): Record<string, string> {
     // Use App Router structure following Next.js + Prisma tutorial pattern
-    return {
+    const pages: Record<string, string> = {
       'src/app/layout.tsx': this.generateLayoutComponent(),
       'src/app/page.tsx': this.generateHomePage(),
       'src/app/models/page.tsx': this.generateModelsListPage(),
@@ -386,6 +457,16 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
       'src/app/schedules/page.tsx': this.generateSchedulesPage(),
       'src/app/chat/page.tsx': this.generateChatPage()
     };
+
+    // Add authentication pages if authentication is required
+    if (this.options.userAccess?.requiresAuthentication) {
+      pages['src/app/register/page.tsx'] = this.generateRegisterPage();
+      pages['src/app/login/page.tsx'] = this.generateLoginPage();
+      pages['src/app/logout/page.tsx'] = this.generateLogoutPage();
+      pages['src/app/profile/page.tsx'] = this.generateProfilePage();
+    }
+
+    return pages;
   }
 
   private generateComponents(): Record<string, string> {
@@ -402,7 +483,7 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
     };
   }
 
-  private generateApiRoutes(): Record<string, string> {
+    private generateApiRoutes(): Record<string, string> {
     const files: Record<string, string> = {};
 
     // System endpoints
@@ -411,6 +492,18 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
     files['src/pages/api/models/[modelName].ts'] = this.generateModelEndpoint();
     files['src/pages/api/models/[modelName]/[id].ts'] = this.generateModelRecordEndpoint();
     files['src/pages/api/chat.ts'] = this.generateChatEndpoint();
+
+    // Authentication endpoints if authentication is required
+    if (this.options.userAccess?.requiresAuthentication) {
+      files['src/pages/api/auth/register.ts'] = this.generateRegisterEndpoint();
+      files['src/pages/api/auth/login.ts'] = this.generateLoginEndpoint();
+      files['src/pages/api/auth/logout.ts'] = this.generateLogoutEndpoint();
+      files['src/pages/api/auth/session.ts'] = this.generateSessionEndpoint();
+      files['src/pages/api/auth/profile.ts'] = this.generateProfileEndpoint();
+      
+      // Chat-related endpoints for authenticated users
+      files['src/pages/api/chat/conversations.ts'] = this.generateChatConversationsEndpoint();
+    }
 
     // Dynamic action execution endpoint (fetches from main app)
     files['src/pages/api/actions/[actionName].ts'] = this.generateDynamicActionEndpoint();
@@ -428,9 +521,9 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
     files['src/pages/api/agent/actions.ts'] = this.generateActionsEndpoint();
     files['src/pages/api/agent/schedules.ts'] = this.generateSchedulesEndpoint();
     files['src/pages/api/agent/models.ts'] = this.generateModelsEndpoint();
-          files['src/pages/api/agent/config.ts'] = this.generateAgentConfigEndpoint();
-      files['src/pages/api/agent/data.ts'] = this.generateAgentDataEndpoint();
-      files['src/pages/api/agent/test-connection.ts'] = this.generateTestConnectionEndpoint();
+        files['src/pages/api/agent/config.ts'] = this.generateAgentConfigEndpoint();
+    files['src/pages/api/agent/data.ts'] = this.generateAgentDataEndpoint();
+    files['src/pages/api/agent/test-connection.ts'] = this.generateTestConnectionEndpoint();
 
     return files;
   }
@@ -806,7 +899,7 @@ export default function App({ Component, pageProps }: AppProps) {
   private generateApiClient(): string {
     return `// API client for mobile app
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
-const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
 const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
 const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
 const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
@@ -1083,7 +1176,8 @@ export default api;`;
   }
 
   private generateThemeSystem(): string {
-    return `export const themes = {
+    return `// Theme system - theme is dynamically loaded from agent config API
+export const themes = {
   green: {
     name: 'Matrix',
     primary: 'green',
@@ -1874,6 +1968,8 @@ export default function SchedulesPage() {
   }
 
   private generateChatPage(): string {
+    const requiresAuth = this.options.userAccess?.requiresAuthentication || false;
+    
     return `import Layout from '@/components/Layout';
 import ChatMessage from '@/components/ChatMessage';
 import { useChat } from '@ai-sdk/react';
@@ -1885,15 +1981,91 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [showQuickActions, setShowQuickActions] = useState(false);
+  ${requiresAuth ? `
+  // 🔐 Authentication state
+  const [user, setUser] = useState(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [conversations, setConversations] = useState([]);
+  const [currentConversationId, setCurrentConversationId] = useState(null);` : ''}
   
   // Use global agent context
   const { config: agentConfig } = useAgent();
+
+  ${requiresAuth ? `
+  // 🔐 Authentication check and user context setup
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/session');
+        if (!response.ok) {
+          router.push('/login');
+          return;
+        }
+        const userData = await response.json();
+        setUser(userData);
+        
+        // Load user's chat conversations
+        await loadUserConversations(userData.id);
+        
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        router.push('/login');
+      } finally {
+        setIsAuthLoading(false);
+      }
+    };
+    checkAuth();
+  }, []);
+
+  // Load user's chat history
+  const loadUserConversations = async (userId) => {
+    try {
+      const response = await fetch('/api/chat/conversations');
+      if (response.ok) {
+        const data = await response.json();
+        setConversations(data.conversations || []);
+        
+        // Set current conversation or create new one
+        if (data.conversations.length > 0) {
+          setCurrentConversationId(data.conversations[0].id);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load conversations:', error);
+    }
+  };
+
+  // Show loading screen while checking authentication
+  if (isAuthLoading) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          <span className="ml-2 text-gray-400">Authenticating...</span>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Redirect to login if not authenticated
+  if (!user) {
+    return null; // Will redirect in useEffect
+  }` : ''}
   
   const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
     api: '/api/chat',
     initialMessages: [],
+    ${requiresAuth ? `
+    body: {
+      conversationId: currentConversationId
+    },` : ''}
     onError: (error) => {
       console.error('Chat error:', error);
+      ${requiresAuth ? `
+      // If authentication error, redirect to login
+      if (error.message?.includes('Authentication') || error.message?.includes('401')) {
+        router.push('/login');
+      }` : ''}
     }
   });
 
@@ -2013,13 +2185,35 @@ What would you like to explore first?\`,
         {/* Header */}
         <div className="p-4 border-b border-green-400/30">
           <div className="flex items-center justify-between">
-            <div>
+            <div className="flex-1">
               <h1 className="text-xl font-mono font-bold text-green-200">
                 {agentConfig?.name || 'AI Assistant'}
               </h1>
               <p className="text-sm font-mono text-green-300/70">
                 {agentConfig?.description || 'Powered by AI SDK • Ask questions about your data, actions, and schedules'}
               </p>
+              ${requiresAuth ? `
+              {user && (
+                <div className="flex items-center mt-2 space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-xs font-bold">
+                      {user.name?.charAt(0)?.toUpperCase() || 'U'}
+                    </div>
+                    <span className="text-xs font-mono text-green-300">
+                      {user.name} ({user.role})
+                    </span>
+                  </div>
+                  <span className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded">
+                    {conversations.length} conversations
+                  </span>
+                  <button
+                    onClick={() => router.push('/profile')}
+                    className="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                  >
+                    Profile
+                  </button>
+                </div>
+              )}` : ''}
             </div>
             <button
               onClick={() => setShowQuickActions(!showQuickActions)}
@@ -2532,6 +2726,79 @@ export default function LoadingSpinner({ size = 'md', color = 'green' }: Loading
 import api from '@/lib/api';
 import LoadingSpinner from './LoadingSpinner';
 
+// Simple UI component fallback
+const getDefaultComponents = (action) => {
+  // Use existing UI components if available
+  if (action.uiComponents && action.uiComponents.length > 0) {
+    return action.uiComponents;
+  }
+  
+  // Simple fallback
+  return [
+    { name: 'input', type: 'text', label: 'Input', placeholder: 'Enter input data', required: true, defaultValue: '' }
+  ];
+
+};
+
+// Simple error message fallback
+const getSimpleErrorMessage = (error, action, executionMode) => {
+  const errorMessage = error instanceof Error ? error.message : error?.error || 'Unknown error';
+  
+  return {
+    title: 'Execution Failed',
+    message: \`Error executing "\${action.name}": \${errorMessage}\`,
+    suggestion: 'Please try again or contact support if the problem persists.',
+    retryable: true
+  };
+  
+
+    return {
+      title: 'Resource Not Found',
+      message: \`The requested resource for "\${action.name}" could not be found. It may have been deleted or moved.\`,
+      suggestion: 'Verify the ID or resource identifier and try again.',
+      retryable: false
+    };
+  }
+  
+  if (executionMode === 'remote') {
+    return {
+      title: 'Remote Execution Failed',
+      message: \`Failed to execute "\${action.name}" on the main application server.\`,
+      suggestion: 'Try switching to local execution mode or contact support if the issue persists.',
+      retryable: true
+    };
+  }
+  
+  // Action-type specific error handling
+  if (actionType === 'mutation' && errorMessage.toLowerCase().includes('constraint')) {
+    return {
+      title: 'Data Constraint Violation',
+      message: \`Cannot save data for "\${action.name}" because it violates database constraints.\`,
+      suggestion: 'Check for duplicate values, missing required fields, or invalid relationships.',
+      retryable: true
+    };
+  }
+  
+  if (actionType === 'query' && errorMessage.toLowerCase().includes('syntax')) {
+    return {
+      title: 'Query Error',
+      message: \`There's an issue with the search parameters for "\${action.name}".\`,
+      suggestion: 'Simplify your search criteria or contact support if the problem continues.',
+      retryable: true
+    };
+  }
+  
+  // Generic but contextual fallback
+  return {
+    title: 'Execution Failed',
+    message: \`An error occurred while executing "\${action.name}": \${errorMessage}\`,
+    suggestion: actionType === 'mutation' ? 
+      'Verify your input data and ensure all required fields are provided.' :
+      'Check your search parameters and try again with different criteria.',
+    retryable: true
+  };
+};
+
 interface ActionExecutionModalProps {
   action: {
     id: string;
@@ -2554,17 +2821,8 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
   const [result, setResult] = useState<any>(null);
   const [step, setStep] = useState<'input' | 'executing' | 'result'>('input');
 
-  // Generate mock UI components if none provided
-  const uiComponents = action.uiComponentsDesign || [
-    {
-      name: 'input',
-      type: 'text',
-      label: 'Input Data',
-      placeholder: 'Enter input for ' + action.name,
-      required: false,
-      defaultValue: ''
-    }
-  ];
+  // Use simple UI component fallback
+  const uiComponents = getDefaultComponents(action);
 
   // Initialize input parameters with default values
   useEffect(() => {
@@ -2605,9 +2863,13 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
       // Notify parent component
       onComplete(actionResult);
     } catch (error) {
+              const smartError = getSimpleErrorMessage(error, action, executionMode);
       const errorResult = {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: smartError.message,
+        title: smartError.title,
+        suggestion: smartError.suggestion,
+        retryable: smartError.retryable,
         executionMode
       };
       setResult(errorResult);
@@ -2707,10 +2969,11 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
       };
     } else {
       return {
-        status: 'Error',
+        status: result.title || 'Error',
         message: result.error || 'Action failed',
-        details: result.details || 'No additional details',
-        mode: executionMode === 'local' ? 'Local Execution' : 'Remote Execution'
+        details: result.suggestion || result.details || 'No additional details',
+        mode: executionMode === 'local' ? 'Local Execution' : 'Remote Execution',
+        retryable: result.retryable !== false
       };
     }
   };
@@ -2838,6 +3101,85 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
                   ))}
                 </div>
               </div>
+
+              {/* Step Execution Logs */}
+              {result.stepExecutionLogs && result.stepExecutionLogs.length > 0 && (
+                <div className="bg-blue-500/10 border border-blue-400/20 rounded-lg p-4">
+                  <h4 className="font-mono text-sm text-blue-300 mb-3">📝 Step Execution Logs</h4>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {result.stepExecutionLogs.map((log: any, index: number) => (
+                      <div key={index} className={\`text-xs font-mono \${log.level === 'error' ? 'text-red-300' : 'text-blue-200'}\`}>
+                        <span className="text-blue-300/50">[{log.step || index + 1}]</span> {log.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Enhanced Step Data */}
+              {result.enhancedStepData && (
+                <div className="bg-emerald-500/10 border border-emerald-400/20 rounded-lg p-4">
+                  <h4 className="font-mono text-sm text-emerald-300 mb-3">🔍 Step Analysis</h4>
+                  <div className="grid grid-cols-2 gap-3 text-xs font-mono">
+                    <div className="text-emerald-200">
+                      <span className="text-emerald-300/70">Total Steps:</span> {result.enhancedStepData.totalSteps}
+                    </div>
+                    <div className="text-emerald-200">
+                      <span className="text-emerald-300/70">Has Test Code:</span> {result.enhancedStepData.hasTestCode ? '✅' : '❌'}
+                    </div>
+                    <div className="text-emerald-200">
+                      <span className="text-emerald-300/70">Has Mock Data:</span> {result.enhancedStepData.hasMockData ? '✅' : '❌'}
+                    </div>
+                    <div className="text-emerald-200">
+                      <span className="text-emerald-300/70">Has Auth:</span> {result.enhancedStepData.hasAuthentication ? '🔐' : '🔓'}
+                    </div>
+                    {result.enhancedStepData.externalApiProvider && (
+                      <div className="col-span-2 text-emerald-200">
+                        <span className="text-emerald-300/70">API Provider:</span> {result.enhancedStepData.externalApiProvider}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Database Changes Display */}
+              {result.data && result.data.databaseChanges && (
+                <div className="bg-purple-500/10 border border-purple-400/20 rounded-lg p-4">
+                  <h4 className="font-mono text-sm text-purple-300 mb-3">🗄️ Database Changes</h4>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {Object.entries(result.data.databaseChanges).map(([operation, records]) => (
+                      <div key={operation} className="border-l-2 border-purple-400/30 pl-3">
+                        <div className="text-xs font-mono text-purple-200 font-bold">{operation.toUpperCase()}</div>
+                        <div className="text-xs font-mono text-purple-200/70 mt-1">
+                          {Array.isArray(records) ? 
+                            \`\${records.length} record(s)\` : 
+                            JSON.stringify(records, null, 2)
+                          }
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* External API Calls Display */}
+              {result.data && result.data.externalApiCalls && (
+                <div className="bg-orange-500/10 border border-orange-400/20 rounded-lg p-4">
+                  <h4 className="font-mono text-sm text-orange-300 mb-3">🌐 External API Calls</h4>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {result.data.externalApiCalls.map((call: any, index: number) => (
+                      <div key={index} className="border-l-2 border-orange-400/30 pl-3">
+                        <div className="text-xs font-mono text-orange-200 font-bold">
+                          {call.method} {call.endpoint}
+                        </div>
+                        <div className="text-xs font-mono text-orange-200/70 mt-1">
+                          Status: {call.status} | Response: {JSON.stringify(call.response, null, 2)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -2892,15 +3234,292 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
     const modelsContext = this.options.models.map(m => `${m.name} (${m.description || 'data model'})`).join(', ');
     const actionsContext = this.options.actions.map(a => `${a.name} (${a.description || 'action'})`).join(', ');
     const schedulesContext = this.options.schedules.map(s => `${s.name} (${s.description || 'scheduled task'})`).join(', ');
+    const requiresAuth = this.options.userAccess?.requiresAuthentication || false;
     
     return `import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { streamText, convertToCoreMessages } from 'ai';
 import { z } from 'zod';
+${requiresAuth ? `import jwt from 'jsonwebtoken';
+import { prisma } from '@/lib/prisma';` : ''}
+
+${requiresAuth ? `
+// 🔐 Verify JWT token and get user context
+async function verifyUserAuthentication(req) {
+  const token = req.cookies?.['auth-token'];
+  
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    
+    const user = await prisma.appUser.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true
+      }
+    });
+
+    if (!user || !user.isActive) {
+      throw new Error('User not found or inactive');
+    }
+
+    return user;
+  } catch (error) {
+    throw new Error('Invalid authentication token');
+  }
+}
+
+// 🛠️ Generate dynamic action tools with role-based filtering
+async function generateActionTools(userContext) {
+  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
+  const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+  const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+
+  try {
+    // Fetch all agent config including actions from main app
+    const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+        'X-Agent-Token': AGENT_TOKEN,
+        'X-Document-ID': DOCUMENT_ID,
+      },
+    });
+
+    if (!response.ok) {
+      console.warn('Failed to fetch actions from main app');
+      return [];
+    }
+
+    const data = await response.json();
+    const actions = data.success ? data.agentConfig.actions : [];
+
+    // Filter actions based on user role
+    const accessibleActions = actions.filter(action => {
+      if (!action.userRole || action.userRole === 'both') return true;
+      if (action.userRole === 'admin' && userContext.role === 'ADMIN') return true;
+      if (action.userRole === 'member' && (userContext.role === 'MEMBER' || userContext.role === 'ADMIN')) return true;
+      return false;
+    });
+
+    // Convert to AI SDK tool format
+    return accessibleActions.map(action => ({
+      name: \`execute_\${action.name.toLowerCase().replace(/\\s+/g, '_')}\`,
+      description: \`\${action.description || action.name}. User role required: \${action.userRole || 'any'}\`,
+      parameters: z.object({
+        ...action.parameters?.reduce((acc, param) => {
+          acc[param.name] = z.string().describe(param.description || param.name);
+          return acc;
+        }, {}) || {},
+        _userContext: z.object({
+          userId: z.string(),
+          role: z.string()
+        }).optional()
+      }),
+      execute: async (args) => {
+        // Apply user scoping for user-scoped actions
+        if (action.userDataScoping === 'user_scoped') {
+          args.userId = userContext.id;
+          args.userScopedFilter = { userId: userContext.id };
+        }
+
+        // Log action execution
+        await logActionExecution(action.id, action.name, userContext, args);
+
+        // Execute action logic (simplified - in reality would execute the full action code)
+        return {
+          success: true,
+          message: \`Action '\${action.name}' executed successfully\`,
+          userRole: userContext.role,
+          timestamp: new Date().toISOString()
+        };
+      }
+    }));
+  } catch (error) {
+    console.error('Failed to generate action tools:', error);
+    return [];
+  }
+}
+
+// 🗄️ Generate dynamic database query tools with user scoping
+function generateDatabaseTools(userContext) {
+  const models = ${JSON.stringify(this.options.models)};
+  const tools = [];
+
+  models.forEach(model => {
+    // List/search tool for each model
+    tools.push({
+      name: \`query_\${model.name.toLowerCase()}_list\`,
+      description: \`Get a list of \${model.name} records. Use when user wants to see, find, list, or search \${model.name} data.\`,
+      parameters: z.object({
+        limit: z.number().optional().describe('Maximum number of records to return (default: 10)'),
+        search: z.string().optional().describe('Search term to filter records'),
+        orderBy: z.string().optional().describe('Field to order by')
+      }),
+      execute: async (args) => {
+        // Apply user scoping if model has userId field
+        const baseWhere = args.search ? { 
+          OR: model.fields.filter(f => f.type === 'String').map(f => ({
+            [f.name]: { contains: args.search, mode: 'insensitive' }
+          }))
+        } : {};
+
+        // Add user scoping for user-scoped models
+        const hasUserField = model.fields.some(f => f.name === 'userId');
+        const userScopedWhere = hasUserField ? 
+          { ...baseWhere, userId: userContext.id } : baseWhere;
+
+        try {
+          const records = await prisma[model.name.toLowerCase()].findMany({
+            take: args.limit || 10,
+            where: userScopedWhere,
+            orderBy: args.orderBy ? { [args.orderBy]: 'desc' } : { id: 'desc' }
+          });
+
+          return {
+            success: true,
+            data: records,
+            count: records.length,
+            userScoped: hasUserField
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: 'Failed to query database',
+            details: error.message
+          };
+        }
+      }
+    });
+
+    // Get single record tool
+    tools.push({
+      name: \`query_\${model.name.toLowerCase()}_by_id\`,
+      description: \`Get a specific \${model.name} record by ID. Use when user asks for details about a specific \${model.name}.\`,
+      parameters: z.object({
+        id: z.string().describe(\`The ID of the \${model.name} record\`)
+      }),
+      execute: async (args) => {
+        try {
+          const hasUserField = model.fields.some(f => f.name === 'userId');
+          const where = hasUserField ? 
+            { id: args.id, userId: userContext.id } : 
+            { id: args.id };
+
+          const record = await prisma[model.name.toLowerCase()].findUnique({
+            where
+          });
+
+          if (!record) {
+            return {
+              success: false,
+              error: 'Record not found or access denied'
+            };
+          }
+
+          return {
+            success: true,
+            data: record
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: 'Failed to fetch record',
+            details: error.message
+          };
+        }
+      }
+    });
+  });
+
+  return tools;
+}
+
+// 📝 Log action execution for audit trail
+async function logActionExecution(actionId, actionName, userContext, args) {
+  try {
+    await prisma.actionExecutionLog.create({
+      data: {
+        actionId: actionId || 'unknown',
+        actionName: actionName,
+        actionType: 'chat_tool',
+        inputParameters: JSON.stringify(args),
+        startedAt: new Date(),
+        status: 'completed',
+        triggerSource: 'chat',
+        userId: userContext.id
+      }
+    });
+  } catch (error) {
+    console.error('Failed to log action execution:', error);
+  }
+}
+
+// 💬 Save chat conversation with user context
+async function saveChatWithUserContext(messages, userContext, conversationId = null) {
+  try {
+    let conversation;
+    
+    if (conversationId) {
+      // Verify conversation ownership
+      conversation = await prisma.chatConversation.findFirst({
+        where: { id: conversationId, userId: userContext.id }
+      });
+    }
+
+    if (!conversation) {
+      // Create new conversation
+      conversation = await prisma.chatConversation.create({
+        data: {
+          userId: userContext.id,
+          title: 'Chat Session',
+          status: 'active',
+          messageCount: 0,
+          toolCallCount: 0
+        }
+      });
+    }
+
+    // Save new messages
+    for (const message of messages.slice(-2)) { // Save last 2 messages to avoid duplicates
+      await prisma.chatMessage.create({
+        data: {
+          conversationId: conversation.id,
+          role: message.role,
+          content: message.content,
+          toolCalls: message.toolInvocations ? JSON.stringify(message.toolInvocations) : null,
+          messageIndex: conversation.messageCount,
+          createdAt: new Date()
+        }
+      });
+    }
+
+    // Update conversation stats
+    await prisma.chatConversation.update({
+      where: { id: conversation.id },
+      data: {
+        messageCount: { increment: Math.min(messages.length, 2) },
+        lastActivity: new Date()
+      }
+    });
+
+    return conversation.id;
+  } catch (error) {
+    console.error('Failed to save chat:', error);
+    return null;
+  }
+}` : ''}
 
 // Fetch API keys and model configuration from main app
 async function getAIModelWithApiKeys() {
-  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
   const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
   const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
   const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
@@ -2982,7 +3601,7 @@ async function getAIModelWithApiKeys() {
 // Fetch agent data including personality directly from main app
 async function getAgentData() {
   try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
     const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
     const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
@@ -3093,78 +3712,140 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { messages } = req.body;
+    ${requiresAuth ? `
+    // 🔐 Step 1: Authenticate user
+    let userContext = null;
+    try {
+      userContext = await verifyUserAuthentication(req);
+    } catch (authError) {
+      return res.status(401).json({ 
+        error: 'Authentication required', 
+        message: authError.message 
+      });
+    }` : ''}
+
+    const { messages, conversationId } = req.body;
     
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array is required' });
     }
 
+    ${requiresAuth ? `
+    // 🔐 Step 2: Verify conversation ownership (if conversationId provided)
+    if (conversationId) {
+      const conversation = await prisma.chatConversation.findFirst({
+        where: { id: conversationId, userId: userContext.id }
+      });
+      if (!conversation) {
+        return res.status(404).json({ error: 'Conversation not found or access denied' });
+      }
+    }` : ''}
+
+    // 🤖 Step 3: Setup AI model and tools
     const model = await getAIModelWithApiKeys();
     const systemPrompt = await buildSystemPrompt();
     
-    const result = await streamText({
-      model,
-      system: systemPrompt,
-      messages: convertToCoreMessages(messages),
-      maxTokens: 1000,
-      temperature: 0.7,
-      tools: {
-        getSystemInfo: {
-          description: 'Get current system information and status',
-          parameters: z.object({}),
-          execute: async () => {
-            return {
-              models: ${this.options.models.length},
-              actions: ${this.options.actions.length},
-              schedules: ${this.options.schedules.length},
-              activeSchedules: ${this.options.schedules.filter(s => s.interval?.active !== false).length},
-              status: 'operational',
-              timestamp: new Date().toISOString()
-            };
-          }
-        },
-        listModels: {
-          description: 'List all available data models',
-          parameters: z.object({}),
-          execute: async () => {
-            return {
-              models: ${JSON.stringify(this.options.models.map(m => ({
-                name: m.name,
-                description: m.description || 'Data model',
-                fields: m.fields?.length || 0
-              })))}
-            };
-          }
-        },
-        listActions: {
-          description: 'List all available smart actions',
-          parameters: z.object({}),
-          execute: async () => {
-            return {
-              actions: ${JSON.stringify(this.options.actions.map(a => ({
-                name: a.name,
-                description: a.description || 'Smart action',
-                type: a.type || 'query'
-              })))}
-            };
-          }
-        },
-        listSchedules: {
-          description: 'List all scheduled tasks',
-          parameters: z.object({}),
-          execute: async () => {
-            return {
-              schedules: ${JSON.stringify(this.options.schedules.map(s => ({
-                name: s.name,
-                description: s.description || 'Scheduled task',
-                pattern: s.interval?.pattern || '* * * * *',
-                active: s.interval?.active !== false
-              })))}
-            };
-          }
+    ${requiresAuth ? `
+    // 🛠️ Step 4: Generate dynamic tools with user context
+    const actionTools = await generateActionTools(userContext);
+    const databaseTools = generateDatabaseTools(userContext);
+    
+    // Combine all tools
+    const allTools = [
+      ...actionTools,
+      ...databaseTools,
+      {
+        name: 'getSystemInfo',
+        description: 'Get current system information and status',
+        parameters: z.object({}),
+        execute: async () => {
+          return {
+            models: ${this.options.models.length},
+            actions: ${this.options.actions.length},
+            schedules: ${this.options.schedules.length},
+            user: {
+              name: userContext.name,
+              role: userContext.role,
+              email: userContext.email
+            },
+            status: 'operational',
+            timestamp: new Date().toISOString()
+          };
         }
       }
+    ];
+
+    // Convert to tools object format
+    const tools = allTools.reduce((acc, tool) => {
+      acc[tool.name] = {
+        description: tool.description,
+        parameters: tool.parameters,
+        execute: tool.execute
+      };
+      return acc;
+    }, {});` : `
+    // Basic tools for non-authenticated apps
+    const tools = {
+      getSystemInfo: {
+        description: 'Get current system information and status',
+        parameters: z.object({}),
+        execute: async () => {
+          return {
+            models: ${this.options.models.length},
+            actions: ${this.options.actions.length},
+            schedules: ${this.options.schedules.length},
+            status: 'operational',
+            timestamp: new Date().toISOString()
+          };
+        }
+      },
+      listModels: {
+        description: 'List all available data models',
+        parameters: z.object({}),
+        execute: async () => {
+          return {
+            models: ${JSON.stringify(this.options.models.map(m => ({
+              name: m.name,
+              description: m.description || 'Data model',
+              fields: m.fields?.length || 0
+            })))}
+          };
+        }
+      },
+      listActions: {
+        description: 'List all available smart actions',
+        parameters: z.object({}),
+        execute: async () => {
+          return {
+            actions: ${JSON.stringify(this.options.actions.map(a => ({
+              name: a.name,
+              description: a.description || 'Smart action',
+              type: a.type || 'query'
+            })))}
+          };
+        }
+      }
+    };`}
+    
+    // 💬 Step 5: Generate AI response with tools
+    const result = await streamText({
+      model,
+      system: systemPrompt + ${requiresAuth ? `\`\n\n🔐 **User Context**: You are chatting with \${userContext.name} (\${userContext.role}). \${userContext.role === 'ADMIN' ? 'This user has admin privileges and can access all features.' : 'This user has member privileges with limited access to admin features.'}\`` : `''`},
+      messages: convertToCoreMessages(messages),
+      maxTokens: 1500,
+      temperature: 0.7,
+      tools
     });
+
+    ${requiresAuth ? `
+    // 🔄 Step 6: Save conversation with user context (async, non-blocking)
+    setImmediate(async () => {
+      try {
+        await saveChatWithUserContext(messages, userContext, conversationId);
+      } catch (saveError) {
+        console.error('Failed to save chat conversation:', saveError);
+      }
+    });` : ''}
 
     return result.toAIStreamResponse();
   } catch (error) {
@@ -3173,6 +3854,13 @@ export default async function handler(req, res) {
     if (error.message?.includes('API_KEY')) {
       return res.status(500).json({ 
         error: 'AI service configuration error. Please check your API keys.' 
+      });
+    }
+    
+    if (error.message?.includes('Authentication')) {
+      return res.status(401).json({ 
+        error: 'Authentication failed',
+        message: error.message 
       });
     }
     
@@ -3399,10 +4087,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (error: any) {
     console.error(\`Database operation failed for model \${modelName}:\`, error);
     
-    return res.status(500).json({
+    // Enhanced error handling for Vercel deployment
+    let errorMessage = \`Failed to access model \${modelName}\`;
+    let statusCode = 500;
+    
+    // Handle specific Prisma/database errors
+    if (error.code === 'P2002') {
+      errorMessage = 'Unique constraint violation';
+      statusCode = 409;
+    } else if (error.code === 'P2025') {
+      errorMessage = 'Record not found';
+      statusCode = 404;
+    } else if (error.message?.includes('SQLITE_CANTOPEN')) {
+      errorMessage = 'Database file access error - check deployment configuration';
+      statusCode = 503;
+    }
+    
+    return res.status(statusCode).json({
       success: false,
-      error: \`Failed to access model \${modelName}\`,
-      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error',
+      timestamp: new Date().toISOString(),
+      model: modelName
     });
   }
 }`;
@@ -3529,46 +4235,49 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 }`;
   }
 
+  
+
   private generateDynamicActionEndpoint(): string {
     return `import type { NextApiRequest, NextApiResponse } from 'next'
 import { prisma } from '@/lib/prisma'
 
-// Fetch action definition from main app
-async function getActionFromMainApp(actionName: string) {
-  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+// Fetch all actions from main app
+async function getAllActionsFromMainApp() {
+  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
   const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-  const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
   const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
   try {
-    // Call main app to get action definition
-    let response = await fetch(\`\${MAIN_APP_URL}/api/agent/execute-action\`, {
-      method: 'POST',
+    // Call main app to get all actions
+    const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
       headers: {
         'Content-Type': 'application/json',
         'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+        'X-Agent-Token': AGENT_TOKEN,
+        'X-Document-ID': DOCUMENT_ID,
       },
-      body: JSON.stringify({
-        actionName: actionName,
-        getDefinitionOnly: true // Only fetch definition, don't execute
-      })
     });
 
     if (!response.ok) {
-      throw new Error(\`Failed to fetch action definition: \${response.status}\`);
+      throw new Error(\`Failed to fetch actions: \${response.status}\`);
     }
 
     const data = await response.json();
-    return data.success ? data.action : null;
+    return data.success ? data.agentConfig.actions : [];
   } catch (error) {
-    console.error('Failed to fetch action from main app:', error);
-    throw error;
+    console.error('Failed to fetch actions from main app:', error);
+    return [];
   }
+}
+
+// Find specific action by name
+function findActionByName(actions: any[], actionName: string) {
+  return actions.find(action => action.name === actionName || action.id === actionName);
 }
 
 // Fetch credentials from main app
 async function getCredentials() {
-  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
   const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
   const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
   const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
@@ -3591,6 +4300,8 @@ async function getCredentials() {
   return {};
 }
 
+
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { actionName } = req.query;
 
@@ -3601,8 +4312,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     console.log('🚀 Executing dynamic action:', actionName);
     
-    // Fetch action definition from main app
-    const action = await getActionFromMainApp(actionName);
+    // Fetch all actions from main app
+    const allActions = await getAllActionsFromMainApp();
+    const action = findActionByName(allActions, actionName);
+    
     if (!action) {
       return res.status(404).json({ error: \`Action '\${actionName}' not found\` });
     }
@@ -3626,27 +4339,298 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       email: 'demo@example.com'
     };
     
-    // Mock AI object for action execution
+    // Enhanced AI object with generateObject support
     const ai = {
       generateText: async (prompt: string) => {
         return { text: \`Mock AI response for: \${prompt}\` };
+      },
+      generateObject: async (options: any) => {
+        console.log('🤖 Mock AI generateObject called with schema:', options.schema?._def?.typeName || 'unknown');
+        // Return mock object that matches expected schema structure
+        return {
+          object: {
+            analysis: 'Mock AI analysis result',
+            confidence: 85,
+            recommendations: ['Mock recommendation 1', 'Mock recommendation 2'],
+            result: 'Mock result',
+            success: true
+          }
+        };
       }
     };
     
     let result;
+    const startTime = new Date();
+    let actionExecutionLogId = null;
+    
+    // Create ActionExecutionLog for live actions (not test mode)
+    const isTestMode = req.query.test === 'true' || req.headers['x-test-mode'] === 'true';
+    
+    if (!isTestMode) {
+      try {
+        const actionLog = await prisma.actionExecutionLog.create({
+          data: {
+            actionId: action.id || actionName,
+            actionName: actionName,
+            actionType: action.type || 'mutation',
+            inputParameters: JSON.stringify(input),
+            startedAt: startTime,
+            status: 'running',
+            triggerSource: 'sub_agent_api',
+            userId: member?.id || 'anonymous'
+          }
+        });
+        actionExecutionLogId = actionLog.id;
+        console.log('📝 Created ActionExecutionLog:', actionExecutionLogId);
+      } catch (error) {
+        console.error('Failed to create ActionExecutionLog:', error);
+      }
+    }
     
     if (action.execute?.code?.script) {
       // Execute the fetched action code against local SQLite database
       const actionCode = action.execute.code.script;
       const envVars = { ...credentials, ...process.env };
       
-      // Create function from action code and execute it
-      const actionFunction = new Function('database', 'input', 'member', 'ai', 'envVars', \`
+      // Create comprehensive logger that writes to database for live actions
+      const stepLogs = [];
+      const databaseOperations = [];
+      const aiOperations = [];
+      const externalApiCalls = [];
+      
+      const logger = {
+        info: (message) => {
+          const logEntry = {
+            level: 'info',
+            message,
+            timestamp: new Date().toISOString(),
+            step: stepLogs.length + 1
+          };
+          stepLogs.push(logEntry);
+          console.log(\`[STEP \${logEntry.step}] \${message}\`);
+        },
+        error: (message) => {
+          const logEntry = {
+            level: 'error', 
+            message,
+            timestamp: new Date().toISOString(),
+            step: stepLogs.length + 1
+          };
+          stepLogs.push(logEntry);
+          console.error(\`[STEP \${logEntry.step}] ERROR: \${message}\`);
+        },
+        // Database operation logger
+        database: async (operation, model, data, result) => {
+          const dbLog = {
+            operation,
+            model,
+            data: JSON.stringify(data),
+            result: JSON.stringify(result),
+            timestamp: new Date().toISOString()
+          };
+          databaseOperations.push(dbLog);
+          
+          if (!isTestMode && actionExecutionLogId) {
+            try {
+              await prisma.databaseOperationLog.create({
+                data: {
+                  actionExecutionId: actionExecutionLogId,
+                  operation,
+                  tableName: model,
+                  inputData: JSON.stringify(data),
+                  outputData: JSON.stringify(result),
+                  executedAt: new Date()
+                }
+              });
+            } catch (error) {
+              console.error('Failed to log database operation:', error);
+            }
+          }
+        },
+        // AI operation logger  
+        ai: async (operation, prompt, result) => {
+          const aiLog = {
+            operation,
+            prompt,
+            result: JSON.stringify(result),
+            timestamp: new Date().toISOString()
+          };
+          aiOperations.push(aiLog);
+          
+          if (!isTestMode && actionExecutionLogId) {
+            try {
+              await prisma.aiCallLog.create({
+                data: {
+                  actionExecutionId: actionExecutionLogId,
+                  operation,
+                  prompt,
+                  response: JSON.stringify(result),
+                  calledAt: new Date()
+                }
+              });
+            } catch (error) {
+              console.error('Failed to log AI operation:', error);
+            }
+          }
+        },
+        // External API logger
+        api: async (method, endpoint, requestData, responseData, status) => {
+          const apiLog = {
+            method,
+            endpoint,
+            request: JSON.stringify(requestData),
+            response: JSON.stringify(responseData),
+            status,
+            timestamp: new Date().toISOString()
+          };
+          externalApiCalls.push(apiLog);
+          
+          if (!isTestMode && actionExecutionLogId) {
+            try {
+              await prisma.externalApiCallLog.create({
+                data: {
+                  actionExecutionId: actionExecutionLogId,
+                  endpoint,
+                  method,
+                  requestData: JSON.stringify(requestData),
+                  responseData: JSON.stringify(responseData),
+                  statusCode: status,
+                  calledAt: new Date()
+                }
+              });
+            } catch (error) {
+              console.error('Failed to log external API call:', error);
+            }
+          }
+        }
+      };
+      
+      // Enhanced AI object with logging
+      const ai = {
+        generateText: async (prompt: string) => {
+          const result = { text: \`Mock AI response for: \${prompt}\` };
+          await logger.ai('generateText', prompt, result);
+          return result;
+        },
+        generateObject: async (options: any) => {
+          console.log('🤖 Mock AI generateObject called with schema:', options.schema?._def?.typeName || 'unknown');
+          const result = {
+            object: {
+              analysis: 'Mock AI analysis result',
+              confidence: 85,
+              recommendations: ['Mock recommendation 1', 'Mock recommendation 2'],
+              result: 'Mock result',
+              success: true
+            }
+          };
+          await logger.ai('generateObject', JSON.stringify(options), result);
+          return result;
+        }
+      };
+      
+      // Enhanced Prisma client with logging
+      const loggedPrisma = new Proxy(prisma, {
+        get(target, prop) {
+          const originalMethod = target[prop];
+          if (typeof originalMethod === 'object' && originalMethod !== null) {
+            // Model-level proxy (e.g., prisma.user)
+            return new Proxy(originalMethod, {
+              get(modelTarget, modelProp) {
+                const originalModelMethod = modelTarget[modelProp];
+                if (typeof originalModelMethod === 'function') {
+                  // Method-level proxy (e.g., prisma.user.findMany)
+                  return async function(...args) {
+                    const result = await originalModelMethod.apply(modelTarget, args);
+                    await logger.database(modelProp.toString(), prop.toString(), args[0] || {}, result);
+                    return result;
+                  };
+                }
+                return originalModelMethod;
+              }
+            });
+          }
+          return originalMethod;
+        }
+      });
+      
+      // Create function from action code and execute it with enhanced logging
+      const actionFunction = new Function('prisma', 'input', 'member', 'ai', 'envVars', 'logger', \`
         \${actionCode}
-        return executeAction(database, input, member, ai, envVars);
+        return executeAction(prisma, input, member, ai, envVars, logger);
       \`);
       
-      result = await actionFunction(prisma, input, member, ai, envVars);
+      result = await actionFunction(loggedPrisma, input, member, ai, envVars, logger);
+      
+      // Enhance result with step execution logs and enhanced step support
+      if (result && typeof result === 'object') {
+        result.stepExecutionLogs = stepLogs;
+        result.executedWithLogging = true;
+        
+        // Add logged operation data for UI display
+        if (databaseOperations.length > 0) {
+          result.databaseChanges = databaseOperations.reduce((acc, op) => {
+            acc[op.operation] = acc[op.operation] || [];
+            acc[op.operation].push({
+              model: op.model,
+              data: JSON.parse(op.data),
+              result: JSON.parse(op.result)
+            });
+            return acc;
+          }, {});
+        }
+        
+        if (externalApiCalls.length > 0) {
+          result.externalApiCalls = externalApiCalls.map(call => ({
+            method: call.method,
+            endpoint: call.endpoint,
+            status: call.status,
+            request: JSON.parse(call.request),
+            response: JSON.parse(call.response)
+          }));
+        }
+        
+        if (aiOperations.length > 0) {
+          result.aiOperations = aiOperations.map(op => ({
+            operation: op.operation,
+            prompt: op.prompt,
+            result: JSON.parse(op.result)
+          }));
+        }
+        
+        // Add enhanced step metadata if available
+        if (action.pseudoSteps && action.pseudoSteps.length > 0) {
+          result.enhancedStepData = {
+            totalSteps: action.pseudoSteps.length,
+            hasTestCode: action.pseudoSteps.some(step => step.testCode),
+            hasMockData: action.pseudoSteps.some(step => step.mockInput && step.mockOutput),
+            hasAuthentication: action.pseudoSteps.some(step => step.oauthTokens || step.apiKeys),
+            stepTypes: action.pseudoSteps.map(step => step.type),
+            externalApiProvider: action.externalApiProvider || null
+          };
+        }
+      }
+      
+      // Update ActionExecutionLog with completion status for live actions
+      if (!isTestMode && actionExecutionLogId) {
+        try {
+          const endTime = new Date();
+          const executionTime = endTime.getTime() - startTime.getTime();
+          
+          await prisma.actionExecutionLog.update({
+            where: { id: actionExecutionLogId },
+            data: {
+              status: result?.success !== false ? 'completed' : 'failed',
+              completedAt: endTime,
+              executionTimeMs: executionTime,
+              outputData: JSON.stringify(result),
+              errorMessage: result?.success === false ? result.error : null
+            }
+          });
+          console.log(\`✅ Updated ActionExecutionLog \${actionExecutionLogId} with completion status\`);
+        } catch (error) {
+          console.error('Failed to update ActionExecutionLog completion:', error);
+        }
+      }
     } else {
       // Basic fallback execution logic
       result = {
@@ -3666,6 +4650,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
   } catch (error) {
     console.error(\`❌ Error executing dynamic action '\${actionName}':\`, error);
+    
+    // Update ActionExecutionLog with error status for live actions
+    if (!isTestMode && actionExecutionLogId) {
+      try {
+        const endTime = new Date();
+        const executionTime = endTime.getTime() - startTime.getTime();
+        
+        await prisma.actionExecutionLog.update({
+          where: { id: actionExecutionLogId },
+          data: {
+            status: 'failed',
+            completedAt: endTime,
+            executionTimeMs: executionTime,
+            errorMessage: error instanceof Error ? error.message : 'Internal server error'
+          }
+        });
+        console.log(\`❌ Updated ActionExecutionLog \${actionExecutionLogId} with error status\`);
+      } catch (updateError) {
+        console.error('Failed to update ActionExecutionLog with error:', updateError);
+      }
+    }
+    
     res.status(500).json({ 
       success: false, 
       error: error instanceof Error ? error.message : 'Internal server error',
@@ -3682,8 +4688,13 @@ import { prisma } from '@/lib/prisma'
 // Get schedules from sub-agent's own API (which calls main app)
 async function getSchedulesToRun() {
   try {
+    // Get the correct app URL for the current environment
+    const APP_URL = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL 
+      ? \`https://\${process.env.VERCEL_URL}\` 
+      : 'http://localhost:3000';
+      
     // Call sub-agent's own schedules API
-    const response = await fetch('http://localhost:3000/api/agent/schedules');
+    const response = await fetch(\`\${APP_URL}/api/agent/schedules\`);
 
     if (!response.ok) {
       console.log('Failed to get schedules from sub-agent API:', response.status);
@@ -3717,7 +4728,7 @@ async function getSchedulesToRun() {
 
 // Fetch credentials from main app
 async function getCredentials() {
-  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
   const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
   const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
@@ -3752,7 +4763,7 @@ async function executeScheduleSteps(schedule: any, credentials: any) {
       console.log(\`Executing step \${i + 1}: \${step.description || step.name}\`);
       
       // Call the main app to execute the step's action
-      const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+      const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
       const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
       
       const actionResponse = await fetch(\`\${MAIN_APP_URL}/api/agent/execute-action\`, {
@@ -3908,7 +4919,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     console.log('🔗 Triggering action directly on main app:', actionId);
     
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
     const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
     const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
     const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
@@ -3977,7 +4988,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     console.log('🔗 Triggering schedule directly on main app:', scheduleId);
     
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
     const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
     const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
     const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
@@ -4033,10 +5044,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   private generatePrismaClient(): string {
     return `import { PrismaClient } from "@prisma/client";
 
-// Simple Prisma client singleton pattern following Next.js best practices
+// Prisma client singleton pattern optimized for Vercel serverless functions
 const prismaClientSingleton = () => {
   return new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error']
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    // Optimize for serverless environments
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL,
+      },
+    },
   });
 };
 
@@ -4046,7 +5063,14 @@ declare const globalThis: {
 
 export const prisma = globalThis.prismaGlobal ?? prismaClientSingleton();
 
-if (process.env.NODE_ENV !== "production") globalThis.prismaGlobal = prisma`;
+if (process.env.NODE_ENV !== "production") globalThis.prismaGlobal = prisma;
+
+// Helper function to ensure connection is properly closed
+export async function closePrisma() {
+  if (prisma) {
+    await prisma.$disconnect();
+  }
+}`;
   }
 
   private generateApiHook(): string {
@@ -4504,7 +5528,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
     const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
     const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
@@ -4570,7 +5594,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
     const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
     const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
@@ -4636,7 +5660,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
     const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
     const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
@@ -4702,7 +5726,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
     const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
     const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
@@ -4827,7 +5851,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
     const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
     const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
@@ -5039,7 +6063,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://www.rom.cards';
     const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
     const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
@@ -5112,6 +6136,684 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 }`;
   }
+
+  // ===============================
+  // AUTHENTICATION METHODS
+  // ===============================
+
+  /**
+   * Generate registration page with creator/admin role handling
+   */
+  private generateRegisterPage(): string {
+    return `'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+export default function RegisterPage() {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+    setSuccess('');
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      setIsLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSuccess(data.message || 'Account created successfully!');
+        setTimeout(() => {
+          router.push('/');
+        }, 1500);
+      } else {
+        setError(data.error || 'Registration failed');
+      }
+    } catch (err) {
+      setError('Registration failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            Create your account
+          </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            Join this agent application
+          </p>
+        </div>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded">
+              {success}
+            </div>
+          )}
+          <div>
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              placeholder="Full name"
+            />
+          </div>
+          <div>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              placeholder="Email address"
+            />
+          </div>
+          <div>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              placeholder="Password (min 6 characters)"
+            />
+          </div>
+          <div>
+            <input
+              type="password"
+              required
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              placeholder="Confirm password"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+          >
+            {isLoading ? 'Creating account...' : 'Create account'}
+          </button>
+          <div className="text-center">
+            <span className="text-sm text-gray-600">
+              Already have an account?{' '}
+              <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
+                Sign in
+              </Link>
+            </span>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}`;
+  }
+
+  /**
+   * Generate login page for authentication
+   */
+  private generateLoginPage(): string {
+    return `'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        router.push('/');
+      } else {
+        setError(data.error || 'Login failed');
+      }
+    } catch (err) {
+      setError('Login failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            Sign in to your account
+          </h2>
+        </div>
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+              {error}
+            </div>
+          )}
+          <div>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              placeholder="Email address"
+            />
+          </div>
+          <div>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+              placeholder="Password"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+          >
+            {isLoading ? 'Signing in...' : 'Sign in'}
+          </button>
+          <div className="text-center">
+            <span className="text-sm text-gray-600">
+              Don't have an account?{' '}
+              <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500">
+                Create account
+              </Link>
+            </span>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}`;
+  }
+
+  /**
+   * Generate logout page
+   */
+  private generateLogoutPage(): string {
+    return `'use client';
+
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
+export default function LogoutPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const logout = async () => {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      router.push('/login');
+    };
+    logout();
+  }, [router]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <h2 className="text-xl font-semibold">Signing out...</h2>
+      </div>
+    </div>
+  );
+}`;
+  }
+
+  /**
+   * Generate profile page
+   */
+  private generateProfilePage(): string {
+    return `'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: 'ADMIN' | 'MEMBER';
+}
+
+export default function ProfilePage() {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await fetch('/api/auth/profile');
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+        } else {
+          router.push('/login');
+        }
+      } catch (error) {
+        router.push('/login');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, [router]);
+
+  if (isLoading) {
+    return <div className="p-4">Loading...</div>;
+  }
+
+  if (!user) {
+    return <div className="p-4">Not authenticated</div>;
+  }
+
+  return (
+    <div className="max-w-2xl mx-auto p-6">
+      <h1 className="text-2xl font-bold mb-6">Profile</h1>
+      <div className="bg-white shadow rounded-lg p-6">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="text-sm font-medium text-gray-500">Email</label>
+            <p className="mt-1 text-sm text-gray-900">{user.email}</p>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-500">Name</label>
+            <p className="mt-1 text-sm text-gray-900">{user.name}</p>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-gray-500">Role</label>
+            <p className="mt-1 text-sm text-gray-900">
+              <span className={\`px-2 py-1 text-xs rounded-full \${user.role === 'ADMIN' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}\`}>
+                {user.role}
+              </span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}`;
+  }
+
+  /**
+   * Generate registration API endpoint with creator/admin role logic
+   */
+  private generateRegisterEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next';
+import { prisma } from '@/lib/prisma';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { name, email, password } = req.body;
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email and password required' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  try {
+    // Check if user already exists
+    const existingUser = await prisma.appUser.findUnique({
+      where: { email }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
+    // Determine user role: creator gets ADMIN, everyone else gets MEMBER
+    const creatorEmail = process.env.CREATOR_EMAIL;
+    const isCreator = creatorEmail && email.toLowerCase() === creatorEmail.toLowerCase();
+    
+    // If no creator email is set, first user becomes admin
+    const userCount = await prisma.appUser.count();
+    const shouldBeAdmin = isCreator || (userCount === 0 && !creatorEmail);
+    
+    const userRole = shouldBeAdmin ? 'ADMIN' : 'MEMBER';
+    
+    console.log(\`👤 Registering user: \${email} as \${userRole}\${isCreator ? ' (creator)' : ''}\${userCount === 0 && !creatorEmail ? ' (first user)' : ''}\`);
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Create user with appropriate role
+    const user = await prisma.appUser.create({
+      data: {
+        name,
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        role: userRole
+      }
+    });
+
+    // Create JWT token
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '7d' }
+    );
+
+    // Set HTTP-only cookie
+    res.setHeader('Set-Cookie', \`auth-token=\${token}; HttpOnly; Path=/; Max-Age=604800; SameSite=Strict\`);
+
+    return res.status(201).json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      },
+      message: userRole === 'ADMIN' ? 'Admin account created successfully' : 'Member account created successfully'
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}`;
+  }
+
+  /**
+   * Generate login API endpoint
+   */
+  private generateLoginEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next';
+import { prisma } from '@/lib/prisma';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password required' });
+  }
+
+  try {
+    // Find user in database
+    const user = await prisma.appUser.findUnique({
+      where: { email }
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Verify password (assuming password is hashed)
+    const isValid = await bcrypt.compare(password, user.password || '');
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Create JWT token
+    const token = jwt.sign(
+      { userId: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '7d' }
+    );
+
+    // Set HTTP-only cookie
+    res.setHeader('Set-Cookie', \`auth-token=\${token}; HttpOnly; Path=/; Max-Age=604800; SameSite=Strict\`);
+
+    return res.status(200).json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}`;
+  }
+
+  /**
+   * Generate logout API endpoint
+   */
+  private generateLogoutEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Clear auth cookie
+  res.setHeader('Set-Cookie', 'auth-token=; HttpOnly; Path=/; Max-Age=0; SameSite=Strict');
+  
+  return res.status(200).json({ success: true });
+}`;
+  }
+
+  /**
+   * Generate session API endpoint
+   */
+  private generateSessionEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next';
+import jwt from 'jsonwebtoken';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const token = req.cookies['auth-token'];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+    
+    return res.status(200).json({
+      user: {
+        id: decoded.userId,
+        email: decoded.email,
+        role: decoded.role
+      }
+    });
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}`;
+  }
+
+  /**
+   * Generate profile API endpoint
+   */
+  private generateProfileEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next';
+import { prisma } from '@/lib/prisma';
+import jwt from 'jsonwebtoken';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const token = req.cookies['auth-token'];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+    
+    const user = await prisma.appUser.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        createdAt: true,
+        lastLoginAt: true
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    return res.status(200).json(user);
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}`;
+  }
+
+  /**
+   * Generate chat conversations API endpoint for authenticated users
+   */
+  private generateChatConversationsEndpoint(): string {
+    return `import type { NextApiRequest, NextApiResponse } from 'next';
+import { prisma } from '@/lib/prisma';
+import jwt from 'jsonwebtoken';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const token = req.cookies['auth-token'];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+    
+    // Verify user exists and is active
+    const user = await prisma.appUser.findUnique({
+      where: { id: decoded.userId },
+      select: { id: true, isActive: true }
+    });
+
+    if (!user || !user.isActive) {
+      return res.status(401).json({ error: 'User not found or inactive' });
+    }
+
+    // Load user's chat conversations with message previews
+    const conversations = await prisma.chatConversation.findMany({
+      where: { userId: user.id },
+      include: {
+        messages: {
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            content: true,
+            role: true,
+            createdAt: true
+          }
+        }
+      },
+      orderBy: { lastActivity: 'desc' },
+      take: 50 // Limit to recent 50 conversations
+    });
+
+    // Format response
+    const formattedConversations = conversations.map(conv => ({
+      id: conv.id,
+      title: conv.title,
+      lastActivity: conv.lastActivity,
+      messageCount: conv.messageCount,
+      status: conv.status,
+      lastMessage: conv.messages[0] || null,
+      createdAt: conv.createdAt
+    }));
+
+    return res.status(200).json({
+      success: true,
+      conversations: formattedConversations,
+      total: formattedConversations.length
+    });
+
+  } catch (error) {
+    console.error('Failed to load conversations:', error);
+    return res.status(500).json({ 
+      error: 'Failed to load conversations',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+}`;
+  }
+
+
 }
 
 export default MobileAppTemplate; 

@@ -1,10 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generatePseudoSteps } from '@/lib/ai/tools/agent-builder/generation';
+import { z } from 'zod';
+import { generateEnhancedPseudoSteps } from '@/lib/ai/tools/agent-builder/generation';
+
+// Enhanced step generation schema
+const EnhancedStepSchema = z.object({
+  steps: z.array(z.object({
+    id: z.string(),
+    description: z.string(),
+    type: z.enum(['Database find unique', 'Database find many', 'Database update unique', 'Database update many', 'Database create', 'Database create many', 'Database delete unique', 'Database delete many', 'Database upsert', 'Database aggregate', 'Database count', 'api call post', 'api call get', 'api call put', 'api call delete', 'graphql query', 'graphql mutation', 'ai analysis', 'ai generate object']),
+    inputFields: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      type: z.string(),
+      kind: z.enum(['scalar', 'object', 'enum']),
+      required: z.boolean(),
+      list: z.boolean(),
+      relationModel: z.string().optional(),
+      description: z.string().optional(),
+      defaultValue: z.string().optional()
+    })),
+    outputFields: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      type: z.string(),
+      kind: z.enum(['scalar', 'object', 'enum']),
+      required: z.boolean(),
+      list: z.boolean(),
+      relationModel: z.string().optional(),
+      description: z.string().optional(),
+      defaultValue: z.string().optional()
+    })),
+    oauthTokens: z.object({
+      provider: z.string(),
+      accessToken: z.string(),
+      refreshToken: z.string().optional(),
+      expiresAt: z.string().optional()
+    }).optional(),
+    apiKeys: z.object({
+      provider: z.string(),
+      keyName: z.string(),
+      keyValue: z.string()
+    }).optional(),
+    mockInput: z.record(z.any()),
+    mockOutput: z.record(z.any()),
+    testCode: z.string(),
+    actualCode: z.string(),
+    logMessage: z.string(),
+    stepOrder: z.number(),
+    dependsOn: z.array(z.string()).optional(),
+    isOptional: z.boolean().optional(),
+    errorHandling: z.object({
+      retryAttempts: z.number().optional(),
+      fallbackAction: z.string().optional(),
+      continueOnError: z.boolean().optional()
+    }).optional()
+  })),
+  externalApiProvider: z.enum(['gmail', 'shopify', 'stripe', 'slack', 'notion', 'salesforce', 'hubspot', 'facebook', 'instagram', 'linkedin', 'threads', 'github', 'google-calendar', 'microsoft-teams']).nullable(),
+  apiValidation: z.object({
+    isValid: z.boolean(),
+    singleProvider: z.boolean(),
+    conflictingProviders: z.array(z.string()).optional()
+  }),
+  testCode: z.string()
+});
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, description, availableModels, entityType, businessContext, type } = body;
+    const { name, description, availableModels, entityType, businessContext, type, documentId } = body;
 
     // Validate required fields
     if (!name || !description || !entityType) {
@@ -23,34 +86,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate pseudo steps using AI
-    const pseudoSteps = await generatePseudoSteps(
+    // Use the unified enhanced step generation function
+    const result = await generateEnhancedPseudoSteps(
       name,
       description,
       actionType,
       availableModels || [],
-      entityType,
-      businessContext
+      businessContext,
+      documentId
     );
-
-    // Enhanced analysis is temporarily disabled to avoid complexity
-    // TODO: Implement proper enhanced analysis integration when needed
 
     return NextResponse.json({
       success: true,
-      pseudoSteps,
-      // Store the enhanced analysis for testing but don't expose details  
+      pseudoSteps: result.steps,
+      externalApiProvider: result.externalApiProvider,
+      testCode: result.testCode,
       _internal: {
-        hasRealCode: false,
-        hasTestCases: false
+        hasRealCode: true,
+        hasTestCases: true,
+        validatedSteps: true,
+        apiValidation: result.apiValidation
       }
     });
 
   } catch (error) {
-    console.error('Error generating pseudo steps:', error);
+    console.error('Error generating enhanced steps:', error);
     return NextResponse.json(
       { 
-        error: 'Failed to generate pseudo steps',
+        error: 'Failed to generate enhanced steps',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
       { status: 500 }

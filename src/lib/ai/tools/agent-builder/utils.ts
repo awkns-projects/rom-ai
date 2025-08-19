@@ -407,12 +407,12 @@ export async function executeActionWithUI(
       const input = Object.values(stepData).reduce((acc, data) => ({ ...acc, ...data }), {});
       
       // Execute the action function
-      if (action.execute.type === 'code' && action.execute.code?.script) {
+      if (action.execute.code?.script) {
         const actionFunction = new Function('database', 'input', 'member', action.execute.code.script);
         const result = await actionFunction(database, input, member);
         return result;
       } else {
-        throw new Error('Action execution type not supported');
+        throw new Error('Action has no executable code');
       }
     } catch (error) {
       throw new Error(`Action execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);

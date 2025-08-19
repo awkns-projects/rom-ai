@@ -336,6 +336,7 @@ export const ActionsListEditor = memo(({
       name: `Action${actions.length + 1}`,
       emoji: '⚡',
       description: '',
+      type: 'mutation', // Default to mutation
       role: 'member',
       dataSource: {
         type: 'database',
@@ -451,7 +452,18 @@ export const ActionsListEditor = memo(({
                     <span className="text-lg sm:text-xl">{action.emoji || '⚡'}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{action.name || 'Unnamed Action'}</h4>
+                    <div className="flex items-center gap-2 mb-1">
+                      <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{action.name || 'Unnamed Action'}</h4>
+                      {action.type && (
+                        <span className={`px-2 py-1 rounded text-xs font-mono border ${
+                          action.type === 'mutation' 
+                            ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' 
+                            : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
+                        }`}>
+                          {action.type === 'mutation' ? '🔧 MUTATION' : '📊 QUERY'}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
                       {action.role} • {action.execute?.type || 'Not configured'} • {action.results?.actionType || 'Not configured'}
                     </p>

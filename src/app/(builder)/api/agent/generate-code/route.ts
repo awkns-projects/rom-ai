@@ -33,12 +33,21 @@ const CodeGenerationSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, description, pseudoSteps, availableModels, entityType, businessContext, inputParameters, enhancedAnalysis, testResults } = body;
+    const { name, description, pseudoSteps, availableModels, entityType, businessContext, inputParameters, enhancedAnalysis, testResults, type } = body;
 
     // Validate required fields
     if (!name || !description || !pseudoSteps || !Array.isArray(pseudoSteps)) {
       return NextResponse.json(
         { error: 'Missing required fields: name, description, pseudoSteps' },
+        { status: 400 }
+      );
+    }
+
+    // Validate action type
+    const actionType = type || 'mutation';
+    if (actionType !== 'query' && actionType !== 'mutation') {
+      return NextResponse.json(
+        { error: 'Invalid action type. Must be "query" or "mutation"' },
         { status: 400 }
       );
     }
@@ -60,52 +69,139 @@ export async function POST(request: NextRequest) {
         })) : []
     );
 
-    // Generate executable code based on pseudo steps
-    const systemPrompt = `You are a senior JavaScript developer generating executable code for ${entityType} operations.
+    // Assemble enhanced step information for code generation
+    const enhancedSteps = pseudoSteps.map((step: any, index: number) => ({
+      ...step,
+      stepIndex: index + 1,
+      hasActualCode: Boolean(step.actualCode),
+      hasTestCode: Boolean(step.testCode),
+      hasMockData: Boolean(step.mockInput && step.mockOutput),
+      hasAuthentication: Boolean(step.oauthTokens || step.apiKeys)
+    }));
 
-TASK: Generate complete, executable JavaScript code based on the provided pseudo steps.
+    // Validate external API consistency
+    const externalApiProviders = enhancedSteps
+      .filter(step => step.oauthTokens || step.apiKeys)
+      .map(step => step.oauthTokens?.provider || step.apiKeys?.provider)
+      .filter((provider, index, arr) => arr.indexOf(provider) === index);
+
+    if (externalApiProviders.length > 1) {
+      return NextResponse.json({
+        error: 'Invalid action: Multiple external API providers detected',
+        details: `Actions can only use one external API provider. Found: ${externalApiProviders.join(', ')}`,
+        conflictingProviders: externalApiProviders
+      }, { status: 400 });
+    }
+
+    // Generate executable code based on enhanced step information
+    const systemPrompt = `You are a senior JavaScript architect generating production-ready code by assembling validated step components.
+
+TASK: Generate complete, executable JavaScript code using the provided enhanced step information.
 
 CONTEXT:
 - Name: ${name}
 - Description: ${description}
+- Action Type: ${actionType} (${actionType === 'mutation' ? 'MODIFIES data - creates, updates, deletes' : 'READS data only - queries, analyzes, searches'})
 - Entity Type: ${entityType}
 - Business Context: ${businessContext || 'General business operations'}
+- External API Provider: ${externalApiProviders[0] || 'none'}
 - Available Models: ${JSON.stringify(availableModels?.map((m: any) => ({ name: m.name, fields: m.fields?.map((f: any) => ({ name: f.name, type: f.type })) })) || [])}
 
-${enhancedAnalysis ? `ENHANCED ANALYSIS (VALIDATED):
-✅ This action has been fully analyzed and tested with real scenarios
-✅ Test scenarios executed: ${enhancedAnalysis.analysis?.testScenarios?.length || 0}
-✅ Database operations validated: ${enhancedAnalysis.analysis?.analysis?.databaseOperations?.tablesToUpdate?.length || 0} tables
-✅ External APIs validated: ${enhancedAnalysis.analysis?.analysis?.externalAPIs?.length || 0} APIs
-✅ All business logic has been validated with actual data
-` : ''}
+ENHANCED STEPS WITH ACTUAL CODE:
+${JSON.stringify(enhancedSteps, null, 2)}
 
-${testResults ? `REAL TEST EXECUTION RESULTS:
-✅ Successfully executed ${testResults.stepResults?.length || 0} steps
-✅ Total execution time: ${testResults.executionTime || 0}ms
-✅ All steps completed successfully
-✅ Business validations passed
-✅ Generate production-ready code based on these validated results
-` : ''}
-
-PSEUDO STEPS TO IMPLEMENT:
-${JSON.stringify(pseudoSteps, null, 2)}
-
-REQUIRED INPUT PARAMETERS (from first step):
+REQUIRED INPUT PARAMETERS:
 ${JSON.stringify(extractedInputParams, null, 2)}
 
-CODE GENERATION REQUIREMENTS:
+CODE ASSEMBLY STRATEGY:
+1. **USE ACTUAL STEP CODE**: Each step provides actualCode - assemble these in sequence
+2. **ADD LOGGING**: Include logMessage templates for each step
+3. **HANDLE DEPENDENCIES**: Respect dependsOn relationships and data flow
+4. **ERROR HANDLING**: Implement retry logic and fallback actions from errorHandling
+5. **AUTHENTICATION**: Include OAuth tokens and API keys from step configuration
+
+**🎯 ACTION TYPE COMPLIANCE:**
+${actionType === 'mutation' ? `
+This is a MUTATION action - it MUST modify data:
+- Include database write operations (create, update, delete, upsert)
+- External API calls that modify remote data
+- Focus on data transformation and persistence
+- Return details about what was changed/created
+- Include validation before making changes
+` : `
+This is a QUERY action - it MUST NOT modify data:
+- Only use read operations (find, aggregate, count)
+- External API calls should only retrieve data
+- Focus on data retrieval, analysis, and insights
+- Never include create, update, delete operations
+- Return data insights, search results, or analysis
+`}
+
+CODE ASSEMBLY REQUIREMENTS:
 
 1. EXECUTION CONTEXT:
-   The code will be executed using: new Function('context', code)
-   Where context = { db, ai, input, envVars }
+   The code will be executed using: new Function('prisma', 'input', 'member', 'ai', 'envVars', 'logger', code)
+   Where the parameters are:
    
-   - db: Database operations (db.ModelName.find(), db.ModelName.create(), etc.)
+   - prisma: Prisma client for database operations (prisma.modelName.findMany(), etc.)
+   - input: User-provided input parameters
+   - member: User context (id, role, email)
    - ai: AI operations using generateObject function
-   - input: User-provided input parameters (MUST include all parameters from the first step)
    - envVars: Environment variables for external APIs
+   - logger: Logging functions (logger.info(), logger.error()) for step tracking
 
-2. INPUT PARAMETER HANDLING:
+2. STEP CODE ASSEMBLY:
+   Each step provides actualCode that should be assembled in sequence with logging:
+   
+   // Step X execution with logging
+   logger.info('Starting step {stepOrder}: {logMessage}');
+   try {
+     {actualCode}
+     logger.info('Completed step {stepOrder} successfully');
+   } catch (error) {
+     logger.error('Step {stepOrder} failed: ' + error.message);
+     // Apply error handling logic from step.errorHandling
+   }
+   
+   CRITICAL: Use logger.info() and logger.error() throughout the code to track step execution progress.
+
+3. DEPENDENCY MANAGEMENT:
+   - Respect step dependencies defined in dependsOn arrays
+   - Pass output from previous steps as input to dependent steps
+   - Handle data flow variables between steps
+
+4. AUTHENTICATION HANDLING:
+   For steps with oauthTokens or apiKeys:
+   // OAuth example
+   const accessToken = envVars.{PROVIDER}_ACCESS_TOKEN;
+   const refreshToken = envVars.{PROVIDER}_REFRESH_TOKEN;
+   
+   // API Key example  
+   const apiKey = envVars.{PROVIDER}_API_KEY;
+
+5. ERROR HANDLING:
+   Implement retry logic and fallback actions from errorHandling configuration:
+   let retryCount = 0;
+   const maxRetries = {retryAttempts || 3};
+   while (retryCount < maxRetries) {
+     try {
+       // Step execution
+       break;
+     } catch (error) {
+       retryCount++;
+       if (retryCount >= maxRetries) {
+         if ({continueOnError}) {
+           logger.warn('Step failed but continuing: ' + error.message);
+           break;
+         } else {
+           throw error;
+         }
+       }
+       await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+     }
+   }
+
+6. INPUT PARAMETER VALIDATION:
    ${extractedInputParams.length > 0 ? `
    The code MUST expect these input parameters in the input object:
    ${extractedInputParams.map((param: any) => `
@@ -118,35 +214,38 @@ CODE GENERATION REQUIREMENTS:
    if (!input.${param.name}) throw new Error('Required parameter ${param.name} is missing');`).join('')}
    ` : 'No input parameters required.'}
 
-3. CODE STRUCTURE:
+7. CODE STRUCTURE:
    - Start with input parameter validation
-   - Process each pseudo step sequentially
-   - Handle data flow between steps (output of step N becomes input of step N+1)
-   - Include proper error handling
-   - Return structured result object
+   - Initialize variables for step data flow
+   - Execute each step in order, respecting dependencies
+   - Handle authentication for external API steps
+   - Include comprehensive logging
+   - Return structured result with all step outputs
 
 4. DATABASE OPERATIONS:
-   For database operations, use the actual API format:
-   - db.findMany(modelName, { where: filter, limit: number }) - find multiple records
-   - db.findUnique(modelName, where) - find single record  
-   - db.create(modelName, data) - create new record
-   - db.createMany(modelName, dataArray) - create multiple records (returns { count, records })
-   - db.update(modelName, where, data) - update existing records
-   - db.updateMany(modelName, where, data) - update multiple records (returns { count, records })
-   - db.delete(modelName, where) - delete records
-   - db.deleteMany(modelName, where) - delete multiple records (returns { count, records })
+   For database operations, use Prisma Client syntax directly:
+   - prisma.modelName.findMany({ where: filter, take: limit }) - find multiple records
+   - prisma.modelName.findUnique({ where }) - find single record  
+   - prisma.modelName.create({ data }) - create new record
+   - prisma.modelName.createMany({ data: dataArray }) - create multiple records
+   - prisma.modelName.update({ where, data }) - update existing records
+   - prisma.modelName.updateMany({ where, data }) - update multiple records
+   - prisma.modelName.delete({ where }) - delete records
+   - prisma.modelName.deleteMany({ where }) - delete multiple records
    
    STEP TYPE TO DATABASE OPERATION MAPPING:
-   - "Database find unique" → db.findUnique(modelName, where)
-   - "Database find many" → db.findMany(modelName, { where: filter })
-   - "Database create" → db.create(modelName, data)
-   - "Database create many" → db.createMany(modelName, dataArray)
-   - "Database update unique" → db.update(modelName, where, data) 
-   - "Database update many" → db.updateMany(modelName, where, data)
-   - "Database delete unique" → db.delete(modelName, where)
-   - "Database delete many" → db.deleteMany(modelName, where)
+   - "Database find unique" → prisma.modelName.findUnique({ where })
+   - "Database find many" → prisma.modelName.findMany({ where: filter })
+   - "Database create" → prisma.modelName.create({ data })
+   - "Database create many" → prisma.modelName.createMany({ data: dataArray })
+   - "Database update unique" → prisma.modelName.update({ where, data }) 
+   - "Database update many" → prisma.modelName.updateMany({ where, data })
+   - "Database delete unique" → prisma.modelName.delete({ where })
+   - "Database delete many" → prisma.modelName.deleteMany({ where })
 
-   IMPORTANT: The first parameter is always the MODEL NAME as a string, not db.ModelName.method()!
+   IMPORTANT: 
+   - Use camelCase for model names (e.g., prisma.customerOrder, not prisma.CustomerOrder)
+   - All operations take objects with named parameters ({ where, data, etc.})
 
 5. AI OPERATIONS:
    For AI analysis/decisions, use:
@@ -246,12 +345,20 @@ Generate production-ready, executable JavaScript code that implements the busine
         },
         {
           role: 'user',
-          content: `Generate executable JavaScript code for: ${name}
+          content: `Generate production-ready JavaScript code for: ${name}
 
-Pseudo Steps:
-${pseudoSteps.map((step: any, index: number) => 
-  `Step ${index + 1}: ${step.description}
+ASSEMBLE CODE FROM ENHANCED STEPS:
+${enhancedSteps.map((step: any) => 
+  `Step ${step.stepOrder}: ${step.description}
   - Type: ${step.type}
+  - Actual Code: ${step.actualCode || 'NOT PROVIDED - generate basic implementation'}
+  - Test Code: ${step.testCode || 'NOT PROVIDED'}
+  - Log Message: ${step.logMessage || 'Step ' + step.stepOrder + ' executing'}
+  - Mock Input: ${JSON.stringify(step.mockInput || {})}
+  - Mock Output: ${JSON.stringify(step.mockOutput || {})}
+  - Dependencies: ${step.dependsOn?.join(', ') || 'None'}
+  - Error Handling: ${step.errorHandling ? `Retries: ${step.errorHandling.retryAttempts || 3}, Continue on error: ${step.errorHandling.continueOnError || false}` : 'Default'}
+  - Authentication: ${step.oauthTokens ? `OAuth (${step.oauthTokens.provider})` : step.apiKeys ? `API Key (${step.apiKeys.provider})` : 'None'}
   - Inputs: ${step.inputFields?.map((f: any) => `${f.name} (${f.type})`).join(', ') || 'None'}
   - Outputs: ${step.outputFields?.map((f: any) => `${f.name} (${f.type})`).join(', ') || 'None'}`
 ).join('\n\n')}
@@ -261,16 +368,92 @@ Input Parameters Required:
 ${extractedInputParams.map((param: any) => `- ${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}`).join('\n')}
 ` : ''}
 
-Generate complete, executable code that can run in production with real data and properly handles all input parameters.`
+ASSEMBLY INSTRUCTIONS:
+1. Use the actualCode from each step as the core implementation
+2. Add the logMessage for each step execution
+3. Implement the error handling configuration for each step
+4. Handle authentication for steps that require it
+5. Respect step dependencies and data flow
+6. Include comprehensive logging throughout
+
+Generate the final assembled code that combines all step implementations into a cohesive, executable action.`
         }
       ],
       temperature: 0.2,
     });
 
-    // Ensure we return the input parameters we used
+    // Generate live test code that combines all steps
+    const generateTestCode = (steps: any[]) => {
+      const testSteps = steps.map(step => {
+        const mockInput = JSON.stringify(step.mockInput || {});
+        const mockOutput = JSON.stringify(step.mockOutput || {});
+        
+        return `
+    // Test Step ${step.stepOrder}: ${step.description}
+    console.log('Testing step ${step.stepOrder}: ${step.description}');
+    const step${step.stepOrder}Input = ${mockInput};
+    const step${step.stepOrder}ExpectedOutput = ${mockOutput};
+    
+    // Execute step ${step.stepOrder} test code
+    ${step.testCode || `// No specific test code provided for step ${step.stepOrder}`}
+    
+    console.log('Step ${step.stepOrder} test completed');`;
+      }).join('\n');
+
+      return `
+// Live Test Code for Action: ${name}
+async function testAction(input = {}) {
+  console.log('Starting live test for action: ${name}');
+  console.log('Input parameters:', input);
+  
+  const testResults = {
+    success: false,
+    steps: [],
+    totalTime: 0,
+    errors: []
+  };
+  
+  const startTime = Date.now();
+  
+  try {
+${testSteps}
+    
+    testResults.success = true;
+    testResults.totalTime = Date.now() - startTime;
+    console.log('All tests completed successfully');
+    
+  } catch (error) {
+    testResults.errors.push(error.message);
+    console.error('Test failed:', error.message);
+  }
+  
+  return testResults;
+}
+
+// Export for testing
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { testAction };
+}`;
+    };
+
+          const testCode = generateTestCode(enhancedSteps);
+
+    // Generate execution logs
+    const executionLogs = enhancedSteps.map(step => step.logMessage || `Step ${step.stepOrder}: ${step.description}`);
+
+    // Ensure we return the enhanced information
     const finalResult = {
       ...result.object,
-      inputParameters: extractedInputParams.length > 0 ? extractedInputParams : result.object.inputParameters
+      inputParameters: extractedInputParams.length > 0 ? extractedInputParams : result.object.inputParameters,
+      externalApiProvider: externalApiProviders[0] || null,
+      testCode,
+      executionLogs,
+      enhancedSteps: enhancedSteps.length,
+      apiValidation: {
+        isValid: externalApiProviders.length <= 1,
+        singleProvider: externalApiProviders.length === 1,
+        provider: externalApiProviders[0] || null
+      }
     };
 
     return NextResponse.json({

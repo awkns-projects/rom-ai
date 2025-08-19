@@ -28,35 +28,10 @@ import {
 import { z } from 'zod';
 
 import { mergeModelsIntelligently, mergeActionsIntelligently, mergeSchedulesIntelligently } from './merging';
-// import type { PseudoCodeStep } from '../../../artifacts/agent/types/action';
+import type { PseudoCodeStep } from '../../../../artifacts/agent/types/action';
 // import { mergeDatabaseChanges, mergeActionChanges, mergeScheduleChanges, logMergingDecision } from './merging';
 
-// Define PseudoCodeStep interface locally to avoid import issues
-interface PseudoCodeStep {
-  id: string;
-  description: string;
-  type: string;
-  inputFields: Array<{
-    id: string;
-    name: string;
-    type: string;
-    kind: 'scalar' | 'object' | 'enum';
-    required: boolean;
-    list: boolean;
-    description: string;
-    relationModel?: string;
-  }>;
-  outputFields: Array<{
-    id: string;
-    name: string;
-    type: string;
-    kind: 'scalar' | 'object' | 'enum';
-    required: boolean;
-    list: boolean;
-    description: string;
-    relationModel?: string;
-  }>;
-}
+// Now using the proper PseudoCodeStep type from action.ts for consistency
 
 interface ActionStep {
   id: string;
@@ -2737,7 +2712,7 @@ Use this EXACT template structure:
     "mainFunction": {
       "name": "processData",
       "parameterNames": ["database", "input", "member"],
-      "functionBody": "try { const result = await database.create('Data', input); return { output: { success: true, data: result, message: 'Success' }, data: [{ modelId: 'Data', createdRecords: [result] }] }; } catch (error) { throw new Error('Failed: ' + error.message); }",
+      "functionBody": "try { const result = await prisma.data.create({ data: input }); return { output: { success: true, data: result, message: 'Success' }, data: [{ modelId: 'Data', createdRecords: [result] }] }; } catch (error) { throw new Error('Failed: ' + error.message); }",
       "parameterDescriptions": {
         "database": "Database connection object",
         "input": "Input data from user",
@@ -2776,7 +2751,7 @@ Use this EXACT template structure:
         "modelName": "Data",
         "operation": "create",
         "parameterNames": ["database", "data"],
-        "functionBody": "return await database.create('Data', data);"
+        "functionBody": "return await prisma.data.create({ data });"
       }
     ],
     "testCases": [
@@ -3840,13 +3815,24 @@ REMEMBER: Every workflow must start with batch operations or filtering - NEVER r
 
     return {
       id: `step_${Date.now()}_${index}`,
-      step: index + 1,
-      type: step.type,
-      title: step.title || step.description,
       description: step.description,
+      type: step.type,
       inputFields: processedInputFields,
       outputFields: processedOutputFields,
-      code: step.code || ''
+      mockInput: step.mockInput || {},
+      mockOutput: step.mockOutput || {},
+      testCode: step.testCode || '',
+      actualCode: step.actualCode || step.code || '',
+      logMessage: step.logMessage || `Executing ${step.type}: ${step.description}`,
+      stepOrder: index + 1,
+      dependsOn: step.dependsOn || [],
+      isOptional: step.isOptional || false,
+      errorHandling: step.errorHandling || {
+        retryAttempts: 1,
+        continueOnError: false
+      },
+      oauthTokens: step.oauthTokens,
+      apiKeys: step.apiKeys
     };
   });
 
@@ -4699,21 +4685,21 @@ FUNCTION REQUIREMENTS:
 7. For AI analysis, use generateObject() with proper Zod schemas
 
 PRISMA DATABASE OPERATIONS:
-- Use the 'database' parameter as the Prisma client instance
+- Use the 'prisma' parameter as the Prisma client instance
 - Examples:
 
-  * await database.post.findMany({ 
+  * await prisma.post.findMany({ 
       where: { published: true }, 
       include: { author: true, categories: true },
       orderBy: { createdAt: 'desc' }
     })
-  * await database.user.findUnique({ 
+  * await prisma.user.findUnique({ 
       where: { email: userEmail },
       select: { id: true, name: true, posts: { take: 5 } }
     })
-  * await database.$transaction([
-      database.user.update({ where: { id: userId }, data: { credits: { increment: 10 } } }),
-      database.transaction.create({ data: { userId, amount: 10, type: 'CREDIT' } })
+  * await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: 10 } } }),
+      prisma.transaction.create({ data: { userId, amount: 10, type: 'CREDIT' } })
     ])
 
 PRISMA ERROR HANDLING:
@@ -4946,7 +4932,7 @@ function assembleStepsIntoCode(steps: ActionStep[], actionAnalysis: any): string
 ${stepFunctions}
 
 // Main execution function
-async function executeAction(database, input, member, ai, envVars = {}) {
+async function executeAction(prisma, input, member, ai, envVars = {}, logger = console) {
   try {
     // Validate input parameters
     ${actionAnalysis.inputVariables.filter((v: any) => v.required).map((v: any) => 
@@ -5019,7 +5005,7 @@ async function executeAction(database, input, member, ai, envVars = {}) {
 }
 
 // Execute the action
-return await executeAction(database, input, member, ai, envVars);`;
+return await executeAction(prisma, input, member, ai, envVars, logger);`;
 
   return mainExecutionCode;
 }
@@ -5198,4 +5184,253 @@ async function retrySchemaGenerationWithValidation(
 ): Promise<string> {
   console.log('⚠️ Schema retry validation temporarily disabled');
   return originalSchema;
+}
+
+/**
+ * ENHANCED PSEUDO STEP GENERATION - UNIFIED LOGIC
+ * This function contains the same logic used by both:
+ * - /api/agent/generate-steps route
+ * - step2-action-generation.ts orchestrator
+ */
+export async function generateEnhancedPseudoSteps(
+  actionName: string,
+  actionDescription: string,
+  actionType: 'query' | 'mutation',
+  availableModels: AgentModel[],
+  businessContext?: string,
+  documentId?: string
+): Promise<{
+  steps: PseudoCodeStep[];
+  externalApiProvider: string | null;
+  apiValidation: {
+    isValid: boolean;
+    singleProvider: boolean;
+    conflictingProviders?: string[];
+  };
+  testCode: string;
+}> {
+  console.log(`🧩 Generating enhanced pseudo steps for: ${actionName} (${actionType})`);
+  
+  const model = await getAgentBuilderModel();
+  
+  const systemPrompt = `You are an expert business process analyst designing detailed, executable action steps.
+
+TASK: Generate comprehensive, detailed steps for "${actionName}" - a ${actionType} action.
+
+DESCRIPTION: ${actionDescription}
+ACTION TYPE: ${actionType} (${actionType === 'mutation' ? 'modifies data' : 'reads data only'})
+BUSINESS CONTEXT: ${businessContext || 'General business operations'}
+
+AVAILABLE MODELS: ${JSON.stringify(availableModels?.map((m: any) => ({ 
+  name: m.name, 
+  fields: m.fields?.map((f: any) => ({ name: f.name, type: f.type, kind: f.kind })) 
+})) || [])}
+
+CRITICAL REQUIREMENTS:
+
+1. **EXTERNAL API VALIDATION**:
+   - Actions can only use ONE type of external API (e.g., only Gmail OR only Shopify, not both)
+   - Multiple calls to the SAME API are allowed (e.g., multiple Gmail API calls)
+   - If external APIs are needed, identify the PRIMARY provider and validate consistency
+   - Set externalApiProvider to the detected provider or null if no external APIs
+
+2. **STEP TYPES - PRISMA DATABASE OPERATIONS**:
+   - findUnique: Find single record by unique identifier
+   - findUniqueOrThrow: Find single record, throw error if not found
+   - findFirst: Find first record matching condition
+   - findFirstOrThrow: Find first record, throw error if not found
+   - findMany: Find multiple records with filtering
+   - create: Create single new record
+   - createMany: Create multiple records at once
+   - createManyAndReturn: Create multiple records and return them
+   - update: Update single record
+   - updateMany: Update multiple records
+   - upsert: Create or update record (if exists)
+   - delete: Delete single record
+   - deleteMany: Delete multiple records
+   - count: Count records with optional filtering
+   - aggregate: Aggregate data (count, sum, avg, etc.)
+   - groupBy: Group records and aggregate
+   - $transaction: Execute multiple operations in transaction
+   - $executeRaw: Execute raw SQL command
+   - $queryRaw: Execute raw SQL query
+
+3. **EXTERNAL API OPERATIONS**:
+   - api call post: POST request to external API
+   - api call get: GET request to external API
+   - api call put: PUT request to external API
+   - api call delete: DELETE request to external API
+   - api call patch: PATCH request to external API
+   - graphql query: GraphQL query operation
+   - graphql mutation: GraphQL mutation operation
+   - graphql subscription: GraphQL subscription operation
+
+4. **AI OPERATIONS**:
+   - ai analysis: Analyze data using AI
+   - ai generate object: Generate structured objects using AI
+   - ai generate text: Generate text content using AI
+   - ai generate image: Generate images using AI
+
+5. **JAVASCRIPT DATA OPERATIONS**:
+   - map: Transform array elements
+   - filter: Filter array elements
+   - reduce: Reduce array to single value
+   - find: Find single element in array
+   - forEach: Iterate over array elements
+   - sort: Sort array elements
+   - slice: Extract portion of array
+   - concat: Concatenate arrays
+   - join: Join array elements to string
+   - parse json: Parse JSON string to object
+   - stringify json: Convert object to JSON string
+   - validate data: Validate data structure
+   - transform data: Transform data format
+   - merge objects: Merge multiple objects
+
+5. **AUTHENTICATION & CREDENTIALS**:
+   - For OAuth APIs (Gmail, Shopify, etc.): Include oauthTokens with provider reference
+   - For API Key APIs (Stripe, etc.): Include apiKeys with provider reference
+   - Reference agent document OAuth table: "{provider}_access_token", "{provider}_refresh_token"
+   - Reference credentials table: "{provider}_api_key", "{provider}_secret_key"
+
+6. **MOCK DATA GENERATION**:
+   - Generate realistic mock input data for testing
+   - Generate expected mock output data
+   - Use business-relevant examples (no "test123" or placeholder data)
+   - Match input/output field types and constraints
+
+7. **CODE GENERATION**:
+   - testCode: Specific test code for this step only (no hardcoding)
+   - actualCode: Executable code for this step with proper error handling
+   - logMessage: Descriptive log message template with variables
+
+8. **STEP DEPENDENCIES**:
+   - stepOrder: Sequential order (1, 2, 3...)
+   - dependsOn: Array of step IDs that must complete first
+   - Consider data flow between steps
+
+9. **ERROR HANDLING**:
+   - Define retry attempts for external API calls
+   - Specify fallback actions for failures
+   - Determine if step failure should stop entire action
+
+Generate detailed, executable steps that follow these patterns and requirements.`;
+
+  const EnhancedStepSchema = z.object({
+    steps: z.array(z.object({
+      id: z.string(),
+      description: z.string(),
+      type: z.enum([
+        // Prisma Database Operations
+        'findUnique', 'findUniqueOrThrow', 'findFirst', 'findFirstOrThrow', 'findMany', 
+        'create', 'createMany', 'createManyAndReturn',
+        'update', 'updateMany', 'upsert',
+        'delete', 'deleteMany',
+        'count', 'aggregate', 'groupBy',
+        '$transaction', '$executeRaw', '$queryRaw',
+        // External API Operations  
+        'api call post', 'api call get', 'api call put', 'api call delete', 'api call patch',
+        'graphql query', 'graphql mutation', 'graphql subscription',
+        // AI Operations
+        'ai analysis', 'ai generate object', 'ai generate text', 'ai generate image',
+        // JavaScript Data Operations
+        'map', 'filter', 'reduce', 'find', 'forEach', 'sort', 'slice', 'concat', 'join',
+        'parse json', 'stringify json', 'validate data', 'transform data', 'merge objects'
+      ]),
+      inputFields: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+        type: z.string(),
+        kind: z.enum(['scalar', 'object', 'enum']),
+        required: z.boolean(),
+        list: z.boolean(),
+        relationModel: z.string().optional(),
+        description: z.string().optional(),
+        defaultValue: z.string().optional()
+      })),
+      outputFields: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+        type: z.string(),
+        kind: z.enum(['scalar', 'object', 'enum']),
+        required: z.boolean(),
+        list: z.boolean(),
+        relationModel: z.string().optional(),
+        description: z.string().optional(),
+        defaultValue: z.string().optional()
+      })),
+      oauthTokens: z.object({
+        provider: z.string(),
+        accessToken: z.string(),
+        refreshToken: z.string().optional(),
+        expiresAt: z.string().optional()
+      }).optional(),
+      apiKeys: z.object({
+        provider: z.string(),
+        keyName: z.string(),
+        keyValue: z.string()
+      }).optional(),
+      mockInput: z.record(z.any()),
+      mockOutput: z.record(z.any()),
+      testCode: z.string(),
+      actualCode: z.string(),
+      logMessage: z.string(),
+      stepOrder: z.number(),
+      dependsOn: z.array(z.string()).optional(),
+      isOptional: z.boolean().optional(),
+      errorHandling: z.object({
+        retryAttempts: z.number().optional(),
+        fallbackAction: z.string().optional(),
+        continueOnError: z.boolean().optional()
+      }).optional()
+    })),
+    externalApiProvider: z.enum(['gmail', 'shopify', 'stripe', 'slack', 'notion', 'salesforce', 'hubspot', 'facebook', 'instagram', 'linkedin', 'threads', 'github', 'google-calendar', 'microsoft-teams']).nullable(),
+    apiValidation: z.object({
+      isValid: z.boolean(),
+      singleProvider: z.boolean(),
+      conflictingProviders: z.array(z.string()).optional()
+    }),
+    testCode: z.string()
+  });
+
+  const result = await generateObject({
+    model,
+    schema: EnhancedStepSchema,
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      },
+      {
+        role: 'user',
+        content: `Generate detailed, executable steps for "${actionName}":
+
+Description: ${actionDescription}
+Type: ${actionType}
+Business Context: ${businessContext || 'General business operations'}
+
+Requirements:
+- Create 3-7 logical steps that accomplish the business goal
+- Include proper input/output field definitions
+- Generate realistic mock data for testing
+- Include authentication for external APIs if needed
+- Validate external API consistency (only one provider type)
+- Generate actual executable code for each step
+- Include comprehensive error handling
+- Create step dependencies where data flows between steps
+
+Focus on creating steps that can be executed in sequence to achieve the business objective described.`
+      }
+    ],
+    temperature: 0.3,
+  });
+
+  console.log(`✅ Generated ${result.object.steps.length} enhanced pseudo steps with validation`);
+  
+  return {
+    steps: result.object.steps as PseudoCodeStep[],
+    externalApiProvider: result.object.externalApiProvider,
+    apiValidation: result.object.apiValidation,
+    testCode: result.object.testCode
+  };
 }

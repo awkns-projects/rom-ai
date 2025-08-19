@@ -1,4 +1,4 @@
-import { generateActions, generatePrismaActions, generatePseudoSteps, generateUIComponents } from '../generation';
+import { generateActions, generatePrismaActions, generateUIComponents, generateEnhancedPseudoSteps } from '../generation';
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { getAgentBuilderModel } from '../generation';
@@ -61,26 +61,30 @@ const CodeGenerationSchema = z.object({
 });
 
 /**
- * STEP 2A: Generate Pseudo Steps (like /generate-steps route)
+ * STEP 2A: Generate Enhanced Pseudo Steps (using unified generation function)
  */
 async function generateActionPseudoSteps(
   actionName: string,
   actionDescription: string,
   actionType: 'query' | 'mutation',
   availableModels: any[],
-  businessContext: string
+  businessContext: string,
+  documentId?: string
 ): Promise<any[]> {
-  console.log(`🧩 Step 2A: Generating pseudo steps for action: ${actionName}`);
+  console.log(`🧩 Step 2A: Generating enhanced pseudo steps for action: ${actionName}`);
   
-  // Use the same logic as /generate-steps route
-  return await generatePseudoSteps(
+  // Use the unified enhanced step generation function
+  const result = await generateEnhancedPseudoSteps(
     actionName,
     actionDescription,
     actionType,
     availableModels || [],
-    'action', // entityType
-    businessContext
+    businessContext,
+    documentId
   );
+
+  console.log(`✅ Generated ${result.steps.length} enhanced pseudo steps with testCode and validation`);
+  return result.steps;
 }
 
 /**
@@ -149,6 +153,7 @@ TASK: Generate complete, executable JavaScript code based on the provided pseudo
 CONTEXT:
 - Name: ${actionName}
 - Description: ${actionDescription}
+- Action Type: ${actionType} (${actionType === 'mutation' ? 'MODIFIES data - creates, updates, deletes' : 'READS data only - queries, analyzes, searches'})
 - Entity Type: ${entityType}
 - Business Context: ${businessContext}
 - Available Models: ${JSON.stringify(availableModels?.map((m: any) => ({ name: m.name, fields: m.fields?.map((f: any) => ({ name: f.name, type: f.type })) })) || [])}
@@ -158,6 +163,23 @@ ${JSON.stringify(pseudoSteps, null, 2)}
 
 REQUIRED INPUT PARAMETERS (from first step):
 ${JSON.stringify(extractedInputParams, null, 2)}
+
+**🎯 ACTION TYPE COMPLIANCE:**
+${actionType === 'mutation' ? `
+This is a MUTATION action - it MUST modify data:
+- Include database write operations (create, update, delete, upsert)
+- External API calls that modify remote data
+- Focus on data transformation and persistence
+- Return details about what was changed/created
+- Include validation before making changes
+` : `
+This is a QUERY action - it MUST NOT modify data:
+- Only use read operations (find, aggregate, count)
+- External API calls should only retrieve data
+- Focus on data retrieval, analysis, and insights
+- Never include create, update, delete operations
+- Return data insights, search results, or analysis
+`}
 
 CODE GENERATION REQUIREMENTS:
 
@@ -205,27 +227,40 @@ CODE GENERATION REQUIREMENTS:
    - Return structured result with count and processed items
 
 5. DATABASE OPERATIONS:
-   For database operations, use the actual API format:
-   - db.findMany(modelName, { where: filter, limit: number }) - find multiple records
-   - db.findUnique(modelName, where) - find single record  
-   - db.create(modelName, data) - create new record
-   - db.createMany(modelName, dataArray) - create multiple records (returns { count, records })
-   - db.update(modelName, where, data) - update existing records
-   - db.updateMany(modelName, where, data) - update multiple records (returns { count, records })
-   - db.delete(modelName, where) - delete records
-   - db.deleteMany(modelName, where) - delete multiple records (returns { count, records })
+   For database operations, use Prisma Client syntax directly:
+   - prisma.modelName.findMany({ where: filter, take: limit }) - find multiple records
+   - prisma.modelName.findUnique({ where }) - find single record  
+   - prisma.modelName.create({ data }) - create new record
+   - prisma.modelName.createMany({ data: dataArray }) - create multiple records
+   - prisma.modelName.update({ where, data }) - update existing records
+   - prisma.modelName.updateMany({ where, data }) - update multiple records
+   - prisma.modelName.delete({ where }) - delete records
+   - prisma.modelName.deleteMany({ where }) - delete multiple records
    
-   STEP TYPE TO DATABASE OPERATION MAPPING:
-   - "Database find unique" → db.findUnique(modelName, where)
-   - "Database find many" → db.findMany(modelName, { where: filter })
-   - "Database create" → db.create(modelName, data)
-   - "Database create many" → db.createMany(modelName, dataArray)
-   - "Database update unique" → db.update(modelName, where, data) 
-   - "Database update many" → db.updateMany(modelName, where, data)
-   - "Database delete unique" → db.delete(modelName, where)
-   - "Database delete many" → db.deleteMany(modelName, where)
+   STEP TYPE TO PRISMA OPERATION MAPPING:
+   - "findUnique" → prisma.modelName.findUnique({ where })
+   - "findUniqueOrThrow" → prisma.modelName.findUniqueOrThrow({ where })
+   - "findFirst" → prisma.modelName.findFirst({ where })
+   - "findFirstOrThrow" → prisma.modelName.findFirstOrThrow({ where })
+   - "findMany" → prisma.modelName.findMany({ where: filter })
+   - "create" → prisma.modelName.create({ data })
+   - "createMany" → prisma.modelName.createMany({ data: dataArray })
+   - "createManyAndReturn" → prisma.modelName.createManyAndReturn({ data: dataArray })
+   - "update" → prisma.modelName.update({ where, data }) 
+   - "updateMany" → prisma.modelName.updateMany({ where, data })
+   - "upsert" → prisma.modelName.upsert({ where, update, create })
+   - "delete" → prisma.modelName.delete({ where })
+   - "deleteMany" → prisma.modelName.deleteMany({ where })
+   - "count" → prisma.modelName.count({ where })
+   - "aggregate" → prisma.modelName.aggregate({ where, _count, _sum, _avg, _min, _max })
+   - "groupBy" → prisma.modelName.groupBy({ by, where, _count, _sum, _avg, _min, _max })
+   - "$transaction" → prisma.$transaction([operations])
+   - "$executeRaw" → prisma.$executeRaw\`SQL query\`
+   - "$queryRaw" → prisma.$queryRaw\`SQL query\`
 
-   IMPORTANT: The first parameter is always the MODEL NAME as a string, not db.ModelName.method()!
+   IMPORTANT: 
+   - Use camelCase for model names (e.g., prisma.customerOrder, not prisma.CustomerOrder)
+   - All operations take objects with named parameters ({ where, data, etc.})
 
 6. AI OPERATIONS:
    For AI analysis/decisions, use:
@@ -341,6 +376,8 @@ BUSINESS CONTEXT:
   externalApis.map((api: any) => `${api.provider} (${api.connectionType})`).join('\n') :
   '- No external APIs specified'
 }
+- User Access: ${step0Analysis.userAccess?.appType || 'not specified'} (${step0Analysis.userAccess?.requiresAuthentication ? 'authenticated' : 'no auth'})
+- Data Scoping: ${step0Analysis.userAccess?.userDataScoping || 'shared_data'}
 
 🚨 CRITICAL BATCH PROCESSING REQUIREMENTS:
 
@@ -398,23 +435,34 @@ REQUIREMENTS:
    - Design actions that combine multiple APIs for workflow automation
    - Focus on API-to-API orchestration and data synchronization
 
-5. ACTION TYPES:
+5. USER ROLE & DATA SCOPING REQUIREMENTS:
+   - userRole: Assign based on the operation complexity and security needs:
+     * 'admin': System management, user administration, global operations, sensitive data export
+     * 'member': Personal data operations, basic business processes, individual workflows
+     * 'both': Reports, chat, general queries accessible to all authenticated users
+   
+   - userDataScoping: Align with the action's data access pattern:
+     * 'user_scoped': Actions that operate only on the current user's data (personal dashboards, user profiles)
+     * 'shared_data': Actions that work with data visible to all users (public reports, shared catalogs)
+     * 'system_wide': Actions that need access to all data regardless of user (admin reports, system sync)
+
+6. ACTION TYPES:
    - 'mutation': Actions that create, update, or modify data across systems
    - 'query': Actions that analyze, generate insights, or retrieve complex data
 
-6. AVOID BASIC CRUD:
+7. AVOID BASIC CRUD:
    - Don't generate actions like "Create Record", "Update Item", "Delete Entry"
    - Users already have basic database operations available
    - Focus on business logic that adds significant value
 
-7. EXAMPLES OF CHAINABLE BATCH BUSINESS PROCESS ACTIONS:
+8. EXAMPLES OF CHAINABLE BATCH BUSINESS PROCESS ACTIONS:
    - "Import Customer Data" → processes all customers → outputs customerIds → feeds into "Send Welcome Email Campaign"
    - "Analyze Sales Data" → analyzes all sales → outputs reportId → feeds into "Generate Dashboard"
    - "Process Orders Batch" → processes all pending orders → outputs orderIds → feeds into "Update Inventory Levels"
    - "Fetch User Preferences" → gets all user preferences → outputs preferences → feeds into "Customize Experience Campaign"
    - "Validate Product Data" → validates all products → outputs validatedData → feeds into "Sync to Catalog"
 
-8. CRITICAL BATCH INPUT REQUIREMENT:
+9. CRITICAL BATCH INPUT REQUIREMENT:
    ALL ACTIONS MUST BE DESIGNED TO ACCEPT BATCH INPUT WITH items[] ARRAYS:
    - Never design actions that take single parameters like { userId: "123" }
    - Always design actions that accept: { items: [{ userId: "123" }] }
@@ -443,6 +491,8 @@ Generate 3-5 meaningful business process actions that can work independently OR 
         purpose: z.string().describe('Detailed description of the complete workflow including external API integrations'),
         type: z.enum(['query', 'mutation']).describe('query for data analysis/retrieval, mutation for data modification/creation'),
         operation: z.literal('create').describe('All generated actions are new'),
+        userRole: z.enum(['admin', 'member', 'both']).describe('Which user role can execute this action'),
+        userDataScoping: z.enum(['user_scoped', 'shared_data', 'system_wide']).describe('Whether this action operates on user-specific data, shared data, or system-wide data'),
         businessValue: z.string().describe('Explanation of the business value and automation benefit'),
         expectedOutputs: z.array(z.string()).describe('List of key outputs this action produces that could be used by other actions (e.g., "customerId", "reportUrl", "processedData")').optional(),
         chainingSuggestions: z.string().describe('Brief note on how this action could work with others in a chained workflow').optional()
@@ -462,6 +512,11 @@ Generate 3-5 meaningful business process actions that can work independently OR 
 3. Integrate multiple systems for end-to-end automation
 4. Solve real business problems and add significant value
 5. 🔗 PRODUCE CHAINABLE OUTPUTS: Design actions that output useful data for parameter chaining
+6. 👥 ASSIGN PROPER USER ROLES & DATA SCOPING:
+   - Consider the app type: ${step0Analysis.userAccess?.appType || 'not specified'}
+   - Consider data scoping: ${step0Analysis.userAccess?.userDataScoping || 'shared_data'}
+   - Assign userRole (admin/member/both) based on operation sensitivity and user access needs
+   - Assign userDataScoping (user_scoped/shared_data/system_wide) based on data access pattern
 
 ${hasExternalApis ? 
   `Focus heavily on integrating these external services into comprehensive workflows that span multiple systems. Consider how data flows between different APIs and services.` :
@@ -487,6 +542,8 @@ Generate actions that represent complete business processes AND can be chained t
     purpose: action.purpose,
     type: action.type,
     operation: action.operation,
+    userRole: action.userRole,
+    userDataScoping: action.userDataScoping,
     _aiGenerated: true,
     businessValue: action.businessValue,
     expectedOutputs: action.expectedOutputs || [],
@@ -511,22 +568,23 @@ async function createCompleteAction(
   console.log(`🚀 Creating complete action: ${actionName} (${actionType})`);
   
   try {
-    // Step 2A: Generate Pseudo Steps (like /generate-steps)
-    const pseudoSteps = await generateActionPseudoSteps(
+    // Step 2A: Generate Enhanced Pseudo Steps (using same logic as /generate-steps API)
+    const stepGenerationResult = await generateActionPseudoSteps(
       actionName,
       actionDescription,
       actionType,
       availableModels,
-      businessContext
+      businessContext,
+      undefined // documentId not available in this context
     );
     
-    console.log(`✅ Step 2A complete: Generated ${pseudoSteps.length} pseudo steps`);
+    console.log(`✅ Step 2A complete: Generated ${stepGenerationResult.length} enhanced pseudo steps`);
     
     // Step 2B: Generate UI Components (like /generate-ui-components)
     const uiComponents = await generateActionUIComponents(
       actionName,
       actionDescription,
-      pseudoSteps,
+      stepGenerationResult,
       availableModels,
       businessContext
     );
@@ -538,7 +596,7 @@ async function createCompleteAction(
       actionName,
       actionDescription,
       actionType,
-      pseudoSteps,
+      stepGenerationResult,
       availableModels,
       businessContext,
       entityType
@@ -554,15 +612,14 @@ async function createCompleteAction(
       type: actionType,
       role: actionSpec.role || 'member',
       
-      // Step 2A results: Pseudo Steps
-      pseudoSteps: pseudoSteps,
+      // Step 2A results: Enhanced Pseudo Steps
+      pseudoSteps: stepGenerationResult,
       
       // Step 2B results: UI Components  
       uiComponentsDesign: uiComponents,
       
       // Step 2C results: Executable Code
       execute: {
-        type: 'code' as const,
         code: {
           script: codeResult.code,
           envVars: codeResult.envVars || []
@@ -581,19 +638,7 @@ async function createCompleteAction(
         }
       },
       
-      // Required fields for AgentAction interface
-      dataSource: {
-        type: 'database' as const,
-        database: {
-          models: availableModels || []
-        }
-      },
-      results: {
-        actionType: 'Create' as const,
-        model: actionName,
-        identifierIds: [],
-        fields: {}
-      }
+      // No additional fields needed
     };
     
     console.log(`🎉 Complete action created: ${actionName} with pseudo steps, UI components, and executable code`);
@@ -610,24 +655,18 @@ async function createCompleteAction(
       type: actionType,
       role: actionSpec.role || 'member',
       execute: {
-        type: 'prompt' as const,
-        prompt: {
-          content: `Execute action: ${actionDescription}`,
-          model: 'gpt-4',
-          temperature: 0.2
+        code: {
+          script: `// Fallback action code for: ${actionDescription}
+async function executeAction(prisma, input, member, ai, envVars, logger) {
+  return {
+    success: false,
+    error: 'Action code generation failed - fallback execution',
+    actionName: '${actionName}',
+    description: '${actionDescription}'
+  };
+}`,
+          envVars: []
         }
-      },
-      dataSource: {
-        type: 'database' as const,
-        database: {
-          models: availableModels || []
-        }
-      },
-      results: {
-        actionType: 'Create' as const,
-        model: actionName,
-        identifierIds: [],
-        fields: {}
       },
       _internal: {
         hasRealCode: false,
@@ -770,7 +809,7 @@ export function validateStep2Output(output: Step2Output): boolean {
     const actionsWithPseudoSteps = output.actions.filter((a: any) => a.pseudoSteps && a.pseudoSteps.length > 0);
     const actionsWithUIComponents = output.actions.filter((a: any) => a.uiComponentsDesign && a.uiComponentsDesign.length > 0);
     const actionsWithCode = output.actions.filter(a => 
-      a.execute && a.execute.type === 'code' && a.execute.code?.script
+      a.execute && a.execute.code?.script
     );
 
     if (actionsWithCode.length === 0) {
