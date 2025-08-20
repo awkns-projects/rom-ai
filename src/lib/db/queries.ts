@@ -981,3 +981,21 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
     );
   }
 }
+
+export async function getDocumentsByUserId({ userId }: { userId: string }) {
+  try {
+    const documents = await db
+      .select()
+      .from(document)
+      .where(and(eq(document.userId, userId), eq(document.kind, 'agent')))
+      .orderBy(desc(document.createdAt));
+
+    return documents;
+  } catch (error) {
+    console.error('Database error in getDocumentsByUserId:', error);
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get documents by user id',
+    );
+  }
+}
