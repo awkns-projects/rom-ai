@@ -28,22 +28,22 @@ flowchart TD
             VAL_RA[VAL-RA Agent]
         end
         
-        subgraph Stage2["Stage 2: Information Gathering"]
+        subgraph Stage2["Stage 2: 3rd party provider information Gathering"]
             MCP_ADAPTER[MCP Adapter<br/>Protocol Bridge]
             ABI_FETCH[ABI-FETCH Agent]
-            ABI_ANALYZE[ABI-ANALYZE Agent]
             API_FETCH[API-FETCH Agent]
+            ABI_ANALYZE[ABI/API-ANALYZE Agent]
             QA_INFO[QA-INFO Agent]
             VAL_INFO[VAL-INFO Agent]
         end
         
-        subgraph Stage3["Stage 3: System Design"]
+        subgraph Stage3["Stage 3: System integration Design"]
             SDA[SDA-W3 Agent]
             QA_SDA[QA-SDA Agent]
             VAL_SDA[VAL-SDA Agent]
         end
         
-        subgraph Stage4["Stage 4: Architecture Design"]
+        subgraph Stage4["Stage 4: Data Schema Design"]
             ADA[ADA-W3 Agent]
             QA_ADA[QA-ADA Agent]
             VAL_ADA[VAL-ADA Agent]
@@ -152,7 +152,7 @@ flowchart TD
   ```
   - user send a request with description about the app they want
   - user wait a few minutes
-  - user get an fully-functional and well-tested app with the functionality fullfilling the given requirement desciption
+  - user get an fully-functional and well-tested app with the functionality fullfilling the given requirement description
   ```
 - required endpoint:
   - `/api/agent/generate?description=...`
@@ -218,35 +218,35 @@ flowchart TD
 - **ABI/API-ANALYZE Agent**: Analyzes contract interfaces, maps functions and events, analyzes gas costs
 - **QA-INFO Agent**: Generates tests for information gathering, validates data completeness
 - **VAL-INFO Agent (can be replaced by user)**: 
-  - Validates if the ABI/API analyzed results meet test requirements from stage 1, if not, ask FETCH/ANALYZE Agent to regenerate the analyzed results
+  - Validates if the ABI/API analyzed results meet test requirements from stage 1, if not, ask ABI/API-ANALYZE Agent to regenerate the analyzed results
   - Validates if test scenarios cover the analyzed results, if not, ask QA-INFO Agent to regenerate the tests
 
 #### **Stage 3: System integration Design**
-- **SDA-W3 Agent**: Generates Designs system architecture (3rd party integration diagram depicted in mermaid) and Action Ideas
+- **SDA-W3 Agent**: Generates system architecture (3rd party integration diagram depicted in mermaid) and Action Ideas
 - **QA-SDA Agent**: Generates system E2E tests
 - **VAL-SDA Agent**: 
   - Validates if the system architecture, Action Ideas meet test requirements from stage 1, if not, ask SDA-W3 Agent to regenerate the design
   - Validates if E2E test scenarios cover the SDA-W3 Agent results, if not, ask QA-SDA Agent to regenerate the tests
 
 #### **Stage 4: Data Schema Design**
-- **ADA-W3 Agent**: Generate Data Schemas and API integration plans 
+- **ADA-W3 Agent**: Generates Data Schemas and API integration plans 
 - **QA-ADA Agent**: Generates system integrational tests
 - **VAL-ADA Agent**: 
   - Validates if the Data Schemas and API integration plans meet test requirements from stage 3, if not, ask ADA-W3 Agent to regenerate the design
   - Validates if system integrational tests cover the ADA-W3 Agent results, if not, ask QA-ADA Agent to regenerate the tests
 
 #### **Stage 5: Module Design**
-- **MDA-W3 Agent**: Designs model CRUD and API adaptor classes and integration flows ( steps in actions)
+- **MDA-W3 Agent**: Designs model CRUD and API adaptor classes and integration flows (steps in actions)
 - **QA-MDA Agent**: Generates module tests, component tests, API endpoint tests
 - **VAL-MDA Agent**:
-  - Validates if the model CRUD and API adaptor classes and integration flows ( steps in actions) meet test requirements from stage 4, if not, ask MDA-W3 Agent to regenerate the design
-  - Validates if system integrational tests cover the MDA-W3 Agent results, if not, ask QA-MDA Agent to regenerate the tests
+  - Validates if the model CRUD and API adaptor classes and integration flows (steps in actions) meet test requirements from stage 4, if not, ask MDA-W3 Agent to regenerate the design
+  - Validates if module tests, component tests, API endpoint tests cover the MDA-W3 Agent results, if not, ask QA-MDA Agent to regenerate the tests
 
 #### **Stage 6: Implementation**
 - **DEV-W3 Agent**: Implements code
 - **QA-DEV Agent**: Generates unit tests
 - **VAL-DEV Agent**:
-  - Validates if the code meet test requirements from stage 4, if not, ask DEV-W3 Agent to regenerate the code
+  - Validates if the code meets test requirements from stage 5, if not, ask DEV-W3 Agent to regenerate the code
   - Validates if unit tests cover the DEV-W3 Agent results, if not, ask QA-DEV Agent to regenerate the tests
 
 #### **Stage 7: Final Testing**
@@ -312,8 +312,8 @@ The pluggable MCP server system allows users to define their own MCP server conn
 
 1. **Stage 1 → Stage 2**: Requirements tests validate information gathering
 2. **Stage 2 → Stage 3**: Information tests validate system design
-3. **Stage 3 → Stage 4**: System tests validate architecture choices
-4. **Stage 4 → Stage 5**: Architecture tests validate module design
+3. **Stage 3 → Stage 4**: System tests validate data schema design
+4. **Stage 4 → Stage 5**: Data schema tests validate module design
 5. **Stage 5 → Stage 6**: Module tests validate implementation
 6. **Stage 6 → Stage 7**: Implementation tests validate final application
 
@@ -338,6 +338,8 @@ This section focuses on the **easiest way to prove our multi-agent system concep
   - Why: Official SDK, full protocol compliance, supports custom server implementations
   - Stars: 2k+, Official Microsoft/OpenAI project
   - Alternative: **Custom MCP adapter implementation** using Express.js with plugin system
+- **EVM MCP Server** (https://github.com/mcpdotdirect/evm-mcp-server)
+
 
 #### **Database & State Management**
 - **Prisma** (`@prisma/client`) - **RECOMMENDED**
@@ -394,7 +396,7 @@ This section focuses on the **easiest way to prove our multi-agent system concep
   - Stars: 25k+, Industry standard
   - Alternative: **Joi** for more traditional validation
 
-### POC Architecture (CLI + RESTful APIs)
+### POC Architecture (CLI + RESTful APIs with Pluggable MCP Design)
 
 ```mermaid
 flowchart TD
@@ -419,6 +421,8 @@ flowchart TD
                 QA["POST /api/agents/qa-ra/execute"]
                 VAL["POST /api/agents/val-ra/execute"]
                 ABI["POST /api/agents/abi-fetch/execute"]
+                API_FETCH["POST /api/agents/api-fetch/execute"]
+                ABI_ANALYZE["POST /api/agents/abi-api-analyze/execute"]
             end
             
             subgraph MCP["MCP Adapter Endpoints"]
@@ -427,13 +431,50 @@ flowchart TD
                 MCP_SERVERS["GET /api/mcp/servers"]
                 MCP_CONFIG["POST /api/mcp/config"]
                 MCP_HEALTH["GET /api/mcp/health"]
+                MCP_REGISTER["POST /api/mcp/register-server"]
+                MCP_ROUTE["POST /api/mcp/route-request"]
             end
         end
         
         subgraph Services["Vercel Services"]
-            POSTGRES[(Vercel Postgres)]
-            KV[(Vercel KV)]
-            STORAGE[(Vercel Storage)]
+            POSTGRES[(Vercel Postgres<br/>Pipeline State & Config)]
+            KV[(Vercel KV<br/>MCP Server Registry)]
+            STORAGE[(Vercel Storage<br/>Artifacts & Results)]
+        end
+    end
+
+    subgraph MCPAdapter["MCP Adapter Layer"]
+        subgraph MCPCore["MCP Core Services"]
+            MCP_ROUTER[MCP Router<br/>Load Balancing & Routing]
+            MCP_REGISTRY[MCP Registry<br/>Server Discovery]
+            MCP_HEALTH_MONITOR[Health Monitor<br/>Server Status]
+            MCP_CONFIG_MGR[Config Manager<br/>User Settings]
+        end
+        
+        subgraph MCPProtocol["MCP Protocol Bridge"]
+            MCP_TRANSLATOR[Protocol Translator<br/>Request/Response Mapping]
+            MCP_AUTH[Authentication Manager<br/>API Keys, OAuth2, Bearer]
+            MCP_FALLOVER[Failover Handler<br/>Backup Server Management]
+        end
+    end
+
+    subgraph PluggableMCPServers["Pluggable MCP Servers"]
+        subgraph Web3Servers["Web3 MCP Servers"]
+            EVM_MCP[EVM MCP Server<br/>Blockchain Interactions]
+            ETHEREUM_MCP[Ethereum MCP Server<br/>Contract ABI Fetching]
+            POLYGON_MCP[Polygon MCP Server<br/>Layer 2 Operations]
+        end
+        
+        subgraph Web2Servers["Web2 MCP Servers"]
+            API_MCP[API MCP Server<br/>REST/GraphQL APIs]
+            DATABASE_MCP[Database MCP Server<br/>SQL/NoSQL Operations]
+            FILE_MCP[File MCP Server<br/>Storage Operations]
+        end
+        
+        subgraph CustomServers["Custom MCP Servers"]
+            USER_MCP_1[User MCP Server 1<br/>Custom Implementation]
+            USER_MCP_2[User MCP Server 2<br/>Custom Implementation]
+            USER_MCP_N[User MCP Server N<br/>Custom Implementation]
         end
     end
 
@@ -441,6 +482,7 @@ flowchart TD
         AI[OpenAI API]
         BLOCKCHAIN[Etherscan API]
         WEB2[Web2 APIs]
+        EXPLORERS[Blockchain Explorers]
     end
 
     subgraph Frontend["Your Frontend Service"]
@@ -465,7 +507,20 @@ flowchart TD
     Agents -->|Cache| KV
     Core -->|Files| STORAGE
     
-    %% External Integration
-    Agents -->|MCP Adapter| MCP
-    MCP -->|Route to Pluggable Servers| External
+    %% MCP Adapter Integration
+    Agents -->|Tool Requests| MCP
+    MCP -->|Route Requests| MCPAdapter
+    MCPAdapter -->|Protocol Translation| MCPProtocol
+    MCPProtocol -->|Load Balance| MCPCore
+    
+    %% Pluggable Server Integration
+    MCPCore -->|Route to Servers| PluggableMCPServers
+    PluggableMCPServers -->|External Queries| External
+    
+    %% Registry & Configuration
+    MCPCore -->|Server Discovery| MCP_REGISTRY
+    MCPCore -->|Health Checks| MCP_HEALTH_MONITOR
+    MCPCore -->|User Config| MCP_CONFIG_MGR
+    MCP_REGISTRY -->|Store Config| KV
+    MCP_CONFIG_MGR -->|Load Config| KV
 ```
