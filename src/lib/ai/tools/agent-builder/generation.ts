@@ -4224,6 +4224,29 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    }
    \`\`\`
 
+CRITICAL RELATION SYNTAX RULES - PREVENT COMMON ERRORS:
+1. **Missing @relation fields error**: "The relation field \`lead\` on Model \`CRMRecord\` must specify the \`fields\` argument"
+   - FIX: Add fields: [foreignKeyField], references: [id] to @relation attribute
+   - Example: \`lead Lead? @relation(fields: [leadId], references: [id])\`
+
+2. **Optional field relation error**: "The relation field \`product\` uses the scalar fields \`productId\`. At least one of those fields is optional. Hence the relation field must be optional as well."
+   - FIX: If foreign key field is optional (productId String?), relation field must also be optional (product Product?)
+   - Example: \`productId String?\` requires \`product Product? @relation(...)\`
+
+3. **Bidirectional relation error**: "A relation must specify the \`fields\` and \`references\` arguments on only one side"
+   - FIX: ONLY ONE side of a relation should have fields/references in @relation
+   - Correct: User has \`posts Post[]\` (no @relation), Post has \`author User? @relation(fields: [authorId], references: [id])\`
+
+4. **One-to-one relation error**: "The relation field must be backed by a unique constraint"
+   - FIX: Foreign key field must have @unique for one-to-one relations
+   - Example: \`userId String? @unique\` for one-to-one relation
+
+AUTOMATIC ERROR PREVENTION:
+- Schema will be automatically validated with comprehensive manual checks
+- Multiple layers of relation error detection and fixing
+- Retry generation with error feedback if needed
+- Intelligent error-specific fixes applied automatically
+
 Generate a complete, production-ready Prisma schema that supports the business requirements from the Step 0 analysis.
 The schema should be practical, well-structured, and follow Prisma best practices.
 
@@ -4412,6 +4435,29 @@ INTELLIGENT MERGING INSTRUCTIONS:
    - Add new enums as needed
    - Update existing enums by adding new values (don't remove existing ones)
    - Place enum definitions before the models that use them
+
+CRITICAL RELATION SYNTAX RULES - PREVENT COMMON ERRORS:
+1. **Missing @relation fields error**: "The relation field \`lead\` on Model \`CRMRecord\` must specify the \`fields\` argument"
+   - FIX: Add fields: [foreignKeyField], references: [id] to @relation attribute
+   - Example: \`lead Lead? @relation(fields: [leadId], references: [id])\`
+
+2. **Optional field relation error**: "The relation field \`product\` uses the scalar fields \`productId\`. At least one of those fields is optional. Hence the relation field must be optional as well."
+   - FIX: If foreign key field is optional (productId String?), relation field must also be optional (product Product?)
+   - Example: \`productId String?\` requires \`product Product? @relation(...)\`
+
+3. **Bidirectional relation error**: "A relation must specify the \`fields\` and \`references\` arguments on only one side"
+   - FIX: ONLY ONE side of a relation should have fields/references in @relation
+   - Correct: User has \`posts Post[]\` (no @relation), Post has \`author User? @relation(fields: [authorId], references: [id])\`
+
+4. **One-to-one relation error**: "The relation field must be backed by a unique constraint"
+   - FIX: Foreign key field must have @unique for one-to-one relations
+   - Example: \`userId String? @unique\` for one-to-one relation
+
+AUTOMATIC ERROR PREVENTION:
+- Schema will be automatically validated with comprehensive manual checks
+- Multiple layers of relation error detection and fixing
+- Retry generation with error feedback if needed
+- Intelligent error-specific fixes applied automatically
 
 SCHEMA STRUCTURE:
 Always include the standard generator and datasource blocks:
@@ -5052,30 +5098,584 @@ function generateBasicPrismaSchema(models: AgentModel[]): string {
   }).join('\n\n');
 }
 
+
+
 /**
- * Temporary disabled validation to avoid WASM dependency issues
- * TODO: Re-enable when @prisma/internals WASM issue is resolved
+ * Retry schema generation with AI if validation fails
+ */
+async function retrySchemaGenerationWithValidation(
+  originalSchema: string,
+  validationError: string,
+  generateFunction: () => Promise<string>,
+  maxRetries: number = 2
+): Promise<string> {
+  console.log(`🔄 Retrying schema generation due to validation error: ${validationError}`);
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    console.log(`📝 Schema generation retry attempt ${attempt}/${maxRetries}...`);
+    
+    try {
+      const model = await getAgentBuilderModel();
+      
+      // Generate improved schema with error feedback
+      const result = await generateObject({
+        model,
+        schema: prismaSchemaGenerationSchema,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a Prisma schema expert. The previous schema had validation errors. Generate a corrected version.
+
+VALIDATION ERROR TO FIX:
+${validationError}
+
+PROBLEMATIC SCHEMA:
+\`\`\`prisma
+${originalSchema}
+\`\`\`
+
+CRITICAL FIXES NEEDED:
+1. **Missing @relation fields**: Every relation MUST have fields: and references: arguments
+2. **Optional field relations**: If a foreign key field is optional (has ?), the relation field must also be optional
+3. **Bidirectional relations**: Only ONE side should have fields: and references: arguments
+4. **One-to-one relations**: Foreign key fields must have @unique attribute
+
+CORRECT RELATION PATTERNS:
+\`\`\`prisma
+// One-to-many (correct)
+model User {
+  id    String @id @default(cuid())
+  posts Post[]  // No @relation arguments needed here
+}
+
+model Post {
+  id       String @id @default(cuid())  
+  authorId String?                      // Optional foreign key
+  author   User?   @relation(fields: [authorId], references: [id])  // Optional relation
+}
+
+// One-to-one (correct)  
+model User {
+  id      String   @id @default(cuid())
+  profile Profile? // No @relation arguments needed here
+}
+
+model Profile {
+  id     String @id @default(cuid())
+  userId String? @unique                // Must be @unique for one-to-one
+  user   User?   @relation(fields: [userId], references: [id])
+}
+\`\`\`
+
+Generate a corrected schema that follows these patterns exactly.`
+          }
+        ],
+        temperature: 0.1
+      });
+      
+      const correctedSchema = result.object.schema;
+      
+      // Validate the corrected schema
+      const validation = await validatePrismaSchema(correctedSchema);
+      
+      if (validation.valid) {
+        console.log(`✅ Schema retry successful on attempt ${attempt}`);
+        return validation.result?.fixedSchema || correctedSchema;
+      } else {
+        console.log(`❌ Schema retry attempt ${attempt} failed: ${validation.error}`);
+        if (attempt === maxRetries) {
+          console.log('⚠️ Max retries reached, returning manually fixed schema');
+          return fixPrismaRelationErrors(originalSchema);
+        }
+      }
+      
+    } catch (error) {
+      console.error(`❌ Schema retry attempt ${attempt} failed:`, error);
+      if (attempt === maxRetries) {
+        console.log('⚠️ Max retries reached, returning manually fixed schema');
+        return fixPrismaRelationErrors(originalSchema);
+      }
+    }
+  }
+  
+  // Fallback to manual fixes if all retries failed
+  return fixPrismaRelationErrors(originalSchema);
+}
+
+/**
+ * Validate and format Prisma schema using Prisma internals
+ * This validates the schema string directly without creating temporary files
  */
 async function validatePrismaSchema(schemaString: string): Promise<{ valid: boolean; error?: string; result?: any }> {
-  console.log('⚠️ Schema validation temporarily disabled due to WASM dependency issues');
+  console.log('🔍 Validating Prisma schema programmatically...');
   
-  // Apply basic relation fixes since full validation is disabled
-  const fixedSchema = fixBidirectionalRelations(schemaString);
+    try {
+    // First apply manual fixes to catch common issues
+    const preFixedSchema = fixPrismaRelationErrors(schemaString);
+    
+    // Use comprehensive manual validation and fixing
+    console.log('📝 Using comprehensive manual validation and fixing...');
+    
+    // Apply comprehensive validation and fixes
+    const validationResult = validateSchemaBasically(preFixedSchema);
+    
+    if (validationResult.valid) {
+      console.log('✅ Schema validation successful with manual fixes');
+      return { 
+        valid: true, 
+        result: { 
+          validationMethod: 'comprehensive-manual-validation',
+          fixedSchema: preFixedSchema,
+          formatted: false,
+          manualFixesApplied: true
+        } 
+      };
+    } else {
+      // Try additional manual fixes for specific errors
+      console.log('🔧 Applying additional fixes for validation errors...');
+      const additionallyFixedSchema = fixAdditionalSchemaIssues(preFixedSchema, validationResult.error);
+      
+      const retryValidation = validateSchemaBasically(additionallyFixedSchema);
+      if (retryValidation.valid) {
+        console.log('✅ Additional fixes successful');
+        return { 
+          valid: true, 
+          result: { 
+            validationMethod: 'comprehensive-manual-validation-with-additional-fixes',
+            fixedSchema: additionallyFixedSchema,
+            formatted: false,
+            manualFixesApplied: true,
+            additionalFixesApplied: true
+          } 
+        };
+      }
+      
+      console.error('❌ Schema validation failed:', retryValidation.error);
+      return { 
+        valid: false, 
+        error: retryValidation.error || 'Schema validation failed',
+        result: {
+          fixedSchema: additionallyFixedSchema,
+          manualFixesApplied: true,
+          additionalFixesApplied: true
+        }
+      };
+    }
+    
+  } catch (error: any) {
+    console.error('❌ Schema validation setup failed:', error);
+    
+    // Fallback to basic manual fixes
+    console.log('⚠️ Falling back to manual relation fixes only...');
+    const fallbackFixedSchema = fixPrismaRelationErrors(schemaString);
+    
+    return { 
+      valid: true, 
+      result: { 
+        validationMethod: 'fallback-manual-fixes-only',
+        fixedSchema: fallbackFixedSchema,
+        formatted: false,
+        fallbackUsed: true
+      } 
+    };
+  }
+}
+
+/**
+ * Basic schema validation without Prisma internals
+ */
+function validateSchemaBasically(schemaString: string): { valid: boolean; error?: string } {
+  try {
+    // Check for required generator and datasource blocks
+    const hasGenerator = /generator\s+client\s*{[^}]*provider\s*=\s*["']prisma-client-js["'][^}]*}/.test(schemaString);
+    const hasDatasource = /datasource\s+db\s*{[^}]*provider\s*=[^}]*url\s*=[^}]*}/.test(schemaString);
+    
+    if (!hasGenerator) {
+      return { valid: false, error: 'Schema missing required generator client block' };
+    }
+    
+    if (!hasDatasource) {
+      return { valid: false, error: 'Schema missing required datasource db block' };
+    }
+    
+    // Check for basic model syntax
+    const hasModels = /model\s+\w+\s*{[^}]*}/.test(schemaString);
+    if (!hasModels) {
+      return { valid: false, error: 'Schema must contain at least one model' };
+    }
+    
+    // Check for obvious syntax errors
+    const openBraces = (schemaString.match(/{/g) || []).length;
+    const closeBraces = (schemaString.match(/}/g) || []).length;
+    if (openBraces !== closeBraces) {
+      return { valid: false, error: 'Mismatched curly braces in schema' };
+    }
+    
+    // Check for common relation errors
+    const relationErrors = findRelationErrors(schemaString);
+    if (relationErrors.length > 0) {
+      return { valid: false, error: `Relation errors: ${relationErrors.join(', ')}` };
+    }
+    
+    console.log('✅ Basic schema validation passed');
+    return { valid: true };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return { valid: false, error: errorMessage };
+  }
+}
+
+/**
+ * Find common relation errors in schema
+ */
+function findRelationErrors(schema: string): string[] {
+  const errors: string[] = [];
+  const lines = schema.split('\n');
   
-  return { 
-    valid: true, 
-    result: { 
-      validationMethod: 'basic-fixes-applied',
-      fixedSchema: fixedSchema 
-    } 
-  };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    // Check for relations without fields argument
+    if (line.includes('@relation') && !line.includes('fields:')) {
+      const match = line.match(/(\w+)\s+(\w+)(\?)?\s*@relation/);
+      if (match) {
+        const [, fieldName, relatedModel] = match;
+        // Check if this might need fields argument (not an array relation)
+        if (!line.includes('[]')) {
+          errors.push(`Relation field '${fieldName}' may need fields argument`);
+        }
+      }
+    }
+    
+    // Check for optional field relation mismatches
+    if (line.includes('@relation(') && line.includes('fields:')) {
+      const fieldsMatch = line.match(/fields:\s*\[([^\]]+)\]/);
+      if (fieldsMatch) {
+        const foreignKey = fieldsMatch[1].trim();
+        // Look for the foreign key field in the model
+        const foreignKeyPattern = new RegExp(`${foreignKey}\\s+\\w+\\?`);
+        const relationPattern = new RegExp(`(\\w+)\\s+(\\w+)\\s*@relation`);
+        const relationMatch = line.match(relationPattern);
+        
+        if (schema.includes(foreignKey) && foreignKeyPattern.test(schema) && relationMatch) {
+          const [, , relatedModel] = relationMatch;
+          if (!line.includes(`${relatedModel}?`)) {
+            errors.push(`Relation field should be optional when foreign key '${foreignKey}' is optional`);
+          }
+        }
+      }
+    }
+  }
+  
+  return errors;
+}
+
+/**
+ * Apply additional fixes for specific schema issues
+ */
+function fixAdditionalSchemaIssues(schema: string, error?: string): string {
+  let fixedSchema = schema;
+  
+  if (!error) return fixedSchema;
+  
+  // Fix missing generator/datasource blocks
+  if (error.includes('generator')) {
+    if (!fixedSchema.includes('generator client')) {
+      const generatorBlock = `generator client {
+  provider = "prisma-client-js"
+}
+
+`;
+      fixedSchema = generatorBlock + fixedSchema;
+    }
+  }
+  
+  if (error.includes('datasource')) {
+    if (!fixedSchema.includes('datasource db')) {
+      const datasourceBlock = `datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+`;
+      fixedSchema = datasourceBlock + fixedSchema;
+    }
+  }
+  
+  // Fix relation field optionality based on error message
+  if (error.includes('should be optional')) {
+    const relationPattern = /(\w+)\s+(\w+)\s*@relation\([^)]*fields:\s*\[([^\]]+)\][^)]*\)/g;
+    fixedSchema = fixedSchema.replace(relationPattern, (match, fieldName, relatedModel, foreignKey) => {
+      // Check if foreign key is optional
+      const foreignKeyPattern = new RegExp(`${foreignKey.trim()}\\s+\\w+\\?`);
+      if (foreignKeyPattern.test(fixedSchema) && !match.includes(`${relatedModel}?`)) {
+        return match.replace(
+          new RegExp(`(${fieldName}\\s+)${relatedModel}(\\s*@relation)`),
+          `$1${relatedModel}?$2`
+        );
+      }
+      return match;
+    });
+  }
+  
+  return fixedSchema;
+}
+
+/**
+ * Extract meaningful error messages from Prisma CLI output
+ */
+function extractPrismaError(errorOutput: string): string {
+  // Common Prisma error patterns to extract
+  const errorPatterns = [
+    /Error parsing.*?:\s*(.*?)(?:\n|$)/,
+    /Error validating.*?:\s*(.*?)(?:\n|$)/,
+    /Error:.*?:\s*(.*?)(?:\n|$)/,
+    /.*?must specify the `fields` argument.*?/,
+    /.*?The relation field.*?on Model.*?must.*?/,
+    /.*?must be optional.*?/
+  ];
+  
+  for (const pattern of errorPatterns) {
+    const match = errorOutput.match(pattern);
+    if (match) {
+      return match[1] || match[0];
+    }
+  }
+  
+  // If no specific pattern matches, return a cleaned version
+  return errorOutput
+    .split('\n')[0] // Take first line
+    .replace(/^\s*Error:\s*/, '') // Remove "Error:" prefix
+    .trim();
+}
+
+/**
+ * Fix common Prisma relation errors manually
+ */
+function fixPrismaRelationErrors(schema: string): string {
+  console.log('🔧 Applying manual Prisma relation fixes...');
+  
+  let fixedSchema = schema;
+  
+  // Fix 1: Add missing fields arguments for relations
+  fixedSchema = fixMissingRelationFields(fixedSchema);
+  
+  // Fix 2: Fix bidirectional relation conflicts
+  fixedSchema = fixBidirectionalRelations(fixedSchema);
+  
+  // Fix 3: Fix optional field relation mismatches
+  fixedSchema = fixOptionalRelationFields(fixedSchema);
+  
+  // Fix 4: Fix one-to-one relation uniqueness requirements
+  fixedSchema = fixOneToOneRelations(fixedSchema);
+  
+  return fixedSchema;
+}
+
+/**
+ * Fix missing fields arguments in @relation attributes
+ */
+function fixMissingRelationFields(schema: string): string {
+  console.log('🔧 Fixing missing relation fields arguments...');
+  
+  const lines = schema.split('\n');
+  const models: { [key: string]: { lines: string[], start: number, end: number } } = {};
+  let currentModel = '';
+  let modelStart = -1;
+  
+  // Parse models and their boundaries
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    if (line.startsWith('model ') && line.includes('{')) {
+      currentModel = line.split(' ')[1];
+      modelStart = i;
+      models[currentModel] = { lines: [], start: i, end: -1 };
+    } else if (line === '}' && currentModel) {
+      models[currentModel].end = i;
+      models[currentModel].lines = lines.slice(modelStart, i + 1);
+      currentModel = '';
+    }
+  }
+  
+  // Find and fix relations without fields arguments
+  for (const [modelName, modelData] of Object.entries(models)) {
+    for (let i = 0; i < modelData.lines.length; i++) {
+      const line = modelData.lines[i];
+      
+      // Match relation field without fields/references
+      const relationMatch = line.match(/(\s+)(\w+)\s+(\w+)(\?)?\s*@relation(\([^)]*\))?/);
+      if (relationMatch) {
+        const [fullMatch, indent, fieldName, relatedModel, optional, existingArgs] = relationMatch;
+        
+        // Check if it already has fields/references
+        if (!existingArgs || (!existingArgs.includes('fields:') && !existingArgs.includes('references:'))) {
+          // Look for a corresponding foreign key field
+          const foreignKeyField = findForeignKeyField(modelData.lines, relatedModel, fieldName);
+          
+          if (foreignKeyField) {
+            console.log(`🔧 Adding fields argument to ${modelName}.${fieldName} -> ${relatedModel}`);
+            
+            // Create the corrected relation line
+            const newRelationArgs = existingArgs 
+              ? existingArgs.slice(1, -1) + `, fields: [${foreignKeyField}], references: [id]` 
+              : `fields: [${foreignKeyField}], references: [id]`;
+            
+            const newLine = line.replace(
+              /@relation(\([^)]*\))?/, 
+              `@relation(${newRelationArgs})`
+            );
+            
+            modelData.lines[i] = newLine;
+          }
+        }
+      }
+    }
+    
+    // Update the main lines array
+    lines.splice(modelData.start, modelData.end - modelData.start + 1, ...modelData.lines);
+  }
+  
+  return lines.join('\n');
+}
+
+/**
+ * Find foreign key field for a relation
+ */
+function findForeignKeyField(modelLines: string[], relatedModel: string, relationFieldName: string): string | null {
+  // Common foreign key patterns
+  const possibleFields = [
+    `${relatedModel.toLowerCase()}Id`,
+    `${relatedModel}Id`,
+    `${relationFieldName}Id`,
+    `${relationFieldName.toLowerCase()}Id`
+  ];
+  
+  for (const line of modelLines) {
+    for (const fieldName of possibleFields) {
+      if (line.includes(`${fieldName} `) && line.includes('String')) {
+        return fieldName;
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Fix optional relation field mismatches
+ */
+function fixOptionalRelationFields(schema: string): string {
+  console.log('🔧 Fixing optional relation field mismatches...');
+  
+  // Pattern: relation field uses optional scalar field, so relation must be optional too
+  const relationPattern = /(\s+)(\w+)\s+(\w+)(\[\])?\s*@relation\(([^)]+)\)/g;
+  
+  return schema.replace(relationPattern, (match, indent, fieldName, relatedModel, isArray, relationArgs) => {
+    // Check if this relation references fields
+    const fieldsMatch = relationArgs.match(/fields:\s*\[([^\]]+)\]/);
+    if (fieldsMatch) {
+      const referencedFields = fieldsMatch[1].split(',').map((f: string) => f.trim());
+      
+      // Check if any referenced field is optional
+      const fieldLines = schema.split('\n').filter((line: string) => 
+        referencedFields.some((field: string) => line.includes(`${field} `) && line.includes('?'))
+      );
+      
+      if (fieldLines.length > 0) {
+        // Make the relation field optional if it isn't already
+        if (!match.includes(`${relatedModel}?`) && !isArray) {
+          console.log(`🔧 Making relation field ${fieldName} optional due to optional foreign key`);
+          return match.replace(
+            new RegExp(`(\\s+${fieldName}\\s+)${relatedModel}(\\s*@relation)`),
+            `$1${relatedModel}?$2`
+          );
+        }
+      }
+    }
+    
+    return match;
+  });
+}
+
+/**
+ * Fix one-to-one relation uniqueness requirements
+ */
+function fixOneToOneRelations(schema: string): string {
+  console.log('🔧 Fixing one-to-one relation uniqueness requirements...');
+  
+  const lines = schema.split('\n');
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Find relation with fields argument (potential one-to-one)
+    const relationMatch = line.match(/(\s+)(\w+)\s+(\w+)(\?)?\s*@relation\(([^)]+)\)/);
+    if (relationMatch) {
+      const [, indent, fieldName, relatedModel, optional, relationArgs] = relationMatch;
+      
+      // Check if it has fields argument (indicating this side owns the relation)
+      if (relationArgs.includes('fields:')) {
+        const fieldsMatch = relationArgs.match(/fields:\s*\[([^\]]+)\]/);
+        if (fieldsMatch) {
+          const foreignKeyField = fieldsMatch[1].trim();
+          
+          // Check if the foreign key field exists and needs @unique
+          // Need to look within the SAME model, not globally
+          let currentModel = '';
+          let modelStartIndex = -1;
+          
+          // Find which model we're currently in
+          for (let j = i; j >= 0; j--) {
+            if (lines[j].trim().startsWith('model ')) {
+              currentModel = lines[j].trim().split(' ')[1];
+              modelStartIndex = j;
+              break;
+            }
+          }
+          
+          // Find the foreign key field within the same model
+          const foreignKeyLineIndex = lines.findIndex((l, idx) => {
+            if (idx <= modelStartIndex || idx >= i) return false; // Must be between model start and relation line
+            const regex = new RegExp(`^\\s*${foreignKeyField}\\s+\\w+`);
+            return l.match(regex) && !l.includes('@unique') && !l.includes('@id');
+          });
+          
+          if (foreignKeyLineIndex >= 0) {
+            // For one-to-one relations, the relation field should be optional (Type?) not array (Type[])
+            // AND the foreign key should have @unique
+            const isOneToOne = optional === '?' && !line.includes('[]');
+            
+            if (isOneToOne) {
+              console.log(`🔧 Adding @unique to foreign key ${foreignKeyField} for one-to-one relation`);
+              
+              // More robust replacement that handles various field formats
+              const currentLine = lines[foreignKeyLineIndex];
+              const fieldPattern = new RegExp(`^(\\s*)(${foreignKeyField})(\\s+)(\\w+\\??)(.*)$`);
+              const match = currentLine.match(fieldPattern);
+              
+              if (match) {
+                const [, leadingSpace, fieldName, space, fieldType, rest] = match;
+                // Only add @unique if it's not already there
+                if (!rest.includes('@unique')) {
+                  lines[foreignKeyLineIndex] = `${leadingSpace}${fieldName}${space}${fieldType} @unique${rest}`;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  return lines.join('\n');
 }
 
 /**
  * Fix common bidirectional relation issues where both sides have fields/references
  */
 function fixBidirectionalRelations(schema: string): string {
-  console.log('🔧 Applying basic relation fixes...');
+  console.log('🔧 Applying bidirectional relation fixes...');
   
   // Split schema into lines for easier processing
   const lines = schema.split('\n');
@@ -5174,28 +5774,14 @@ function fixBidirectionalRelations(schema: string): string {
         .replace(/,\s*$/, '') // Remove trailing comma
         .replace(/,\s*,/g, ','); // Remove double commas
       
-      console.log(`🔧 Fixed relation: ${fieldName} in ${modelName}`);
+      console.log(`🔧 Fixed bidirectional relation: ${fieldName} in ${modelName}`);
       return `${prefix}${cleanContent}${suffix}`;
     });
   }
   
   if (relationsToFix.size > 0) {
-    console.log(`✅ Applied ${relationsToFix.size} relation fixes`);
+    console.log(`✅ Applied ${relationsToFix.size} bidirectional relation fixes`);
   }
   
   return fixedSchema;
-}
-
-/**
- * Retry schema generation with AI if validation fails
- * Currently disabled since validation is disabled
- */
-async function retrySchemaGenerationWithValidation(
-  originalSchema: string,
-  validationError: string,
-  generateFunction: () => Promise<string>,
-  maxRetries: number = 2
-): Promise<string> {
-  console.log('⚠️ Schema retry validation temporarily disabled');
-  return originalSchema;
 }

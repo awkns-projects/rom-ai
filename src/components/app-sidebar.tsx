@@ -46,9 +46,10 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                   type="button"
                   className="p-2 h-fit text-green-300 hover:bg-green-500/10 hover:text-green-200"
                   onClick={() => {
-                    setOpenMobile(false);
-                    router.push('/chat');
-                    router.refresh();
+                    window.location.href = '/chat';
+                    // setOpenMobile(false);
+                    // router.push('/chat');
+                    // router.refresh();
                   }}
                 >
                   <PlusIcon />

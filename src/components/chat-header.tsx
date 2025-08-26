@@ -45,8 +45,9 @@ const PureChatHeader = forwardRef<ModelSelectorRef, {
               variant="outline"
               className="order-2 md:order-1 md:px-2 px-2 md:h-fit ml-auto md:ml-0 font-mono"
               onClick={() => {
-                router.push('/chat');
-                router.refresh();
+                window.location.href = '/chat';
+                // router.push('/chat');
+                // router.refresh();
               }}
             >
               <PlusIcon />

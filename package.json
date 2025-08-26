@@ -23,7 +23,9 @@
     "delete:all": "npx tsx scripts/delete-all-projects.ts",
     "delete:neon:force": "npx tsx scripts/delete-neon-projects.ts --force",
     "delete:vercel:force": "npx tsx scripts/delete-vercel-projects.ts --force",
-    "delete:all:force": "npx tsx scripts/delete-all-projects.ts --force"
+    "delete:all:force": "npx tsx scripts/delete-all-projects.ts --force",
+    "prisma:format": "prisma format",
+    "prisma:validate": "prisma validate"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.22",
@@ -81,6 +83,7 @@
     "orderedmap": "^2.1.1",
     "papaparse": "^5.5.2",
     "postgres": "^3.4.4",
+    "prisma": "^6.11.1",
     "prosemirror-example-setup": "^1.2.3",
     "prosemirror-inputrules": "^1.4.0",
     "prosemirror-markdown": "^1.13.1",
