@@ -7,6 +7,7 @@ import equal from 'fast-deep-equal';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import { motion } from 'framer-motion';
 import { useMessages } from '@/hooks/use-messages';
+import type { VisibilityType } from './visibility-selector';
 
 interface MessagesProps {
   chatId: string;
@@ -17,6 +18,8 @@ interface MessagesProps {
   reload: UseChatHelpers['reload'];
   isReadonly: boolean;
   isArtifactVisible: boolean;
+  append: UseChatHelpers['append'];
+  selectedVisibilityType: VisibilityType;
 }
 
 function PureMessages({
@@ -27,6 +30,8 @@ function PureMessages({
   setMessages,
   reload,
   isReadonly,
+  append,
+  selectedVisibilityType,
 }: MessagesProps) {
   const {
     containerRef: messagesContainerRef,
@@ -44,7 +49,13 @@ function PureMessages({
       ref={messagesContainerRef}
       className="flex flex-col min-w-0 gap-6 flex-1 overflow-y-scroll pt-4 relative"
     >
-      {messages.length === 0 && <Greeting />}
+      {messages.length === 0 && (
+        <Greeting 
+          chatId={chatId}
+          append={append}
+          selectedVisibilityType={selectedVisibilityType}
+        />
+      )}
 
       {messages.map((message, index) => (
         <PreviewMessage

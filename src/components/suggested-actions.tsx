@@ -19,28 +19,28 @@ function PureSuggestedActions({
 }: SuggestedActionsProps) {
   const suggestedActions = [
     {
-      emoji: '🛒',
-      title: 'Build a Shopify inventory optimizer',
-      label: 'using Shopify API + Google Sheets integration',
-      action: 'Create an app that connects to Shopify API to track inventory levels, automatically updates Google Sheets with low-stock alerts, and sends Gmail notifications when items need restocking',
+      emoji: '👋',
+      title: 'Tell us about your work',
+      label: 'Share your role, daily tasks, and biggest challenges',
+      action: 'I work as a [your job title] and spend most of my time on [describe main activities]. My biggest challenge is [what takes too much time or is repetitive]. I use tools like [mention apps/platforms you use] and would love help with [specific area you want automated].',
     },
     {
-      emoji: '📸',
-      title: 'Launch an Instagram engagement tracker',
-      label: 'with Instagram API + automated DM responses',
-      action: 'Build a tool using Instagram Basic Display API to track follower engagement, analyze post performance, and automatically respond to DMs with customized messages based on user interactions',
+      emoji: '💪',
+      title: 'Share your wellness goals',
+      label: 'Health, fitness, or personal tracking needs',
+      action: 'I want to improve my [health/fitness/wellness] by tracking [specific metrics or habits]. I currently struggle with [consistency/motivation/organization] and use [current apps or methods]. I would love an agent that helps me [specific goal] by [how you want to be supported].',
     },
     {
-      emoji: '📧',
-      title: 'Create a Gmail-powered lead manager',
-      label: 'that extracts contacts and schedules follow-ups',
-      action: 'Develop an app using Gmail API to automatically extract leads from emails, organize them in a CRM dashboard, and schedule follow-up emails with personalized templates and tracking',
+      emoji: '🎯',
+      title: 'Describe your creative projects',
+      label: 'Content creation, marketing, or personal ventures',
+      action: 'I create [type of content/run a business] focused on [your niche/audience]. I spend too much time on [repetitive tasks] and struggle with [specific challenge like scheduling, ideas, engagement]. I use [platforms/tools] and need help with [specific area] to grow my [business/following/impact].',
     },
     {
-      emoji: '📦',
-      title: 'Design a multi-platform order tracker',
-      label: 'connecting Shopify + PayPal + Gmail notifications',
-      action: 'Build a unified dashboard that uses Shopify API and PayPal API to track orders across platforms, automatically sends status updates via Gmail API, and provides customer analytics',
+      emoji: '🏠',
+      title: 'Share your personal life needs',
+      label: 'Family, home management, or lifestyle automation',
+      action: 'In my personal life, I manage [family responsibilities/household tasks/personal projects] and find it challenging to [organize/track/remember] everything. I want an agent that helps me [specific need] by [how you envision being helped] so I can [desired outcome].',
     },
   ];
 

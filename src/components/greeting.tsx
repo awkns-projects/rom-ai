@@ -1,144 +1,527 @@
-import { cn } from "@/lib/utils";
-import Marquee from "@/components/magicui/marquee";
+'use client';
 
-const reviews = [
-  {
-    name: "🛒 Auto-Selling Store",
-    body: "\"Build me an online store\" → AI agent that handles customer inquiries, processes orders, manages inventory, and upsells products while I sleep.",
-    img: "https://avatar.vercel.sh/ecommerce",
-  },
-  {
-    name: "💰 Deal-Closing Machine",
-    body: "\"Help me sell consulting\" → AI agent that qualifies leads, books discovery calls, sends proposals, and follows up until deals close.",
-    img: "https://avatar.vercel.sh/crm-user",
-  },
-  {
-    name: "📝 Content Empire Builder",
-    body: "\"I need social media content\" → AI agent that researches trends, creates posts, schedules content, and engages with followers across all platforms.",
-    img: "https://avatar.vercel.sh/content-manager",
-  },
-  {
-    name: "📅 Appointment Autopilot",
-    body: "\"Manage my calendar\" → AI agent that handles bookings, sends reminders, reschedules conflicts, and optimizes my daily schedule automatically.",
-    img: "https://avatar.vercel.sh/booking-system",
-  },
-  {
-    name: "📊 Profit Prophet",
-    body: "\"Track my business metrics\" → AI agent that monitors KPIs, predicts trends, alerts me to opportunities, and generates weekly strategy reports.",
-    img: "https://avatar.vercel.sh/analytics-tool",
-  },
-  {
-    name: "🎓 Teaching Titan",
-    body: "\"Create an online course\" → AI agent that teaches students, answers questions, grades assignments, and provides personalized learning paths.",
-    img: "https://avatar.vercel.sh/learning-platform",
-  },
-];
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import type { UseChatHelpers } from '@ai-sdk/react';
+import type { VisibilityType } from './visibility-selector';
 
-const firstRow = reviews.slice(0, reviews.length / 2);
-const secondRow = reviews.slice(reviews.length / 2);
+interface WelcomeMessage {
+  id: string;
+  text: string;
+  delay: number;
+}
 
-const ReviewCard = ({
-  img,
-  name,
-  body,
-}: {
-  img: string;
-  name: string;
-  body: string;
-}) => {
-  return (
-    <figure
-      className={cn(
-        "relative w-80 cursor-pointer overflow-hidden rounded-[2rem] border p-6",
-        // light styles
-        "border-gray-950/[.1] bg-gray-950/[.01] hover:bg-gray-950/[.05]",
-        // dark styles
-        "dark:border-gray-50/[.1] dark:bg-gray-50/[.10] dark:hover:bg-gray-50/[.15]",
-      )}
-    >
-      <div className="flex flex-row items-center gap-3 mb-3">
-        <img className="rounded-full" width="40" height="40" alt="" src={img} />
-        <figcaption className="text-base font-bold dark:text-white">
-          {name}
-        </figcaption>
-      </div>
-      <blockquote className="text-sm leading-relaxed">{body}</blockquote>
-    </figure>
-  );
-};
+interface UserProfile {
+  job?: string;
+  workChallenges?: string;
+  contentNeeds?: string;
+  automationDesires?: string;
+  currentTools?: string;
+}
 
-export const Greeting = () => {
-  return (
-    <section id="greeting">
-      <div className="py-14">
-        <div className="container flex w-full flex-col items-center justify-center p-4 mx-auto">
-          <div className="relative flex w-full max-w-[1000px] flex-col items-center justify-center overflow-hidden rounded-[2rem] border p-10 py-14 mx-auto">
-            <div className="absolute rotate-[35deg]">
-              <Marquee pauseOnHover className="[--duration:20s]" repeat={3}>
-                {firstRow.map((review) => (
-                  <ReviewCard key={review.name} {...review} />
-                ))}
-              </Marquee>
-              <Marquee
-                reverse
-                pauseOnHover
-                className="[--duration:20s]"
-                repeat={3}
-              >
-                {secondRow.map((review) => (
-                  <ReviewCard key={review.name} {...review} />
-                ))}
-              </Marquee>
-              <Marquee pauseOnHover className="[--duration:20s]" repeat={3}>
-                {firstRow.map((review) => (
-                  <ReviewCard key={review.name} {...review} />
-                ))}
-              </Marquee>
-              <Marquee
-                reverse
-                pauseOnHover
-                className="[--duration:20s]"
-                repeat={3}
-              >
-                {secondRow.map((review) => (
-                  <ReviewCard key={review.name} {...review} />
-                ))}
-              </Marquee>
-              <Marquee pauseOnHover className="[--duration:20s]" repeat={3}>
-                {firstRow.map((review) => (
-                  <ReviewCard key={review.name} {...review} />
-                ))}
-              </Marquee>
-              <Marquee
-                reverse
-                pauseOnHover
-                className="[--duration:20s]"
-                repeat={3}
-              >
-                {secondRow.map((review) => (
-                  <ReviewCard key={review.name} {...review} />
-                ))}
-              </Marquee>
+interface GreetingProps {
+  chatId: string;
+  append: UseChatHelpers['append'];
+  selectedVisibilityType: VisibilityType;
+}
+
+export const Greeting = ({ chatId, append, selectedVisibilityType }: GreetingProps) => {
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+  const [showMessages, setShowMessages] = useState<WelcomeMessage[]>([]);
+  const [currentPhase, setCurrentPhase] = useState<'welcome' | 'questions' | 'examples'>('welcome');
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [userProfile, setUserProfile] = useState<UserProfile>({});
+  const [userInput, setUserInput] = useState('');
+
+  const welcomeMessages: WelcomeMessage[] = [
+    // {
+    //   id: 'msg-1',
+    //   text: "🌟 Welcome! I'm ROM, your Digital Companion Creator at ROM Cards.",
+    //   delay: 1000,
+    // },
+    // {
+    //   id: 'msg-2', 
+    //   text: "I'm here to create a special digital companion - think of it as your personal Digimon - that will help with your daily life!",
+    //   delay: 3000,
+    // },
+    // {
+    //   id: 'msg-3',
+    //   text: "✨ Just like how each Digimon has unique abilities, your digital companion will have powers tailored specifically to YOUR needs.",
+    //   delay: 4500,
+    // },
+    // {
+    //   id: 'msg-4',
+    //   text: "To create the perfect companion for you, I need to learn about your world. Ready to begin the creation process? 🎮",
+    //   delay: 6000,
+    // }
+    {
+      id: 'msg-1',
+      text:  "I'm here to create a special digital companion - think of it as your personal Digimon - that will help with your daily life!",
+      delay: 1000,
+    },
+    {
+      id: 'msg-2', 
+      text: "✨ Just like how each Digimon has unique abilities, your digital companion will have powers tailored specifically to YOUR needs.",
+      delay: 2000,
+    },
+  ];
+
+  const questions = [
+    {
+      id: 'job',
+      question: "First, what's your job or role? (e.g., Marketing Manager, Doctor, Student, Business Owner)",
+      placeholder: "I'm a marketing manager at a tech company...",
+      key: 'job' as keyof UserProfile
+    },
+    {
+      id: 'challenges',
+      question: "What are your biggest daily work challenges or time-wasters?",
+      placeholder: "I spend hours scheduling social media posts and responding to emails...",
+      key: 'workChallenges' as keyof UserProfile
+    },
+    {
+      id: 'content',
+      question: "Do you need help with content creation, writing, or creative work?",
+      placeholder: "I struggle with creating engaging social media content and blog posts...",
+      key: 'contentNeeds' as keyof UserProfile
+    },
+    {
+      id: 'automation',
+      question: "What repetitive tasks would you love to automate?",
+      placeholder: "Syncing data between apps, sending follow-up emails, managing my calendar...",
+      key: 'automationDesires' as keyof UserProfile
+    },
+    {
+      id: 'tools',
+      question: "What tools do you currently use for work? (Notion, Slack, Gmail, etc.)",
+      placeholder: "I use Notion for notes, Slack for team communication, and Google Calendar...",
+      key: 'currentTools' as keyof UserProfile
+    }
+  ];
+
+  // Auto-display welcome messages
+  useEffect(() => {
+    if (currentPhase === 'welcome' && currentMessageIndex < welcomeMessages.length) {
+      const currentMessage = welcomeMessages[currentMessageIndex];
+      
+      const timer = setTimeout(() => {
+        setShowMessages(prev => [...prev, currentMessage]);
+        setCurrentMessageIndex(prev => prev + 1);
+      }, currentMessage.delay);
+
+      return () => clearTimeout(timer);
+    } else if (currentPhase === 'welcome' && currentMessageIndex === welcomeMessages.length) {
+      // All welcome messages shown, move to questions
+      const timer = setTimeout(() => {
+        setCurrentPhase('questions');
+      }, 2000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [currentMessageIndex, currentPhase]);
+
+  const handleAnswerSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userInput.trim()) return;
+
+    const currentQuestion = questions[currentQuestionIndex];
+    setUserProfile(prev => ({
+      ...prev,
+      [currentQuestion.key]: userInput.trim()
+    }));
+
+    setUserInput('');
+
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+    } else {
+      // All questions answered, create the companion
+      createDigitalCompanion();
+    }
+  };
+
+  const skipQuestion = () => {
+    if (currentQuestionIndex < questions.length - 1) {
+      setCurrentQuestionIndex(prev => prev + 1);
+    } else {
+      createDigitalCompanion();
+    }
+  };
+
+  const createDigitalCompanion = () => {
+    // Build a comprehensive prompt from the user's answers
+    const answers = Object.entries(userProfile).filter(([_, value]) => value && value.trim() !== '');
+    
+    if (answers.length > 0) {
+      const companionPrompt = `I want to create a digital assistant/companion for my work and life. Here's information about me:
+
+${userProfile.job ? `🏢 My job/role: ${userProfile.job}` : ''}
+
+${userProfile.workChallenges ? `⚡ My biggest work challenges: ${userProfile.workChallenges}` : ''}
+
+${userProfile.contentNeeds ? `✍️ Content creation needs: ${userProfile.contentNeeds}` : ''}
+
+${userProfile.automationDesires ? `🤖 Tasks I want to automate: ${userProfile.automationDesires}` : ''}
+
+${userProfile.currentTools ? `🛠️ Tools I currently use: ${userProfile.currentTools}` : ''}
+
+Please create a personalized AI agent that can help me with these specific needs and integrate with my workflow. Make it like a digital companion that understands my unique situation and can assist me in practical ways.`;
+
+      // Trigger the chat with this prompt
+      triggerChatStart(companionPrompt);
+    } else {
+      // No answers provided, show examples instead
+      setCurrentPhase('examples');
+    }
+  };
+
+  const triggerChatStart = (message: string) => {
+    // Update the URL to reflect the chat session
+    window.history.replaceState({}, '', `/chat/${chatId}`);
+    
+    // Use the append function to start the chat
+    append({
+      role: 'user',
+      content: message,
+    });
+  };
+
+  const useExamplePrompt = (example: any) => {
+    triggerChatStart(example.action);
+  };
+
+  const examplePrompts = [
+    {
+      emoji: '👋',
+      title: 'Marketing Manager Assistant',
+      label: 'Social media, content creation, and campaign management',
+      action: `I want to create a digital assistant/companion for my work and life. Here's information about me:
+
+🏢 My job/role: Marketing Manager at a tech startup
+
+⚡ My biggest work challenges: Creating consistent social media content across multiple platforms, managing campaign timelines, and tracking performance metrics manually
+
+✍️ Content creation needs: I struggle with generating fresh content ideas, writing engaging captions, and maintaining brand voice consistency across LinkedIn, Twitter, and Instagram
+
+🤖 Tasks I want to automate: Scheduling social media posts, generating content calendars, pulling performance reports from different platforms, and creating weekly marketing summaries
+
+🛠️ Tools I currently use: Hootsuite for scheduling, Canva for graphics, Google Analytics, Slack for team communication, and Notion for content planning
+
+Please create a personalized AI agent that can help me with these specific needs and integrate with my workflow. Make it like a digital companion that understands my unique situation and can assist me in practical ways.`,
+    },
+    {
+      emoji: '💪',
+      title: 'Fitness & Wellness Coach',
+      label: 'Health tracking, workout planning, and wellness habits',
+      action: `I want to create a digital assistant/companion for my work and life. Here's information about me:
+
+🏢 My job/role: Software developer working remotely
+
+⚡ My biggest work challenges: Sitting for long hours, irregular eating schedules, and forgetting to take breaks or exercise
+
+✍️ Content creation needs: I want to document my fitness journey and share progress on social media to stay accountable
+
+🤖 Tasks I want to automate: Tracking daily water intake, reminding me to take movement breaks, logging workouts, monitoring sleep patterns, and generating weekly health reports
+
+🛠️ Tools I currently use: Apple Health for basic tracking, MyFitnessPal for nutrition, and a basic workout app
+
+Please create a personalized AI agent that can help me with these specific needs and integrate with my workflow. Make it like a digital companion that understands my unique situation and can assist me in practical ways.`,
+    },
+    {
+      emoji: '🎯',
+      title: 'Content Creator & Influencer',
+      label: 'Content planning, audience engagement, and brand partnerships',
+      action: `I want to create a digital assistant/companion for my work and life. Here's information about me:
+
+🏢 My job/role: Full-time content creator and lifestyle influencer
+
+⚡ My biggest work challenges: Maintaining consistent posting schedules, managing brand partnership deadlines, and engaging with my audience across multiple platforms
+
+✍️ Content creation needs: I need help brainstorming fresh content ideas, writing captions that drive engagement, and repurposing content across different platforms (Instagram, TikTok, YouTube)
+
+🤖 Tasks I want to automate: Content calendar planning, hashtag research, performance analytics tracking, brand outreach follow-ups, and audience engagement monitoring
+
+🛠️ Tools I currently use: Later for scheduling, Photoshop for editing, Google Sheets for tracking partnerships, and native platform analytics
+
+Please create a personalized AI agent that can help me with these specific needs and integrate with my workflow. Make it like a digital companion that understands my unique situation and can assist me in practical ways.`,
+    },
+    {
+      emoji: '🏠',
+      title: 'Busy Parent & Household Manager',
+      label: 'Family scheduling, household tasks, and personal organization',
+      action: `I want to create a digital assistant/companion for my work and life. Here's information about me:
+
+🏢 My job/role: Working parent managing both a part-time consulting business and household responsibilities
+
+⚡ My biggest work challenges: Juggling client deadlines with family schedules, keeping track of kids' activities and appointments, and managing household budgets and tasks
+
+✍️ Content creation needs: I want to document family memories and share parenting tips, but struggle to find time for consistent posting
+
+🤖 Tasks I want to automate: Family calendar management, meal planning and grocery lists, tracking household expenses, scheduling maintenance tasks, and organizing kids' school and activity schedules
+
+🛠️ Tools I currently use: Google Calendar for family scheduling, Mint for budgeting, a shared grocery list app, and basic photo storage
+
+Please create a personalized AI agent that can help me with these specific needs and integrate with my workflow. Make it like a digital companion that understands my unique situation and can assist me in practical ways.`,
+    },
+  ];
+
+  if (currentPhase === 'welcome') {
+    return (
+      <div className="w-full max-w-4xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <motion.div 
+            className="flex justify-center mb-6"
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          >
+            <div className="relative">
+              <div className="w-20 h-20 bg-gradient-to-br from-purple-400 via-blue-500 to-green-500 rounded-3xl flex items-center justify-center shadow-xl">
+                <img src="/images/logo.png" alt="ROM" className="w-12 h-12" />
+              </div>
+              <div className="absolute -top-2 -right-2 w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center text-lg animate-pulse">
+                ✨
+              </div>
             </div>
-            <div className="z-10 mx-auto size-24 rounded-[2rem] border bg-white/10 p-3 shadow-2xl backdrop-blur-md dark:bg-black/10 lg:size-32">
-                <img src="/images/logo.png" alt="Rom Cards Logo" className="mx-auto size-16 text-black dark:text-white lg:size-24" />
-              {/* <HeartHandshake className="mx-auto size-16 text-black dark:text-white lg:size-24" /> */}
-            </div>
-            <div className="z-10 mt-8 flex flex-col items-center text-center text-black dark:text-white w-full max-w-5xl mx-auto px-6">
-              <h1 className="text-3xl font-bold sm:text-4xl lg:text-6xl text-center dark:text-white font-sans tracking-tight mb-6 bg-gradient-to-r from-green-200 via-green-100 to-green-200 dark:from-green-100 dark:via-green-200 dark:to-green-100 bg-clip-text text-transparent animate-pulse drop-shadow-lg">
-                Rom Cards
-              </h1>
-              <p className="text-lg sm:text-xl lg:text-2xl text-center max-w-4xl mx-auto font-medium font-sans leading-relaxed tracking-normal mb-4 text-gray-800 dark:text-green-200 brightness-110">
-                Simply describe what you need - watch your AI agent come to life and start earning money for you!
-              </p>
-              <span className="block text-base sm:text-lg lg:text-xl text-green-600 font-normal font-mono tracking-wide italic">
-                No coding required. Just prompt, deploy, and profit.
-              </span>
-            </div>
-            <div className="absolute inset-x-0 bottom-0 h-full bg-gradient-to-b from-transparent to-white to-70% dark:to-black" />
+          </motion.div>
+          
+          <motion.h1 
+            className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-3"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.3, duration: 0.6 }}
+          >
+            Digital Companion Creation Lab
+          </motion.h1>
+          
+          <motion.p 
+            className="text-lg text-gray-600 dark:text-gray-400"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5, duration: 0.6 }}
+          >
+            Creating your personalized AI Digimon ⚡
+          </motion.p>
+        </div>
+
+        {/* Welcome Messages */}
+        <div className="bg-gradient-to-br from-purple-50 via-blue-50 to-green-50 dark:from-purple-950/20 dark:via-blue-950/20 dark:to-green-950/20 rounded-2xl shadow-lg border border-purple-200 dark:border-purple-700 overflow-hidden mb-8">
+          <div className="p-6 space-y-4 min-h-[350px]">
+            <AnimatePresence>
+              {showMessages.map((message) => (
+                <motion.div
+                  key={message.id}
+                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  className="flex justify-start"
+                >
+                  <div className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-2xl px-4 py-3 shadow-sm max-w-md border border-purple-200 dark:border-purple-700">
+                    <div className="flex items-center mb-2">
+                      <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center mr-2">
+                        <span className="text-white text-xs">🤖</span>
+                      </div>
+                      <span className="text-xs font-medium text-purple-600 dark:text-purple-400">ROM</span>
+                    </div>
+                    <p className="text-sm leading-relaxed">{message.text}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
         </div>
       </div>
-    </section>
+    );
+  }
+
+  if (currentPhase === 'questions') {
+    const currentQuestion = questions[currentQuestionIndex];
+    const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
+
+    return (
+      <div className="w-full max-w-4xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-6">
+            <div className="relative">
+              <div className="w-20 h-20 bg-gradient-to-br from-purple-400 via-blue-500 to-green-500 rounded-3xl flex items-center justify-center shadow-xl">
+                <img src="/images/logo.png" alt="ROM" className="w-12 h-12" />
+              </div>
+              <div className="absolute -top-2 -right-2 w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center text-lg animate-pulse">
+                ⚡
+              </div>
+            </div>
+          </div>
+          
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-3">
+            Creating Your Digital Companion
+          </h1>
+          
+          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-4">
+            <motion.div 
+              className="bg-gradient-to-r from-purple-500 to-blue-500 h-2 rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 0.5 }}
+            />
+          </div>
+          
+          <p className="text-lg text-gray-600 dark:text-gray-400">
+            Question {currentQuestionIndex + 1} of {questions.length}
+          </p>
+        </div>
+
+        {/* Conversation Style Question */}
+        <div className="space-y-6 mb-8">
+          {/* ROM's Question Message */}
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+            className="flex justify-start"
+          >
+            <div className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-2xl px-4 py-3 shadow-sm max-w-md border border-purple-200 dark:border-purple-700">
+              <div className="flex items-center mb-2">
+                <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center mr-2">
+                  <span className="text-white text-xs">🤖</span>
+                </div>
+                <span className="text-xs font-medium text-purple-600 dark:text-purple-400">ROM</span>
+              </div>
+              <p className="text-sm leading-relaxed">{currentQuestion.question}</p>
+            </div>
+          </motion.div>
+
+          {/* Previous Answers */}
+          {Object.entries(userProfile).map(([key, value], index) => {
+            if (!value || !value.trim()) return null;
+            const questionIndex = questions.findIndex(q => q.key === key);
+            if (questionIndex === -1 || questionIndex >= currentQuestionIndex) return null;
+            
+            return (
+              <motion.div
+                key={`answer-${key}`}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                className="flex justify-end"
+              >
+                <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-2xl px-4 py-3 shadow-sm max-w-md">
+                  <p className="text-sm leading-relaxed">{value}</p>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* Input Form */}
+        <form onSubmit={handleAnswerSubmit} className="space-y-6">
+          <div className="flex justify-end">
+            <div className="w-full max-w-md">
+              <textarea
+                value={userInput}
+                onChange={(e) => setUserInput(e.target.value)}
+                placeholder={currentQuestion.placeholder}
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white resize-none"
+                rows={3}
+                autoFocus
+              />
+              
+              <div className="flex gap-3 mt-3">
+                <button
+                  type="submit"
+                  disabled={!userInput.trim()}
+                  className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:from-green-600 hover:to-emerald-600 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {currentQuestionIndex === questions.length - 1 ? 'Create My Companion! 🎉' : 'Send →'}
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={skipQuestion}
+                  className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm"
+                >
+                  Skip
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+
+        {/* Option to use examples instead */}
+        <div className="mt-8 text-center">
+          <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm">
+            Don't want to answer questions? No problem!
+          </p>
+          <button
+            onClick={() => setCurrentPhase('examples')}
+            className="px-6 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
+          >
+            Choose from Examples Instead
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentPhase === 'examples') {
+    return (
+      <div className="w-full max-w-4xl mx-auto px-4 py-8">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="flex justify-center mb-6">
+            <div className="w-20 h-20 bg-gradient-to-br from-purple-400 via-blue-500 to-green-500 rounded-3xl flex items-center justify-center shadow-xl">
+              <img src="/images/logo.png" alt="ROM" className="w-12 h-12" />
+            </div>
+          </div>
+          
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-3">
+            Choose Your Companion Type
+          </h1>
+          <p className="text-lg text-gray-600 dark:text-gray-400">
+            Pick an example that matches your needs, and we'll customize it for you!
+          </p>
+        </div>
+
+        {/* Example Prompts Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {examplePrompts.map((example, index) => (
+            <motion.div
+              key={example.title}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 p-6 hover:shadow-xl transition-shadow cursor-pointer"
+              onClick={() => useExamplePrompt(example)}
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-blue-100 dark:from-purple-900 dark:to-blue-900 rounded-xl flex items-center justify-center text-2xl">
+                  {example.emoji}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-800 dark:text-gray-200">{example.title}</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{example.label}</p>
+                </div>
+              </div>
+              
+              <button className="w-full px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-lg hover:from-purple-600 hover:to-blue-600 transition-all font-medium">
+                Create This Companion Type
+              </button>
+            </motion.div>
+          ))}
+        </div>
+
+        <div className="mt-8 text-center">
+          <button
+            onClick={() => setCurrentPhase('questions')}
+            className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            ← Back to Questions
+          </button>
+        </div>
+      </div>
   );
+  }
+
+  return null;
 };
