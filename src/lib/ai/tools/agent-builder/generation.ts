@@ -5452,6 +5452,37 @@ function extractPrismaError(errorOutput: string): string {
 /**
  * Fix common Prisma relation errors manually
  */
+/**
+ * Fix completely empty @relation attributes (no arguments at all)
+ */
+function fixEmptyRelations(schema: string): string {
+  console.log('🔧 Fixing empty @relation attributes...');
+  
+  const lines = schema.split('\n');
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    // Match relation field with empty or no arguments
+    const emptyRelationMatch = line.match(/(\s+)(\w+)\s+(\w+)(\?)?\s*@relation(\(\s*\))?(\s*)$/);
+    if (emptyRelationMatch) {
+      const [, indent, fieldName, relatedModel, optional, existingArgs, trailing] = emptyRelationMatch;
+      
+      // Only fix if it's truly empty (no args or empty parens)
+      if (!existingArgs || existingArgs.trim() === '()') {
+        console.log(`🔧 Adding basic @relation for ${fieldName} -> ${relatedModel}`);
+        
+        // For bidirectional relations, we'll add minimal relations and let other functions handle the specifics
+        // Just add empty parens for now - other functions will fill in fields/references
+        const newLine = line.replace(/@relation(\(\s*\))?/, '@relation()');
+        lines[i] = newLine;
+      }
+    }
+  }
+  
+  return lines.join('\n');
+}
+
 function fixPrismaRelationErrors(schema: string): string {
   console.log('🔧 Applying manual Prisma relation fixes...');
   
@@ -5460,13 +5491,19 @@ function fixPrismaRelationErrors(schema: string): string {
   // Fix 1: Add missing fields arguments for relations
   fixedSchema = fixMissingRelationFields(fixedSchema);
   
-  // Fix 2: Fix bidirectional relation conflicts
+  // Fix 2: Fix empty relations (no args at all)
+  fixedSchema = fixEmptyRelations(fixedSchema);
+  
+  // Fix 3: Fix missing references on bidirectional relations
+  fixedSchema = fixMissingBidirectionalReferences(fixedSchema);
+  
+  // Fix 3: Fix bidirectional relation conflicts
   fixedSchema = fixBidirectionalRelations(fixedSchema);
   
-  // Fix 3: Fix optional field relation mismatches
+  // Fix 4: Fix optional field relation mismatches
   fixedSchema = fixOptionalRelationFields(fixedSchema);
   
-  // Fix 4: Fix one-to-one relation uniqueness requirements
+  // Fix 5: Fix one-to-one relation uniqueness requirements
   fixedSchema = fixOneToOneRelations(fixedSchema);
   
   return fixedSchema;
@@ -5596,6 +5633,122 @@ function fixOptionalRelationFields(schema: string): string {
     
     return match;
   });
+}
+
+/**
+ * Fix missing references arguments in bidirectional relations
+ * Handles cases where both sides are missing the references argument
+ */
+function fixMissingBidirectionalReferences(schema: string): string {
+  console.log('🔧 Fixing missing references in bidirectional relations...');
+  
+  const lines = schema.split('\n');
+  const models: { [key: string]: { lines: string[], startIndex: number } } = {};
+  let currentModel = '';
+  let currentModelStartIndex = -1;
+  
+  // Parse models and their fields
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    
+    if (line.startsWith('model ') && line.includes('{')) {
+      currentModel = line.split(' ')[1];
+      currentModelStartIndex = i;
+      models[currentModel] = { lines: [], startIndex: i };
+    } else if (line === '}') {
+      currentModel = '';
+      currentModelStartIndex = -1;
+    } else if (currentModel && line.includes('@relation')) {
+      models[currentModel].lines.push(line);
+    }
+  }
+  
+  // Find bidirectional relations where both sides are missing references
+  const relationPairs: Array<{
+    model1: string, field1: string, line1: string, model1Index: number,
+    model2: string, field2: string, line2: string, model2Index: number
+  }> = [];
+  
+  for (const [modelName, modelData] of Object.entries(models)) {
+    for (const relationLine of modelData.lines) {
+      const match = relationLine.match(/(\w+)\s+(\w+)(\[\])?\s*@relation\(([^)]*)\)/);
+      if (match) {
+        const fieldName = match[1];
+        const relatedModel = match[2].replace('[]', '');
+        const relationArgs = match[4];
+        
+        // Check if this relation has fields but no references
+        const hasFields = relationArgs.includes('fields:');
+        const hasReferences = relationArgs.includes('references:');
+        
+        if (hasFields && !hasReferences) {
+          // Look for the corresponding relation in the related model
+          const relatedModelData = models[relatedModel];
+          if (relatedModelData) {
+            for (const relatedLine of relatedModelData.lines) {
+              const relatedMatch = relatedLine.match(/(\w+)\s+(\w+)(\[\])?\s*@relation\(([^)]*)\)/);
+              if (relatedMatch) {
+                const relatedFieldName = relatedMatch[1];
+                const relatedModelName = relatedMatch[2].replace('[]', '');
+                const relatedArgs = relatedMatch[4];
+                
+                // Check if this is the reverse relation and also missing references
+                if (relatedModelName === modelName && relatedArgs.includes('fields:') && !relatedArgs.includes('references:')) {
+                  relationPairs.push({
+                    model1: modelName, field1: fieldName, line1: relationLine, model1Index: modelData.startIndex,
+                    model2: relatedModel, field2: relatedFieldName, line2: relatedLine, model2Index: relatedModelData.startIndex
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  // Apply fixes - add references to both sides
+  let fixedSchema = schema;
+  
+  for (const pair of relationPairs) {
+    console.log(`🔧 Adding missing references for bidirectional relation: ${pair.model1}.${pair.field1} <-> ${pair.model2}.${pair.field2}`);
+    
+    // Add references: [id] to the first relation
+    const regex1 = new RegExp(
+      `(\\s+${pair.field1}\\s+${pair.model2}\\??\\[?\\]?\\s*@relation\\([^)]*fields:\\s*\\[[^\\]]+\\])([^)]*)(\\))`,
+      'g'
+    );
+    
+    fixedSchema = fixedSchema.replace(regex1, (match, prefix, middle, suffix) => {
+      if (!middle.includes('references:')) {
+        const cleanMiddle = middle.replace(/^,\s*/, '').replace(/,\s*$/, '');
+        const newReferences = cleanMiddle ? ', references: [id]' : 'references: [id]';
+        return `${prefix}${cleanMiddle}${newReferences}${suffix}`;
+      }
+      return match;
+    });
+    
+    // Add references: [id] to the second relation
+    const regex2 = new RegExp(
+      `(\\s+${pair.field2}\\s+${pair.model1}\\??\\[?\\]?\\s*@relation\\([^)]*fields:\\s*\\[[^\\]]+\\])([^)]*)(\\))`,
+      'g'
+    );
+    
+    fixedSchema = fixedSchema.replace(regex2, (match, prefix, middle, suffix) => {
+      if (!middle.includes('references:')) {
+        const cleanMiddle = middle.replace(/^,\s*/, '').replace(/,\s*$/, '');
+        const newReferences = cleanMiddle ? ', references: [id]' : 'references: [id]';
+        return `${prefix}${cleanMiddle}${newReferences}${suffix}`;
+      }
+      return match;
+    });
+  }
+  
+  if (relationPairs.length > 0) {
+    console.log(`✅ Fixed ${relationPairs.length} bidirectional relations missing references`);
+  }
+  
+  return fixedSchema;
 }
 
 /**

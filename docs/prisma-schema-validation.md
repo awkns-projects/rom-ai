@@ -67,6 +67,34 @@ model Payment {
 }
 ```
 
+### 6. Missing references in bidirectional relations
+**Error**: "The relation fields `analytics` on Model `Content` and `content` on Model `Analytics` do not provide the `references` argument in the @relation attribute. You have to provide it on one of the two fields."
+
+**Fix**: Automatically adds missing `references` arguments to bidirectional relations:
+```prisma
+// Before (error)
+model Content {
+  analytics Analytics? @relation(fields: [analyticsId])
+  analyticsId String?
+}
+
+model Analytics {
+  content Content? @relation(fields: [contentId])
+  contentId String?
+}
+
+// After (fixed)
+model Content {
+  analytics Analytics? @relation(fields: [analyticsId], references: [id])
+  analyticsId String?
+}
+
+model Analytics {
+  content Content? @relation(fields: [contentId], references: [id])
+  contentId String?
+}
+```
+
 ### 2. Optional field relation mismatch
 **Error**: "The relation field uses optional scalar fields. Hence the relation field must be optional as well."
 
