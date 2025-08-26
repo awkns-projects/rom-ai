@@ -84,7 +84,7 @@ const PureChatHeader = forwardRef<ModelSelectorRef, {
           href={`/deployment`}
         >
           <span className="md:hidden">🤖</span>
-          <span className="hidden md:inline">My Agents</span>
+          <span className="hidden md:inline">Marketplace</span>
         </Link>
       </Button> 
     </header>

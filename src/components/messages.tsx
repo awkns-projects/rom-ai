@@ -8,6 +8,7 @@ import type { UseChatHelpers } from '@ai-sdk/react';
 import { motion } from 'framer-motion';
 import { useMessages } from '@/hooks/use-messages';
 import type { VisibilityType } from './visibility-selector';
+import type { User } from 'next-auth';
 
 interface MessagesProps {
   chatId: string;
@@ -20,6 +21,7 @@ interface MessagesProps {
   isArtifactVisible: boolean;
   append: UseChatHelpers['append'];
   selectedVisibilityType: VisibilityType;
+  user?: User;
 }
 
 function PureMessages({
@@ -30,8 +32,10 @@ function PureMessages({
   setMessages,
   reload,
   isReadonly,
+  isArtifactVisible,
   append,
   selectedVisibilityType,
+  user,
 }: MessagesProps) {
   const {
     containerRef: messagesContainerRef,
@@ -54,6 +58,7 @@ function PureMessages({
           chatId={chatId}
           append={append}
           selectedVisibilityType={selectedVisibilityType}
+          user={user}
         />
       )}
 

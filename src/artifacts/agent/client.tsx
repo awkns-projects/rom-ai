@@ -468,6 +468,129 @@ const useModalHandlers = (safeMetadata: AgentArtifactMetadata, setMetadata: (met
   return { openExplanationModal, closeExplanationModal };
 };
 
+// Simple draggable progress button
+const DraggableProgressButton = memo(({
+  status,
+  currentStep,
+  stepProgress,
+  stepMessages,
+  agentData,
+  calculateProgressPercentage
+}: {
+  status: 'streaming' | 'idle';
+  currentStep?: string;
+  stepProgress?: Record<string, 'processing' | 'complete'>;
+  stepMessages?: Record<string, string>;
+  agentData: AgentData;
+  calculateProgressPercentage: (currentStep?: string, stepProgress?: Record<string, 'processing' | 'complete'>, agentData?: any) => number;
+}) => {
+  const [position, setPosition] = useState({ x: 20, y: 200 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    
+    const startX = e.clientX - position.x;
+    const startY = e.clientY - position.y;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setPosition({
+        x: Math.max(10, Math.min(e.clientX - startX, window.innerWidth - 320)),
+        y: Math.max(10, Math.min(e.clientY - startY, window.innerHeight - 200))
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  if (status !== 'streaming') return null;
+
+  const progress = Math.round(calculateProgressPercentage(currentStep, stepProgress, agentData));
+  const currentStepMessage = stepMessages?.[currentStep || ''] || 'Building Agent';
+
+  return (
+    <div
+      className="fixed z-[9999] select-none"
+      style={{
+        left: position.x,
+        top: position.y,
+        cursor: isDragging ? 'grabbing' : 'grab'
+      }}
+      onMouseDown={handleMouseDown}
+      onMouseEnter={() => !isDragging && setIsExpanded(true)}
+      onMouseLeave={() => !isDragging && setIsExpanded(false)}
+    >
+      <div
+        className={`bg-black/95 border-2 border-green-500/40 rounded-2xl backdrop-blur-xl shadow-2xl transition-all duration-300 ${
+          isExpanded ? 'w-80 p-4' : 'w-16 h-16'
+        }`}
+      >
+        {/* Compact circle */}
+        <div className={`flex items-center justify-center ${isExpanded ? 'w-16 h-16 absolute top-2 left-2' : 'w-16 h-16'}`}>
+          <div className="relative">
+            <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
+              <path
+                className="text-green-500/20"
+                stroke="currentColor"
+                strokeWidth="3"
+                fill="none"
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+              />
+              <path
+                className="text-green-400"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeDasharray={`${progress}, 100`}
+                strokeLinecap="round"
+                fill="none"
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+              />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-xs font-bold text-green-200 font-mono">{progress}%</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Expanded view */}
+        {isExpanded && (
+          <div className="ml-12 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-green-200 font-mono">Build Progress</div>
+                <div className="text-xs text-green-400 font-mono">{agentData?.name || 'AI Agent'}</div>
+              </div>
+              <div className="text-lg font-bold text-blue-400 font-mono">{progress}%</div>
+            </div>
+            
+            <div className="p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+              <div className="text-xs font-mono text-blue-300">
+                🔄 {currentStepMessage}
+              </div>
+            </div>
+            
+            <div className="relative h-2 bg-green-500/10 rounded-full overflow-hidden">
+              <div 
+                className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-700 rounded-full transition-all duration-1000"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+});
+
 // Main Agent Builder Component
 const AgentBuilderContent = memo(({
   content,
@@ -998,290 +1121,100 @@ const AgentBuilderContent = memo(({
   }
 
   return (
-    <div className="h-full bg-black text-green-200 flex flex-col relative overflow-hidden font-mono">
-      {/* Background Effects */}
-      <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-green-600/5 pointer-events-none" />
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-green-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-green-400/10 rounded-full blur-3xl pointer-events-none" />
+    <>
+      {/* Draggable Progress Button - Outside main container to avoid z-index issues */}
+      {status === 'streaming' && (
+        <DraggableProgressButton
+          status={status}
+          currentStep={safeMetadata.currentStep}
+          stepProgress={safeMetadata.stepProgress}
+          stepMessages={safeMetadata.stepMessages}
+          agentData={agentData}
+          calculateProgressPercentage={calculateProgressPercentage}
+        />
+      )}
       
-      {/* Header */}
-      <div className="relative border-b border-green-500/20 backdrop-blur-xl bg-black/50">
-        <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-r from-green-600 to-green-700 flex items-center justify-center shadow-lg shadow-green-500/20">
-                  <div className="text-black text-lg">🤖</div>
+      <div className="h-full bg-black text-green-200 flex flex-col relative overflow-hidden font-mono">
+        {/* Background Effects */}
+        <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 via-transparent to-green-600/5 pointer-events-none" />
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-green-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-green-400/10 rounded-full blur-3xl pointer-events-none" />
+        
+        {/* Header */}
+        <div className="relative border-b border-green-500/20 backdrop-blur-xl bg-black/50">
+          <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-r from-green-600 to-green-700 flex items-center justify-center shadow-lg shadow-green-500/20">
+                    <div className="text-black text-lg">🤖</div>
+                  </div>
+                  <div>
+                    <h1 className="text-xl sm:text-2xl font-bold text-matrix-gradient bg-clip-text font-mono">
+                      Agent Builder
+                    </h1>
+                    <p className="text-green-400 text-xs sm:text-sm font-medium font-mono">
+                      Design and configure your AI agent system
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h1 className="text-xl sm:text-2xl font-bold text-matrix-gradient bg-clip-text font-mono">
-                    Agent Builder
-                  </h1>
-                  <p className="text-green-400 text-xs sm:text-sm font-medium font-mono">
-                    Design and configure your AI agent system
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex flex-row items-center justify-between sm:justify-start gap-3 sm:gap-4">
-              {/* Status Indicator */}
-              <div className="flex items-center gap-3 px-3 sm:px-4 py-2 rounded-xl bg-black/50 border border-green-500/20 backdrop-blur-sm">
-                <div className="status-indicator status-online">
-                  <div className={cn(
-                    "w-3 h-3 rounded-full transition-all duration-300",
-                    status === 'streaming'
-                      ? "bg-blue-400 animate-pulse shadow-lg shadow-blue-400/50"
-                      : "bg-green-400 animate-matrix-pulse shadow-lg shadow-green-400/50"
-                  )} />
-                </div>
-                <span className="text-sm font-medium text-green-400 font-mono">
-                  {status === 'streaming' ? 'Building...' : 'Ready'}
-                </span>
               </div>
               
-              {/* Deployment Button */}
-              {deploymentInfo && deploymentInfo.deploymentUrl && (
-                <Button
-                  onClick={() => window.open(deploymentInfo.deploymentUrl, '_blank')}
-                  className="px-4 sm:px-6 py-2.5 text-sm font-medium font-mono transition-all duration-200 btn-matrix bg-blue-600 hover:bg-blue-700 text-white border-blue-500/50"
-                >
-                  <div className="flex items-center gap-2 justify-center">
-                    <div className="w-4 h-4">🌐</div>
-                    <span>View Live App</span>
+              <div className="flex flex-row items-center justify-between sm:justify-start gap-3 sm:gap-4">
+                {/* Status Indicator */}
+                <div className="flex items-center gap-3 px-3 sm:px-4 py-2 rounded-xl bg-black/50 border border-green-500/20 backdrop-blur-sm">
+                  <div className="status-indicator status-online">
+                    <div className={cn(
+                      "w-3 h-3 rounded-full transition-all duration-300",
+                      status === 'streaming'
+                        ? "bg-blue-400 animate-pulse shadow-lg shadow-blue-400/50"
+                        : "bg-green-400 animate-matrix-pulse shadow-lg shadow-green-400/50"
+                    )} />
                   </div>
-                </Button>
-              )}
-
-              {/* Save Button - Hide during building */}
-              {status !== 'streaming' && (
-                <Button
-                  onClick={saveAgentToConversation}
-                  disabled={isSaving}
-                  className={cn(
-                    "px-4 sm:px-6 py-2.5 text-sm font-medium font-mono transition-all duration-200",
-                    hasUnsavedChanges 
-                      ? "btn-matrix border-yellow-500/50 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300" 
-                      : "btn-matrix"
-                  )}
-                >
-                  <div className="flex items-center gap-2 justify-center">
-                    <div className="w-4 h-4">
-                      {isSaving ? '⏳' : hasUnsavedChanges ? '📝' : '💾'}
+                  <span className="text-sm font-medium text-green-400 font-mono">
+                    {status === 'streaming' ? 'Building...' : 'Ready'}
+                  </span>
+                </div>
+                
+                {/* Deployment Button */}
+                {deploymentInfo && deploymentInfo.deploymentUrl && (
+                  <Button
+                    onClick={() => window.open(deploymentInfo.deploymentUrl, '_blank')}
+                    className="px-4 sm:px-6 py-2.5 text-sm font-medium font-mono transition-all duration-200 btn-matrix bg-blue-600 hover:bg-blue-700 text-white border-blue-500/50"
+                  >
+                    <div className="flex items-center gap-2 justify-center">
+                      <div className="w-4 h-4">🌐</div>
+                      <span>View Live App</span>
                     </div>
-                    <span>
-                      {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'Save Agent'}
-                    </span>
-                  </div>
-                </Button>
-              )}
+                  </Button>
+                )}
+
+                {/* Save Button - Hide during building */}
+                {status !== 'streaming' && (
+                  <Button
+                    onClick={saveAgentToConversation}
+                    disabled={isSaving}
+                    className={cn(
+                      "px-4 sm:px-6 py-2.5 text-sm font-medium font-mono transition-all duration-200",
+                      hasUnsavedChanges 
+                        ? "btn-matrix border-yellow-500/50 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300" 
+                        : "btn-matrix"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 justify-center">
+                      <div className="w-4 h-4">
+                        {isSaving ? '⏳' : hasUnsavedChanges ? '📝' : '💾'}
+                      </div>
+                      <span>
+                        {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'Save Agent'}
+                      </span>
+                    </div>
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
-          
-          {/* Enhanced Progress Indicator - Only show when AI is actually running */}
-          {status === 'streaming' && (
-            <div className="mt-2 sm:mt-6">
-              {/* Mobile: Compact with all steps */}
-              <div className="sm:hidden p-3 rounded-lg bg-black/50 border border-green-500/20 backdrop-blur-sm">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-1 h-1 bg-yellow-400 rounded-full animate-pulse" />
-                    <span className="text-xs font-mono text-green-200">
-                      {(() => {
-                        const currentStepMessage = safeMetadata.stepMessages?.[safeMetadata.currentStep || ''];
-                        if (currentStepMessage) {
-                          // Truncate long messages for mobile
-                          return currentStepMessage.length > 40 
-                            ? currentStepMessage.substring(0, 37) + '...'
-                            : currentStepMessage;
-                        }
-                        return 'Building Agent';
-                      })()}
-                    </span>
-                  </div>
-                  <div className="text-sm font-bold text-blue-600">{Math.round(calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData))}%</div>
-                </div>
-                
-                {/* Progress Bar */}
-                <div className="relative h-1 bg-green-500/10 rounded-full overflow-hidden mb-2">
-                  <div 
-                    className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-700 rounded-full transition-all duration-1000 ease-out"
-                    style={{ width: `${calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData)}%` }}
-                  />
-                </div>
-                
-                {/* Mobile Steps - Horizontal dots */}
-                <div className="flex items-center justify-center gap-1">
-                  {(() => {
-                    const steps = [
-                      { id: 'analysis', label: 'Analysis' },
-                      { id: 'models', label: 'Models' },
-                      { id: 'actions', label: 'Actions' },
-                      { id: 'schedules', label: 'Schedules' }
-                    ];
-                    
-                    const getEnhancedStepStatus = (stepId: string) => {
-                      const stepIdMapping: Record<string, string> = {
-                        'step0': 'analysis',
-                        'step1': 'models',
-                        'step2': 'actions',
-                        'step3': 'schedules',
-                        'complete': 'complete'
-                      };
-                      
-                      const orchestratorStepId = Object.keys(stepIdMapping).find(key => stepIdMapping[key] === stepId) || stepId;
-                      
-                      if (safeMetadata.stepProgress) {
-                        if (safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress]) {
-                          return safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress];
-                        }
-                        if (orchestratorStepId && safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress]) {
-                          return safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress];
-                        }
-                      }
-                      
-                      if (safeMetadata.currentStep === stepId || safeMetadata.currentStep === orchestratorStepId) {
-                        return 'processing';
-                      }
-                      
-                      return getStepStatus(stepId, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
-                    };
-                    
-                    return steps.map((step, index) => {
-                      const stepStatus = getEnhancedStepStatus(step.id);
-                      return (
-                        <div 
-                          key={step.id}
-                          className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                            stepStatus === 'complete' 
-                              ? 'bg-green-400 shadow-sm shadow-green-500/50' 
-                              : stepStatus === 'processing' 
-                              ? 'bg-yellow-400 shadow-sm shadow-yellow-500/50 animate-pulse'
-                              : 'bg-green-500/20 border border-green-500/30'
-                          }`} 
-                          title={step.label}
-                        />
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-              
-              {/* Desktop: Full version with all steps */}
-              <div className="hidden sm:block p-4 rounded-2xl bg-black/50 border border-green-500/20 backdrop-blur-sm shadow-lg shadow-green-500/10">
-                <div className="flex items-center justify-between gap-0 mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="text-sm font-medium text-green-200 font-mono">Build Progress</div>
-                    <div className="px-2 py-0.5 rounded bg-green-500/20 text-green-300 text-xs font-medium font-mono border border-green-500/30">
-                      {agentData?.name || 'AI Agent System'}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-blue-600">{Math.round(calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData))}%</div>
-                    <div className="text-xs text-gray-500">Complete</div>
-                  </div>
-                </div>
-                
-                {/* Current Step Message */}
-                {(() => {
-                  const currentStepMessage = safeMetadata.stepMessages?.[safeMetadata.currentStep || ''];
-                  if (currentStepMessage) {
-                    return (
-                      <div className="mb-3 p-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                        <div className="text-xs font-mono text-blue-300">
-                          🔄 {currentStepMessage}
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-                
-                {/* Progress Bar */}
-                <div className="relative h-2 bg-green-500/10 rounded-full overflow-hidden border border-green-500/20 mb-4">
-                  <div 
-                    className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-green-700 rounded-full transition-all duration-1000 ease-out shadow-lg shadow-green-500/30"
-                    style={{ width: `${calculateProgressPercentage(safeMetadata.currentStep, safeMetadata.stepProgress, agentData)}%` }}
-                  />
-                  {/* Animated shimmer effect for active progress */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
-                </div>
-                
-                {/* Desktop Steps - Show all steps */}
-                <div className="flex items-center justify-between text-xs font-mono">
-                  {(() => {
-                    const steps = [
-                      { id: 'analysis', label: 'Analysis' },
-                      { id: 'models', label: 'Models' },
-                      { id: 'actions', label: 'Actions' },
-                      { id: 'schedules', label: 'Schedules' }
-                    ];
-                    
-                    const getEnhancedStepStatus = (stepId: string) => {
-                      const stepIdMapping: Record<string, string> = {
-                        'step0': 'analysis',
-                        'step1': 'models',
-                        'step2': 'actions',
-                        'step3': 'schedules',
-                        'complete': 'complete'
-                      };
-                      
-                      const orchestratorStepId = Object.keys(stepIdMapping).find(key => stepIdMapping[key] === stepId) || stepId;
-                      
-                      if (safeMetadata.stepProgress) {
-                        if (safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress]) {
-                          return safeMetadata.stepProgress[stepId as keyof typeof safeMetadata.stepProgress];
-                        }
-                        if (orchestratorStepId && safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress]) {
-                          return safeMetadata.stepProgress[orchestratorStepId as keyof typeof safeMetadata.stepProgress];
-                        }
-                      }
-                      
-                      if (safeMetadata.currentStep === stepId || safeMetadata.currentStep === orchestratorStepId) {
-                        return 'processing';
-                      }
-                      
-                      return getStepStatus(stepId, safeMetadata.currentStep, safeMetadata.stepProgress, agentData);
-                    };
-                    
-                    return steps.map((step, index) => {
-                      const stepStatus = getEnhancedStepStatus(step.id);
-                      const isComplete = stepStatus === 'complete';
-                      const isProcessing = stepStatus === 'processing';
-                      
-                      return (
-                        <div key={step.id} className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                            isComplete 
-                              ? 'bg-green-400 shadow-lg shadow-green-500/50' 
-                              : isProcessing 
-                              ? 'bg-yellow-400 shadow-lg shadow-yellow-500/50 animate-pulse'
-                              : 'bg-green-500/20 border border-green-500/30'
-                          }`} />
-                          <span className={`font-medium transition-colors duration-300 whitespace-nowrap ${
-                            isComplete 
-                              ? 'text-green-400' 
-                              : isProcessing 
-                              ? 'text-yellow-400'
-                              : 'text-green-500/50'
-                          }`}>
-                            {step.label}
-                          </span>
-                          {index < steps.length - 1 && (
-                            <div className={`w-8 h-0.5 transition-colors duration-300 ${
-                              isComplete ? 'bg-green-400/50' : 'bg-green-500/20'
-                            }`} />
-                          )}
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
-      </div>
 
       {/* Navigation */}
       <div className="relative border-b border-green-500/20 backdrop-blur-xl bg-black/50 sticky top-0 z-50 md:static md:z-auto">
@@ -2102,6 +2035,7 @@ const AgentBuilderContent = memo(({
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 });
 

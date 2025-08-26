@@ -1271,7 +1271,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
         {/* Header */}
         <div className="mb-6 sm:mb-8">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
+            {/* <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
                 <span className="text-white text-sm">🎨</span>
               </div>
@@ -1279,7 +1279,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
                 <h1 className="text-xl sm:text-2xl font-bold text-green-400">Avatar Creator</h1>
                 <p className="text-xs sm:text-sm text-gray-400">Design and configure your AI agent avatar</p>
               </div>
-            </div>
+            </div> */}
 
             {/* Save Status & Actions */}
             
