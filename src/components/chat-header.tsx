@@ -51,10 +51,10 @@ const PureChatHeader = forwardRef<ModelSelectorRef, {
               }}
             >
               <PlusIcon />
-              <span className="hidden md:inline">NEW CHAT</span>
+              <span className="hidden md:inline">NEW AGENT</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent className="bg-black border-green-500/30 text-green-200 font-mono">NEW CHAT</TooltipContent>
+          <TooltipContent className="bg-black border-green-500/30 text-green-200 font-mono">NEW AGENT</TooltipContent>
         </Tooltip>
       )}
 

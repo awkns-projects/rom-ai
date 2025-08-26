@@ -259,6 +259,108 @@ export async function getChatsByUserId({
   }
 }
 
+async function extractDocumentIdFromMessages(chatId: string): Promise<string | null> {
+  try {
+    const messages = await getMessagesByChatId({ id: chatId });
+    
+    // Look for agent data in messages (similar logic to chat route)
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      
+      if (message.parts && Array.isArray(message.parts)) {
+        for (const part of message.parts) {
+          // Check for tool-invocation parts with agentBuilder 
+          if (part.type === 'tool-invocation' && part.toolInvocation?.toolName === 'agentBuilder') {
+            
+            // Check both 'call' and 'result' states
+            const content = part.toolInvocation.state === 'call' ? part.toolInvocation.args : 
+                          part.toolInvocation.state === 'result' ? part.toolInvocation.result : null;
+            
+            if (content) {
+              if (part.toolInvocation.state === 'result' && content.id && content.kind === 'agent') {
+                return content.id;
+              }
+              
+              if (part.toolInvocation.state === 'call' && content.existingDocumentId) {
+                return content.existingDocumentId;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    return null;
+  } catch (error) {
+    console.warn(`Failed to extract document ID from chat ${chatId}:`, error);
+    return null;
+  }
+}
+
+export async function getChatsByUserIdWithAvatars({
+  id,
+  limit,
+  startingAfter,
+  endingBefore,
+}: {
+  id: string;
+  limit: number;
+  startingAfter: string | null;
+  endingBefore: string | null;
+}) {
+  try {
+    // First get the regular chats
+    const chatResult = await getChatsByUserId({
+      id,
+      limit,
+      startingAfter,
+      endingBefore,
+    });
+
+    // Enhance each chat with avatar information
+    const chatsWithAvatars = await Promise.all(
+      chatResult.chats.map(async (chat) => {
+        let avatarData = null;
+        
+        try {
+          // Extract document ID from chat messages
+          const documentId = await extractDocumentIdFromMessages(chat.id);
+          
+          if (documentId) {
+            // Get avatars associated with this document
+            const avatars = await getAvatarsByDocumentId({
+              documentId,
+              userId: id,
+              limit: 1,
+            });
+            
+            if (avatars.length > 0) {
+              avatarData = avatars[0];
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to get avatar for chat ${chat.id}:`, error);
+        }
+
+        return {
+          ...chat,
+          avatar: avatarData,
+        };
+      })
+    );
+
+    return {
+      chats: chatsWithAvatars,
+      hasMore: chatResult.hasMore,
+    };
+  } catch (error) {
+    throw new ChatSDKError(
+      'bad_request:database',
+      'Failed to get chats with avatars by user id',
+    );
+  }
+}
+
 export async function getChatById({ id }: { id: string }) {
   try {
     const [selectedChat] = await db.select().from(chat).where(eq(chat.id, id));

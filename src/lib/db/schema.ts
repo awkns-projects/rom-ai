@@ -38,6 +38,10 @@ export const chat = pgTable('Chat', {
 
 export type Chat = InferSelectModel<typeof chat>;
 
+export type ChatWithAvatar = Chat & {
+  avatar: Avatar | null;
+};
+
 export const message = pgTable('Message', {
   id: uuid('id').primaryKey().notNull().defaultRandom(),
   chatId: uuid('chatId')

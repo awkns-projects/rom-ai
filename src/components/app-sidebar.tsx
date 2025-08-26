@@ -55,7 +55,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
                   <PlusIcon />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent align="end" className="bg-black border-green-500/30 text-green-200 font-mono">NEW CHAT</TooltipContent>
+              <TooltipContent align="end" className="bg-black border-green-500/30 text-green-200 font-mono">NEW AGENT</TooltipContent>
             </Tooltip>
           </div>
         </SidebarMenu>
