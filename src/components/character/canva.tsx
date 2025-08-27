@@ -260,6 +260,12 @@ export default function CharacterGenerate({ showRandomCharacter = false }: { sho
   const [characterInfo, setCharacterInfo] = useState<Record<string, any>>({});
   const [selectedBackground, setSelectedBackground] = useState<string>('');
   const [selectedAnimation, setSelectedAnimation] = useState<{ name: string; row: number; frames: number } | null>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  // Ensure component only runs on client side to prevent hydration mismatch
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   const getImage = async (source: string) => {
     return await new Promise((resolve) => {
@@ -351,12 +357,12 @@ export default function CharacterGenerate({ showRandomCharacter = false }: { sho
     }
   }, [characterInfo]);
 
-  // Auto-generate character if showRandomCharacter prop is true
+  // Auto-generate character if showRandomCharacter prop is true (only on client)
   useEffect(() => {
-    if (showRandomCharacter && Object.keys(characterInfo).length === 0) {
+    if (isClient && showRandomCharacter && Object.keys(characterInfo).length === 0) {
       callGenerate();
     }
-  }, [showRandomCharacter]);
+  }, [showRandomCharacter, isClient]);
 
   return (
     <div
@@ -417,7 +423,7 @@ export default function CharacterGenerate({ showRandomCharacter = false }: { sho
         </canvas> */}
 
         {/* Character Animation */}
-        {characterCreated && selectedAnimation && (
+        {isClient && characterCreated && selectedAnimation && (
           <div style={{ marginTop: showRandomCharacter ? "8px" : "32px" }}>
             {/* <div style={{ marginBottom: "16px", color: "#ffffff", fontSize: "1.25rem", fontWeight: "500" }}>
               Character Animation
@@ -436,6 +442,20 @@ export default function CharacterGenerate({ showRandomCharacter = false }: { sho
                 hideAnimationName={showRandomCharacter}
               />
             </div>
+          </div>
+        )}
+        
+        {/* Loading state for SSR */}
+        {showRandomCharacter && !isClient && (
+          <div style={{ 
+            marginTop: "8px",
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '150px',
+            color: '#888'
+          }}>
+            Loading character...
           </div>
         )}
       </div>

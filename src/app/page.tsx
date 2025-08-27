@@ -966,21 +966,24 @@ function ShowcaseSection() {
               <div className="relative z-10">
                 <div className="text-center mb-8">
                   <div className={`w-24 h-24 bg-gradient-to-br ${companion.gradient} rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-500 shadow-xl shadow-${companion.accentColor}-500/25`}>
-                  <CharacterGenerate showRandomCharacter={true} />
-              </div>
-            </div>
+                    <CharacterGenerate showRandomCharacter={true} />
+                  </div>
+                </div>
 
-                <h3 className="text-3xl font-bold text-white mb-3 text-center tracking-tight group-hover:text-emerald-300 transition-colors duration-300">
+                <h3 className="text-3xl font-bold text-white mb-3 text-center tracking-tight group-hover:text-emerald-300 transition-colors duration-300 relative -mt-4 z-20" style={{
+                  textShadow: '0 0 20px rgba(0,0,0,0.8), 0 2px 4px rgba(0,0,0,0.9)',
+                  backdropFilter: 'blur(2px)'
+                }}>
                 {companion.name}
                 </h3>
                 
                 <div className="text-center mb-6">
-                  <span className={`inline-block px-4 py-2 bg-gradient-to-r ${companion.gradient} text-white text-sm font-semibold rounded-full shadow-lg`}>
+                  <span className={`inline-block px-4 py-2 bg-gradient-to-r ${companion.gradient} text-white text-sm font-semibold rounded-full shadow-lg relative z-20`}>
                     {companion.type}
                   </span>
                 </div>
                 
-                <p className="text-gray-400 text-center mb-8 leading-relaxed font-light group-hover:text-gray-300 transition-colors duration-300">
+                <p className="text-gray-400 text-center mb-8 leading-relaxed font-light group-hover:text-gray-300 transition-colors duration-300 relative z-20 drop-shadow-sm">
                   {companion.description}
                 </p>
               

@@ -322,9 +322,9 @@ Please create a personalized AI agent that can help me with these specific needs
               <div className="w-24 h-24 bg-gradient-to-br from-purple-400 via-blue-500 to-green-500 rounded-3xl flex items-center justify-center shadow-xl">
                 <img src="/images/logo.png" alt="ROM" className="w-14 h-14" />
               </div>
-              <div className="absolute -top-2 -right-2 w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center text-xl animate-pulse">
+              {/* <div className="absolute -top-2 -right-2 w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center text-xl animate-pulse">
                 ✨
-              </div>
+              </div> */}
             </div>
           </motion.div>
           
