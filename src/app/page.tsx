@@ -317,9 +317,9 @@ function Header() {
                 height={40}
                 className="object-contain group-hover:scale-105 transition-transform"
               />
-              <span className="text-xl font-bold text-white">
+              {/* <span className="text-xl font-bold text-white">
                 Rom Cards
-              </span>
+              </span> */}
             </Link>
 
             <nav className="hidden md:flex items-center gap-8">
@@ -563,188 +563,20 @@ function HowItWorksSection() {
         </div>
 
         {/* Demo CTA */}
-        <div className="text-center mt-20">
+        {/* <div className="text-center mt-20">
           <Link href="#showcase">
             <Button variant="outline" className="border-2 border-blue-500/30 text-blue-300 hover:bg-blue-500/10 hover:border-blue-400/50 px-8 py-4 text-lg rounded-2xl backdrop-blur-sm transition-all duration-300">
               <Play className="w-5 h-5 mr-2" />
               See It In Action
             </Button>
           </Link>
-        </div>
+        </div> */}
       </div>
     </section>
   );
 }
 
-// Interactive Demo Section
-function DemoSection() {
-  const [demoTheme, setDemoTheme] = useState("green");
-  
-  // Sample agent data for the demo
-  const demoAgentData = {
-    name: "Luna",
-    description: "Your intelligent life coach companion",
-    theme: demoTheme,
-    domain: "life-coaching",
-    createdAt: new Date().toISOString(),
-    avatar: {
-      type: "default",
-      emoji: "🌙"
-    },
-    models: [
-      {
-        id: "tasks",
-        name: "Daily Tasks",
-        emoji: "✅",
-        fields: [
-          { name: "task", type: "text", description: "Task description" },
-          { name: "priority", type: "text", description: "Task priority" },
-          { name: "completed", type: "boolean", description: "Completion status" }
-        ],
-        records: [
-          {
-            id: "1",
-            data: { task: "Morning workout", priority: "High", completed: true },
-            createdAt: new Date().toISOString()
-          },
-          {
-            id: "2", 
-            data: { task: "Call dentist", priority: "Medium", completed: false },
-            createdAt: new Date().toISOString()
-          }
-        ],
-        hasPublishedField: true,
-        createdAt: new Date().toISOString()
-    },
-    {
-        id: "goals",
-        name: "Life Goals",
-        emoji: "🎯",
-        fields: [
-          { name: "goal", type: "text", description: "Goal description" },
-          { name: "deadline", type: "date", description: "Target date" }
-        ],
-        records: [
-          {
-            id: "1",
-            data: { goal: "Learn Spanish", deadline: "2024-12-31" },
-            createdAt: new Date().toISOString()
-          }
-        ],
-        hasPublishedField: true,
-        createdAt: new Date().toISOString()
-      }
-    ],
-    actions: [
-      {
-        id: "schedule-reminder",
-        name: "Schedule Reminder",
-        results: { actionType: "Notification" }
-      },
-      {
-        id: "daily-check",
-        name: "Daily Check-in",
-        results: { actionType: "Survey" }
-      }
-    ],
-    schedules: [
-      {
-        id: "morning-routine",
-        name: "Morning Routine Check",
-        description: "Daily morning wellness check-in",
-        interval: { active: true, pattern: "Daily 8:00 AM" }
-      },
-      {
-        id: "weekly-review",
-        name: "Weekly Goal Review",
-        description: "Review progress on life goals",
-        interval: { active: true, pattern: "Weekly Sunday" }
-    }
-    ]
-  };
 
-  return (
-    <section className="py-32 px-8 bg-gradient-to-b from-slate-950 via-gray-950 to-black relative overflow-hidden">
-      {/* Premium background decoration */}
-      <div className="absolute inset-0 opacity-15">
-        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-1/4 left-1/4 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl"></div>
-      </div>
-
-      <div className="max-w-8xl mx-auto relative z-10">
-        <div className="text-center mb-20">
-          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-500/10 to-purple-500/10 backdrop-blur-xl border border-blue-400/20 rounded-full px-6 py-3 mb-8 shadow-2xl shadow-blue-500/10">
-            <Target className="w-5 h-5 text-blue-400" />
-            <span className="text-blue-300 text-sm font-medium tracking-wide">LIVE INTERACTIVE PREVIEW</span>
-          </div>
-          
-          <h2 className="text-6xl md:text-7xl font-bold text-white mb-8 tracking-tight">
-            Experience
-            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 font-extrabold">
-              Excellence
-            </span>
-          </h2>
-          
-          <p className="text-2xl text-gray-300 max-w-5xl mx-auto leading-relaxed font-light">
-            Interact with a fully functional AI companion interface. See the premium features in action.
-          </p>
-      </div>
-
-        <div className="flex justify-center">
-          <div className="w-full max-w-lg">
-            <Suspense fallback={
-              <div className="w-full h-[36rem] bg-gradient-to-br from-slate-900/60 to-gray-900/80 rounded-3xl border border-slate-700/30 flex items-center justify-center backdrop-blur-xl shadow-2xl">
-                <div className="text-blue-400 animate-pulse font-medium">Loading Interactive Demo...</div>
-      </div>
-            }>
-              <div className="relative">
-                <MobileAppDemoWrapper 
-                  agentData={demoAgentData as any}
-                  onThemeChange={(newTheme: string) => {
-                    console.log('🎨 Demo theme changed to:', newTheme);
-                    setDemoTheme(newTheme);
-                  }} 
-                  onDataChange={(updatedData: any) => {
-                    console.log('📊 Demo data changed:', updatedData);
-                  }}
-                />
-                {/* Premium glow effect around demo */}
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-3xl blur-2xl -z-10"></div>
-        </div>
-            </Suspense>
-          </div>
-        </div>
-
-        {/* Demo Features */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-20 max-w-4xl mx-auto">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
-              <MessageCircle className="w-8 h-8 text-white" />
-            </div>
-            <h3 className="text-xl font-bold text-white mb-2">Real-Time Interaction</h3>
-            <p className="text-gray-400 font-light">Chat with AI, browse data models, and explore all features</p>
-          </div>
-          
-          <div className="text-center">
-            <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
-              <Database className="w-8 h-8 text-white" />
-            </div>
-            <h3 className="text-xl font-bold text-white mb-2">Live Data Management</h3>
-            <p className="text-gray-400 font-light">Create, edit, and manage records in real-time</p>
-          </div>
-          
-          <div className="text-center">
-            <div className="w-16 h-16 bg-gradient-to-br from-emerald-600 to-green-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
-              <Sparkles className="w-8 h-8 text-white" />
-            </div>
-            <h3 className="text-xl font-bold text-white mb-2">Theme Customization</h3>
-            <p className="text-gray-400 font-light">Switch between premium color schemes instantly</p>
-          </div>
-      </div>
-    </div>
-    </section>
-  );
-}
 
 
 
@@ -891,7 +723,7 @@ function ShowcaseSection() {
 
         {/* Interactive Demo Section */}
         <div className="text-center mb-32">
-          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-500/10 to-purple-500/10 backdrop-blur-xl border border-blue-400/20 rounded-full px-6 py-3 mb-8 shadow-xl shadow-blue-500/10">
+          {/* <div className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-500/10 to-purple-500/10 backdrop-blur-xl border border-blue-400/20 rounded-full px-6 py-3 mb-8 shadow-xl shadow-blue-500/10">
             <Target className="w-5 h-5 text-blue-400" />
             <span className="text-blue-300 text-sm font-medium tracking-wide">INTERACTIVE DEMO</span>
           </div>
@@ -902,7 +734,7 @@ function ShowcaseSection() {
           
           <p className="text-lg text-gray-300 mb-12 max-w-3xl mx-auto">
             This is a fully functional Rom Card. Click around, explore features, and see how it works.
-          </p>
+          </p> */}
 
           <div className="flex justify-center">
             <div className="w-full max-w-lg">
@@ -1100,97 +932,97 @@ function PricingSection() {
 // Premium create section
 function CreateSection() {
   return (
-    <section id="create" className="py-32 px-8 bg-gradient-to-b from-gray-950 via-slate-950 to-black relative overflow-hidden">
+    <section id="create" className="py-16 sm:py-24 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-gray-950 via-slate-950 to-black relative overflow-hidden">
       {/* Premium background elements */}
       <div className="absolute inset-0 opacity-20">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
-        <div className="absolute top-3/4 left-1/2 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute top-1/4 left-1/4 w-48 h-48 sm:w-72 sm:h-72 lg:w-96 lg:h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-40 h-40 sm:w-60 sm:h-60 lg:w-80 lg:h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute top-3/4 left-1/2 w-32 h-32 sm:w-48 sm:h-48 lg:w-64 lg:h-64 bg-purple-500/10 rounded-full blur-3xl"></div>
       </div>
 
       <div className="max-w-6xl mx-auto text-center relative z-10">
-        <div className="bg-gradient-to-br from-slate-900/60 via-gray-900/70 to-slate-950/80 backdrop-blur-2xl border border-slate-700/30 rounded-3xl p-16 relative overflow-hidden shadow-2xl">
+        <div className="bg-gradient-to-br from-slate-900/60 via-gray-900/70 to-slate-950/80 backdrop-blur-2xl border border-slate-700/30 rounded-2xl sm:rounded-3xl p-6 sm:p-10 lg:p-16 relative overflow-hidden shadow-2xl">
           {/* Premium overlay gradient */}
           <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-blue-500/5 to-purple-500/5"></div>
           
           <div className="relative z-10">
-            <div className="inline-flex items-center gap-3 bg-gradient-to-r from-emerald-500/10 to-blue-500/10 backdrop-blur-xl border border-emerald-400/20 rounded-full px-6 py-3 mb-12 shadow-xl shadow-emerald-500/10">
-              <Lightbulb className="w-5 h-5 text-emerald-400" />
-              <span className="text-emerald-300 text-sm font-medium tracking-wide">Ready to Transform</span>
+            <div className="inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-emerald-500/10 to-blue-500/10 backdrop-blur-xl border border-emerald-400/20 rounded-full px-4 sm:px-6 py-2 sm:py-3 mb-8 sm:mb-12 shadow-xl shadow-emerald-500/10">
+              <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
+              <span className="text-emerald-300 text-xs sm:text-sm font-medium tracking-wide">Ready to Transform</span>
             </div>
 
-            <div className="flex justify-center mb-12">
+            <div className="flex justify-center mb-8 sm:mb-12">
               <div className="relative">
                 <Image 
                   src="/images/logo.png" 
                   alt="Rom Cards Logo" 
-                  width={80} 
-                  height={80}
-                  className="object-contain"
+                  width={60} 
+                  height={60}
+                  className="object-contain sm:w-20 sm:h-20"
                 />
                 <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/20 to-blue-400/20 rounded-full blur-xl animate-pulse"></div>
-          </div>
-        </div>
+              </div>
+            </div>
             
-            <h2 className="text-6xl md:text-7xl font-bold text-white mb-8 tracking-tight">
+            <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 sm:mb-8 tracking-tight leading-tight">
               Ready to
               <span className="block text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-blue-400 to-purple-400 font-extrabold">
                 Elevate?
               </span>
             </h2>
             
-            <p className="text-2xl text-gray-300 mb-12 leading-relaxed font-light max-w-4xl mx-auto">
-              Remember that excitement when you first discovered something truly revolutionary?<br />
-              That moment when everything changed?<br />
-              <span className="text-white font-medium">Your transformation begins now.</span>
+            <p className="text-lg sm:text-xl lg:text-2xl text-gray-300 mb-8 sm:mb-12 leading-relaxed font-light max-w-4xl mx-auto px-4">
+              <span className="block sm:inline">Remember that excitement when you first discovered something truly revolutionary?</span>
+              <span className="block sm:inline"> That moment when everything changed?</span>
+              <span className="block text-white font-medium mt-2 sm:mt-0 sm:ml-2">Your transformation begins now.</span>
             </p>
             
-            <div className="mb-12 max-w-md mx-auto">
-              <div className="bg-gradient-to-br from-emerald-500/20 via-blue-500/15 to-purple-500/20 border border-emerald-400/30 rounded-3xl p-8 backdrop-blur-xl shadow-2xl">
+            <div className="mb-8 sm:mb-12 max-w-sm sm:max-w-md mx-auto">
+              <div className="bg-gradient-to-br from-emerald-500/20 via-blue-500/15 to-purple-500/20 border border-emerald-400/30 rounded-2xl sm:rounded-3xl p-6 sm:p-8 backdrop-blur-xl shadow-2xl">
                 <div className="relative">
-                <CharacterGenerate showRandomCharacter={true} />
+                  <CharacterGenerate showRandomCharacter={true} />
                   <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/10 to-blue-400/10 rounded-2xl blur-xl"></div>
                 </div>
-                <p className="text-emerald-300 font-medium mt-6 tracking-wide">Your elite companion awaits</p>
+                <p className="text-emerald-300 font-medium mt-4 sm:mt-6 tracking-wide text-sm sm:text-base">Your elite companion awaits</p>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-12">
-                <Link href="/register">
-                <Button className="group bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-2xl px-16 py-8 rounded-2xl shadow-2xl shadow-emerald-500/25 transform hover:scale-105 hover:shadow-emerald-500/40 transition-all duration-300 border border-emerald-500/30">
-                  <Play className="w-7 h-7 mr-4 group-hover:scale-110 transition-transform" />
-                  Begin Transformation
-                  <ArrowRight className="w-7 h-7 ml-4 group-hover:translate-x-1 transition-transform" />
-                  </Button>
-                </Link>
+            <div className="flex flex-col gap-4 sm:gap-6 justify-center items-center mb-8 sm:mb-12">
+              <Link href="/register" className="w-full sm:w-auto">
+                <Button className="group bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-lg sm:text-xl lg:text-2xl px-8 sm:px-12 lg:px-16 py-4 sm:py-6 lg:py-8 rounded-2xl shadow-2xl shadow-emerald-500/25 transform hover:scale-105 hover:shadow-emerald-500/40 transition-all duration-300 border border-emerald-500/30 w-full sm:w-auto">
+                  <Play className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 mr-2 sm:mr-3 lg:mr-4 group-hover:scale-110 transition-transform" />
+                  <span className="whitespace-nowrap">Begin Transformation</span>
+                  <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 lg:w-7 lg:h-7 ml-2 sm:ml-3 lg:ml-4 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </Link>
             </div>
             
-            <div className="flex items-center justify-center gap-8 text-gray-400 font-medium">
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 lg:gap-8 text-gray-400 font-medium text-xs sm:text-sm">
               <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-emerald-400" />
-                <span>Enterprise-ready</span>
-          </div>
-              <div className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-emerald-400" />
-                <span>Instant deployment</span>
+                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 flex-shrink-0" />
+                <span className="whitespace-nowrap">Enterprise-ready</span>
               </div>
               <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-emerald-400" />
-                <span>Bank-level security</span>
+                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 flex-shrink-0" />
+                <span className="whitespace-nowrap">Instant deployment</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400 flex-shrink-0" />
+                <span className="whitespace-nowrap">Bank-level security</span>
               </div>
             </div>
           </div>
 
           {/* Premium corner accents */}
-          <div className="absolute top-0 left-0 w-32 h-32 opacity-10">
-            <div className="w-full h-full bg-gradient-to-br from-emerald-500 to-blue-500 transform -rotate-45 -translate-x-16 -translate-y-16 rounded-2xl"></div>
+          <div className="absolute top-0 left-0 w-16 h-16 sm:w-24 sm:h-24 lg:w-32 lg:h-32 opacity-10">
+            <div className="w-full h-full bg-gradient-to-br from-emerald-500 to-blue-500 transform -rotate-45 -translate-x-8 -translate-y-8 sm:-translate-x-12 sm:-translate-y-12 lg:-translate-x-16 lg:-translate-y-16 rounded-2xl"></div>
           </div>
-          <div className="absolute bottom-0 right-0 w-32 h-32 opacity-10">
-            <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-500 transform rotate-45 translate-x-16 translate-y-16 rounded-2xl"></div>
+          <div className="absolute bottom-0 right-0 w-16 h-16 sm:w-24 sm:h-24 lg:w-32 lg:h-32 opacity-10">
+            <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-500 transform rotate-45 translate-x-8 translate-y-8 sm:translate-x-12 sm:translate-y-12 lg:translate-x-16 lg:translate-y-16 rounded-2xl"></div>
           </div>
         </div>
-        </div>
-      </section>
+      </div>
+    </section>
   );
 }
 
