@@ -384,10 +384,10 @@ Please create a personalized AI agent that can help me with these specific needs
           >
             <div className="text-center mb-6">
               <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-500 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg">
-                <span className="text-3xl">💬</span>
+                <span className="text-3xl">🤖</span>
               </div>
               <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-4">
-                Continue Previous Chats
+                My Agents
               </h2>
               {!user ? (
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
@@ -395,11 +395,11 @@ Please create a personalized AI agent that can help me with these specific needs
                 </p>
               ) : hasChats ? (
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  Continue your conversations with your existing AI companions.
+                  Build with your existing AI agents.
                 </p>
               ) : (
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  No previous chats found. Start by creating your first agent!
+                  No agents found. Start by creating your first agent!
                 </p>
               )}
             </div>

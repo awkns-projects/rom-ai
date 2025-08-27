@@ -512,6 +512,34 @@ const DraggableProgressButton = memo(({
     document.addEventListener('mouseup', handleMouseUp);
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    
+    const touch = e.touches[0];
+    const startX = touch.clientX - position.x;
+    const startY = touch.clientY - position.y;
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        setPosition({
+          x: Math.max(10, Math.min(touch.clientX - startX, window.innerWidth - 320)),
+          y: Math.max(10, Math.min(touch.clientY - startY, window.innerHeight - 200))
+        });
+      }
+    };
+
+    const handleTouchEnd = () => {
+      setIsDragging(false);
+      document.removeEventListener('touchmove', handleTouchMove);
+      document.removeEventListener('touchend', handleTouchEnd);
+    };
+
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    document.addEventListener('touchend', handleTouchEnd);
+  };
+
   if (status !== 'streaming') return null;
 
   const progress = Math.round(calculateProgressPercentage(currentStep, stepProgress, agentData));
@@ -519,13 +547,14 @@ const DraggableProgressButton = memo(({
 
   return (
     <div
-      className="fixed z-[9999] select-none"
+      className="fixed z-[9999] select-none touch-none"
       style={{
         left: position.x,
         top: position.y,
         cursor: isDragging ? 'grabbing' : 'grab'
       }}
       onMouseDown={handleMouseDown}
+      onTouchStart={handleTouchStart}
       onMouseEnter={() => !isDragging && setIsExpanded(true)}
       onMouseLeave={() => !isDragging && setIsExpanded(false)}
     >
