@@ -334,7 +334,7 @@ function Header() {
               ))}
             </nav>
 
-            <Link href="/register" className="hidden md:block">
+            <Link href="/chat" className="hidden md:block">
               <Button className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors">
                 <Play className="w-4 h-4 mr-2" />
                 Get Started
@@ -369,7 +369,7 @@ function Header() {
                 </button>
               ))}
               <div className="px-6 pt-4">
-                <Link href="/register" onClick={() => setIsMobileMenuOpen(false)}>
+                <Link href="/chat" onClick={() => setIsMobileMenuOpen(false)}>
                   <Button className="w-full bg-green-600 hover:bg-green-700 text-white">
                     Get Started
                   </Button>
@@ -444,7 +444,7 @@ function HeroSection() {
 
         {/* CTAs */}
         <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center mb-6 sm:mb-8 px-4">
-          <Link href="/register">
+          <Link href="/chat">
             <Button className="group bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-8 sm:px-12 py-4 sm:py-6 text-lg sm:text-xl rounded-2xl shadow-2xl shadow-emerald-500/25 transform hover:scale-105 hover:shadow-emerald-500/40 transition-all duration-300 border border-emerald-500/30 w-full sm:w-auto">
               <Play className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3 group-hover:scale-110 transition-transform" />
               Create Your Rom Card
@@ -1076,7 +1076,7 @@ function PricingSection() {
               </div>
             </div>
 
-            <Link href="/register">
+            <Link href="/chat">
               <Button className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white py-4 text-lg rounded-2xl shadow-xl shadow-emerald-500/25 transition-all duration-300">
                 Start Free
               </Button>
