@@ -47,62 +47,142 @@ import { MobileAppDemoWrapper } from '@/artifacts/agent/components/MobileAppDemo
 
 const navLinks = [
   { href: '#home', label: 'Home' },
-  { href: '#what-is', label: 'What is Rom Cards' },
   { href: '#how-it-works', label: 'How it Works' },
   { href: '#showcase', label: 'Showcase' },
   { href: '#pricing', label: 'Pricing' }
 ];
 
-// Better wave animation - original style
+// Sophisticated multi-layer wave animation
 function WaveAnimation() {
   const meshRef = useRef<THREE.Mesh>(null);
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
+  
+  // Custom shader material for advanced visual effects
+  const vertexShader = `
+    uniform float uTime;
+    uniform float uWaveStrength;
+    varying vec3 vPosition;
+    varying vec3 vNormal;
+    varying vec2 vUv;
+    
+    float noise(vec3 p) {
+      return sin(p.x * 1.2) * sin(p.y * 1.5) * sin(p.z * 0.8);
+    }
+    
+    void main() {
+      vUv = uv;
+      vPosition = position;
+      
+             // Enhanced wave calculation with more dramatic movement
+       float wave1 = sin(position.x * 0.2 + uTime * 2.0) * 0.25;
+       float wave2 = sin(position.y * 0.15 + uTime * 1.5) * 0.20;
+       float wave3 = sin((position.x + position.y) * 0.1 + uTime * 2.5) * 0.15;
+       float wave4 = sin(position.x * 0.5 - uTime * 3.0) * 0.12;
+       float wave5 = sin(position.y * 0.4 + uTime * 2.8) * 0.10;
+      
+             // Add enhanced noise for more organic movement
+       float noiseValue = noise(position + uTime * 0.3) * 0.08;
+      
+      vec3 newPosition = position;
+      newPosition.z = (wave1 + wave2 + wave3 + wave4 + wave5 + noiseValue) * uWaveStrength;
+      
+      vPosition = newPosition;
+      vNormal = normal;
+      
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+    }
+  `;
+  
+  const fragmentShader = `
+    uniform float uTime;
+    uniform vec3 uColor1;
+    uniform vec3 uColor2;
+    uniform vec3 uColor3;
+    varying vec3 vPosition;
+    varying vec3 vNormal;
+    varying vec2 vUv;
+    
+    void main() {
+      // Dynamic color mixing based on position and time
+      float colorMix1 = sin(vPosition.x * 0.1 + uTime * 0.5) * 0.5 + 0.5;
+      float colorMix2 = sin(vPosition.y * 0.1 + uTime * 0.3) * 0.5 + 0.5;
+      float colorMix3 = sin(vPosition.z * 2.0 + uTime * 0.8) * 0.5 + 0.5;
+      
+      vec3 color = mix(uColor1, uColor2, colorMix1);
+      color = mix(color, uColor3, colorMix2);
+      
+      // Add glow effect based on wave height
+      float glow = abs(vPosition.z) * 3.0;
+      color += vec3(glow * 0.2, glow * 0.4, glow * 0.1);
+      
+      // Fade edges for seamless blending
+      float edgeFade = 1.0 - smoothstep(0.7, 1.0, length(vUv - 0.5) * 2.0);
+      
+      gl_FragColor = vec4(color, 0.15 * edgeFade);
+    }
+  `;
+  
+  const uniforms = useMemo(() => ({
+    uTime: { value: 0 },
+    uWaveStrength: { value: 2.5 },
+    uColor1: { value: new THREE.Color('#00ff88') },
+    uColor2: { value: new THREE.Color('#00aaff') },
+    uColor3: { value: new THREE.Color('#aa00ff') }
+  }), []);
   
   useFrame(({ clock }) => {
-    if (meshRef.current) {
-      const geometry = meshRef.current.geometry as THREE.PlaneGeometry;
-      const position = geometry.attributes.position as BufferAttribute;
-      const array = position.array as Float32Array;
-      
-      const time = clock.elapsedTime;
-      
-      for (let i = 0; i < array.length; i += 3) {
-        const x = array[i];
-        const y = array[i + 1];
-        
-        // Multiple wave layers for more dynamic effect
-        const wave1 = Math.sin(x * 0.3 + time * 1.2) * 0.15;
-        const wave2 = Math.sin(y * 0.2 + time * 0.8) * 0.1;
-        const wave3 = Math.sin((x + y) * 0.15 + time * 1.5) * 0.08;
-        
-        array[i + 2] = wave1 + wave2 + wave3;
-      }
-      position.needsUpdate = true;
+    if (materialRef.current) {
+      materialRef.current.uniforms.uTime.value = clock.elapsedTime;
     }
   });
 
   return (
     <mesh ref={meshRef} rotation={[-Math.PI / 2.2, 0, 0]} position={[0, -1.5, -2]}>
-      <planeGeometry args={[30, 30, 64, 64]} />
-      <meshBasicMaterial 
-        color="#00ff88" 
-        wireframe 
-        opacity={0.2} 
-        transparent 
+      <planeGeometry args={[35, 35, 128, 128]} />
+      <shaderMaterial
+        ref={materialRef}
+        vertexShader={vertexShader}
+        fragmentShader={fragmentShader}
+        uniforms={uniforms}
+        transparent={true}
         side={THREE.DoubleSide}
+        wireframe={false}
       />
     </mesh>
   );
 }
 
-// 3D Wave Background
+
+
+// Advanced 3D Wave Background with enhanced movement
 function Wave3D() {
   return (
-    <div className="absolute inset-0 opacity-40">
+    <div className="absolute inset-0 opacity-60">
       <Canvas camera={{ position: [0, 3, 8], fov: 75 }}>
         <Suspense fallback={null}>
+          {/* Main wave surface */}
           <WaveAnimation />
+          
+          {/* Secondary wave layer with different parameters */}
+          <mesh rotation={[-Math.PI / 2.2, 0, Math.PI / 4]} position={[0, -2, -3]} scale={[0.8, 0.8, 0.8]}>
+            <planeGeometry args={[30, 30, 96, 96]} />
+            <meshBasicMaterial 
+              color="#0066ff" 
+              wireframe 
+              opacity={0.15} 
+              transparent 
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          
+          {/* Advanced lighting setup */}
           <ambientLight intensity={0.3} />
-          <pointLight position={[10, 10, 10]} intensity={0.5} color="#00ff88" />
+          <pointLight position={[10, 10, 10]} intensity={1.0} color="#00ff88" />
+          <pointLight position={[-10, -10, 5]} intensity={0.8} color="#0088ff" />
+          <pointLight position={[0, 15, -5]} intensity={0.6} color="#8800ff" />
+          
+          {/* Fog for depth */}
+          <fog attach="fog" args={['#000000', 5, 20]} />
         </Suspense>
       </Canvas>
     </div>
@@ -158,11 +238,12 @@ function FloatingParticles() {
   );
 }
 
-// Clean typewriter effect
+// Smooth typewriter effect
 function TypewriterText() {
   const [text, setText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [loopNum, setLoopNum] = useState(0);
+  const [typingSpeed, setTypingSpeed] = useState(100);
 
   const words = [
     'Your childhood digital pet, evolved.',
@@ -172,40 +253,40 @@ function TypewriterText() {
   ];
 
   useEffect(() => {
-    const handleTyping = () => {
-      const current = loopNum % words.length;
-      const fullText = words[current];
+    const current = loopNum % words.length;
+    const fullText = words[current];
 
-      setText(
-        isDeleting
-          ? fullText.substring(0, text.length - 1)
-          : fullText.substring(0, text.length + 1)
-      );
-
-      let typeSpeed = 150;
-
-      if (isDeleting) {
-        typeSpeed /= 2;
+    const timer = setTimeout(() => {
+      if (!isDeleting) {
+        // Typing forward
+        if (text.length < fullText.length) {
+          setText(fullText.substring(0, text.length + 1));
+          setTypingSpeed(80 + Math.random() * 40); // Vary speed slightly for realism
+        } else {
+          // Finished typing, wait then start deleting
+          setTimeout(() => setIsDeleting(true), 2500);
+        }
+      } else {
+        // Deleting
+        if (text.length > 0) {
+          setText(text.substring(0, text.length - 1));
+          setTypingSpeed(30 + Math.random() * 20); // Faster deletion
+        } else {
+          // Finished deleting, move to next word
+          setIsDeleting(false);
+          setLoopNum(loopNum + 1);
+          setTypingSpeed(100);
+        }
       }
+    }, typingSpeed);
 
-      if (!isDeleting && text === fullText) {
-        setTimeout(() => setIsDeleting(true), 2000);
-      } else if (isDeleting && text === '') {
-        setIsDeleting(false);
-        setLoopNum(loopNum + 1);
-      }
-
-      setTimeout(handleTyping, typeSpeed);
-    };
-
-    const timer = setTimeout(handleTyping, 150);
     return () => clearTimeout(timer);
-  }, [text, isDeleting, loopNum, words]);
+  }, [text, isDeleting, loopNum, typingSpeed, words]);
 
   return (
-    <div className="text-xl md:text-2xl text-green-400 font-medium min-h-[2rem]">
+    <div className="text-lg sm:text-xl md:text-2xl text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-400 to-green-400 font-medium min-h-[2rem] sm:min-h-[2.5rem] flex items-center justify-center text-center leading-tight">
       {text}
-      <span className="animate-pulse">|</span>
+      <span className="ml-1 text-emerald-400 animate-pulse">|</span>
     </div>
   );
 }
@@ -305,7 +386,7 @@ function Header() {
 // Clean hero section focused on the core message
 function HeroSection() {
   return (
-    <section id="home" className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-950 via-gray-950 to-black">
+    <section id="home" className="min-h-screen pt-20 pb-16 flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-950 via-gray-950 to-black">
       <Wave3D />
       <FloatingParticles />
       
@@ -316,44 +397,67 @@ function HeroSection() {
         <div className="absolute top-3/4 left-1/2 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl"></div>
       </div>
       
-      <div className="relative z-10 max-w-6xl mx-auto px-8 text-center">
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center w-full">
         
-        <div className="inline-flex items-center gap-3 bg-gradient-to-r from-emerald-500/10 to-blue-500/10 backdrop-blur-xl border border-emerald-400/20 rounded-full px-6 py-3 mb-12 shadow-xl shadow-emerald-500/10">
+        <div className="inline-flex items-center gap-2 sm:gap-3 bg-gradient-to-r from-emerald-500/10 to-blue-500/10 backdrop-blur-xl border border-emerald-400/20 rounded-full px-4 sm:px-6 py-2 sm:py-3 mb-6 sm:mb-8 shadow-xl shadow-emerald-500/10">
           <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shadow-lg shadow-emerald-400/50"></div>
-          <span className="text-emerald-300 text-sm font-medium tracking-wide">AI Digital Companions</span>
-            </div>
+          <span className="text-emerald-300 text-xs sm:text-sm font-medium tracking-wide">AI Digital Companions</span>
+        </div>
             
-        <h1 className="text-6xl md:text-8xl font-bold text-white mb-8 tracking-tight leading-tight">
-          Your Personal
+        <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold text-white mb-4 sm:mb-6 tracking-tight leading-tight px-2">
           <span className="block text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-400 to-purple-400 font-extrabold">
             Rom Cards
-                    </span>
+          </span>
         </h1>
-        
-        <div className="mb-12 min-h-[3rem] flex items-center justify-center">
+
+        <div className="mb-6 sm:mb-8 min-h-[2.5rem] sm:min-h-[3rem] flex items-center justify-center px-4">
           <TypewriterText />
-            </div>
+        </div>
             
-        <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-4xl mx-auto leading-relaxed font-light">
+        <p className="text-base sm:text-lg md:text-xl text-gray-300 mb-8 sm:mb-12 max-w-xs sm:max-w-2xl md:max-w-3xl mx-auto leading-relaxed font-light px-4">
           Remember those digital pets? They're back—but now they're intelligent AI companions that actually help run your life.
         </p>
 
+        {/* Character Showcase - Centered */}
+        <div className="mb-8 sm:mb-12 px-4">
+          <div className="w-64 h-64 sm:w-72 sm:h-72 md:w-80 md:h-80 mx-auto relative">
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/20 via-cyan-400/20 to-purple-400/20 rounded-3xl border-2 border-emerald-400/30 shadow-2xl"></div>
+            <div className="absolute inset-3 sm:inset-4 bg-black/60 backdrop-blur-sm rounded-2xl border border-purple-400/20 flex items-center justify-center overflow-hidden">
+              <CharacterGenerate showRandomCharacter={true} />
+            </div>
+            
+            {/* Floating abilities with animations - responsive positioning */}
+            <div className="absolute -top-3 -left-6 sm:-top-4 sm:-left-8 bg-emerald-500/20 backdrop-blur-xl border border-emerald-400/30 rounded-xl p-2 sm:p-4 text-emerald-100 text-xs sm:text-sm animate-float shadow-lg">
+              📊 Analyzes data
+            </div>
+            <div className="absolute top-12 -right-8 sm:top-16 sm:-right-12 bg-cyan-500/20 backdrop-blur-xl border border-cyan-400/30 rounded-xl p-2 sm:p-4 text-cyan-100 text-xs sm:text-sm animate-float shadow-lg" style={{ animationDelay: '1s' }}>
+              🤖 Makes decisions
+            </div>
+            <div className="absolute -bottom-6 -left-3 sm:-bottom-8 sm:-left-4 bg-purple-500/20 backdrop-blur-xl border border-purple-400/30 rounded-xl p-2 sm:p-4 text-purple-100 text-xs sm:text-sm animate-float shadow-lg" style={{ animationDelay: '2s' }}>
+              💡 Learns patterns
+            </div>
+            <div className="absolute bottom-6 -right-6 sm:bottom-8 sm:-right-8 bg-pink-500/20 backdrop-blur-xl border border-pink-400/30 rounded-xl p-2 sm:p-4 text-pink-100 text-xs sm:text-sm animate-float shadow-lg" style={{ animationDelay: '1.5s' }}>
+              ⚡ Evolves daily
+            </div>
+          </div>
+        </div>
+
         {/* CTAs */}
-        <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-12">
+        <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center mb-6 sm:mb-8 px-4">
           <Link href="/register">
-            <Button className="group bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-12 py-6 text-xl rounded-2xl shadow-2xl shadow-emerald-500/25 transform hover:scale-105 hover:shadow-emerald-500/40 transition-all duration-300 border border-emerald-500/30">
-              <Play className="w-6 h-6 mr-3 group-hover:scale-110 transition-transform" />
+            <Button className="group bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-8 sm:px-12 py-4 sm:py-6 text-lg sm:text-xl rounded-2xl shadow-2xl shadow-emerald-500/25 transform hover:scale-105 hover:shadow-emerald-500/40 transition-all duration-300 border border-emerald-500/30 w-full sm:w-auto">
+              <Play className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3 group-hover:scale-110 transition-transform" />
               Create Your Rom Card
-              <ArrowRight className="w-6 h-6 ml-3 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 ml-2 sm:ml-3 group-hover:translate-x-1 transition-transform" />
             </Button>
           </Link>
-          <Button variant="outline" className="border-2 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-400/50 px-12 py-6 text-xl rounded-2xl backdrop-blur-sm transition-all duration-300">
-            <MessageCircle className="w-6 h-6 mr-3" />
+          <Button variant="outline" className="border-2 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-400/50 px-8 sm:px-12 py-4 sm:py-6 text-lg sm:text-xl rounded-2xl backdrop-blur-sm transition-all duration-300 w-full sm:w-auto">
+            <MessageCircle className="w-5 h-5 sm:w-6 sm:h-6 mr-2 sm:mr-3" />
             Watch Demo
           </Button>
-                  </div>
+        </div>
 
-        <div className="flex items-center justify-center gap-8 text-gray-400 text-sm font-medium">
+                <div className="flex flex-wrap items-center justify-center gap-6 md:gap-8 text-gray-400 text-sm font-medium">
           <div className="flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-emerald-400" />
             <span>Free to start</span>
@@ -366,114 +470,12 @@ function HeroSection() {
             <Shield className="w-4 h-4 text-emerald-400" />
             <span>No coding required</span>
           </div>
-            </div>
+        </div>
                     </div>
     </section>
   );
 }
 
-// What is Rom Cards explanation section
-function WhatIsSection() {
-  return (
-    <section id="what-is" className="py-32 px-8 bg-gradient-to-b from-black to-slate-950 relative overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute inset-0 opacity-15">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl"></div>
-      </div>
-
-      <div className="max-w-8xl mx-auto relative z-10">
-        <div className="text-center mb-20">
-          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 backdrop-blur-xl border border-cyan-400/20 rounded-full px-6 py-3 mb-8 shadow-2xl shadow-cyan-500/10">
-            <Lightbulb className="w-5 h-5 text-cyan-400" />
-            <span className="text-cyan-300 text-sm font-medium tracking-wide">THE CONCEPT EXPLAINED</span>
-          </div>
-          
-          <h2 className="text-6xl md:text-7xl font-bold text-white mb-8 tracking-tight">
-            What Makes
-            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-emerald-400 font-extrabold">
-              Rom Cards Special?
-            </span>
-          </h2>
-          
-          <p className="text-2xl text-gray-300 max-w-5xl mx-auto leading-relaxed font-light">
-            Not boring apps. Not faceless dashboards. Something entirely different.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
-          {/* Left - Enhanced Character showcase */}
-          <div className="relative">
-            <div className="w-96 h-96 mx-auto relative">
-              <div className="absolute inset-0 bg-gradient-to-br from-cyan-400/25 via-purple-400/25 to-emerald-400/25 rounded-3xl border-2 border-cyan-400/40 shadow-2xl"></div>
-              <div className="absolute inset-6 bg-black/70 backdrop-blur-sm rounded-2xl border border-purple-400/30 flex items-center justify-center overflow-hidden">
-                <CharacterGenerate showRandomCharacter={true} />
-              </div>
-              
-              {/* Enhanced floating abilities */}
-              <div className="absolute -top-6 -left-12 bg-cyan-500/25 backdrop-blur-xl border border-cyan-400/40 rounded-xl p-5 text-cyan-100 text-base animate-float shadow-xl">
-                📊 Analyzes data
-              </div>
-              <div className="absolute top-20 -right-16 bg-purple-500/25 backdrop-blur-xl border border-purple-400/40 rounded-xl p-5 text-purple-100 text-base animate-float shadow-xl" style={{ animationDelay: '1s' }}>
-                🤖 Makes decisions
-              </div>
-              <div className="absolute -bottom-10 -left-8 bg-emerald-500/25 backdrop-blur-xl border border-emerald-400/40 rounded-xl p-5 text-emerald-100 text-base animate-float shadow-xl" style={{ animationDelay: '2s' }}>
-                💡 Learns patterns
-              </div>
-              <div className="absolute bottom-16 -right-12 bg-pink-500/25 backdrop-blur-xl border border-pink-400/40 rounded-xl p-5 text-pink-100 text-base animate-float shadow-xl" style={{ animationDelay: '1.5s' }}>
-                ⚡ Evolves daily
-              </div>
-            </div>
-          </div>
-
-          {/* Right - Detailed Description */}
-          <div className="space-y-8">
-            <div className="text-xl text-gray-200 leading-relaxed space-y-6">
-              <p>They're characters you <span className="text-cyan-300 font-semibold">hatch, train, and evolve</span>—who then become your intelligent business partners:</p>
-              
-              <div className="space-y-5 ml-8">
-                <div className="flex items-start gap-5">
-                  <div className="w-4 h-4 bg-cyan-400 rounded-full mt-1 shadow-lg shadow-cyan-400/50"></div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-white mb-1">Intelligent Task Management</h4>
-                    <p className="text-gray-400">Track, prioritize, and automatically manage your workflows</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-5">
-                  <div className="w-4 h-4 bg-purple-400 rounded-full mt-1 shadow-lg shadow-purple-400/50"></div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-white mb-1">Smart Automation</h4>
-                    <p className="text-gray-400">Learn your patterns and automate repetitive processes</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-5">
-                  <div className="w-4 h-4 bg-emerald-400 rounded-full mt-1 shadow-lg shadow-emerald-400/50"></div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-white mb-1">Proactive Assistance</h4>
-                    <p className="text-gray-400">Send reminders, generate reports, and keep you ahead</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-5">
-                  <div className="w-4 h-4 bg-pink-400 rounded-full mt-1 shadow-lg shadow-pink-400/50"></div>
-                  <div>
-                    <h4 className="text-lg font-semibold text-white mb-1">Continuous Evolution</h4>
-                    <p className="text-gray-400">Grow smarter and more capable as your business grows</p>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-gradient-to-r from-cyan-500/10 to-purple-500/10 backdrop-blur-xl border border-cyan-400/20 rounded-2xl p-8 mt-8">
-                <p className="text-2xl text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-purple-300 to-emerald-300 font-semibold leading-relaxed">
-                  "It's like having a Digimon in real life—except it runs your shop, your coaching business, or your content studio."
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
 
 // How it Works - 3 simple steps
 function HowItWorksSection() {
@@ -576,11 +578,13 @@ function HowItWorksSection() {
 
 // Interactive Demo Section
 function DemoSection() {
+  const [demoTheme, setDemoTheme] = useState("green");
+  
   // Sample agent data for the demo
   const demoAgentData = {
     name: "Luna",
     description: "Your intelligent life coach companion",
-    theme: "green",
+    theme: demoTheme,
     domain: "life-coaching",
     createdAt: new Date().toISOString(),
     avatar: {
@@ -696,8 +700,13 @@ function DemoSection() {
               <div className="relative">
                 <MobileAppDemoWrapper 
                   agentData={demoAgentData as any}
-                  onThemeChange={() => {}} 
-                  onDataChange={() => {}}
+                  onThemeChange={(newTheme: string) => {
+                    console.log('🎨 Demo theme changed to:', newTheme);
+                    setDemoTheme(newTheme);
+                  }} 
+                  onDataChange={(updatedData: any) => {
+                    console.log('📊 Demo data changed:', updatedData);
+                  }}
                 />
                 {/* Premium glow effect around demo */}
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-3xl blur-2xl -z-10"></div>
@@ -741,11 +750,13 @@ function DemoSection() {
 
 // Showcase section - Demo + Success Stories
 function ShowcaseSection() {
+  const [demoTheme, setDemoTheme] = useState("green");
+  
   // Demo agent data for the interactive preview
   const demoAgentData = {
     name: "Luna",
     description: "Your intelligent life coach companion",
-    theme: "green",
+    theme: demoTheme,
     domain: "life-coaching",
     createdAt: new Date().toISOString(),
     avatar: {
@@ -903,8 +914,13 @@ function ShowcaseSection() {
                 <div className="relative">
                   <MobileAppDemoWrapper 
                     agentData={demoAgentData as any}
-                    onThemeChange={() => {}} 
-                    onDataChange={() => {}}
+                    onThemeChange={(newTheme: string) => {
+                      console.log('🎨 Theme changed to:', newTheme);
+                      setDemoTheme(newTheme);
+                    }} 
+                    onDataChange={(updatedData: any) => {
+                      console.log('📊 Data changed:', updatedData);
+                    }}
                   />
                   {/* Premium glow effect around demo */}
                   <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-3xl blur-2xl -z-10"></div>
@@ -1180,7 +1196,6 @@ export default function HomePage() {
     <div className="min-h-screen bg-black text-white">
       <Header />
       <HeroSection />
-      <WhatIsSection />
       <HowItWorksSection />
       <ShowcaseSection />
       <PricingSection />
