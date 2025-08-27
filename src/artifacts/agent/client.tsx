@@ -625,7 +625,8 @@ const AgentBuilderContent = memo(({
   
   // Safe metadata with defaults to prevent crashes
   const safeMetadata: AgentArtifactMetadata = useMemo(() => ({
-    selectedTab: metadata?.selectedTab || 'onboard',
+    selectedTab: metadata?.selectedTab || 'avatar',
+    selectedBrainTab: metadata?.selectedBrainTab || 'overview',
     editingModel: metadata?.editingModel || null,
     editingAction: metadata?.editingAction || null,
     editingSchedule: metadata?.editingSchedule || null,
@@ -932,24 +933,36 @@ const AgentBuilderContent = memo(({
   // Tab configuration
   const tabs = useMemo(() => [
     {
-      id: 'onboard' as const,
-      label: 'Onboard',
+      id: 'avatar' as const,
+      label: 'Avatar',
       count: 0
     },
     {
+      id: 'brain' as const,
+      label: 'Brain',
+      count: 0
+    }
+  ], [agentData.models?.length, agentData.actions?.length, agentData.schedules?.length]);
+
+  // Brain sub-tabs configuration
+  const brainTabs = useMemo(() => [
+    {
       id: 'models' as const,
       label: 'Models',
-      count: agentData.models?.length || 0
+      count: agentData.models?.length || 0,
+      icon: '🗃️'
     },
     {
       id: 'actions' as const,
       label: 'Actions',
-      count: agentData.actions?.length || 0
+      count: agentData.actions?.length || 0,
+      icon: '⚡'
     },
     {
       id: 'schedules' as const,
       label: 'Schedules',
-      count: agentData.schedules?.length || 0
+      count: agentData.schedules?.length || 0,
+      icon: '⏰'
     }
   ], [agentData.models?.length, agentData.actions?.length, agentData.schedules?.length]);
 
@@ -1219,6 +1232,7 @@ const AgentBuilderContent = memo(({
       {/* Navigation */}
       <div className="relative border-b border-green-500/20 backdrop-blur-xl bg-black/50 sticky top-0 z-50 md:static md:z-auto">
         <div className="px-4 sm:px-6 lg:px-8">
+          {/* Main tabs */}
           <div className="flex gap-1 sm:gap-2 -mb-px overflow-x-auto" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {tabs.map((tab) => (
               <button
@@ -1236,16 +1250,7 @@ const AgentBuilderContent = memo(({
               >
                 <div className="flex items-center gap-2 sm:gap-3">
                   <span className="font-medium">{tab.label}</span>
-                  {tab.id !== 'onboard' && (
-                    <div className={cn(
-                      "px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-full text-xs font-bold font-mono transition-colors border",
-                      safeMetadata.selectedTab === tab.id
-                        ? "bg-green-500/20 text-green-300 border-green-500/30"
-                        : "bg-green-500/10 text-green-400 border-green-500/20 group-hover:bg-green-500/20 group-hover:text-green-300"
-                    )}>
-                      {tab.count}
-                    </div>
-                  )}
+
                 </div>
                 
                 {/* Active tab indicator */}
@@ -1255,6 +1260,50 @@ const AgentBuilderContent = memo(({
               </button>
             ))}
           </div>
+
+          {/* Brain navigation - similar to Avatar's Onboard/Tutorial toggle */}
+          {safeMetadata.selectedTab === 'brain' && (
+            <div className="border-t border-green-500/10 mt-0 pt-3 pb-1">
+              <div className="flex items-center justify-center">
+                <div className="inline-flex bg-green-500/10 border border-green-500/20 rounded-lg p-0.5 shadow-sm">
+                  <button
+                    onClick={() => updateMetadata({ 
+                      selectedBrainTab: 'overview',
+                      dataManagement: null 
+                    })}
+                    className={`px-3 py-1.5 text-xs font-mono rounded-lg transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap ${
+                      safeMetadata.selectedBrainTab === 'overview' || !safeMetadata.selectedBrainTab
+                        ? "bg-green-500/20 text-green-200 shadow-sm"
+                        : "text-green-400 hover:text-green-200"
+                    }`}
+                  >
+                    <span>🧠</span>
+                    <span>Overview</span>
+                  </button>
+                  {brainTabs.map((brainTab) => (
+                    <button
+                      key={brainTab.id}
+                      onClick={() => updateMetadata({ 
+                        selectedBrainTab: brainTab.id,
+                        dataManagement: null 
+                      })}
+                      className={`px-3 py-1.5 text-xs font-mono rounded-lg transition-all duration-200 flex items-center gap-1.5 whitespace-nowrap ${
+                        safeMetadata.selectedBrainTab === brainTab.id
+                          ? "bg-green-500/20 text-green-200 shadow-sm"
+                          : "text-green-400 hover:text-green-200"
+                      }`}
+                    >
+                      <span>{brainTab.icon}</span>
+                      <span>{brainTab.label}</span>
+                      <span className="px-1.5 py-0.5 rounded-full text-xs bg-green-500/20 text-green-300 border border-green-500/30">
+                        {brainTab.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1296,13 +1345,18 @@ const AgentBuilderContent = memo(({
               }
               
               // Show appropriate tab content
-              if (safeMetadata.selectedTab === 'onboard') {
+              if (safeMetadata.selectedTab === 'avatar') {
                 return (
                   <OnboardContent 
-                    onTabChange={(tab) => setMetadata({ 
+                    onTabChange={(tab) => {
+                      if (tab === 'models' || tab === 'actions' || tab === 'schedules') {
+                        setMetadata({ 
                       ...safeMetadata, 
-                      selectedTab: tab 
-                    })} 
+                          selectedTab: 'brain',
+                          selectedBrainTab: tab
+                        });
+                      }
+                    }} 
                     models={agentData.models || []}
                     agentData={agentData}
                     onThemeChange={(theme) => {
@@ -1315,7 +1369,114 @@ const AgentBuilderContent = memo(({
                 );
               }
               
-              if (safeMetadata.selectedTab === 'models') {
+              // Brain Overview - Simple introduction to the Brain components
+              if (safeMetadata.selectedTab === 'brain' && (safeMetadata.selectedBrainTab === 'overview' || !safeMetadata.selectedBrainTab)) {
+                return (
+                  <div className="space-y-8">
+                    {/* Simplified Hero Section */}
+                    <div className="text-center space-y-4">
+                      <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-r from-green-600 to-green-700 flex items-center justify-center shadow-lg shadow-green-500/20">
+                        <span className="text-3xl">🧠</span>
+                      </div>
+                      <h2 className="text-2xl font-bold text-green-200 font-mono">Your Agent's Brain</h2>
+                      <p className="text-green-400 font-mono max-w-2xl mx-auto leading-relaxed">
+                        Your AI agent's intelligence comes from three simple components that work together.
+                      </p>
+                    </div>
+
+                    {/* Simplified Three Components - No buttons, just clickable cards */}
+                    <div className="grid md:grid-cols-3 gap-6">
+                      {/* Models Card */}
+                      <div 
+                        className="group cursor-pointer p-6 rounded-xl bg-blue-500/10 border border-blue-500/20 backdrop-blur-sm hover:bg-blue-500/15 transition-all duration-300"
+                        onClick={() => updateMetadata({ selectedBrainTab: 'models' })}
+                      >
+                        <div className="text-center space-y-3">
+                          <div className="w-12 h-12 mx-auto rounded-lg bg-blue-500/20 flex items-center justify-center border border-blue-500/30 group-hover:scale-110 transition-transform">
+                            <span className="text-2xl">🗃️</span>
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-blue-200 font-mono mb-1">Models</h3>
+                            <div className="px-2 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 text-sm font-mono mb-2 inline-block">
+                              {agentData.models?.length || 0} created
+                            </div>
+                            <p className="text-blue-300 text-sm font-mono leading-relaxed">
+                              Store and organize your data
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Actions Card */}
+                      <div 
+                        className="group cursor-pointer p-6 rounded-xl bg-purple-500/10 border border-purple-500/20 backdrop-blur-sm hover:bg-purple-500/15 transition-all duration-300"
+                        onClick={() => updateMetadata({ selectedBrainTab: 'actions' })}
+                      >
+                        <div className="text-center space-y-3">
+                          <div className="w-12 h-12 mx-auto rounded-lg bg-purple-500/20 flex items-center justify-center border border-purple-500/30 group-hover:scale-110 transition-transform">
+                            <span className="text-2xl">⚡</span>
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-purple-200 font-mono mb-1">Actions</h3>
+                            <div className="px-2 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-sm font-mono mb-2 inline-block">
+                              {agentData.actions?.length || 0} created
+                            </div>
+                            <p className="text-purple-300 text-sm font-mono leading-relaxed">
+                              Let users interact with your data
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Schedules Card */}
+                      <div 
+                        className="group cursor-pointer p-6 rounded-xl bg-orange-500/10 border border-orange-500/20 backdrop-blur-sm hover:bg-orange-500/15 transition-all duration-300"
+                        onClick={() => updateMetadata({ selectedBrainTab: 'schedules' })}
+                      >
+                        <div className="text-center space-y-3">
+                          <div className="w-12 h-12 mx-auto rounded-lg bg-orange-500/20 flex items-center justify-center border border-orange-500/30 group-hover:scale-110 transition-transform">
+                            <span className="text-2xl">⏰</span>
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-orange-200 font-mono mb-1">Schedules</h3>
+                            <div className="px-2 py-1 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30 text-sm font-mono mb-2 inline-block">
+                              {agentData.schedules?.length || 0} created
+                            </div>
+                            <p className="text-orange-300 text-sm font-mono leading-relaxed">
+                              Automate tasks on a timer
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Simple Flow Explanation */}
+                    <div className="p-6 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
+                      <div className="text-center space-y-4">
+                        <h3 className="text-lg font-bold text-green-200 font-mono">How it works</h3>
+                        <div className="flex items-center justify-center gap-4 text-sm font-mono flex-wrap">
+                          <span className="px-3 py-2 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                            📊 Models store data
+                          </span>
+                          <span className="text-green-400">→</span>
+                          <span className="px-3 py-2 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            ⚡ Actions process it
+                          </span>
+                          <span className="text-green-400">→</span>
+                          <span className="px-3 py-2 rounded-lg bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                            ⏰ Schedules automate it
+                          </span>
+                        </div>
+                        <p className="text-green-400 font-mono text-sm max-w-lg mx-auto">
+                          Click any component above to start building, or use the tabs at the top to navigate.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              
+              if (safeMetadata.selectedTab === 'brain' && safeMetadata.selectedBrainTab === 'models') {
                 console.log('🗂️ Rendering ModelsListEditor');
                 console.log('🗂️ Models data:', {
                   modelsCount: agentData.models?.length || 0,
@@ -1387,9 +1548,14 @@ const AgentBuilderContent = memo(({
                       models={agentData.models || []}
                       onModelsChange={(models) => updateAgentData({ ...agentData, models })}
                       updateMetadata={(updates) => {
+                        // Filter out invalid tab values that might come from ModelsListEditor
+                        const filteredUpdates = { ...updates };
+                        if ('selectedTab' in filteredUpdates) {
+                          delete filteredUpdates.selectedTab;
+                        }
                         setMetadata({ 
                           ...safeMetadata, 
-                          ...updates
+                          ...filteredUpdates
                         });
                       }}
                       status={'idle'}
@@ -1398,7 +1564,7 @@ const AgentBuilderContent = memo(({
                 );
               }
               
-              if (safeMetadata.selectedTab === 'actions') {
+              if (safeMetadata.selectedTab === 'brain' && safeMetadata.selectedBrainTab === 'actions') {
                 console.log('⚡ Rendering ActionsListEditor');
                 console.log('⚡ Actions data:', {
                   actionsCount: agentData.actions?.length || 0,
@@ -1476,7 +1642,7 @@ const AgentBuilderContent = memo(({
                 );
               }
               
-              if (safeMetadata.selectedTab === 'schedules') {
+              if (safeMetadata.selectedTab === 'brain' && safeMetadata.selectedBrainTab === 'schedules') {
                 console.log('⏰ Rendering SchedulesListEditor');
                 console.log('⏰ Schedules data:', {
                   schedulesCount: agentData.schedules?.length || 0,
@@ -2045,7 +2211,8 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
   
   initialize: ({ setMetadata }) => {
     setMetadata({
-      selectedTab: 'onboard',
+      selectedTab: 'avatar',
+      selectedBrainTab: 'overview',
       editingModel: null,
       editingAction: null,
       editingSchedule: null,

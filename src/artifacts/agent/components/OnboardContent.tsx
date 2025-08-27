@@ -6,7 +6,7 @@ import { MobileAppDemo, themes } from './MobileAppDemo';
 import AvatarCreator from '../../../avatar-creator/avatar-creator';
 
 interface OnboardContentProps {
-  onTabChange?: (tab: 'models' | 'actions' | 'schedules' | 'chat') => void;
+  onTabChange?: (tab: 'models' | 'actions' | 'schedules') => void;
   models?: any[]; // Array of models to determine default view
   agentData?: any; // Add agentData prop
   onThemeChange?: (theme: string) => void; // Add theme change callback
@@ -56,7 +56,7 @@ const DemoWithTab = memo(({ agentData, currentTheme, viewMode, targetTab, onData
           const tabLikeButtons = Array.from(allButtons).filter(button => {
             const text = button.textContent?.toLowerCase() || '';
             return text.includes('dashboard') || text.includes('models') || 
-                   text.includes('schedules') || text.includes('chat');
+                   text.includes('schedules') || text.includes('actions');
           });
           
           if (tabLikeButtons.length > targetTab) {
@@ -98,7 +98,7 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
   const currentTheme = themes[currentAgentTheme as keyof typeof themes] || themes.green;
 
   // Sample data for each tutorial slide
-  const getSampleDataForSlide = (slideId: 'models' | 'actions' | 'schedules' | 'chat') => {
+  const getSampleDataForSlide = (slideId: 'models' | 'actions' | 'schedules') => {
     const baseData = {
       id: 'tutorial-agent-' + slideId,
       name: 'Tutorial Agent',
@@ -258,49 +258,7 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
           ]
         };
 
-      case 'chat':
-        return {
-          ...baseData,
-          theme: currentAgentTheme, // Use the actual agent theme
-          models: [
-            {
-              id: 'customer-model',
-              name: 'Customer',
-              emoji: '👤',
-              idField: 'id',
-              displayFields: ['name', 'email'],
-              fields: [
-                { id: '1', name: 'id', type: 'String', description: 'Unique identifier', isId: true, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'ID', sort: true, order: 1 },
-                { id: '2', name: 'email', type: 'String', description: 'Customer email', isId: false, unique: true, list: false, required: true, kind: 'scalar', relationField: false, title: 'Email', sort: true, order: 2 },
-                { id: '3', name: 'name', type: 'String', description: 'Full name', isId: false, unique: false, list: false, required: true, kind: 'scalar', relationField: false, title: 'Name', sort: true, order: 3 }
-              ],
-              enums: [],
-              records: [
-                { id: '1', modelId: 'customer-model', data: { id: '1', email: 'john@example.com', name: 'John Doe' }, createdAt: '2024-01-15T10:00:00Z', updatedAt: '2024-01-15T10:00:00Z' },
-                { id: '2', modelId: 'customer-model', data: { id: '2', email: 'jane@example.com', name: 'Jane Smith' }, createdAt: '2024-01-16T10:00:00Z', updatedAt: '2024-01-16T10:00:00Z' }
-              ]
-            }
-          ],
-          actions: [
-            {
-              id: 'send-email-action',
-              name: 'Send Recovery Email',
-              description: 'Send automated cart recovery email to customers',
-              results: { actionType: 'Email Automation', status: 'Active', lastRun: '2024-01-20T10:00:00Z', successRate: '94%' }
-            }
-          ],
-          schedules: [
-            {
-              id: 'daily-email-schedule',
-              name: 'Daily Email Campaign',
-              description: 'Send cart recovery emails every day at 10 AM',
-              interval: { pattern: '0 10 * * *', active: true },
-              nextRun: '2024-01-21T10:00:00Z',
-              lastRun: '2024-01-20T10:00:00Z',
-              status: 'Active'
-            }
-          ]
-        };
+
 
       default:
         return baseData;
@@ -352,21 +310,6 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
         'Repeat Tasks - Set up things to happen automatically on a regular schedule',
         'Stay Informed - See what happened and when, so you\'re always in the loop'
       ]
-    },
-    {
-      id: 'chat' as const,
-      title: 'Your AI Assistant & Chat',
-      description: 'Talk to your intelligent AI helper that knows your business inside and out. Ask questions, get insights, and tell it what to do - all in plain English, just like texting a friend.',
-      icon: '🤖',
-      gradient: `from-${currentTheme.primary}-500/20 via-${currentTheme.primary}-600/10 to-${currentTheme.primary}-700/20`,
-      border: `border-${currentTheme.primary}-500/30`,
-      buttonText: 'Chat with My AI',
-      demoTab: 3, // Chat tab
-      features: [
-        'Talk Naturally - Just type what you want, no special commands or technical language needed',
-        'Business Insights - Ask about your customers, sales, or trends and get smart answers',
-        'Easy Commands - Tell your AI to send emails, update info, or run tasks through chat'
-      ]
     }
   ];
 
@@ -382,7 +325,7 @@ export const OnboardContent = memo(({ onTabChange, models = [], agentData, onThe
     setCurrentSlide(index);
   }, []);
 
-  const handleTabNavigation = useCallback((tabId: 'models' | 'actions' | 'schedules' | 'chat') => {
+  const handleTabNavigation = useCallback((tabId: 'models' | 'actions' | 'schedules') => {
     if (onTabChange) {
       onTabChange(tabId);
     }
