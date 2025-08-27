@@ -5540,7 +5540,50 @@ function fixMissingRelationFields(schema: string): string {
     for (let i = 0; i < modelData.lines.length; i++) {
       const line = modelData.lines[i];
       
-      // Match relation field without fields/references
+      // First, check for fields that look like relations but have NO @relation at all
+      const potentialRelationMatch = line.match(/(\s+)(\w+)\s+([A-Z]\w+)(\?)?\s*$/);
+      if (potentialRelationMatch && !line.includes('@relation') && !line.includes('@id') && !line.includes('@default')) {
+        const [, indent, fieldName, relatedModel, optional] = potentialRelationMatch;
+        
+        // Check if this is likely a relation (not a basic type)
+        const isBasicType = ['String', 'Int', 'Float', 'Boolean', 'DateTime', 'Json', 'Bytes'].includes(relatedModel);
+        if (!isBasicType && models[relatedModel]) {
+          // Look for a corresponding foreign key field
+          const foreignKeyField = findForeignKeyField(modelData.lines, relatedModel, fieldName);
+          
+          if (foreignKeyField) {
+            console.log(`🔧 Adding complete @relation to ${modelName}.${fieldName} -> ${relatedModel}`);
+            
+            const newLine = line.replace(
+              new RegExp(`(\\s+${fieldName}\\s+${relatedModel}\\??)\\s*$`),
+              `$1 @relation(fields: [${foreignKeyField}], references: [id])`
+            );
+            
+            modelData.lines[i] = newLine;
+            continue; // Skip the next check since we've handled this line
+          } else {
+            // If no foreign key exists, create one and add the relation
+            const expectedForeignKey = `${fieldName}Id`;
+            console.log(`🔧 Adding foreign key ${expectedForeignKey} and @relation to ${modelName}.${fieldName} -> ${relatedModel}`);
+            
+            // Add the foreign key field before the relation field
+            const foreignKeyLine = `${indent}${expectedForeignKey} String?`;
+            modelData.lines.splice(i, 0, foreignKeyLine);
+            
+            // Update the relation field (now at i+1)
+            const newRelationLine = modelData.lines[i + 1].replace(
+              new RegExp(`(\\s+${fieldName}\\s+${relatedModel}\\??)\\s*$`),
+              `$1 @relation(fields: [${expectedForeignKey}], references: [id])`
+            );
+            
+            modelData.lines[i + 1] = newRelationLine;
+            i++; // Skip the next iteration since we added a line
+            continue;
+          }
+        }
+      }
+      
+      // Then, check for existing @relation fields that are missing arguments
       const relationMatch = line.match(/(\s+)(\w+)\s+(\w+)(\?)?\s*@relation(\([^)]*\))?/);
       if (relationMatch) {
         const [fullMatch, indent, fieldName, relatedModel, optional, existingArgs] = relationMatch;

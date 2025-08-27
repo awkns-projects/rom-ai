@@ -245,9 +245,11 @@ pids/
       "db:studio": "prisma studio",
       "db:seed": "tsx prisma/seed.ts",
       "db:init": "node scripts/init-sqlite.js",
-      "db:setup": "npm run db:init && npm run db:generate && npm run db:push",
+      "db:setup": "npm run db:init && npm run prisma:format && npm run db:generate && npm run db:push",
       "db:reset": "prisma migrate reset --force",
-      postinstall: "npm run db:init && npm run db:generate",
+      "prisma:format": "prisma format",
+      "prisma:validate": "prisma validate",
+      postinstall: "npm run db:init && npm run prisma:format && npm run db:generate",
       "vercel-build": "npm run db:setup && next build"
     };
 

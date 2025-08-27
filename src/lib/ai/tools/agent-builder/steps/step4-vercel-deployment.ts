@@ -461,14 +461,14 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
       ['read', 'execute'] // Default permissions for deployed agents
     );
     
-          const allEnvVars = {
-        DATABASE_URL: databaseUrl,
-        NEXTAUTH_SECRET: generateRandomSecret(),
-        NEXTAUTH_URL: agentDeploymentUrl,
+              const allEnvVars = {
+      DATABASE_URL: databaseUrl,
+      NEXTAUTH_SECRET: generateRandomSecret(),
+      NEXTAUTH_URL: agentDeploymentUrl,
       NODE_ENV: 'production',
       CRON_SECRET: generateRandomSecret(),
       // Configuration for calling back to main app
-      NEXT_PUBLIC_MAIN_APP_URL: process.env.NEXT_PUBLIC_MAIN_APP_URL,
+      NEXT_PUBLIC_MAIN_APP_URL: process.env.NEXT_PUBLIC_MAIN_APP_URL || '',
       NEXT_PUBLIC_DOCUMENT_ID: input.documentId || '',
       NEXT_PUBLIC_AGENT_KEY: agentKey,
       NEXT_PUBLIC_AGENT_TOKEN: agentToken,

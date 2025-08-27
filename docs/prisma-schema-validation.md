@@ -31,15 +31,40 @@ If validation fails, the system:
 
 ## Common Relation Errors Fixed
 
-### 1. Missing @relation fields
-**Error**: "The relation field `lead` on Model `CRMRecord` must specify the `fields` argument"
+### 1. Missing @relation fields and attributes
+**Error**: "The relation field `lead` on Model `CRMRecord` must specify the `fields` argument" or "The relation field `post` on Model `PerformanceMetric` must specify the `references` argument"
 
-**Fix**: Automatically adds `fields` and `references` arguments:
+**Fix**: Automatically adds missing `@relation` attributes and their arguments:
 ```prisma
-// Before (error)
+// Before (error - completely missing @relation)
+model PerformanceMetric {
+  postId String?
+  post   SocialMediaPost?  // ❌ Missing @relation entirely
+}
+
+// After (fixed)
+model PerformanceMetric {
+  postId String?
+  post   SocialMediaPost? @relation(fields: [postId], references: [id])
+}
+
+// Before (error - missing both @relation AND foreign key)
+model PerformanceMetrics {
+  conversionRate     Float?
+  SocialMediaContent SocialMediaContent?  // ❌ Missing @relation AND foreign key
+}
+
+// After (fixed - both added automatically)
+model PerformanceMetrics {
+  conversionRate       Float?
+  SocialMediaContentId String?  // ✅ Foreign key created
+  SocialMediaContent   SocialMediaContent? @relation(fields: [SocialMediaContentId], references: [id])  // ✅ Complete relation added
+}
+
+// Before (error - missing fields argument)
 model CRMRecord {
   leadId String?
-  lead   Lead? @relation
+  lead   Lead? @relation  // ❌ Missing fields/references
 }
 
 // After (fixed)
