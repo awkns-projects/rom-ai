@@ -1,0 +1,219 @@
+import {
+  CHARACTER_STYLE,
+  CHARACTER_FEATURE,
+  CharacterFeature,
+} from "../../definitions";
+import { CHARACTER_PERSON_TYPE } from "../../person/definitions";
+
+import {
+  CHARACTER_BACKPACK_TYPE,
+  CHARACTER_BACKPACK_STRAP_TYPE,
+  CHARACTER_CARGO_TYPE,
+  CHARACTER_QUIVER_TYPE,
+} from "./types";
+
+export const backpack_stylemap = [
+  CHARACTER_STYLE.BLACK,
+  CHARACTER_STYLE.BLUE,
+  CHARACTER_STYLE.BLUEGRAY,
+  CHARACTER_STYLE.FOREST,
+  CHARACTER_STYLE.GRAY,
+  CHARACTER_STYLE.GREEN,
+  CHARACTER_STYLE.LAVENDER,
+  CHARACTER_STYLE.LEATHER,
+  CHARACTER_STYLE.MAROON,
+  CHARACTER_STYLE.NAVY,
+  CHARACTER_STYLE.ORANGE,
+  CHARACTER_STYLE.PINK,
+  CHARACTER_STYLE.PURPLE,
+  CHARACTER_STYLE.RED,
+  CHARACTER_STYLE.SKY,
+  CHARACTER_STYLE.TAN,
+  CHARACTER_STYLE.TEAL,
+  CHARACTER_STYLE.WALNUT,
+  CHARACTER_STYLE.WHITE,
+  CHARACTER_STYLE.YELLOW,
+];
+
+export const backpack_jetpack_stylemap = [
+  CHARACTER_STYLE.BRONZE,
+  CHARACTER_STYLE.GOLD,
+  CHARACTER_STYLE.STEEL,
+];
+
+export const backpack_basket_stylemap = [
+  CHARACTER_STYLE.ROUND,
+  CHARACTER_STYLE.SQUARE,
+];
+
+export const backpack_feature: CharacterFeature = {
+  [CHARACTER_BACKPACK_TYPE.NONE]: {
+    variant: CHARACTER_BACKPACK_TYPE.NONE,
+    stylemap: [],
+    required: {},
+  },
+  [CHARACTER_BACKPACK_TYPE.BACKPACK]: {
+    variant: CHARACTER_BACKPACK_TYPE.BACKPACK,
+    stylemap: backpack_stylemap,
+    required: {
+      [CHARACTER_FEATURE.PERSON]: [
+        CHARACTER_PERSON_TYPE.MALE,
+        CHARACTER_PERSON_TYPE.FEMALE,
+        CHARACTER_PERSON_TYPE.PREGNANT,
+        CHARACTER_PERSON_TYPE.MUSCULAR,
+      ],
+    },
+  },
+  [CHARACTER_BACKPACK_TYPE.SQUARE_PACK]: {
+    variant: CHARACTER_BACKPACK_TYPE.SQUARE_PACK,
+    stylemap: backpack_stylemap,
+    required: {
+      [CHARACTER_FEATURE.PERSON]: [
+        CHARACTER_PERSON_TYPE.MALE,
+        CHARACTER_PERSON_TYPE.FEMALE,
+        CHARACTER_PERSON_TYPE.PREGNANT,
+        CHARACTER_PERSON_TYPE.MUSCULAR,
+      ],
+    },
+  },
+  [CHARACTER_BACKPACK_TYPE.JETPACK]: {
+    variant: CHARACTER_BACKPACK_TYPE.JETPACK,
+    stylemap: backpack_jetpack_stylemap,
+    required: {
+      [CHARACTER_FEATURE.PERSON]: [
+        CHARACTER_PERSON_TYPE.MALE,
+        CHARACTER_PERSON_TYPE.FEMALE,
+        CHARACTER_PERSON_TYPE.PREGNANT,
+        CHARACTER_PERSON_TYPE.MUSCULAR,
+      ],
+    },
+  },
+  [CHARACTER_BACKPACK_TYPE.BASKET]: {
+    variant: CHARACTER_BACKPACK_TYPE.BASKET,
+    stylemap: backpack_basket_stylemap,
+    required: {
+      [CHARACTER_FEATURE.PERSON]: [
+        CHARACTER_PERSON_TYPE.MALE,
+        CHARACTER_PERSON_TYPE.FEMALE,
+        CHARACTER_PERSON_TYPE.PREGNANT,
+        CHARACTER_PERSON_TYPE.MUSCULAR,
+      ],
+    },
+  },
+};
+
+export const backpack_strap_stylemap = [
+  CHARACTER_STYLE.BLACK,
+  CHARACTER_STYLE.BLUE,
+  CHARACTER_STYLE.BLUEGRAY,
+  CHARACTER_STYLE.FOREST,
+  CHARACTER_STYLE.GRAY,
+  CHARACTER_STYLE.GREEN,
+  CHARACTER_STYLE.LAVENDER,
+  CHARACTER_STYLE.LEATHER,
+  CHARACTER_STYLE.MAROON,
+  CHARACTER_STYLE.NAVY,
+  CHARACTER_STYLE.ORANGE,
+  CHARACTER_STYLE.PINK,
+  CHARACTER_STYLE.PURPLE,
+  CHARACTER_STYLE.RED,
+  CHARACTER_STYLE.SKY,
+  CHARACTER_STYLE.TAN,
+  CHARACTER_STYLE.TEAL,
+  CHARACTER_STYLE.WALNUT,
+  CHARACTER_STYLE.WHITE,
+  CHARACTER_STYLE.YELLOW,
+];
+
+export const backpack_strap_feature: CharacterFeature = {
+  [CHARACTER_BACKPACK_STRAP_TYPE.NONE]: {
+    variant: CHARACTER_BACKPACK_STRAP_TYPE.NONE,
+    stylemap: [],
+    required: {},
+  },
+  [CHARACTER_BACKPACK_STRAP_TYPE.STRAP]: {
+    variant: CHARACTER_BACKPACK_STRAP_TYPE.STRAP,
+    stylemap: backpack_strap_stylemap,
+    required: {
+      [CHARACTER_FEATURE.BACKPACK]: [
+        CHARACTER_BACKPACK_TYPE.BACKPACK,
+        CHARACTER_BACKPACK_TYPE.SQUARE_PACK,
+        CHARACTER_BACKPACK_TYPE.JETPACK,
+      ],
+    },
+  },
+};
+
+export const cargo_jetpack_stylemap = [
+  CHARACTER_STYLE.BRONZE,
+  CHARACTER_STYLE.GOLD,
+  CHARACTER_STYLE.STEEL,
+];
+
+export const cargo_basket_wood_stylemap = [
+  CHARACTER_STYLE.LOGS3,
+  CHARACTER_STYLE.LOGS9,
+];
+
+export const cargo_basket_ore_stylemap = [
+  CHARACTER_STYLE.COAL,
+  CHARACTER_STYLE.IRON,
+  CHARACTER_STYLE.STEEL,
+  CHARACTER_STYLE.TIN,
+  CHARACTER_STYLE.COPPER,
+  CHARACTER_STYLE.BRONZE,
+  CHARACTER_STYLE.SILVER,
+  CHARACTER_STYLE.GOLD,
+];
+
+export const cargo_feature: CharacterFeature = {
+  [CHARACTER_CARGO_TYPE.NONE]: {
+    variant: CHARACTER_CARGO_TYPE.NONE,
+    stylemap: [],
+    required: {},
+  },
+  [CHARACTER_CARGO_TYPE.JETPACK]: {
+    variant: CHARACTER_CARGO_TYPE.JETPACK,
+    stylemap: cargo_jetpack_stylemap,
+    required: {
+      [CHARACTER_FEATURE.BACKPACK]: [CHARACTER_BACKPACK_TYPE.JETPACK],
+    },
+  },
+  [CHARACTER_CARGO_TYPE.BASKET_WOOD]: {
+    variant: CHARACTER_CARGO_TYPE.BASKET_WOOD,
+    stylemap: cargo_basket_wood_stylemap,
+    required: {
+      [CHARACTER_FEATURE.BACKPACK]: [CHARACTER_BACKPACK_TYPE.BASKET],
+    },
+  },
+  [CHARACTER_CARGO_TYPE.BASKET_ORE]: {
+    variant: CHARACTER_CARGO_TYPE.BASKET_ORE,
+    stylemap: cargo_basket_ore_stylemap,
+    required: {
+      [CHARACTER_FEATURE.BACKPACK]: [CHARACTER_BACKPACK_TYPE.BASKET],
+    },
+  },
+};
+
+export const quiver_stylemap = [CHARACTER_STYLE.QUIVER];
+
+export const quiver_feature: CharacterFeature = {
+  [CHARACTER_QUIVER_TYPE.NONE]: {
+    variant: CHARACTER_QUIVER_TYPE.NONE,
+    stylemap: [],
+    required: {},
+  },
+  [CHARACTER_QUIVER_TYPE.QUIVER]: {
+    variant: CHARACTER_QUIVER_TYPE.QUIVER,
+    stylemap: quiver_stylemap,
+    required: {
+      [CHARACTER_FEATURE.PERSON]: [
+        CHARACTER_PERSON_TYPE.MALE,
+        CHARACTER_PERSON_TYPE.FEMALE,
+        CHARACTER_PERSON_TYPE.TEEN,
+        CHARACTER_PERSON_TYPE.PREGNANT,
+        CHARACTER_PERSON_TYPE.MUSCULAR,
+      ],
+    },
+  },
+};

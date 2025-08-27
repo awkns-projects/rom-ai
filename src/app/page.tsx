@@ -2,773 +2,138 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Greeting } from '@/components/greeting';
 import { 
-  Bot, 
-  Zap, 
-  Database, 
-  Clock, 
-  DollarSign, 
+  Heart,
+  Sparkles,
   ArrowRight, 
   Play, 
-  Brain,
-  Target,
-  Sparkles,
-  CheckCircle,
   Star,
   Menu,
   X,
-  Terminal,
+  Zap,
+  Brain,
+  Users,
+  Gift,
   Code,
-  Activity,
-  TrendingUp,
-  Cpu,
-  GitBranch,
-  AlertTriangle
+  Terminal,
+  Gamepad2,
+  Trophy,
+  Calendar,
+  Mail,
+  FileText,
+  Search,
+  MessageCircle,
+  CheckCircle,
+  Clock,
+  Target,
+  Lightbulb,
+  Briefcase,
+  Home,
+  Music,
+  Camera,
+  Shield,
+  Database
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
-import * as THREE from 'three';
 import { Suspense, useMemo, useCallback } from 'react';
 import { Canvas, useLoader, useFrame } from '@react-three/fiber';
 import { TextureLoader } from 'three';
 import type { BufferAttribute } from 'three';
-
-const features = [
-  {
-    icon: Bot,
-    title: 'Snap-Together Components',
-    description: 'Connect AI building blocks with simple prompts - like Lego, but each piece has intelligence, memory, and personality that grows stronger over time',
-    gradient: 'from-green-500/20 via-green-600/10 to-green-700/20',
-    border: 'border-green-500/30'
-  },
-  {
-    icon: Database,
-    title: 'Memory Modules',
-    description: 'Built-in memory blocks that never forget - each conversation, task, and preference becomes a persistent asset that makes your agent smarter',
-    gradient: 'from-blue-500/20 via-blue-600/10 to-blue-700/20',
-    border: 'border-blue-500/30'
-  },
-  {
-    icon: Clock,
-    title: 'Always-On Runtime',
-    description: 'Your assembled agents run like apps 24/7 - completing tasks, sending updates, and handling operations while you focus on what matters',
-    gradient: 'from-purple-500/20 via-purple-600/10 to-purple-700/20',
-    border: 'border-purple-500/30'
-  },
-  {
-    icon: Zap,
-    title: 'Universal Connectors',
-    description: 'Plug into any website, app, or data source - your building blocks connect to the entire internet to take real actions in the real world',
-    gradient: 'from-orange-500/20 via-orange-600/10 to-orange-700/20',
-    border: 'border-orange-500/30'
-  }
-];
-
-const useCases = [
-  {
-    emoji: '🎯',
-    title: 'MEV Bot Template',
-    description: 'Trading blocks that monitor chains + execution modules + profit tracking = Your owned trading asset generating continuous yield'
-  },
-  {
-    emoji: '📧',
-    title: 'Email Marketing Template',
-    description: 'Campaign blocks + audience modules + automation engine = Your owned marketing system that runs 24/7 and converts leads'
-  },
-  {
-    emoji: '🔗',
-    title: 'DAO Operations Template',
-    description: 'Governance blocks + treasury modules + community engine = Your owned DAO management asset handling all operations'
-  },
-  {
-    emoji: '🛒',
-    title: 'E-commerce Template',
-    description: 'Inventory blocks + customer service modules + pricing engine = Your owned business system operating round the clock'
-  },
-  {
-    emoji: '📊',
-    title: 'Analytics Template',
-    description: 'Data blocks + trend detection modules + reporting engine = Your owned intelligence system delivering insights automatically'
-  },
-  {
-    emoji: '🎨',
-    title: 'NFT Drop Template',
-    description: 'Monitoring blocks + rarity analysis modules + timing engine = Your owned alpha detection system never missing opportunities'
-  }
-];
-
-const stats = [
-  { value: '100+', label: 'AI Agents Assembled', icon: Bot },
-  { value: '24/7', label: 'Running Like Apps', icon: Clock },
-  { value: '∞', label: 'Building Combinations', icon: Target },
-  { value: '95%', label: 'Asset Revenue Rate', icon: CheckCircle }
-];
+import * as THREE from 'three';
+import CharacterGenerate from '@/components/character/canva';
+import Image from 'next/image';
+import { MobileAppDemoWrapper } from '@/artifacts/agent/components/MobileAppDemo';
 
 const navLinks = [
   { href: '#home', label: 'Home' },
-  { href: '#demo', label: 'Demo' },
-  { href: '#features', label: 'Features' },
-  { href: '#use-cases', label: 'Use Cases' },
-  { href: '#marketplace', label: 'Marketplace' },
-  { href: '#stats', label: 'Stats' },
-  { href: '#get-started', label: 'Get Started' }
+  { href: '#what-is', label: 'What is Rom Cards' },
+  { href: '#how-it-works', label: 'How it Works' },
+  { href: '#showcase', label: 'Showcase' },
+  { href: '#pricing', label: 'Pricing' }
 ];
 
-// React Three Fiber Wave Animation Component with responsive design
-function Points() {
-  const attributeRef = useRef<BufferAttribute>(null);
-  const texture = useLoader(TextureLoader, '/images/circle.png');
-
-  const [t, setT] = useState(0);
-
-  // Responsive wave parameters
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  const graph = useCallback((x: number, z: number) => {
-    const f = isMobile ? 0.003 : 0.002;  // Higher frequency for mobile
-    const a = isMobile ? 3 : 5;          // Smaller amplitude for mobile
-
-    return Math.sin(f * ((x - 15) ** 2 + (z + 30) ** 2 + t)) * a;
-  }, [t, isMobile])
-
-  // Responsive grid parameters
-  const count = isMobile ? 40 : 80;      // Fewer particles on mobile
-  const sep = isMobile ? 4 : 3;          // More spacing on mobile
-  const dimension = 3;
+// Better wave animation - original style
+function WaveAnimation() {
+  const meshRef = useRef<THREE.Mesh>(null);
   
-  let positions = useMemo(() => {
-    let positions: number[] = [];
-
-    for (let xi = 0; xi < count; xi++) {
-      for (let zi = 0; zi < count; zi++) {
-        let x = sep * (xi - count / 2);
-        let z = sep * (zi - count / 2);
-        let y = graph(x, z);
-
-        positions.push(x, y, z);
+  useFrame(({ clock }) => {
+    if (meshRef.current) {
+      const geometry = meshRef.current.geometry as THREE.PlaneGeometry;
+      const position = geometry.attributes.position as BufferAttribute;
+      const array = position.array as Float32Array;
+      
+      const time = clock.elapsedTime;
+      
+      for (let i = 0; i < array.length; i += 3) {
+        const x = array[i];
+        const y = array[i + 1];
+        
+        // Multiple wave layers for more dynamic effect
+        const wave1 = Math.sin(x * 0.3 + time * 1.2) * 0.15;
+        const wave2 = Math.sin(y * 0.2 + time * 0.8) * 0.1;
+        const wave3 = Math.sin((x + y) * 0.15 + time * 1.5) * 0.08;
+        
+        array[i + 2] = wave1 + wave2 + wave3;
       }
+      position.needsUpdate = true;
     }
-    return new Float32Array(positions);
-  }, [count, sep, graph])
-
-  useFrame(() => {
-    setT(t + (isMobile ? 3 : 5))  // Slower animation on mobile for better performance
-
-    if (attributeRef.current) {
-      const positions = attributeRef.current.array as Float32Array;
-
-      let i = 0;
-      for (let xi = 0; xi < count; xi++) {
-        for (let zi = 0; zi < count; zi++) {
-          let x = sep * (xi - count / 2);
-          let z = sep * (zi - count / 2);
-
-          positions[i + 1] = graph(x, z);
-          i += 3;
-        }
-      }
-      attributeRef.current.needsUpdate = true;
-    }
-  })
+  });
 
   return (
-    <points>
-      <bufferGeometry attach="geometry">
-        <bufferAttribute
-          ref={attributeRef}
-          attach='attributes-position'
-          args={[positions, dimension]}
-          count={positions.length / dimension}
-          itemSize={dimension}
-          needsUpdate={true}
-        />
-      </bufferGeometry>
-
-      <pointsMaterial
-        attach="material"
-        map={texture}
-        color={0x00FF88}
-        size={isMobile ? 0.8 : 1}  // Smaller particles on mobile
-        sizeAttenuation
-        alphaTest={0.2}
-        opacity={1}
+    <mesh ref={meshRef} rotation={[-Math.PI / 2.2, 0, 0]} position={[0, -1.5, -2]}>
+      <planeGeometry args={[30, 30, 64, 64]} />
+      <meshBasicMaterial 
+        color="#00ff88" 
+        wireframe 
+        opacity={0.2} 
+        transparent 
+        side={THREE.DoubleSide}
       />
-    </points>
-  )
+    </mesh>
+  );
 }
 
-// New Wave Animation Component with responsive camera
-function WaveAnimation() {
-  const [isMobile, setIsMobile] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
+// 3D Wave Background
+function Wave3D() {
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 1 }}>
-      <Canvas 
-        camera={{ 
-          position: isMobile ? [80, 40, 8] : [150, 60, 10],  // Closer camera on mobile
-          fov: isMobile ? 45 : 35,                            // Wider FOV on mobile
-          near: 1, 
-          far: 800 
-        }}
-      >
+    <div className="absolute inset-0 opacity-40">
+      <Canvas camera={{ position: [0, 3, 8], fov: 75 }}>
         <Suspense fallback={null}>
-          <Points />
+          <WaveAnimation />
+          <ambientLight intensity={0.3} />
+          <pointLight position={[10, 10, 10]} intensity={0.5} color="#00ff88" />
         </Suspense>
       </Canvas>
     </div>
   );
 }
 
-// Enhanced Fallback Particle Background Component
-function EnhancedParticleBackground() {
+// Simple floating particles
+function FloatingParticles() {
   const [particles, setParticles] = useState<Array<{
-    id: number, 
-    x: number, 
-    y: number, 
-    vx: number, 
-    vy: number, 
-    opacity: number,
-    size: number,
-    color: string,
-    waveOffset: number
+    id: number;
+    x: number;
+    y: number;
+    speed: number;
+    opacity: number;
   }>>([]);
 
   useEffect(() => {
-    const colors = ['bg-green-400', 'bg-cyan-400', 'bg-emerald-400', 'bg-lime-400'];
-    const newParticles = Array.from({length: 80}, (_, i) => ({
+    const newParticles = Array.from({length: 8}, (_, i) => ({
       id: i,
       x: Math.random() * 100,
       y: Math.random() * 100,
-      vx: (Math.random() - 0.5) * 0.15,
-      vy: (Math.random() - 0.5) * 0.15,
-      opacity: Math.random() * 0.8 + 0.3,
-      size: Math.random() * 4 + 2,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      waveOffset: Math.random() * Math.PI * 2
+      speed: 0.1 + Math.random() * 0.2,
+      opacity: Math.random() * 0.4 + 0.2
     }));
     setParticles(newParticles);
 
     const interval = setInterval(() => {
-      setParticles(prev => prev.map(particle => {
-        const time = Date.now() * 0.001;
-        const waveY = Math.sin(time + particle.waveOffset) * 5;
-        return {
+      setParticles(prev => prev.map(particle => ({
           ...particle,
-          x: (particle.x + particle.vx + 100) % 100,
-          y: (particle.y + particle.vy + waveY * 0.1 + 100) % 100,
-          opacity: 0.3 + (Math.sin(time * 0.5 + particle.id) + 1) * 0.4
-        };
-      }));
-    }, 50);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-70">
-      {particles.map(particle => (
-        <div
-          key={particle.id}
-          className={`absolute rounded-full ${particle.color} animate-pulse`}
-          style={{
-            left: `${particle.x}%`,
-            top: `${particle.y}%`,
-            width: `${particle.size}px`,
-            height: `${particle.size}px`,
-            opacity: particle.opacity,
-            boxShadow: `0 0 ${particle.size * 3}px currentColor, 0 0 ${particle.size * 6}px currentColor`,
-            filter: 'blur(0.5px)'
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// Typing Animation Component
-function TypewriterEffect() {
-  const [currentText, setCurrentText] = useState('');
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isDeleting, setIsDeleting] = useState(false);
-  
-  const phrases = [
-    'Assemble building blocks: "Customer Support Agent" → Runs 24/7 → Owns $2K/month revenue',
-    'Stack components: "MEV Bot" → Monitors chains → Owns trading profits as your asset',
-    'Connect pieces: "Sales Agent" → Nurtures leads → Owns conversion pipeline value',
-    'Build modules: "DAO Governance" → Tracks proposals → Owns community management revenue',
-    'Snap together: "Marketing Agent" → Grows audience → Owns engagement metrics as assets',
-    'Combine blocks: "NFT Scout" → Finds alpha → Owns mint strategy profits',
-    'Link components: "Calendar Manager" → Books meetings → Owns scheduling service income',
-    'Merge modules: "DeFi Tracker" → Monitors yields → Owns portfolio optimization gains'
-  ];
-
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      const currentPhrase = phrases[currentIndex];
-      
-      if (!isDeleting) {
-        if (currentText !== currentPhrase) {
-          setCurrentText(currentPhrase.slice(0, currentText.length + 1));
-        } else {
-          setTimeout(() => setIsDeleting(true), 2000);
-        }
-      } else {
-        if (currentText !== '') {
-          setCurrentText(currentText.slice(0, -1));
-        } else {
-          setIsDeleting(false);
-          setCurrentIndex((currentIndex + 1) % phrases.length);
-        }
-      }
-    }, isDeleting ? 50 : 100);
-
-    return () => clearTimeout(timeout);
-  }, [currentText, currentIndex, isDeleting]);
-
-  return (
-    <div className="font-mono text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 text-lg md:text-xl">
-      {currentText}
-      <span className="animate-pulse text-green-300">|</span>
-    </div>
-  );
-}
-
-// Floating Success Stories Component - Updated for side panel
-function FloatingSuccessStories() {
-  const stories = [
-    { 
-      icon: '🛒', 
-      name: 'Shopping Agent', 
-      gradient: 'from-blue-500 to-cyan-400',
-      revenue: '$2,847/mo',
-      description: 'Saves 20 hours/week managing inventory and customer emails'
-    },
-    { 
-      icon: '🎯', 
-      name: 'Lead Hunter Agent', 
-      gradient: 'from-purple-500 to-pink-400',
-      revenue: '$5,123/mo', 
-      description: 'Doubled conversion rate by nurturing leads automatically'
-    },
-    { 
-      icon: '📧', 
-      name: 'Content Agent', 
-      gradient: 'from-orange-500 to-red-400',
-      revenue: '$1,956/mo',
-      description: 'Grew email list 300% with personalized content sequences'
-    },
-    { 
-      icon: '📊', 
-      name: 'Analytics Agent', 
-      gradient: 'from-green-500 to-teal-400',
-      revenue: '$3,234/mo',
-      description: 'Never misses important metrics or customer insights'
-    }
-  ];
-
-  return (
-    <div className="space-y-6">
-      {stories.map((story, index) => (
-        <div
-          key={index}
-          className={`bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20 shadow-2xl transform transition-all duration-300 hover:scale-105`}
-          style={{
-            animation: `float ${4 + index}s ease-in-out infinite`,
-            animationDelay: `${index * 0.8}s`
-          }}
-        >
-          <div className={`absolute inset-0 bg-gradient-to-br ${story.gradient} opacity-20 rounded-2xl`}></div>
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-2">
-              <span className="text-3xl">{story.icon}</span>
-              <div>
-                <div className="text-white font-bold text-sm">{story.name}</div>
-                <div className={`text-transparent bg-clip-text bg-gradient-to-r ${story.gradient} font-bold text-xs`}>
-                  {story.revenue}
-                </div>
-              </div>
-            </div>
-            <div className="text-white/80 text-xs">{story.description}</div>
-          </div>
-        </div>
-      ))}
-      <style jsx>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0px) rotate(0deg); }
-          50% { transform: translateY(-15px) rotate(2deg); }
-        }
-      `}</style>
-    </div>
-  );
-}
-
-// Demo Modal Component
-function DemoModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [isOpen]);
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300"
-        onClick={onClose}
-      />
-      
-      {/* Modal */}
-      <div className="relative z-10 bg-gradient-to-br from-black/95 to-green-950/90 backdrop-blur-xl border border-green-500/30 rounded-3xl p-6 md:p-8 shadow-2xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-300">
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 w-8 h-8 bg-green-500/10 hover:bg-green-500/20 border border-green-500/20 rounded-full flex items-center justify-center transition-colors duration-200 group"
-        >
-          <X className="w-4 h-4 text-green-300 group-hover:text-green-100" />
-        </button>
-
-        {/* Modal Content */}
-        <div className="space-y-8">
-          <div className="text-center">
-            <h3 className="text-2xl md:text-3xl font-bold text-green-100 mb-4 font-mono">
-              How AI Building Blocks Work
-            </h3>
-            <p className="text-green-300/80 font-mono text-base md:text-lg">
-              From prompt to running app to owned asset
-            </p>
-          </div>
-
-          {/* Demo Steps */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {[
-              { 
-                emoji: '💭', 
-                title: 'Describe Your Agent',
-                text: 'Tell us what building blocks you need in plain English. Like "I need customer support blocks"',
-                gradient: 'from-green-500/20 to-cyan-500/20',
-                example: '"I want blocks that handle email and schedule meetings"'
-              },
-              { 
-                emoji: '🧩', 
-                title: 'Blocks Snap Together',
-                text: 'Our AI connects the right building blocks with memory, skills, and logic based on your description.',
-                gradient: 'from-cyan-500/20 to-blue-500/20',
-                example: 'Memory blocks, communication modules, automation components...'
-              },
-              { 
-                emoji: '🌐', 
-                title: 'Connects to World',
-                text: 'Your assembled blocks link to real tools and data sources, staying informed and ready to take action.',
-                gradient: 'from-blue-500/20 to-green-500/20',
-                example: 'Email, calendar, databases, websites, social media...'
-              },
-              { 
-                emoji: '⚡', 
-                title: 'Runs Like an App',
-                text: 'Your agent starts working immediately. Use it yourself or let others buy their own copy as an asset!',
-                gradient: 'from-green-500/20 to-emerald-500/20',
-                example: 'Live app, automated workflows, asset ownership...'
-              }
-            ].map((step, index) => (
-              <div key={index} className={`p-6 rounded-2xl bg-gradient-to-r ${step.gradient} border border-green-500/20 backdrop-blur-sm hover:border-green-500/40 transition-all duration-300 group`}>
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${step.gradient} border border-green-500/30 flex items-center justify-center shadow-lg mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                  <span className="text-2xl">{step.emoji}</span>
-                </div>
-                <h4 className="text-green-100 font-mono font-bold text-lg mb-3">{step.title}</h4>
-                <p className="text-green-300/80 font-mono text-sm mb-4 leading-relaxed">{step.text}</p>
-                <div className="bg-black/30 rounded-lg p-3 border border-green-500/20">
-                  <p className="text-green-400/70 font-mono text-xs italic">{step.example}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Live Demo Section */}
-          <div className="bg-black/50 rounded-2xl p-6 border border-green-500/30">
-            <h4 className="text-green-100 font-mono font-bold text-xl mb-4 text-center">
-              Watch AI Blocks Snap Together
-            </h4>
-            <div className="bg-black/70 rounded-xl p-4 font-mono text-sm border border-green-500/20">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span className="text-green-300/70 ml-2">ai-block-builder</span>
-              </div>
-              <div className="space-y-2">
-                <div className="text-cyan-400">$ rom-cards build</div>
-                <div className="text-green-300/80">🧩 What AI blocks do you want to snap together?</div>
-                <div className="text-green-400 animate-pulse">
-                  &gt; "Support blocks that remember conversations and handle tickets"
-                </div>
-                <div className="text-yellow-400">🧠 Finding matching building blocks...</div>
-                <div className="text-blue-400">💾 Snapping memory blocks together...</div>
-                <div className="text-cyan-400">🔗 Connecting communication modules...</div>
-                <div className="text-purple-400">🎯 Linking automation components...</div>
-                <div className="text-orange-400">⚡ Agent is building...</div>
-                <div className="text-green-400">✅ Your AI agent is running!</div>
-                <div className="text-cyan-400">🌐 App URL: https://www.rom.cards/agents/support-hero</div>
-                <div className="text-green-300">🧠 Memory: Customer conversation history</div>
-                <div className="text-yellow-300">💎 Asset: Owned & revenue-generating!</div>
-              </div>
-            </div>
-          </div>
-
-          {/* CTA Section */}
-          <div className="text-center space-y-4">
-            <p className="text-green-300/70 font-mono text-sm">
-              Ready to build your first AI agent?
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/register">
-                <Button 
-                  onClick={onClose}
-                  className="bg-gradient-to-r from-green-600 to-cyan-600 hover:from-green-700 hover:to-cyan-700 text-black border border-green-500/30 shadow-2xl shadow-green-500/25 hover:shadow-green-500/40 px-8 py-3 font-mono text-base group transform hover:scale-105 transition-all duration-300 rounded-xl"
-                >
-                  <Sparkles className="w-5 h-5 mr-2 group-hover:animate-bounce text-black" />
-                  Build My Agent
-                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform text-black" />
-                </Button>
-              </Link>
-              <Button
-                variant="outline"
-                onClick={onClose}
-                className="border-green-500/30 bg-green-500/10 text-green-300 hover:bg-green-500/20 hover:text-green-100 hover:border-green-500/50 backdrop-blur-sm px-8 py-3 font-mono text-base rounded-xl"
-              >
-                Got It, Thanks!
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Clean Enhanced Hero Section Component
-function EnhancedHeroSection() {
-  const [showDemo, setShowDemo] = useState(false);
-
-  return (
-    <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-black">
-      {/* Three.js Wave Animation - positioned absolutely behind content with reduced opacity */}
-      <div className="absolute inset-0 z-0 opacity-30">
-        <WaveAnimation />
-      </div>
-      
-      {/* Removed fallback animated background for cleaner look */}
-      
-      <div className="relative z-10 w-full max-w-7xl mx-auto px-6 py-20">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
-          
-          {/* Left Content - Takes 8 columns on large screens */}
-          <div className="lg:col-span-8 space-y-8">
-            {/* Status Badge with Gradient */}
-            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500/20 to-cyan-500/20 backdrop-blur-sm border border-white/20 rounded-full px-6 py-3 shadow-lg">
-              <div className="w-3 h-3 bg-gradient-to-r from-green-400 to-cyan-400 rounded-full animate-pulse shadow-lg"></div>
-              <span className="text-white font-mono text-sm font-medium">🧩 Lego for AI Agents</span>
-            </div>
-            
-            {/* Main Headline with Colorful Gradient */}
-            <div className="space-y-6">
-              <h1 className="text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-200 via-emerald-200 to-cyan-200 font-mono tracking-tight leading-none">
-                Rom Cards
-              </h1>
-              
-              <p className="text-xl md:text-2xl lg:text-3xl text-white max-w-4xl leading-relaxed">
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 font-semibold">Lego for AI Agents</span>
-                — Assemble from Prompts. Run like Apps. Own like Assets.
-              </p>
-              
-              <p className="text-base md:text-lg lg:text-xl text-white/70 max-w-3xl leading-relaxed">
-                Build powerful AI agents using simple building blocks — just type what you want and watch your digital agent come to life! ✨
-              </p>
-            </div>
-
-            {/* Colorful Terminal Demo */}
-            <div className="w-full max-w-3xl">
-              <div className="bg-gradient-to-br from-slate-800/80 to-purple-900/40 backdrop-blur-xl border border-white/20 rounded-3xl p-6 md:p-8 shadow-2xl">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-4 h-4 bg-gradient-to-r from-red-400 to-red-500 rounded-full shadow-lg"></div>
-                  <div className="w-4 h-4 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full shadow-lg"></div>
-                  <div className="w-4 h-4 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full shadow-lg"></div>
-                  <span className="text-white/80 ml-3 font-mono text-sm">Digital Agent Assembler</span>
-                </div>
-                <div className="text-left space-y-4">
-                  <div className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 font-mono text-sm opacity-75">💭 What agent do you want to assemble?</div>
-                  <TypewriterEffect />
-                  <div className="text-white/60 font-mono text-sm mt-4">
-                    → Your agent is evolving... 🐾✨
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Vibrant CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 pt-4 w-full max-w-lg">
-              <Link href="/register" className="flex-1">
-                <Button className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 shadow-2xl shadow-purple-500/25 hover:shadow-purple-500/40 px-6 py-4 font-mono text-base group transform hover:scale-105 transition-all duration-300 rounded-xl h-14 flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 mr-3 group-hover:animate-bounce flex-shrink-0" />
-                  <span className="flex-1 text-center">Assemble My Agent</span>
-                  <ArrowRight className="w-5 h-5 ml-3 group-hover:translate-x-1 transition-transform flex-shrink-0" />
-                </Button>
-              </Link>
-              
-              <Button
-                variant="outline"
-                onClick={() => setShowDemo(true)}
-                className="flex-1 w-full border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white hover:border-white/50 backdrop-blur-sm px-6 py-4 font-mono text-base group rounded-xl h-14 flex items-center justify-center"
-              >
-                <Play className="w-5 h-5 mr-3 flex-shrink-0" />
-                <span className="flex-1 text-center">See Evolution</span>
-              </Button>
-            </div>
-          </div>
-
-          {/* Right Side - Success Stories - Takes 4 columns on large screens */}
-          <div className="lg:col-span-4">
-            <div className="sticky top-20">
-              {/* Desktop Success Stories */}
-              <div className="hidden lg:block">
-                <div className="mb-6 text-center">
-                  <h3 className="text-xl font-mono font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 mb-2">
-                    Success Stories
-                  </h3>
-                  <p className="text-white/60 font-mono text-sm">
-                    Real people earning with agents
-                  </p>
-                </div>
-                <FloatingSuccessStories />
-              </div>
-
-              {/* Mobile Success Stories */}
-              <div className="lg:hidden">
-                <div className="text-center mb-6">
-                  <h3 className="text-lg font-mono font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 mb-2">
-                    Success Stories
-                  </h3>
-                  <p className="text-white/60 font-mono text-sm">
-                    Real people earning with agents
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {[
-                    { 
-                      icon: '🛒', 
-                      name: 'E-commerce Auto-Pilot', 
-                      gradient: 'from-blue-500 to-cyan-400',
-                      revenue: '$2,847/mo',
-                      description: 'Saved 20 hours/week on inventory and customer emails'
-                    },
-                    { 
-                      icon: '🎯', 
-                      name: 'Lead Scoring System', 
-                      gradient: 'from-purple-500 to-pink-400',
-                      revenue: '$5,123/mo', 
-                      description: 'Doubled conversion rate by auto-qualifying leads'
-                    },
-                    { 
-                      icon: '📧', 
-                      name: 'Newsletter Automation', 
-                      gradient: 'from-orange-500 to-red-400',
-                      revenue: '$1,956/mo',
-                      description: 'Grew email list 300% with automated sequences'
-                    },
-                    { 
-                      icon: '📊', 
-                      name: 'Customer CRM Dashboard', 
-                      gradient: 'from-green-500 to-teal-400',
-                      revenue: '$3,234/mo',
-                      description: 'Never loses track of customer conversations'
-                    }
-                  ].map((story, index) => (
-                    <div
-                      key={index}
-                      className="relative bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20 shadow-2xl overflow-hidden"
-                    >
-                      <div className={`absolute inset-0 bg-gradient-to-br ${story.gradient} opacity-20 rounded-2xl`}></div>
-                      <div className="relative z-10">
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="text-2xl">{story.icon}</span>
-                          <div>
-                            <div className="text-white font-bold text-sm">{story.name}</div>
-                            <div className={`text-transparent bg-clip-text bg-gradient-to-r ${story.gradient} font-bold text-xs`}>
-                              {story.revenue}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-white/80 text-xs">{story.description}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Demo Modal */}
-      <DemoModal isOpen={showDemo} onClose={() => setShowDemo(false)} />
-
-      {/* Subtle gradient overlay */}
-    </section>
-  );
-}
-
-// Enhanced Matrix Rain Effect Component with Colors
-function MatrixRain() {
-  const [drops, setDrops] = useState<Array<{id: number, x: number, y: number, speed: number, char: string, color: string}>>([]);
-
-  useEffect(() => {
-    const chars = ['0', '1', 'ロ', 'ム', 'カ', 'ー', 'ド', '∧', '∨', '⊕', '⊗', '∀', '∃'];
-    const colors = ['text-green-400', 'text-cyan-400', 'text-blue-400', 'text-purple-400'];
-    
-    const newDrops = Array.from({length: 30}, (_, i) => ({
-      id: i,
-      x: Math.random() * 100,
-      y: Math.random() * 100,
-      speed: 0.3 + Math.random() * 0.7,
-      char: chars[Math.floor(Math.random() * chars.length)],
-      color: i % 4 === 0 ? colors[Math.floor(Math.random() * colors.length)] : 'text-green-400'
-    }));
-    setDrops(newDrops);
-
-    const interval = setInterval(() => {
-      setDrops(prev => prev.map(drop => ({
-        ...drop,
-        y: drop.y > 100 ? -10 : drop.y + drop.speed,
-        char: Math.random() > 0.95 ? chars[Math.floor(Math.random() * chars.length)] : drop.char
+        y: particle.y > 100 ? -5 : particle.y + particle.speed,
+        opacity: 0.2 + Math.sin(Date.now() * 0.001 + particle.id) * 0.2
       })));
     }, 100);
 
@@ -776,585 +141,71 @@ function MatrixRain() {
   }, []);
 
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20">
-      {drops.map(drop => (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {particles.map(particle => (
         <div
-          key={drop.id}
-          className={`absolute font-mono text-sm animate-pulse transition-all duration-300 ${drop.color}`}
+          key={particle.id}
+          className="absolute w-1 h-1 bg-green-400 rounded-full"
           style={{
-            left: `${drop.x}%`,
-            top: `${drop.y}%`,
-            transform: 'translateY(-50%)',
-            textShadow: '0 0 10px currentColor'
+            left: `${particle.x}%`,
+            top: `${particle.y}%`,
+            opacity: particle.opacity,
+            boxShadow: '0 0 10px #00ff88',
           }}
-        >
-          {drop.char}
-        </div>
+        />
       ))}
     </div>
   );
 }
 
-// Interactive Demo Preview Component with Enhanced Colors
-function InteractiveDemoPreview() {
-  const [step, setStep] = useState(0);
-  const [isHovered, setIsHovered] = useState(false);
-  
-  const steps = [
-    { text: 'Type your blocks...', icon: Terminal, color: 'text-green-400', bg: 'from-green-500/20 to-green-600/10' },
-    { text: 'AI finds matching blocks', icon: Brain, color: 'text-cyan-400', bg: 'from-cyan-500/20 to-blue-600/10' },
-    { text: 'Blocks snap together', icon: Code, color: 'text-purple-400', bg: 'from-purple-500/20 to-pink-600/10' },
-    { text: 'Agent runs & earns!', icon: Zap, color: 'text-orange-400', bg: 'from-orange-500/20 to-red-600/10' }
+// Clean typewriter effect
+function TypewriterText() {
+  const [text, setText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [loopNum, setLoopNum] = useState(0);
+
+  const words = [
+    'Your childhood digital pet, evolved.',
+    'Now they remember everything.',
+    'Now they help with real life.',
+    'Your AI companion awaits.'
   ];
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setStep(prev => (prev + 1) % steps.length);
-    }, isHovered ? 4000 : 2500);
-    return () => clearInterval(interval);
-  }, [isHovered]);
+    const handleTyping = () => {
+      const current = loopNum % words.length;
+      const fullText = words[current];
+
+      setText(
+        isDeleting
+          ? fullText.substring(0, text.length - 1)
+          : fullText.substring(0, text.length + 1)
+      );
+
+      let typeSpeed = 150;
+
+      if (isDeleting) {
+        typeSpeed /= 2;
+      }
+
+      if (!isDeleting && text === fullText) {
+        setTimeout(() => setIsDeleting(true), 2000);
+      } else if (isDeleting && text === '') {
+        setIsDeleting(false);
+        setLoopNum(loopNum + 1);
+      }
+
+      setTimeout(handleTyping, typeSpeed);
+    };
+
+    const timer = setTimeout(handleTyping, 150);
+    return () => clearTimeout(timer);
+  }, [text, isDeleting, loopNum, words]);
 
   return (
-    <div 
-      className="bg-gradient-to-br from-green-500/10 to-green-700/10 border border-green-500/20 rounded-2xl p-6 backdrop-blur-sm hover:border-green-500/40 transition-all duration-500 transform hover:scale-105"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <div className="space-y-4">
-        {steps.map((stepItem, index) => (
-          <div
-            key={index}
-            className={`flex items-center gap-3 transition-all duration-500 transform ${
-              index === step ? 'opacity-100 scale-105 translate-x-2' : index < step ? 'opacity-70' : 'opacity-30'
-            }`}
-          >
-            <div className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center bg-gradient-to-br ${stepItem.bg} transition-all duration-500 ${
-              index === step ? `border-green-400 shadow-lg shadow-green-400/30 ${stepItem.bg}` : 
-              index < step ? 'border-green-500 bg-green-500/10' : 'border-green-600/30'
-            }`}>
-              <stepItem.icon className={`w-4 h-4 ${stepItem.color} transition-transform duration-300 ${
-                index === step ? 'scale-110' : ''
-              }`} />
-            </div>
-            <span className={`font-mono text-sm transition-all duration-500 ${
-              index === step ? `${stepItem.color} font-semibold drop-shadow-lg` : 
-              index < step ? 'text-green-300' : 'text-green-600'
-            }`}>
-              {stepItem.text}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Enhanced Animated Code Block Component
-function AnimatedCodeBlock() {
-  const [currentLine, setCurrentLine] = useState(0);
-  const [isHovered, setIsHovered] = useState(false);
-  
-  const codeLines = [
-    { text: '> "Snap together customer support building blocks"', color: 'text-cyan-400' },
-    { text: '  ✓ Connecting memory blocks...', color: 'text-green-400' },
-    { text: '  ✓ Linking conversation modules...', color: 'text-blue-400' },
-    { text: '  ✓ Assembling support channels...', color: 'text-purple-400' },
-    { text: '  ✓ Building app runtime...', color: 'text-orange-400' },
-    { text: '🧩 Agent assembled! Running as app, owned as asset.', color: 'text-pink-400' }
-  ];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentLine(prev => (prev + 1) % codeLines.length);
-    }, isHovered ? 3000 : 2000);
-    return () => clearInterval(interval);
-  }, [isHovered]);
-
-  return (
-    <div 
-      className="bg-black/80 border border-green-500/30 rounded-xl p-6 font-mono text-sm backdrop-blur-sm hover:border-green-500/50 hover:shadow-lg hover:shadow-green-500/20 transition-all duration-500 transform hover:scale-105"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <div className="flex items-center gap-2 mb-4">
-        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-        <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse" style={{ animationDelay: '0.2s' }}></div>
-        <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" style={{ animationDelay: '0.4s' }}></div>
-        <span className="text-green-300 ml-2">agent-assembler.terminal</span>
-      </div>
-      <div className="space-y-2">
-        {codeLines.map((line, index) => (
-          <div
-            key={index}
-            className={`transition-all duration-500 transform ${
-              index <= currentLine 
-                ? `${line.color} opacity-100 translate-x-0` 
-                : 'text-green-600 opacity-30 translate-x-2'
-            }`}
-            style={{ 
-              textShadow: index <= currentLine ? '0 0 10px currentColor' : 'none'
-            }}
-          >
-            {line.text}
-            {index === currentLine && (
-              <span className="animate-pulse text-green-400 ml-1">_</span>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Enhanced Live Metrics Component
-function LiveMetrics() {
-  const [metrics, setMetrics] = useState({
-    agents: 142,
-    revenue: 85670,
-    uptime: 99.9
-  });
-  const [animatingMetric, setAnimatingMetric] = useState<number | null>(null);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const metricIndex = Math.floor(Math.random() * 3);
-      setAnimatingMetric(metricIndex);
-      
-      setTimeout(() => {
-        setMetrics(prev => ({
-          agents: metricIndex === 0 ? prev.agents + Math.floor(Math.random() * 2 + 1) : prev.agents,
-          revenue: metricIndex === 1 ? prev.revenue + Math.floor(Math.random() * 200 + 100) : prev.revenue,
-          uptime: metricIndex === 2 ? Math.min(99.9 + Math.random() * 0.08, 99.99) : prev.uptime
-        }));
-        
-        setTimeout(() => setAnimatingMetric(null), 500);
-      }, 200);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const metricData = [
-    { 
-      icon: Activity, 
-      value: metrics.agents, 
-      label: 'Active Agents', 
-      isAnimating: animatingMetric === 0,
-      gradient: 'from-green-500/20 to-cyan-500/20',
-      border: 'border-green-500/20',
-      color: 'text-green-400'
-    },
-    { 
-      icon: TrendingUp, 
-      value: `$${metrics.revenue.toLocaleString()}`, 
-      label: 'Revenue Generated', 
-      isAnimating: animatingMetric === 1,
-      gradient: 'from-blue-500/20 to-purple-500/20',
-      border: 'border-blue-500/20',
-      color: 'text-blue-400'
-    },
-    { 
-      icon: Cpu, 
-      value: `${metrics.uptime.toFixed(1)}%`, 
-      label: 'Uptime', 
-      isAnimating: animatingMetric === 2,
-      gradient: 'from-purple-500/20 to-pink-500/20',
-      border: 'border-purple-500/20',
-      color: 'text-purple-400'
-    }
-  ];
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {metricData.map((metric, index) => (
-        <div key={index} className={`bg-gradient-to-br ${metric.gradient} border ${metric.border} rounded-xl p-4 text-center transition-all duration-500 backdrop-blur-sm ${
-          metric.isAnimating ? `bg-gradient-to-br ${metric.gradient} border-opacity-60 shadow-lg shadow-current/20 scale-105` : ''
-        }`}>
-          <metric.icon className={`w-6 h-6 ${metric.color} mx-auto mb-2 transition-transform duration-300 ${
-            metric.isAnimating ? 'scale-110' : ''
-          }`} style={{ filter: metric.isAnimating ? 'drop-shadow(0 0 8px currentColor)' : 'none' }} />
-          <div className={`text-2xl font-bold text-green-100 font-mono transition-all duration-500 ${
-            metric.isAnimating ? 'text-green-50 scale-105' : ''
-          }`} style={{ textShadow: metric.isAnimating ? '0 0 10px currentColor' : 'none' }}>{metric.value}</div>
-          <div className="text-green-300/70 font-mono text-sm">{metric.label}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Enhanced Features Section with Interactive Cards
-function EnhancedFeatureCard({ feature, index }: { feature: any, index: number }) {
-  const [isHovered, setIsHovered] = useState(false);
-  
-  const colorMap = [
-    { text: 'text-green-400', shadow: 'shadow-green-500/20', glow: 'drop-shadow-green' },
-    { text: 'text-cyan-400', shadow: 'shadow-cyan-500/20', glow: 'drop-shadow-cyan' },
-    { text: 'text-purple-400', shadow: 'shadow-purple-500/20', glow: 'drop-shadow-purple' },
-    { text: 'text-orange-400', shadow: 'shadow-orange-500/20', glow: 'drop-shadow-orange' }
-  ];
-  
-  const colors = colorMap[index % colorMap.length];
-
-  return (
-    <Card 
-      className={`bg-gradient-to-br ${feature.gradient} border ${feature.border} backdrop-blur-sm transition-all duration-500 hover:-translate-y-2 group cursor-pointer ${
-        isHovered ? `hover:shadow-xl ${colors.shadow}` : 'hover:shadow-lg hover:shadow-green-500/10'
-      }`}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <CardHeader className="pb-3">
-        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.gradient} border ${feature.border} flex items-center justify-center mb-3 transition-all duration-500 ${
-          isHovered ? 'scale-125 rotate-6' : 'group-hover:scale-110'
-        }`}>
-          <feature.icon className={`w-6 h-6 transition-all duration-300 ${isHovered ? colors.text : 'text-green-300'}`} 
-            style={{ filter: isHovered ? 'drop-shadow(0 0 8px currentColor)' : 'none' }} />
-        </div>
-        <CardTitle className={`font-mono text-lg transition-all duration-300 ${isHovered ? colors.text : 'text-green-100'}`}>
-          {feature.title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <CardDescription className="text-green-300/70 text-sm font-mono leading-relaxed">
-          {feature.description}
-        </CardDescription>
-      </CardContent>
-    </Card>
-  );
-}
-
-// Enhanced Use Case Cards
-function EnhancedUseCaseCard({ useCase, index }: { useCase: any, index: number }) {
-  const [isHovered, setIsHovered] = useState(false);
-  
-  const gradients = [
-    'from-green-500/10 via-cyan-500/5 to-green-700/10',
-    'from-cyan-500/10 via-blue-500/5 to-cyan-700/10',
-    'from-blue-500/10 via-purple-500/5 to-blue-700/10',
-    'from-purple-500/10 via-pink-500/5 to-purple-700/10',
-    'from-pink-500/10 via-orange-500/5 to-pink-700/10',
-    'from-orange-500/10 via-yellow-500/5 to-orange-700/10'
-  ];
-
-  return (
-    <Card 
-      className={`bg-gradient-to-br ${gradients[index % gradients.length]} border-green-500/20 backdrop-blur-sm transition-all duration-500 hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/10 group cursor-pointer transform hover:-translate-y-1 ${
-        isHovered ? 'scale-105' : ''
-      }`}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className={`w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center border border-green-500/20 transition-all duration-500 ${
-            isHovered ? 'scale-125 rotate-12 shadow-lg shadow-green-500/30' : 'group-hover:scale-110'
-          }`}>
-            <span className="text-2xl" style={{ filter: isHovered ? 'drop-shadow(0 0 8px currentColor)' : 'none' }}>
-              {useCase.emoji}
-            </span>
-          </div>
-          <CardTitle className={`font-mono text-lg transition-all duration-300 ${
-            isHovered ? 'text-green-50' : 'text-green-100'
-          }`}>
-            {useCase.title}
-          </CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <CardDescription className="text-green-300/70 font-mono leading-relaxed">
-          {useCase.description}
-        </CardDescription>
-      </CardContent>
-    </Card>
-  );
-}
-
-// Enhanced Revenue Flow Animation Component
-function RevenueFlowAnimation() {
-  const [activeFlow, setActiveFlow] = useState(0);
-  const flows = [
-    { from: 'Your Agent', to: 'User Purchase', amount: '$50', color: 'text-green-400', gradient: 'from-green-500/20 to-cyan-500/20' },
-    { from: 'Platform Fee', to: 'You Earn', amount: '$35', color: 'text-cyan-400', gradient: 'from-cyan-500/20 to-blue-500/20' },
-    { from: 'Monthly Usage', to: 'Recurring Income', amount: '$20/mo', color: 'text-purple-400', gradient: 'from-purple-500/20 to-pink-500/20' }
-  ];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setActiveFlow(prev => (prev + 1) % flows.length);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="space-y-4">
-      {flows.map((flow, index) => (
-        <div key={index} className={`flex items-center justify-between p-4 rounded-xl border transition-all duration-700 ease-in-out transform ${
-          index === activeFlow 
-            ? `bg-gradient-to-r ${flow.gradient} border-green-500/30 shadow-lg shadow-green-500/10 scale-105` 
-            : 'bg-black/20 border-green-500/10'
-        }`}>
-          <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full transition-all duration-500 ${
-              index === activeFlow ? 'bg-green-400 scale-125 shadow-lg shadow-green-400/50' : 'bg-green-600'
-            }`} style={{ filter: index === activeFlow ? 'drop-shadow(0 0 6px currentColor)' : 'none' }}></div>
-            <span className="font-mono text-sm text-green-200">{flow.from}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <ArrowRight className={`w-4 h-4 transition-all duration-500 ${
-              index === activeFlow ? `${flow.color} translate-x-1 scale-110` : 'text-green-600'
-            }`} style={{ filter: index === activeFlow ? 'drop-shadow(0 0 6px currentColor)' : 'none' }} />
-          </div>
-          <div className="text-right">
-            <div className={`font-mono font-bold transition-all duration-500 ${
-              index === activeFlow ? flow.color + ' scale-110' : 'text-green-600'
-            }`} style={{ textShadow: index === activeFlow ? '0 0 10px currentColor' : 'none' }}>{flow.amount}</div>
-            <div className="font-mono text-xs text-green-300">{flow.to}</div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Enhanced Agent Licensing Examples Component
-function AgentLicensingExamples() {
-  const examples = [
-    {
-      name: 'Shopping Agent',
-      creator: '@sarah_dev',
-      price: '$49/month',
-      users: '1,247',
-      revenue: '$61,503',
-      icon: '🛍️',
-      gradient: 'from-green-500/10 via-cyan-500/5 to-green-700/10',
-      border: 'border-green-500/20',
-      hoverBorder: 'hover:border-green-500/40',
-      growth: '+23%'
-    },
-    {
-      name: 'Lead Hunter Agent',
-      creator: '@mike_ai',
-      price: '$29/month',
-      users: '892',
-      revenue: '$25,868',
-      icon: '🎯',
-      gradient: 'from-cyan-500/10 via-blue-500/5 to-cyan-700/10',
-      border: 'border-cyan-500/20',
-      hoverBorder: 'hover:border-cyan-500/40',
-      growth: '+18%'
-    },
-    {
-      name: 'Creative Agent',
-      creator: '@alex_code',
-      price: '$39/month',
-      users: '634',
-      revenue: '$24,726',
-      icon: '✨',
-      gradient: 'from-purple-500/10 via-pink-500/5 to-purple-700/10',
-      border: 'border-purple-500/20',
-      hoverBorder: 'hover:border-purple-500/40',
-      growth: '+31%'
-    }
-  ];
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      {examples.map((example, index) => (
-        <div key={index} className={`bg-gradient-to-br ${example.gradient} border ${example.border} rounded-xl p-6 backdrop-blur-sm ${example.hoverBorder} transition-all duration-300 group cursor-pointer transform hover:-translate-y-1 hover:shadow-lg hover:shadow-green-500/20`}>
-          <div className="flex items-center gap-3 mb-4">
-            <div className={`w-12 h-12 bg-green-500/10 rounded-xl flex items-center justify-center border ${example.border} group-hover:scale-110 transition-transform duration-300 group-hover:shadow-lg group-hover:shadow-green-500/30`}>
-              <span className="text-2xl" style={{ filter: 'drop-shadow(0 0 6px currentColor)' }}>{example.icon}</span>
-            </div>
-            <div>
-              <h4 className="font-mono font-bold text-green-100 group-hover:text-green-50 transition-colors duration-300">{example.name}</h4>
-              <p className="font-mono text-sm text-green-400">{example.creator}</p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="font-mono text-sm text-green-300">Adoption Fee:</span>
-              <span className="font-mono text-sm text-green-100 font-bold">{example.price}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-mono text-sm text-green-300">Active Users:</span>
-              <span className="font-mono text-sm text-green-100">{example.users}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="font-mono text-sm text-green-300">Total Revenue:</span>
-              <span className="font-mono text-sm text-green-400 font-bold">{example.revenue}</span>
-            </div>
-          </div>
-          <div className="mt-4 pt-4 border-t border-green-500/20">
-            <div className="flex items-center gap-2 text-green-300">
-              <TrendingUp className="w-4 h-4" />
-              <span className="font-mono text-xs">{example.growth} this month</span>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Enhanced Stats Component
-function EnhancedStatsSection() {
-  const [hoveredStat, setHoveredStat] = useState<number | null>(null);
-  
-  const statsData = [
-    { value: '100+', label: 'AI Agents Assembled', icon: Bot, color: 'text-green-400', gradient: 'from-green-500/20 to-cyan-500/20', border: 'border-green-500/20' },
-    { value: '24/7', label: 'Running Like Apps', icon: Clock, color: 'text-cyan-400', gradient: 'from-cyan-500/20 to-blue-500/20', border: 'border-cyan-500/20' },
-    { value: '∞', label: 'Building Combinations', icon: Target, color: 'text-purple-400', gradient: 'from-purple-500/20 to-pink-500/20', border: 'border-purple-500/20' },
-    { value: '95%', label: 'Asset Revenue Rate', icon: CheckCircle, color: 'text-orange-400', gradient: 'from-orange-500/20 to-red-500/20', border: 'border-orange-500/20' }
-  ];
-
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-      {statsData.map((stat, index) => (
-        <div 
-          key={index} 
-          className="text-center group cursor-pointer transform transition-all duration-500 hover:-translate-y-2"
-          onMouseEnter={() => setHoveredStat(index)}
-          onMouseLeave={() => setHoveredStat(null)}
-        >
-          <div className={`w-16 h-16 bg-gradient-to-br ${stat.gradient} border ${stat.border} rounded-2xl flex items-center justify-center mx-auto mb-4 transition-all duration-500 ${
-            hoveredStat === index ? 'scale-125 shadow-xl shadow-green-500/30 border-green-500/40' : 'group-hover:scale-110 group-hover:bg-green-500/20'
-          }`}>
-            <stat.icon className={`w-8 h-8 transition-all duration-300 ${hoveredStat === index ? stat.color : 'text-green-400'}`} 
-              style={{ filter: hoveredStat === index ? 'drop-shadow(0 0 10px currentColor)' : 'none' }} />
-          </div>
-          <div className={`text-3xl font-bold font-mono mb-2 transition-all duration-300 ${
-            hoveredStat === index ? `${stat.color} scale-110` : 'text-green-100'
-          }`} style={{ textShadow: hoveredStat === index ? '0 0 15px currentColor' : 'none' }}>{stat.value}</div>
-          <div className="text-green-300/70 font-mono text-sm">{stat.label}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Enhanced Agent Building Process Visualization
-function AgentBuildingProcess() {
-  const [activeStep, setActiveStep] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-  
-  const steps = [
-    { icon: Terminal, label: 'Describe Vision', color: 'text-green-400', gradient: 'from-green-500/20 to-cyan-500/20' },
-    { icon: Brain, label: 'AI Analysis', color: 'text-cyan-400', gradient: 'from-cyan-500/20 to-blue-500/20' },
-    { icon: Database, label: 'Memory Creation', color: 'text-blue-400', gradient: 'from-blue-500/20 to-purple-500/20' },
-    { icon: Code, label: 'Agent Birth', color: 'text-purple-400', gradient: 'from-purple-500/20 to-pink-500/20' },
-    { icon: Zap, label: 'Mission Start', color: 'text-pink-400', gradient: 'from-pink-500/20 to-orange-500/20' }
-  ];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setIsAnimating(true);
-      setTimeout(() => {
-        setActiveStep(prev => (prev + 1) % steps.length);
-        setIsAnimating(false);
-      }, 200);
-    }, isHovered ? 3000 : 2000);
-    return () => clearInterval(interval);
-  }, [isHovered]);
-
-  return (
-    <div 
-      className="w-full"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {/* Desktop Layout */}
-      <div className="hidden md:block">
-        <div className="relative">
-          {/* Background progress line with gradient */}
-          <div className="absolute top-6 left-0 right-0 flex items-center">
-            <div className="flex-1"></div>
-            <div className="flex-1 h-1 bg-gradient-to-r from-green-600/20 via-cyan-600/20 to-purple-600/20 rounded-full mx-6">
-              <div 
-                className="h-full bg-gradient-to-r from-green-400 via-cyan-400 to-purple-400 rounded-full transition-all duration-700 ease-in-out shadow-lg shadow-green-400/50"
-                style={{ 
-                  width: `${(activeStep / (steps.length - 1)) * 100}%`,
-                  filter: 'drop-shadow(0 0 8px currentColor)'
-                }}
-              />
-            </div>
-            <div className="flex-1"></div>
-          </div>
-          
-          {/* Icons and labels */}
-          <div className="flex justify-between items-start">
-            {steps.map((step, index) => (
-              <div key={index} className="flex flex-col items-center relative z-10 flex-1">
-                <div className={`w-12 h-12 rounded-xl border-2 flex items-center justify-center transition-all duration-500 ease-in-out bg-gradient-to-br ${step.gradient} backdrop-blur-sm ${
-                  index === activeStep 
-                    ? `border-green-400 shadow-xl shadow-green-400/40 scale-110` 
-                    : index < activeStep
-                    ? `border-green-500 ${step.gradient}`
-                    : 'border-green-500/20 bg-black/50'
-                } ${isAnimating && index === activeStep ? 'animate-pulse' : ''}`}>
-                  <step.icon className={`w-6 h-6 transition-all duration-500 ${
-                    index === activeStep ? `${step.color} scale-125` : 
-                    index < activeStep ? 'text-green-400' : 'text-green-600'
-                  }`} style={{ 
-                    filter: index === activeStep ? 'drop-shadow(0 0 10px currentColor)' : 'none'
-                  }} />
-                </div>
-                <span className={`text-xs font-mono mt-3 transition-all duration-500 text-center max-w-20 leading-tight ${
-                  index === activeStep ? `${step.color} font-semibold` : 
-                  index < activeStep ? 'text-green-300' : 'text-green-600'
-                }`} style={{ 
-                  textShadow: index === activeStep ? '0 0 8px currentColor' : 'none'
-                }}>
-                  {step.label}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Mobile Layout */}
-      <div className="md:hidden space-y-4">
-        {steps.map((step, index) => (
-          <div key={index} className="relative">
-            <div className="flex items-center gap-4">
-              <div className={`w-10 h-10 rounded-lg border-2 flex items-center justify-center transition-all duration-500 ease-in-out bg-gradient-to-br ${step.gradient} backdrop-blur-sm flex-shrink-0 ${
-                index === activeStep 
-                  ? `border-green-400 shadow-lg shadow-green-400/30 scale-110` 
-                  : index < activeStep
-                  ? 'border-green-500'
-                  : 'border-green-500/20 bg-black/50'
-              } ${isAnimating && index === activeStep ? 'animate-pulse' : ''}`}>
-                <step.icon className={`w-5 h-5 transition-all duration-500 ${
-                  index === activeStep ? `${step.color} scale-110` : 
-                  index < activeStep ? 'text-green-400' : 'text-green-600'
-                }`} style={{ 
-                  filter: index === activeStep ? 'drop-shadow(0 0 8px currentColor)' : 'none'
-                }} />
-              </div>
-              <div className="flex-1">
-                <span className={`text-sm font-mono transition-all duration-500 ${
-                  index === activeStep ? `${step.color} font-semibold` : 
-                  index < activeStep ? 'text-green-300' : 'text-green-600'
-                }`} style={{ 
-                  textShadow: index === activeStep ? '0 0 8px currentColor' : 'none'
-                }}>
-                  {step.label}
-                </span>
-              </div>
-            </div>
-            {index < steps.length - 1 && (
-              <div className="ml-5 mt-2 mb-2">
-                <div className={`w-0.5 h-6 transition-all duration-700 ease-in-out ${
-                  index < activeStep ? `bg-gradient-to-b ${step.gradient} shadow-sm shadow-green-400/50` : 'bg-green-600/30'
-                }`} style={{ 
-                  filter: index < activeStep ? 'drop-shadow(0 0 4px currentColor)' : 'none'
-                }} />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+    <div className="text-xl md:text-2xl text-green-400 font-medium min-h-[2rem]">
+      {text}
+      <span className="animate-pulse">|</span>
     </div>
   );
 }
@@ -1364,61 +215,54 @@ function Header() {
 
   const handleNavClick = (href: string) => {
     setIsMobileMenuOpen(false);
-    // Small delay to allow menu to close before scrolling
     setTimeout(() => {
       const element = document.querySelector(href);
       if (element) {
-        element.scrollIntoView({ 
-          behavior: 'smooth',
-          block: 'start'
-        });
+        element.scrollIntoView({ behavior: 'smooth' });
       }
     }, 100);
   };
 
   return (
     <>
-      <header className="sticky top-0 bg-black/90 backdrop-blur-xl border-b border-green-500/20 z-50">
-        <div className="max-w-7xl mx-auto px-4">
+      <header className="fixed top-0 w-full bg-black/90 backdrop-blur-md border-b border-green-500/20 z-50">
+        <div className="max-w-7xl mx-auto px-6">
           <div className="flex items-center justify-between h-16">
-            {/* Logo */}
-            <Link href="/" className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center justify-center">
-                <img src="/images/logo.png" alt="Rom Cards" className="w-6 h-6" />
-              </div>
+            <Link href="/" className="flex items-center gap-3 group">
+              <Image 
+                src="/images/logo.png" 
+                alt="Rom Cards Logo" 
+                width={40} 
+                height={40}
+                className="object-contain group-hover:scale-105 transition-transform"
+              />
+              <span className="text-xl font-bold text-white">
+                Rom Cards
+              </span>
             </Link>
 
-            {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center gap-8">
               {navLinks.map((link) => (
                 <button
                   key={link.href}
                   onClick={() => handleNavClick(link.href)}
-                  className="text-green-300 hover:text-green-200 font-mono text-sm transition-colors duration-200 hover:border-b border-green-400 cursor-pointer"
+                  className="text-green-300 hover:text-white font-medium transition-colors"
                 >
                   {link.label}
                 </button>
               ))}
             </nav>
 
-            {/* Desktop CTA Buttons */}
-            <div className="hidden md:flex items-center gap-4">
-              <Link href="/register">
-                <Button variant="outline" size="sm" className="border-green-500/30 bg-black/50 text-green-300 hover:bg-green-500/10 hover:text-green-200 hover:border-green-500/50 backdrop-blur-sm font-mono">
-                  Join Now
+            <Link href="/register" className="hidden md:block">
+              <Button className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition-colors">
+                <Play className="w-4 h-4 mr-2" />
+                Get Started
                 </Button>
               </Link>
-              <Link href="/register">
-                <Button size="sm" className="bg-gradient-to-r from-green-600 to-green-700 text-black hover:from-green-700 hover:to-green-800 border border-green-500/30 shadow-lg shadow-green-500/20 font-mono">
-                  Build Agent
-                </Button>
-              </Link>
-            </div>
 
-            {/* Mobile Menu Button */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden text-green-300 hover:text-green-200 transition-colors relative z-50"
+              className="md:hidden text-green-300 hover:text-white"
             >
               {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
@@ -1426,36 +270,27 @@ function Header() {
         </div>
       </header>
 
-      {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
-          {/* Backdrop */}
           <div 
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300"
+            className="absolute inset-0 bg-black/90"
             onClick={() => setIsMobileMenuOpen(false)}
           />
-          
-          {/* Menu Panel */}
-          <div className="absolute top-16 left-0 right-0 bg-black/95 backdrop-blur-xl border-b border-green-500/20 shadow-2xl shadow-green-500/10 animate-in slide-in-from-top duration-300">
-            <nav className="flex flex-col py-4">
+          <div className="absolute top-16 left-0 right-0 bg-black/95 backdrop-blur-md border-b border-green-500/20">
+            <nav className="flex flex-col py-6">
               {navLinks.map((link) => (
                 <button
                   key={link.href}
                   onClick={() => handleNavClick(link.href)}
-                  className="px-6 py-4 text-green-300 hover:text-green-200 hover:bg-green-500/10 font-mono text-base transition-all duration-200 text-left border-l-2 border-transparent hover:border-green-500"
+                  className="px-6 py-4 text-green-300 hover:text-white text-left"
                 >
                   {link.label}
                 </button>
               ))}
-              <div className="flex flex-col gap-4 px-6 pt-6 border-t border-green-500/20 mt-4">
+              <div className="px-6 pt-4">
                 <Link href="/register" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button variant="outline" className="w-full border-green-500/30 bg-black/50 text-green-300 hover:bg-green-500/10 hover:text-green-200 hover:border-green-500/50 backdrop-blur-sm font-mono py-3">
-                    Join Now
-                  </Button>
-                </Link>
-                <Link href="/register" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button className="w-full bg-gradient-to-r from-green-600 to-green-700 text-black hover:from-green-700 hover:to-green-800 border border-green-500/30 shadow-lg shadow-green-500/20 font-mono py-3">
-                    Build Agent
+                  <Button className="w-full bg-green-600 hover:bg-green-700 text-white">
+                    Get Started
                   </Button>
                 </Link>
               </div>
@@ -1467,715 +302,932 @@ function Header() {
   );
 }
 
-// Mobile App Demo Component
-function MobileAppDemo() {
-  const [activeTab, setActiveTab] = useState(0);
-  
-  const tabs = [
-    { 
-      id: 'dashboard', 
-      label: 'Dashboard', 
-      icon: '📊',
-      color: 'text-green-400'
-    },
-    { 
-      id: 'customers', 
-      label: 'Customers', 
-      icon: '👥',
-      color: 'text-blue-400'
-    },
-    { 
-      id: 'emails', 
-      label: 'Emails', 
-      icon: '📧',
-      color: 'text-purple-400'
-    },
-    { 
-      id: 'schedule', 
-      label: 'Schedule', 
-      icon: '⏰',
-      color: 'text-orange-400'
-    },
-    { 
-      id: 'chat', 
-      label: 'AI Chat', 
-      icon: '🤖',
-      color: 'text-cyan-400'
-    }
-  ];
-
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 0: // Dashboard
-        return (
-          <div className="p-4 space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-green-100 font-mono font-bold text-lg">Dashboard</h3>
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-            </div>
-            
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: 'Active Carts', value: '12', color: 'text-orange-400' },
-                { label: 'Emails Sent', value: '47', color: 'text-green-400' },
-                { label: 'Recovery Rate', value: '23%', color: 'text-blue-400' },
-                { label: 'Revenue', value: '$1,247', color: 'text-purple-400' }
-              ].map((stat, index) => (
-                <div key={index} className="bg-black/30 border border-green-500/20 rounded-lg p-3 text-center">
-                  <div className={`text-xl font-bold font-mono ${stat.color}`}>{stat.value}</div>
-                  <div className="text-green-300/70 font-mono text-xs">{stat.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Quick Actions */}
-            <div className="space-y-2">
-              <h4 className="text-green-200 font-mono text-sm font-semibold">Quick Actions</h4>
-              {[
-                { action: 'Send Cart Recovery Emails', status: 'Ready', color: 'text-green-400' },
-                { action: 'Generate Weekly Report', status: 'Scheduled', color: 'text-blue-400' },
-                { action: 'Update Discount Codes', status: 'In Progress', color: 'text-orange-400' }
-              ].map((item, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-green-500/5 border border-green-500/10 rounded-lg">
-                  <div>
-                    <div className="text-green-100 font-mono text-sm">{item.action}</div>
-                    <div className={`${item.color} font-mono text-xs`}>{item.status}</div>
-                  </div>
-                  <button className="w-8 h-8 bg-green-500/10 border border-green-500/20 rounded-md flex items-center justify-center">
-                    <span className="text-green-400 text-xs">→</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case 1: // Customers
-        return (
-          <div className="p-4 space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-green-100 font-mono font-bold text-lg">Customers</h3>
-              <span className="text-orange-300 font-mono text-xs">12 abandoned carts</span>
-            </div>
-            
-            <div className="space-y-3">
-              {[
-                { name: 'Sarah M.', email: 'sarah@email.com', value: '$127.50', timeLeft: '2h 45m', status: 'pending', avatar: '👩' },
-                { name: 'Mike R.', email: 'mike@email.com', value: '$89.99', timeLeft: '5h 12m', status: 'scheduled', avatar: '👨' },
-                { name: 'Lisa K.', email: 'lisa@email.com', value: '$203.25', timeLeft: '1h 33m', status: 'pending', avatar: '👩‍💼' },
-                { name: 'Tom B.', email: 'tom@email.com', value: '$156.80', timeLeft: '8h 07m', status: 'sent', avatar: '👨‍💻' }
-              ].map((customer, index) => (
-                <div key={index} className="bg-green-500/5 border border-green-500/10 rounded-lg p-3">
-                  <div className="flex items-center gap-3 mb-2">
-                    <span className="text-2xl">{customer.avatar}</span>
-                    <div className="flex-1">
-                      <div className="text-green-100 font-mono text-sm font-medium">{customer.name}</div>
-                      <div className="text-green-400/60 font-mono text-xs">{customer.email}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-green-300 font-mono text-sm font-bold">{customer.value}</div>
-                      <div className="text-green-300/80 font-mono text-xs">{customer.timeLeft}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className={`font-mono text-xs px-2 py-1 rounded ${
-                      customer.status === 'pending' ? 'bg-orange-500/20 text-orange-400' :
-                      customer.status === 'scheduled' ? 'bg-blue-500/20 text-blue-400' :
-                      'bg-green-500/20 text-green-400'
-                    }`}>
-                      {customer.status}
-                    </span>
-                    <div className="flex gap-1">
-                      <button className="w-6 h-6 bg-green-500/10 border border-green-500/20 rounded text-xs">📧</button>
-                      <button className="w-6 h-6 bg-blue-500/10 border border-blue-500/20 rounded text-xs">⏰</button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case 2: // Emails
-        return (
-          <div className="p-4 space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-green-100 font-mono font-bold text-lg">Email Templates</h3>
-              <button className="text-green-400 font-mono text-xs">+ New</button>
-            </div>
-            
-            {/* Email Preview */}
-            <div className="bg-black/30 border border-green-500/20 rounded-lg p-4">
-              <div className="text-green-300/70 font-mono text-xs mb-2">Subject: Don't forget your items + 15% OFF!</div>
-              <div className="space-y-2 text-green-200/80 font-mono text-sm">
-                <p>Hi Sarah,</p>
-                <p>You left some great items in your cart worth $127.50.</p>
-                <p>Complete your purchase in the next 24 hours and save 15% with code: <span className="text-cyan-400 font-bold">CART15</span></p>
-                <div className="mt-3 p-2 bg-green-500/10 border border-green-500/20 rounded text-center">
-                  <span className="text-green-300 font-bold text-xs">Complete Purchase Now →</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Email Stats */}
-            <div className="space-y-2">
-              <h4 className="text-green-200 font-mono text-sm font-semibold">Campaign Performance</h4>
-              {[
-                { metric: 'Open Rate', value: '24.5%', trend: '+2.1%' },
-                { metric: 'Click Rate', value: '8.3%', trend: '+1.5%' },
-                { metric: 'Conversion', value: '18.2%', trend: '+3.2%' }
-              ].map((stat, index) => (
-                <div key={index} className="flex items-center justify-between p-2 bg-green-500/5 rounded">
-                  <span className="text-green-300 font-mono text-sm">{stat.metric}</span>
-                  <div className="text-right">
-                    <span className="text-green-100 font-mono text-sm font-bold">{stat.value}</span>
-                    <span className="text-green-400 font-mono text-xs ml-2">{stat.trend}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case 3: // Schedule
-        return (
-          <div className="p-4 space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-green-100 font-mono font-bold text-lg">Schedule</h3>
-              <button className="text-purple-400 font-mono text-xs">+ Add Task</button>
-            </div>
-            
-            <div className="space-y-3">
-              {[
-                { time: '2:30 PM', task: 'Send cart recovery emails', count: '8 emails', type: 'email' },
-                { time: '6:00 PM', task: 'Follow-up reminders', count: '3 emails', type: 'email' },
-                { time: '9:00 AM', task: 'Weekly analysis report', count: 'Tomorrow', type: 'report' },
-                { time: '12:00 PM', task: 'Update discount codes', count: 'Daily', type: 'update' }
-              ].map((schedule, index) => (
-                <div key={index} className="bg-purple-500/5 border border-purple-500/10 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
-                      <span className="text-purple-300 font-mono text-sm font-bold">{schedule.time}</span>
-                    </div>
-                    <span className="text-purple-400/60 font-mono text-xs">{schedule.count}</span>
-                  </div>
-                  <div className="text-green-100 font-mono text-sm">{schedule.task}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Today's Progress */}
-            <div className="bg-green-500/5 border border-green-500/10 rounded-lg p-3 mt-4">
-              <h4 className="text-green-200 font-mono text-sm font-semibold mb-2">Today's Progress</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs font-mono">
-                  <span className="text-green-300">Tasks Completed</span>
-                  <span className="text-green-400 font-bold">6/8</span>
-                </div>
-                <div className="w-full bg-green-900/30 rounded-full h-2">
-                  <div className="bg-green-400 h-2 rounded-full" style={{ width: '75%' }}></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-
-      case 4: // AI Chat
-        return (
-          <div className="p-4 space-y-4">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 bg-cyan-500/10 border border-cyan-500/20 rounded-lg flex items-center justify-center">
-                <span className="text-cyan-400 text-sm">🤖</span>
-              </div>
-              <h3 className="text-green-100 font-mono font-bold text-lg">AI Assistant</h3>
-            </div>
-            
-            <div className="space-y-4 max-h-64 overflow-y-auto">
-              {[
-                { type: 'ai', message: 'Found 12 abandoned carts. Should I send recovery emails?' },
-                { type: 'user', message: 'Yes, but only to carts over $100' },
-                { type: 'ai', message: 'Filtered to 8 high-value carts. Scheduling emails with 15% discount codes.' },
-                { type: 'ai', message: 'Email campaign queued. Expected recovery: $890 (18% avg rate)' },
-                { type: 'user', message: 'Perfect! Schedule the next batch for 6 PM' },
-                { type: 'ai', message: '✅ Scheduled! I\'ll send 3 follow-up emails at 6 PM today.' }
-              ].map((chat, index) => (
-                <div key={index} className={`flex ${chat.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-xs p-4 rounded-2xl font-mono text-sm leading-relaxed ${
-                    chat.type === 'user' 
-                      ? 'bg-green-500/20 border border-green-500/30 text-green-100' 
-                      : 'bg-cyan-500/20 border border-cyan-500/30 text-cyan-100'
-                  }`}>
-                    {chat.message}
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            <div className="flex gap-3 mt-6 pt-4 border-t border-green-500/20">
-              <input 
-                type="text" 
-                placeholder="Ask AI anything..." 
-                className="flex-1 bg-green-500/5 border border-green-500/20 rounded-xl px-4 py-3 text-green-100 font-mono text-sm focus:outline-none focus:border-green-500/40 placeholder:text-green-500/50"
-              />
-              <button className="w-12 h-12 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 rounded-xl flex items-center justify-center transition-colors duration-200">
-                <span className="text-cyan-400 text-lg">→</span>
-              </button>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
-
+// Clean hero section focused on the core message
+function HeroSection() {
   return (
-    <div className="bg-gradient-to-br from-green-500/10 via-green-600/5 to-green-700/10 border border-green-500/20 rounded-3xl backdrop-blur-sm shadow-2xl overflow-hidden w-full max-w-sm mx-auto" style={{ height: 'min(700px, 80vh)', maxWidth: 'min(350px, calc(100vw - 2rem))' }}>
-      {/* Mobile App Header */}
-      <div className="bg-black/40 border-b border-green-500/20 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center justify-center">
-              <span className="text-lg">🛒</span>
+    <section id="home" className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-950 via-gray-950 to-black">
+      <Wave3D />
+      <FloatingParticles />
+      
+      {/* Background elements */}
+      <div className="absolute inset-0 opacity-20">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute top-3/4 left-1/2 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl"></div>
+      </div>
+      
+      <div className="relative z-10 max-w-6xl mx-auto px-8 text-center">
+        
+        <div className="inline-flex items-center gap-3 bg-gradient-to-r from-emerald-500/10 to-blue-500/10 backdrop-blur-xl border border-emerald-400/20 rounded-full px-6 py-3 mb-12 shadow-xl shadow-emerald-500/10">
+          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse shadow-lg shadow-emerald-400/50"></div>
+          <span className="text-emerald-300 text-sm font-medium tracking-wide">AI Digital Companions</span>
             </div>
-            <div>
-              <h3 className="text-green-100 font-mono font-bold text-sm">Cart Recovery</h3>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className="text-green-300 font-mono text-xs">Live</span>
-              </div>
+            
+        <h1 className="text-6xl md:text-8xl font-bold text-white mb-8 tracking-tight leading-tight">
+          Your Personal
+          <span className="block text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-400 to-purple-400 font-extrabold">
+            Rom Cards
+                    </span>
+        </h1>
+        
+        <div className="mb-12 min-h-[3rem] flex items-center justify-center">
+          <TypewriterText />
             </div>
-          </div>
-          <div className="flex gap-1">
-            <div className="w-1 h-1 bg-green-400 rounded-full"></div>
-            <div className="w-1 h-1 bg-green-400 rounded-full"></div>
-            <div className="w-1 h-1 bg-green-400 rounded-full"></div>
-          </div>
-        </div>
-      </div>
+            
+        <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-4xl mx-auto leading-relaxed font-light">
+          Remember those digital pets? They're back—but now they're intelligent AI companions that actually help run your life.
+        </p>
 
-      {/* Content Area */}
-      <div className="flex-1 overflow-y-auto" style={{ height: 'calc(100% - 140px)' }}>
-        {renderTabContent()}
-      </div>
+        {/* CTAs */}
+        <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-12">
+          <Link href="/register">
+            <Button className="group bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white px-12 py-6 text-xl rounded-2xl shadow-2xl shadow-emerald-500/25 transform hover:scale-105 hover:shadow-emerald-500/40 transition-all duration-300 border border-emerald-500/30">
+              <Play className="w-6 h-6 mr-3 group-hover:scale-110 transition-transform" />
+              Create Your Rom Card
+              <ArrowRight className="w-6 h-6 ml-3 group-hover:translate-x-1 transition-transform" />
+            </Button>
+          </Link>
+          <Button variant="outline" className="border-2 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 hover:border-emerald-400/50 px-12 py-6 text-xl rounded-2xl backdrop-blur-sm transition-all duration-300">
+            <MessageCircle className="w-6 h-6 mr-3" />
+            Watch Demo
+          </Button>
+                  </div>
 
-      {/* Bottom Tab Navigation */}
-      <div className="bg-black/60 border-t border-green-500/20 p-2">
-        <div className="grid grid-cols-5 gap-1">
-          {tabs.map((tab, index) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(index)}
-              className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all duration-200 ${
-                activeTab === index
-                  ? 'bg-green-500/20 border border-green-500/30'
-                  : 'hover:bg-green-500/10'
-              }`}
-            >
-              <span className="text-lg mb-1">{tab.icon}</span>
-              {/* <span className={`font-mono text-xs transition-colors duration-200 text-center ${
-                activeTab === index ? tab.color : 'text-green-500'
-              }`}>
-                {tab.label}
-              </span> */}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
+        <div className="flex items-center justify-center gap-8 text-gray-400 text-sm font-medium">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-400" />
+            <span>Free to start</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-emerald-400" />
+            <span>30 seconds setup</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-emerald-400" />
+            <span>No coding required</span>
+          </div>
+            </div>
+                    </div>
+    </section>
   );
 }
 
-// Configuration Notice Component
-function ConfigurationNotice() {
-  const [showNotice, setShowNotice] = useState(false);
-  const [issueType, setIssueType] = useState<'auth_error' | 'domain_mismatch' | 'general'>('general');
-
-  useEffect(() => {
-    // Check if we're on the error page or have auth issues
-    const url = new URL(window.location.href);
-    const hasAuthError = url.pathname.includes('/api/auth/error') || 
-                        url.searchParams.has('error') ||
-                        url.searchParams.has('guest_fallback');
-    
-    // Check for domain mismatch (www vs non-www)
-    const isDomainMismatch = window.location.hostname.includes('www.rom.cards') || 
-                            window.location.hostname.includes('rom.cards');
-    
-    if (hasAuthError) {
-      setShowNotice(true);
-      if (url.pathname.includes('/api/auth/error')) {
-        setIssueType('auth_error');
-      } else if (isDomainMismatch && url.searchParams.get('error') === 'Configuration') {
-        setIssueType('domain_mismatch');
-      } else {
-        setIssueType('general');
-      }
-    }
-
-    // Also check if we came from an auth error redirect
-    if (document.referrer && document.referrer.includes('/api/auth/error')) {
-      setShowNotice(true);
-      setIssueType('auth_error');
-    }
-  }, []);
-
-  const getNoticeContent = () => {
-    switch (issueType) {
-      case 'domain_mismatch':
-        return {
-          title: 'Domain Configuration Issue Detected',
-          message: 'There\'s a mismatch between the www and non-www domain configuration. This should resolve automatically, but you can also try accessing the site with or without "www" prefix.',
-          suggestions: [
-            { label: 'Try www.rom.cards', action: () => window.location.href = 'https://www.rom.cards' },
-            { label: 'Try rom.cards', action: () => window.location.href = 'https://rom.cards' }
-          ]
-        };
-      case 'auth_error':
-        return {
-          title: 'Authentication System Temporarily Unavailable',
-          message: 'The authentication system is experiencing configuration issues. You can still browse the platform, but login and personalized features may be limited.',
-          suggestions: []
-        };
-      default:
-        return {
-          title: 'Temporary Configuration Issue',
-          message: 'We\'re experiencing a temporary configuration issue. You can still explore the platform below, but some features may be limited.',
-          suggestions: []
-        };
-    }
-  };
-
-  if (!showNotice) return null;
-
-  const content = getNoticeContent();
-
+// What is Rom Cards explanation section
+function WhatIsSection() {
   return (
-    <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 mb-8 backdrop-blur-sm">
-      <div className="flex items-start gap-3">
-        <AlertTriangle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
-        <div className="flex-1">
-          <h3 className="text-orange-100 font-mono font-bold text-sm mb-2">
-            {content.title}
-          </h3>
-          <p className="text-orange-200/80 font-mono text-xs leading-relaxed mb-3">
-            {content.message}
+    <section id="what-is" className="py-32 px-8 bg-gradient-to-b from-black to-slate-950 relative overflow-hidden">
+      {/* Background decoration */}
+      <div className="absolute inset-0 opacity-15">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl"></div>
+      </div>
+
+      <div className="max-w-8xl mx-auto relative z-10">
+        <div className="text-center mb-20">
+          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 backdrop-blur-xl border border-cyan-400/20 rounded-full px-6 py-3 mb-8 shadow-2xl shadow-cyan-500/10">
+            <Lightbulb className="w-5 h-5 text-cyan-400" />
+            <span className="text-cyan-300 text-sm font-medium tracking-wide">THE CONCEPT EXPLAINED</span>
+          </div>
+          
+          <h2 className="text-6xl md:text-7xl font-bold text-white mb-8 tracking-tight">
+            What Makes
+            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-emerald-400 font-extrabold">
+              Rom Cards Special?
+            </span>
+          </h2>
+          
+          <p className="text-2xl text-gray-300 max-w-5xl mx-auto leading-relaxed font-light">
+            Not boring apps. Not faceless dashboards. Something entirely different.
           </p>
-          <div className="flex flex-wrap gap-2">
-            <a 
-              href="/api/health" 
-              className="inline-flex items-center gap-1 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 text-orange-200 px-3 py-1 rounded-lg font-mono text-xs transition-colors"
-            >
-              <Activity className="w-3 h-3" />
-              System Status
-            </a>
-            <button 
-              onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-1 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 text-orange-200 px-3 py-1 rounded-lg font-mono text-xs transition-colors"
-            >
-              <ArrowRight className="w-3 h-3" />
-              Retry
-            </button>
-            {content.suggestions.map((suggestion, index) => (
-              <button 
-                key={index}
-                onClick={suggestion.action}
-                className="inline-flex items-center gap-1 bg-orange-500/20 hover:bg-orange-500/30 border border-orange-500/30 text-orange-200 px-3 py-1 rounded-lg font-mono text-xs transition-colors"
-              >
-                {suggestion.label}
-              </button>
-            ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+          {/* Left - Enhanced Character showcase */}
+          <div className="relative">
+            <div className="w-96 h-96 mx-auto relative">
+              <div className="absolute inset-0 bg-gradient-to-br from-cyan-400/25 via-purple-400/25 to-emerald-400/25 rounded-3xl border-2 border-cyan-400/40 shadow-2xl"></div>
+              <div className="absolute inset-6 bg-black/70 backdrop-blur-sm rounded-2xl border border-purple-400/30 flex items-center justify-center overflow-hidden">
+                <CharacterGenerate showRandomCharacter={true} />
+              </div>
+              
+              {/* Enhanced floating abilities */}
+              <div className="absolute -top-6 -left-12 bg-cyan-500/25 backdrop-blur-xl border border-cyan-400/40 rounded-xl p-5 text-cyan-100 text-base animate-float shadow-xl">
+                📊 Analyzes data
+              </div>
+              <div className="absolute top-20 -right-16 bg-purple-500/25 backdrop-blur-xl border border-purple-400/40 rounded-xl p-5 text-purple-100 text-base animate-float shadow-xl" style={{ animationDelay: '1s' }}>
+                🤖 Makes decisions
+              </div>
+              <div className="absolute -bottom-10 -left-8 bg-emerald-500/25 backdrop-blur-xl border border-emerald-400/40 rounded-xl p-5 text-emerald-100 text-base animate-float shadow-xl" style={{ animationDelay: '2s' }}>
+                💡 Learns patterns
+              </div>
+              <div className="absolute bottom-16 -right-12 bg-pink-500/25 backdrop-blur-xl border border-pink-400/40 rounded-xl p-5 text-pink-100 text-base animate-float shadow-xl" style={{ animationDelay: '1.5s' }}>
+                ⚡ Evolves daily
+              </div>
+            </div>
+          </div>
+
+          {/* Right - Detailed Description */}
+          <div className="space-y-8">
+            <div className="text-xl text-gray-200 leading-relaxed space-y-6">
+              <p>They're characters you <span className="text-cyan-300 font-semibold">hatch, train, and evolve</span>—who then become your intelligent business partners:</p>
+              
+              <div className="space-y-5 ml-8">
+                <div className="flex items-start gap-5">
+                  <div className="w-4 h-4 bg-cyan-400 rounded-full mt-1 shadow-lg shadow-cyan-400/50"></div>
+                  <div>
+                    <h4 className="text-lg font-semibold text-white mb-1">Intelligent Task Management</h4>
+                    <p className="text-gray-400">Track, prioritize, and automatically manage your workflows</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-5">
+                  <div className="w-4 h-4 bg-purple-400 rounded-full mt-1 shadow-lg shadow-purple-400/50"></div>
+                  <div>
+                    <h4 className="text-lg font-semibold text-white mb-1">Smart Automation</h4>
+                    <p className="text-gray-400">Learn your patterns and automate repetitive processes</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-5">
+                  <div className="w-4 h-4 bg-emerald-400 rounded-full mt-1 shadow-lg shadow-emerald-400/50"></div>
+                  <div>
+                    <h4 className="text-lg font-semibold text-white mb-1">Proactive Assistance</h4>
+                    <p className="text-gray-400">Send reminders, generate reports, and keep you ahead</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-5">
+                  <div className="w-4 h-4 bg-pink-400 rounded-full mt-1 shadow-lg shadow-pink-400/50"></div>
+                  <div>
+                    <h4 className="text-lg font-semibold text-white mb-1">Continuous Evolution</h4>
+                    <p className="text-gray-400">Grow smarter and more capable as your business grows</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-gradient-to-r from-cyan-500/10 to-purple-500/10 backdrop-blur-xl border border-cyan-400/20 rounded-2xl p-8 mt-8">
+                <p className="text-2xl text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-purple-300 to-emerald-300 font-semibold leading-relaxed">
+                  "It's like having a Digimon in real life—except it runs your shop, your coaching business, or your content studio."
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
+    </section>
+  );
+}
+
+// How it Works - 3 simple steps
+function HowItWorksSection() {
+  const steps = [
+    {
+      number: "01",
+      title: "Create Your Character",
+      description: "Choose your companion's appearance, personality, and initial skills. Give them a name and backstory.",
+      icon: "🎨",
+      color: "emerald"
+    },
+    {
+      number: "02", 
+      title: "Train & Configure",
+      description: "Set up your data models, automation rules, and workflows. Your Rom Card learns your preferences.",
+      icon: "🧠",
+      color: "blue"
+    },
+    {
+      number: "03",
+      title: "Watch Them Work",
+      description: "Your companion handles tasks, sends updates, and grows smarter every day. You focus on what matters.",
+      icon: "🚀",
+      color: "purple"
+    }
+  ];
+
+  return (
+    <section id="how-it-works" className="py-32 px-8 bg-gradient-to-b from-slate-950 via-gray-950 to-black relative overflow-hidden">
+      {/* Background decoration */}
+      <div className="absolute inset-0 opacity-15">
+        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-1/4 left-1/4 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl"></div>
+      </div>
+
+      <div className="max-w-7xl mx-auto relative z-10">
+        <div className="text-center mb-20">
+          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-500/10 to-purple-500/10 backdrop-blur-xl border border-blue-400/20 rounded-full px-6 py-3 mb-8 shadow-2xl shadow-blue-500/10">
+            <Target className="w-5 h-5 text-blue-400" />
+            <span className="text-blue-300 text-sm font-medium tracking-wide">SIMPLE 3-STEP PROCESS</span>
+          </div>
+          
+          <h2 className="text-6xl md:text-7xl font-bold text-white mb-8 tracking-tight">
+            How It
+            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 font-extrabold">
+              Works
+            </span>
+          </h2>
+          
+          <p className="text-2xl text-gray-300 max-w-4xl mx-auto leading-relaxed font-light">
+            Getting started with your Rom Card is surprisingly simple. No technical skills required.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+          {steps.map((step, index) => (
+            <div key={index} className="group relative">
+              <div className="bg-gradient-to-br from-slate-900/60 via-gray-900/70 to-slate-950/80 backdrop-blur-2xl border border-slate-700/30 rounded-3xl p-8 hover:border-slate-600/50 transition-all duration-700 shadow-2xl">
+                
+                <div className="text-center mb-8">
+                  <div className={`inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-${step.color}-600 to-${step.color}-700 mb-6 group-hover:scale-110 transition-transform duration-500 shadow-xl`}>
+                    <span className="text-3xl">{step.icon}</span>
+                  </div>
+                  
+                  <div className={`text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-${step.color}-400 to-${step.color}-600 mb-4`}>
+                    {step.number}
+                  </div>
+                </div>
+                
+                <h3 className="text-2xl font-bold text-white mb-4 text-center tracking-tight">
+                  {step.title}
+                </h3>
+                
+                <p className="text-gray-400 leading-relaxed text-center font-light">
+                  {step.description}
+                </p>
+              </div>
+
+              {/* Connection line */}
+              {index < steps.length - 1 && (
+                <div className="hidden md:block absolute top-1/2 -right-6 w-12 h-0.5 bg-gradient-to-r from-slate-600 to-transparent transform -translate-y-1/2"></div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Demo CTA */}
+        <div className="text-center mt-20">
+          <Link href="#showcase">
+            <Button variant="outline" className="border-2 border-blue-500/30 text-blue-300 hover:bg-blue-500/10 hover:border-blue-400/50 px-8 py-4 text-lg rounded-2xl backdrop-blur-sm transition-all duration-300">
+              <Play className="w-5 h-5 mr-2" />
+              See It In Action
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Interactive Demo Section
+function DemoSection() {
+  // Sample agent data for the demo
+  const demoAgentData = {
+    name: "Luna",
+    description: "Your intelligent life coach companion",
+    theme: "green",
+    domain: "life-coaching",
+    createdAt: new Date().toISOString(),
+    avatar: {
+      type: "default",
+      emoji: "🌙"
+    },
+    models: [
+      {
+        id: "tasks",
+        name: "Daily Tasks",
+        emoji: "✅",
+        fields: [
+          { name: "task", type: "text", description: "Task description" },
+          { name: "priority", type: "text", description: "Task priority" },
+          { name: "completed", type: "boolean", description: "Completion status" }
+        ],
+        records: [
+          {
+            id: "1",
+            data: { task: "Morning workout", priority: "High", completed: true },
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: "2", 
+            data: { task: "Call dentist", priority: "Medium", completed: false },
+            createdAt: new Date().toISOString()
+          }
+        ],
+        hasPublishedField: true,
+        createdAt: new Date().toISOString()
+    },
+    {
+        id: "goals",
+        name: "Life Goals",
+        emoji: "🎯",
+        fields: [
+          { name: "goal", type: "text", description: "Goal description" },
+          { name: "deadline", type: "date", description: "Target date" }
+        ],
+        records: [
+          {
+            id: "1",
+            data: { goal: "Learn Spanish", deadline: "2024-12-31" },
+            createdAt: new Date().toISOString()
+          }
+        ],
+        hasPublishedField: true,
+        createdAt: new Date().toISOString()
+      }
+    ],
+    actions: [
+      {
+        id: "schedule-reminder",
+        name: "Schedule Reminder",
+        results: { actionType: "Notification" }
+      },
+      {
+        id: "daily-check",
+        name: "Daily Check-in",
+        results: { actionType: "Survey" }
+      }
+    ],
+    schedules: [
+      {
+        id: "morning-routine",
+        name: "Morning Routine Check",
+        description: "Daily morning wellness check-in",
+        interval: { active: true, pattern: "Daily 8:00 AM" }
+      },
+      {
+        id: "weekly-review",
+        name: "Weekly Goal Review",
+        description: "Review progress on life goals",
+        interval: { active: true, pattern: "Weekly Sunday" }
+    }
+    ]
+  };
+
+  return (
+    <section className="py-32 px-8 bg-gradient-to-b from-slate-950 via-gray-950 to-black relative overflow-hidden">
+      {/* Premium background decoration */}
+      <div className="absolute inset-0 opacity-15">
+        <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-1/4 left-1/4 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl"></div>
+      </div>
+
+      <div className="max-w-8xl mx-auto relative z-10">
+        <div className="text-center mb-20">
+          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-500/10 to-purple-500/10 backdrop-blur-xl border border-blue-400/20 rounded-full px-6 py-3 mb-8 shadow-2xl shadow-blue-500/10">
+            <Target className="w-5 h-5 text-blue-400" />
+            <span className="text-blue-300 text-sm font-medium tracking-wide">LIVE INTERACTIVE PREVIEW</span>
+          </div>
+          
+          <h2 className="text-6xl md:text-7xl font-bold text-white mb-8 tracking-tight">
+            Experience
+            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 font-extrabold">
+              Excellence
+            </span>
+          </h2>
+          
+          <p className="text-2xl text-gray-300 max-w-5xl mx-auto leading-relaxed font-light">
+            Interact with a fully functional AI companion interface. See the premium features in action.
+          </p>
+      </div>
+
+        <div className="flex justify-center">
+          <div className="w-full max-w-lg">
+            <Suspense fallback={
+              <div className="w-full h-[36rem] bg-gradient-to-br from-slate-900/60 to-gray-900/80 rounded-3xl border border-slate-700/30 flex items-center justify-center backdrop-blur-xl shadow-2xl">
+                <div className="text-blue-400 animate-pulse font-medium">Loading Interactive Demo...</div>
+      </div>
+            }>
+              <div className="relative">
+                <MobileAppDemoWrapper 
+                  agentData={demoAgentData as any}
+                  onThemeChange={() => {}} 
+                  onDataChange={() => {}}
+                />
+                {/* Premium glow effect around demo */}
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-3xl blur-2xl -z-10"></div>
+        </div>
+            </Suspense>
+          </div>
+        </div>
+
+        {/* Demo Features */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-20 max-w-4xl mx-auto">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+              <MessageCircle className="w-8 h-8 text-white" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">Real-Time Interaction</h3>
+            <p className="text-gray-400 font-light">Chat with AI, browse data models, and explore all features</p>
+          </div>
+          
+          <div className="text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+              <Database className="w-8 h-8 text-white" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">Live Data Management</h3>
+            <p className="text-gray-400 font-light">Create, edit, and manage records in real-time</p>
+          </div>
+          
+          <div className="text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-emerald-600 to-green-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+              <Sparkles className="w-8 h-8 text-white" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">Theme Customization</h3>
+            <p className="text-gray-400 font-light">Switch between premium color schemes instantly</p>
+          </div>
+      </div>
     </div>
+    </section>
+  );
+}
+
+
+
+// Showcase section - Demo + Success Stories
+function ShowcaseSection() {
+  // Demo agent data for the interactive preview
+  const demoAgentData = {
+    name: "Luna",
+    description: "Your intelligent life coach companion",
+    theme: "green",
+    domain: "life-coaching",
+    createdAt: new Date().toISOString(),
+    avatar: {
+      type: "default",
+      emoji: "🌙"
+    },
+    models: [
+      {
+        id: "tasks",
+        name: "Daily Tasks",
+        emoji: "✅",
+        fields: [
+          { name: "task", type: "text", description: "Task description" },
+          { name: "priority", type: "text", description: "Task priority" },
+          { name: "completed", type: "boolean", description: "Completion status" }
+        ],
+        records: [
+          {
+            id: "1",
+            data: { task: "Morning workout", priority: "High", completed: true },
+            createdAt: new Date().toISOString()
+          },
+          {
+            id: "2", 
+            data: { task: "Call dentist", priority: "Medium", completed: false },
+            createdAt: new Date().toISOString()
+          }
+        ],
+        hasPublishedField: true,
+        createdAt: new Date().toISOString()
+      },
+      {
+        id: "goals",
+        name: "Life Goals",
+        emoji: "🎯",
+        fields: [
+          { name: "goal", type: "text", description: "Goal description" },
+          { name: "deadline", type: "date", description: "Target date" }
+        ],
+        records: [
+          {
+            id: "1",
+            data: { goal: "Learn Spanish", deadline: "2024-12-31" },
+            createdAt: new Date().toISOString()
+          }
+        ],
+        hasPublishedField: true,
+        createdAt: new Date().toISOString()
+      }
+    ],
+    actions: [
+      {
+        id: "schedule-reminder",
+        name: "Schedule Reminder",
+        results: { actionType: "Notification" }
+      },
+      {
+        id: "daily-check",
+        name: "Daily Check-in",
+        results: { actionType: "Survey" }
+      }
+    ],
+    schedules: [
+      {
+        id: "morning-routine",
+        name: "Morning Routine Check",
+        description: "Daily morning wellness check-in",
+        interval: { active: true, pattern: "Daily 8:00 AM" }
+      },
+      {
+        id: "weekly-review",
+        name: "Weekly Goal Review",
+        description: "Review progress on life goals",
+        interval: { active: true, pattern: "Weekly Sunday" }
+      }
+    ]
+  };
+
+  const companions = [
+    {
+      name: "Aurelia",
+      type: "Executive Assistant",
+      description: "Enterprise-grade scheduling, meeting optimization, and strategic planning intelligence",
+      earnings: "$12,500/month",
+      gradient: "from-purple-600 to-violet-600",
+      accentColor: "purple"
+    },
+    {
+      name: "Zenith", 
+      type: "Innovation Strategist",
+      description: "Advanced market research, competitive analysis, and creative ideation workflows",
+      earnings: "$18,900/month",
+      gradient: "from-blue-600 to-cyan-600",
+      accentColor: "blue"
+    },
+    {
+      name: "Synapse",
+      type: "Data Intelligence", 
+      description: "Complex data analysis, predictive modeling, and automated insight generation",
+      earnings: "$24,750/month",
+      gradient: "from-emerald-600 to-green-600",
+      accentColor: "emerald"
+    }
+  ];
+
+  return (
+    <section id="showcase" className="py-32 px-8 bg-gradient-to-b from-black via-slate-950 to-gray-950 relative overflow-hidden">
+      {/* Premium background elements */}
+      <div className="absolute inset-0 opacity-10">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/20 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl"></div>
+      </div>
+
+      <div className="max-w-8xl mx-auto relative z-10">
+        <div className="text-center mb-24">
+          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-emerald-500/10 to-purple-500/10 backdrop-blur-xl border border-emerald-400/20 rounded-full px-6 py-3 mb-8 shadow-2xl shadow-emerald-500/10">
+            <Users className="w-5 h-5 text-emerald-400" />
+            <span className="text-emerald-300 text-sm font-medium tracking-wide">LIVE DEMO & SUCCESS STORIES</span>
+          </div>
+          
+          <h2 className="text-6xl md:text-7xl font-bold text-white mb-8 tracking-tight">
+            See Them
+            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-blue-400 to-purple-400 font-extrabold">
+              In Action
+            </span>
+            </h2>
+          
+          <p className="text-2xl text-gray-300 max-w-5xl mx-auto leading-relaxed font-light">
+            Try the interactive demo and meet creators building successful AI companions.
+            </p>
+          </div>
+
+        {/* Interactive Demo Section */}
+        <div className="text-center mb-32">
+          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-blue-500/10 to-purple-500/10 backdrop-blur-xl border border-blue-400/20 rounded-full px-6 py-3 mb-8 shadow-xl shadow-blue-500/10">
+            <Target className="w-5 h-5 text-blue-400" />
+            <span className="text-blue-300 text-sm font-medium tracking-wide">INTERACTIVE DEMO</span>
+          </div>
+          
+          <h3 className="text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight">
+            Try It <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">Live</span>
+          </h3>
+          
+          <p className="text-lg text-gray-300 mb-12 max-w-3xl mx-auto">
+            This is a fully functional Rom Card. Click around, explore features, and see how it works.
+          </p>
+
+          <div className="flex justify-center">
+            <div className="w-full max-w-lg">
+              <Suspense fallback={
+                <div className="w-full h-[36rem] bg-gradient-to-br from-slate-900/60 to-gray-900/80 rounded-3xl border border-slate-700/30 flex items-center justify-center backdrop-blur-xl shadow-2xl">
+                  <div className="text-blue-400 animate-pulse font-medium">Loading Interactive Demo...</div>
+                </div>
+              }>
+                <div className="relative">
+                  <MobileAppDemoWrapper 
+                    agentData={demoAgentData as any}
+                    onThemeChange={() => {}} 
+                    onDataChange={() => {}}
+                  />
+                  {/* Premium glow effect around demo */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 rounded-3xl blur-2xl -z-10"></div>
+                </div>
+              </Suspense>
+            </div>
+          </div>
+
+          {/* Demo Features */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-16 max-w-4xl mx-auto">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+                <MessageCircle className="w-8 h-8 text-white" />
+              </div>
+              <h4 className="text-lg font-bold text-white mb-2">Real-Time Chat</h4>
+              <p className="text-gray-400 font-light text-sm">Chat with AI and explore all features</p>
+            </div>
+            
+            <div className="text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+                <Database className="w-8 h-8 text-white" />
+              </div>
+              <h4 className="text-lg font-bold text-white mb-2">Live Data</h4>
+              <p className="text-gray-400 font-light text-sm">Create and manage records in real-time</p>
+            </div>
+            
+            <div className="text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-emerald-600 to-green-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+                <Sparkles className="w-8 h-8 text-white" />
+              </div>
+              <h4 className="text-lg font-bold text-white mb-2">Themes</h4>
+              <p className="text-gray-400 font-light text-sm">Switch color schemes instantly</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 mb-20">
+          {companions.map((companion, index) => (
+            <div key={index} className="group relative bg-gradient-to-br from-slate-900/60 via-gray-900/70 to-slate-950/80 backdrop-blur-2xl border border-slate-700/30 rounded-3xl p-10 hover:border-slate-600/50 transition-all duration-700 hover:transform hover:-translate-y-4 shadow-2xl hover:shadow-3xl">
+              {/* Premium glow effect */}
+              <div className={`absolute inset-0 opacity-0 group-hover:opacity-10 bg-gradient-to-br ${companion.gradient} rounded-3xl blur-2xl transition-opacity duration-700`}></div>
+              
+              <div className="relative z-10">
+                <div className="text-center mb-8">
+                  <div className={`w-24 h-24 bg-gradient-to-br ${companion.gradient} rounded-3xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-500 shadow-xl shadow-${companion.accentColor}-500/25`}>
+                  <CharacterGenerate showRandomCharacter={true} />
+              </div>
+            </div>
+
+                <h3 className="text-3xl font-bold text-white mb-3 text-center tracking-tight group-hover:text-emerald-300 transition-colors duration-300">
+                {companion.name}
+                </h3>
+                
+                <div className="text-center mb-6">
+                  <span className={`inline-block px-4 py-2 bg-gradient-to-r ${companion.gradient} text-white text-sm font-semibold rounded-full shadow-lg`}>
+                    {companion.type}
+                  </span>
+                </div>
+                
+                <p className="text-gray-400 text-center mb-8 leading-relaxed font-light group-hover:text-gray-300 transition-colors duration-300">
+                  {companion.description}
+                </p>
+              
+                <div className="bg-gradient-to-r from-slate-800/50 to-gray-800/50 backdrop-blur-sm rounded-2xl p-6 text-center border border-slate-700/30">
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                    <Trophy className="w-5 h-5 text-emerald-400" />
+                    <span className="text-3xl font-bold text-emerald-400">{companion.earnings}</span>
+                  </div>
+                  <p className="text-gray-500 text-sm font-medium tracking-wide">MONTHLY REVENUE</p>
+                </div>
+              </div>
+
+              {/* Premium corner accent */}
+              <div className="absolute top-0 right-0 w-24 h-24 opacity-5">
+                <div className={`w-full h-full bg-gradient-to-br ${companion.gradient} transform rotate-45 translate-x-12 -translate-y-12 rounded-2xl`}></div>
+              </div>
+            </div>
+          ))}
+          </div>
+
+        {/* Premium Stats Section */}
+        <div className="text-center">
+          <div className="bg-gradient-to-br from-slate-900/60 via-gray-900/70 to-slate-950/80 backdrop-blur-2xl border border-slate-700/30 rounded-3xl p-12 inline-block shadow-2xl">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
+              <div className="text-center">
+                <div className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-400 mb-3">15,200+</div>
+                <div className="text-gray-400 font-medium tracking-wide">Enterprise Companions</div>
+          </div>
+              <div className="text-center">
+                <div className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 mb-3">$2.1M+</div>
+                <div className="text-gray-400 font-medium tracking-wide">Creator Revenue</div>
+          </div>
+              <div className="text-center">
+                <div className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 mb-3">99.9%</div>
+                <div className="text-gray-400 font-medium tracking-wide">Enterprise Uptime</div>
+        </div>
+          </div>
+          </div>
+          </div>
+        </div>
+      </section>
+  );
+}
+
+// Simple pricing section
+function PricingSection() {
+  return (
+    <section id="pricing" className="py-32 px-8 bg-gradient-to-b from-gray-950 via-slate-950 to-black relative overflow-hidden">
+      <div className="max-w-6xl mx-auto relative z-10">
+        <div className="text-center mb-20">
+          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-emerald-500/10 to-green-500/10 backdrop-blur-xl border border-emerald-400/20 rounded-full px-6 py-3 mb-8 shadow-xl shadow-emerald-500/10">
+            <Gift className="w-5 h-5 text-emerald-400" />
+            <span className="text-emerald-300 text-sm font-medium tracking-wide">SIMPLE PRICING</span>
+          </div>
+          
+          <h2 className="text-6xl md:text-7xl font-bold text-white mb-8 tracking-tight">
+            Start
+            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-green-400 to-teal-400 font-extrabold">
+              Free
+            </span>
+          </h2>
+          
+          <p className="text-2xl text-gray-300 max-w-4xl mx-auto leading-relaxed font-light">
+            Create your first Rom Card for free. Upgrade as you grow.
+          </p>
+        </div>
+
+        <div className="max-w-md mx-auto">
+          <div className="bg-gradient-to-br from-slate-900/60 via-gray-900/70 to-slate-950/80 backdrop-blur-2xl border border-slate-700/30 rounded-3xl p-8 shadow-2xl">
+            <div className="text-center mb-8">
+              <div className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-400 mb-4">
+                Free
+              </div>
+              <p className="text-gray-400">Get started today</p>
+            </div>
+            
+            <div className="space-y-4 mb-8">
+              <div className="flex items-center gap-3">
+                <CheckCircle className="w-5 h-5 text-emerald-400" />
+                <span className="text-gray-300">1 Rom Card</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <CheckCircle className="w-5 h-5 text-emerald-400" />
+                <span className="text-gray-300">Basic automation</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <CheckCircle className="w-5 h-5 text-emerald-400" />
+                <span className="text-gray-300">Community support</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <CheckCircle className="w-5 h-5 text-emerald-400" />
+                <span className="text-gray-300">No credit card required</span>
+              </div>
+            </div>
+
+            <Link href="/register">
+              <Button className="w-full bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white py-4 text-lg rounded-2xl shadow-xl shadow-emerald-500/25 transition-all duration-300">
+                Start Free
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        <div className="text-center mt-12">
+          <p className="text-gray-400">
+            Need more? <span className="text-emerald-400">Paid plans start at $9/month</span> with unlimited Rom Cards and advanced features.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Premium create section
+function CreateSection() {
+  return (
+    <section id="create" className="py-32 px-8 bg-gradient-to-b from-gray-950 via-slate-950 to-black relative overflow-hidden">
+      {/* Premium background elements */}
+      <div className="absolute inset-0 opacity-20">
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl"></div>
+        <div className="absolute top-3/4 left-1/2 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl"></div>
+      </div>
+
+      <div className="max-w-6xl mx-auto text-center relative z-10">
+        <div className="bg-gradient-to-br from-slate-900/60 via-gray-900/70 to-slate-950/80 backdrop-blur-2xl border border-slate-700/30 rounded-3xl p-16 relative overflow-hidden shadow-2xl">
+          {/* Premium overlay gradient */}
+          <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-blue-500/5 to-purple-500/5"></div>
+          
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-3 bg-gradient-to-r from-emerald-500/10 to-blue-500/10 backdrop-blur-xl border border-emerald-400/20 rounded-full px-6 py-3 mb-12 shadow-xl shadow-emerald-500/10">
+              <Lightbulb className="w-5 h-5 text-emerald-400" />
+              <span className="text-emerald-300 text-sm font-medium tracking-wide">Ready to Transform</span>
+            </div>
+
+            <div className="flex justify-center mb-12">
+              <div className="relative">
+                <Image 
+                  src="/images/logo.png" 
+                  alt="Rom Cards Logo" 
+                  width={80} 
+                  height={80}
+                  className="object-contain"
+                />
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/20 to-blue-400/20 rounded-full blur-xl animate-pulse"></div>
+          </div>
+        </div>
+            
+            <h2 className="text-6xl md:text-7xl font-bold text-white mb-8 tracking-tight">
+              Ready to
+              <span className="block text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-blue-400 to-purple-400 font-extrabold">
+                Elevate?
+              </span>
+            </h2>
+            
+            <p className="text-2xl text-gray-300 mb-12 leading-relaxed font-light max-w-4xl mx-auto">
+              Remember that excitement when you first discovered something truly revolutionary?<br />
+              That moment when everything changed?<br />
+              <span className="text-white font-medium">Your transformation begins now.</span>
+            </p>
+            
+            <div className="mb-12 max-w-md mx-auto">
+              <div className="bg-gradient-to-br from-emerald-500/20 via-blue-500/15 to-purple-500/20 border border-emerald-400/30 rounded-3xl p-8 backdrop-blur-xl shadow-2xl">
+                <div className="relative">
+                <CharacterGenerate showRandomCharacter={true} />
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/10 to-blue-400/10 rounded-2xl blur-xl"></div>
+                </div>
+                <p className="text-emerald-300 font-medium mt-6 tracking-wide">Your elite companion awaits</p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-12">
+                <Link href="/register">
+                <Button className="group bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white text-2xl px-16 py-8 rounded-2xl shadow-2xl shadow-emerald-500/25 transform hover:scale-105 hover:shadow-emerald-500/40 transition-all duration-300 border border-emerald-500/30">
+                  <Play className="w-7 h-7 mr-4 group-hover:scale-110 transition-transform" />
+                  Begin Transformation
+                  <ArrowRight className="w-7 h-7 ml-4 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                </Link>
+            </div>
+            
+            <div className="flex items-center justify-center gap-8 text-gray-400 font-medium">
+              <div className="flex items-center gap-2">
+                <CheckCircle className="w-5 h-5 text-emerald-400" />
+                <span>Enterprise-ready</span>
+          </div>
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-emerald-400" />
+                <span>Instant deployment</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-emerald-400" />
+                <span>Bank-level security</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Premium corner accents */}
+          <div className="absolute top-0 left-0 w-32 h-32 opacity-10">
+            <div className="w-full h-full bg-gradient-to-br from-emerald-500 to-blue-500 transform -rotate-45 -translate-x-16 -translate-y-16 rounded-2xl"></div>
+          </div>
+          <div className="absolute bottom-0 right-0 w-32 h-32 opacity-10">
+            <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-500 transform rotate-45 translate-x-16 translate-y-16 rounded-2xl"></div>
+          </div>
+        </div>
+        </div>
+      </section>
   );
 }
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-black text-green-200 scroll-smooth">
+    <div className="min-h-screen bg-black text-white">
       <Header />
+      <HeroSection />
+      <WhatIsSection />
+      <HowItWorksSection />
+      <ShowcaseSection />
+      <PricingSection />
+      <CreateSection />
       
-      {/* Configuration Notice */}
-      <div className="max-w-7xl mx-auto px-4 pt-4">
-        <ConfigurationNotice />
-      </div>
-      
-      {/* Enhanced Hero Section */}
-      <section id="home" className="scroll-mt-16">
-        <EnhancedHeroSection />
-      </section>
-
-      {/* Interactive Demo Section */}
-      <section id="demo" className="py-20 px-4 relative overflow-hidden scroll-mt-16">
-        <MatrixRain />
-        <div className="max-w-7xl mx-auto relative z-10">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Watch Rom Cards Assemble Your Agent
-            </h2>
-            <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
-              Like Lego, but for AI — watch prompts become functional agents that run forever and generate real ownership value
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            {/* Left side - Animated Code Block */}
-            <div className="space-y-6">
-              <AnimatedCodeBlock />
-              <div className="text-center">
-                <p className="text-green-300/70 font-mono text-sm">
-                  Real-time agent building in action
-                </p>
-              </div>
-            </div>
-
-            {/* Right side - Process Visualization */}
-            <div className="space-y-8">
-              <div className="bg-gradient-to-br from-green-500/10 via-green-600/5 to-green-700/10 border border-green-500/20 rounded-2xl p-8 backdrop-blur-sm">
-                <h3 className="text-2xl font-bold text-green-100 mb-6 font-mono text-center">
-                  Agent Assembly Process
-                </h3>
-                <AgentBuildingProcess />
-              </div>
-              <LiveMetrics />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Created AI App Demo Section */}
-      <section className="py-20 px-4 bg-gradient-to-b from-green-950/10 to-black scroll-mt-16">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Interact with your Agent
-            </h2>
-            <p className="text-xl text-green-300/80 max-w-4xl mx-auto font-mono">
-              From prompt to working agent — this shopping agent was assembled from prompts and now runs 24/7 with its own interface
-            </p>
-          </div>
-
-          {/* Mobile App Demo Interface */}
-          <div className="w-full max-w-sm mx-auto px-4">
-            <MobileAppDemo />
-          </div>
-        </div>
-      </section>
-
-      {/* Features Grid */}
-      <section id="features" className="py-20 px-4 scroll-mt-16">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Assemble intelligent agents that works non-stop
-            </h2>
-            <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
-              Like Lego bricks, but intelligent — snap together AI components to build agents that run like apps and generate real value.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {features.map((feature, index) => (
-              <EnhancedFeatureCard key={index} feature={feature} index={index} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Use Cases Section */}
-      <section id="use-cases" className="py-20 px-4 bg-gradient-to-b from-black to-green-950/10 scroll-mt-16">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Pre-Built Agent Templates
-            </h2>
-            <p className="text-xl text-green-300/80 max-w-3xl mx-auto font-mono">
-              Start with proven building block combinations - each template runs like a real agent app and becomes your owned digital asset
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {useCases.map((useCase, index) => (
-              <EnhancedUseCaseCard key={index} useCase={useCase} index={index} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Agent Marketplace & Licensing Section */}
-      <section id="marketplace" className="py-20 px-4 scroll-mt-16">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Own Your AI Agents Like Digital Assets
-            </h2>
-            <p className="text-xl text-green-300/80 max-w-4xl mx-auto font-mono">
-              Build once, own forever. Your assembled agents become tradeable assets that generate recurring revenue — true ownership in the AI economy.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
-            {/* Left side - How it works */}
-            <div className="space-y-8">
-              <div className="bg-gradient-to-br from-green-500/10 via-green-600/5 to-green-700/10 border border-green-500/20 rounded-2xl p-8 backdrop-blur-sm">
-                <h3 className="text-2xl font-bold text-green-100 mb-6 font-mono">
-                  How AI Agent Ownership Works
-                </h3>
-                <div className="space-y-6">
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center justify-center flex-shrink-0 mt-1">
-                      <span className="text-green-400 font-mono font-bold text-sm">1</span>
-                    </div>
-                    <div>
-                      <h4 className="font-mono font-bold text-green-100 mb-2">Assemble Your Agent</h4>
-                      <p className="text-green-300/70 font-mono text-sm leading-relaxed">
-                        Snap together AI building blocks using simple prompts. From customer service to data analysis — like Lego, but intelligent.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center justify-center flex-shrink-0 mt-1">
-                      <span className="text-green-400 font-mono font-bold text-sm">2</span>
-                    </div>
-                    <div>
-                      <h4 className="font-mono font-bold text-green-100 mb-2">Own as Digital Asset</h4>
-                      <p className="text-green-300/70 font-mono text-sm leading-relaxed">
-                        Your assembled agent becomes a tradeable asset. Set your own pricing, licensing terms, and ownership structure.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center justify-center flex-shrink-0 mt-1">
-                      <span className="text-green-400 font-mono font-bold text-sm">3</span>
-                    </div>
-                    <div>
-                      <h4 className="font-mono font-bold text-green-100 mb-2">Generate Asset Revenue</h4>
-                      <p className="text-green-300/70 font-mono text-sm leading-relaxed">
-                        Earn 70% of every purchase and usage fee. Your AI asset generates passive income while running like an app.
-                      </p>
-                    </div>
-                  </div>
+      <footer className="py-20 px-8 border-t border-slate-800/50 bg-gradient-to-b from-black to-slate-950">
+        <div className="max-w-8xl mx-auto text-center">
+          <div className="flex justify-center mb-8">
+            <div className="relative">
+              <Image 
+                src="/images/logo.png" 
+                alt="Rom Cards Logo" 
+                width={48} 
+                height={48}
+                className="object-contain"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/20 to-blue-400/20 rounded-full blur-lg animate-pulse"></div>
                 </div>
               </div>
-
-              {/* Revenue Flow Animation */}
-              <div className="bg-black/50 border border-green-500/20 rounded-xl p-6 backdrop-blur-sm">
-                <h4 className="font-mono font-bold text-green-100 mb-4 text-center">Revenue Flow Example</h4>
-                <RevenueFlowAnimation />
-              </div>
-            </div>
-
-            {/* Right side - Success Examples */}
-            <div className="space-y-8">
-              <div>
-                <h3 className="text-2xl font-bold text-green-100 mb-6 font-mono text-center">
-                  Creator Success Stories
-                </h3>
-                <AgentLicensingExamples />
-              </div>
-
-              {/* Licensing Benefits */}
-              <div className="bg-gradient-to-br from-blue-500/10 via-purple-600/5 to-green-700/10 border border-green-500/20 rounded-2xl p-8 backdrop-blur-sm">
-                <h4 className="font-mono font-bold text-green-100 mb-6">Why Own AI Agents as Assets?</h4>
-                <div className="space-y-4">
-                  {[
-                    { icon: DollarSign, text: 'Earn 70% of all revenue from your owned AI assets' },
-                    { icon: Target, text: 'Global marketplace with thousands of potential buyers' },
-                    { icon: Clock, text: 'Generate passive income 24/7 as your assets run like apps' },
-                    { icon: TrendingUp, text: 'Build a portfolio of valuable, income-generating AI properties' }
-                  ].map((benefit, index) => (
-                    <div key={index} className="flex items-center gap-3">
-                      <benefit.icon className="w-5 h-5 text-green-400 flex-shrink-0" />
-                      <span className="font-mono text-sm text-green-200">{benefit.text}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* CTA for Licensing */}
-              <div className="text-center">
-                <Link href="/register">
-                  <Button className="bg-gradient-to-r from-blue-600 to-purple-700 text-white hover:from-blue-700 hover:to-purple-800 border border-blue-500/30 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 px-8 py-3 font-mono text-lg group">
-                    <Sparkles className="w-5 h-5 mr-2 group-hover:animate-spin" />
-                    Start Building AI Assets
-                    <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section id="stats" className="py-20 px-4 scroll-mt-16">
-        <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-green-100 mb-4 font-mono">
-              Proven Building Block Success
-            </h2>
-            <p className="text-xl text-green-300/80 max-w-2xl mx-auto font-mono">
-              Join the growing community of AI asset builders earning real revenue
+          
+          <div className="mb-8">
+            <h3 className="text-2xl font-bold text-white mb-3 tracking-tight">Rom Cards</h3>
+            <p className="text-gray-400 font-light max-w-2xl mx-auto">
+              Transforming digital companionship through enterprise-grade AI intelligence
             </p>
           </div>
-          <EnhancedStatsSection />
-        </div>
-      </section>
 
-      {/* CTA Section */}
-      <section id="get-started" className="py-20 px-4 scroll-mt-16">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="bg-gradient-to-br from-green-600/10 via-green-500/5 to-green-700/10 border border-green-500/30 rounded-3xl p-12 backdrop-blur-sm relative overflow-hidden">
-            {/* Simplified background effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-green-500/5 via-cyan-500/5 to-green-500/5 opacity-50"></div>
-            
-            <div className="relative z-10">
-              <div className="flex justify-center mb-6">
-                <div className="w-20 h-20 bg-green-500/10 border border-green-500/20 rounded-2xl flex items-center justify-center">
-                  <Brain className="w-10 h-10 text-green-400" />
-                </div>
-              </div>
-              <h2 className="text-4xl font-bold text-green-100 mb-6 font-mono">
-                Ready to Build Your First AI Agent?
-              </h2>
-              <p className="text-xl text-green-300/80 mb-8 font-mono max-w-2xl mx-auto">
-                Join thousands of builders using AI Lego blocks to create agents that run like apps and generate income like owned assets.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/register">
-                  <Button className="bg-gradient-to-r from-green-600 to-green-700 text-black hover:from-green-700 hover:to-green-800 border border-green-500/30 shadow-lg shadow-green-500/20 hover:shadow-green-500/40 hover:shadow-xl transform hover:-translate-y-0.5 px-8 py-3 font-mono text-lg group">
-                    <Play className="w-5 h-5 mr-2 group-hover:animate-bounce" />
-                    Start Building
-                    {/* <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" /> */}
-                  </Button>
-                </Link>
-                <Link href="#">
-                  <Button variant="outline" className="border-green-500/30 bg-black/50 text-green-300 hover:bg-green-500/10 hover:text-green-200 hover:border-green-500/50 backdrop-blur-sm px-8 py-3 font-mono text-lg group">
-                    <Sparkles className="w-5 h-5 mr-2 group-hover:animate-spin" />
-                    See Examples
-                  </Button>
-                </Link>
-              </div>
+          <div className="flex items-center justify-center gap-8 mb-8 text-gray-500 text-sm font-medium">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-emerald-400" />
+              <span>Enterprise Security</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-emerald-400" />
+              <span>99.9% Uptime</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-emerald-400" />
+              <span>Global Scale</span>
             </div>
           </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="py-12 px-4 border-t border-green-500/20">
-        <div className="max-w-6xl mx-auto text-center">
-          <div className="flex justify-center mb-6">
-            <div className="w-12 h-12 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center justify-center">
-              <img src="/images/logo.png" alt="Rom Cards" className="w-8 h-8" />
-            </div>
+          
+          <div className="border-t border-slate-800/50 pt-8">
+            <p className="text-gray-500 font-light">
+              © 2025 Rom Cards • Redefining the future of AI companionship
+            </p>
           </div>
-          <p className="text-green-300/60 font-mono text-sm">
-            © 2025 Rom Cards. Building the future with Lego like AI Agents.
-          </p>
         </div>
       </footer>
     </div>

@@ -1,0 +1,75 @@
+export enum CHARACTER_WEAPON_TYPE {
+  NONE = "",
+  SMASH = "smash",
+  THRUST = "thrust",
+  CROSSBOW = "crossbow",
+  SLINGSHOT = "slingshot",
+  DAGGER = "dagger",
+  GLOWSWORD = "glowsword",
+  LONGSWORD = "longsword",
+  RAPIER = "rapier",
+  SABER = "saber",
+  FLAIL = "flail",
+  MACE = "mace",
+  WARAXE = "waraxe",
+  CANE = "cane",
+  SPEAR = "spear",
+  SCYTHE = "scythe",
+  HALBERD = "halberd",
+  SIMPLE_STAFF = "simple_staff",
+  LOOP_STAFF = "loop_staff",
+  DIAMOND_STAFF = "diamond_staff",
+  GNARLED_STAFF = "gnarled_staff",
+  S_STAFF = "s_staff",
+}
+
+export enum CHARACTER_SHIELD_TYPE {
+  NONE = "",
+  SHIELD = "shield",
+  SPARTAN = "spartan",
+  TWO_ENGRAILED = "two_engrailed",
+  CRUSADER = "crusader",
+  PLUS = "plus",
+  SCUTUM = "scutum",
+  HEATER = "heater",
+}
+
+export enum CHARACTER_SHIELD_TRIM_TYPE {
+  NONE = "",
+  TWO_ENGRAILED = "two_engrailed",
+  SCUTUM = "scutum",
+  HEATER = "heater",
+}
+
+export enum CHARACTER_SHIELD_PAINT_TYPE {
+  NONE = "",
+  HEATER = "heater",
+}
+
+export enum CHARACTER_SHIELD_PATTERN_TYPE {
+  NONE = "",
+  BARRY = "barry",
+  BEND_SINISTER = "bend_sinister",
+  BEND = "bend",
+  BENDY_SINISTER = "bendy_sinister",
+  BENDY = "bendy",
+  BORDURE = "bordure",
+  CHEVRON_INVERTED = "chevron_inverted",
+  CHEVRON = "chevron",
+  CHIEF = "chief",
+  CROSS = "cross",
+  FESS = "fess",
+  LOZENGY = "lozengy",
+  PALE = "pale",
+  PALL = "pall",
+  PALY = "paly",
+  PER_BEND_SINISTER = "per_bend_sinister",
+  PER_BEND = "per_bend",
+  PER_CHEVRON_INVERTED = "per_chevron_inverted",
+  PER_CHEVRON = "per_chevron",
+  PER_FESS = "per_fess",
+  PER_PALE = "per_pale",
+  PER_SALTIRE = "per_saltire",
+  QUARTERLY = "quarterly",
+  SALTIRE = "saltire",
+}

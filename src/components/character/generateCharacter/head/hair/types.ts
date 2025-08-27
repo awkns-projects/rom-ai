@@ -1,0 +1,111 @@
+export enum CHARACTER_HAIR_TYPE {
+  NONE = "",
+
+  AFRO = "afro",
+  AFRO_NATURAL = "afro_natural",
+  AFRO_DREADLOCKS_SHORT = "afro_dreadlocks_short",
+  AFRO_DREADLOCKS_LONG = "afro_dreadlocks_long",
+  AFRO_TWISTS_FADE = "afro_twists_fade",
+  AFRO_TWISTS_STRAIGHT = "afro_twists_straight",
+  AFRO_FLAT_TOP_FADE = "afro_flat_top_fade",
+  AFRO_FLAT_TOP_STRAIGHT = "afro_flat_top_straight",
+  AFRO_CORNROWS = "afro_cornrows",
+
+  CURLY_JEWFRO = "curly_jewfro",
+  CURLY_SHROT = "curly_short",
+  CURLY_LONG = "curly_long",
+
+  BALD_SHAVED_BALDING = "bald_shaved_balding",
+  BALD_SHAVED_LONGHAWK = "bald_shaved_longhawk",
+  BALD_SHAVED_SHORTHAWK = "bald_shaved_shorthawk",
+  BALD_SHAVED_HIGH_TIGHT = "bald_shaved_high_tight",
+  BALD_SHAVED_BUZZCUT = "bald_shaved_buzzcut",
+
+  SHORT_PLAIN = "short_plain",
+  SHORT_PIXIE = "short_pixie",
+  SHORT_PAGE = "short_page",
+  SHORT_PAGE2 = "short_page2",
+  SHORT_IDOL = "short_idol",
+  SHORT_MOP = "short_mop",
+  SHORT_PARTED = "short_parted",
+  SHORT_PART2 = "short_part2",
+  SHORT_MESSY1 = "short_messy1",
+  SHORT_MESSY2 = "short_messy2",
+  SHORT_MESSY3 = "short_messy3",
+  SHORT_BEDHEAD = "short_bedhead",
+  SHORT_UNKEMPT = "short_unkempt",
+  SHORT_BANGSSHORT = "short_bangsshort",
+  SHORT_SWOOP = "short_swoop",
+  SHORT_SIDE_SWOOP = "short_side_swoop",
+  SHORT_CURTAINS = "short_curtains",
+  SHORT_BANGS = "short_bangs",
+  SHORT_SINGLE = "short_single",
+  SHORT_COWLICK = "short_cowlick",
+  SHORT_COWLICK_TALL = "short_cowlick_tall",
+  SHORT_TIED_BACK = "short_tied_back",
+
+  SPIKY_SPIKED_PORCUPINE = "spiky_spiked_porcupine",
+  SPIKY_SPIKED_LIBERTY = "spiky_spiked_liberty",
+  SPIKY_SPIKED_LIBERTY2 = "spiky_spiked_liberty2",
+  SPIKY_SPIKED_BEEHIVE = "spiky_spiked_beehive",
+  SPIKY_SPIKED = "spiky_spiked",
+  SPIKY_SPIKED2 = "spiky_spiked2",
+  SPIKY_HALFMESSY = "spiky_halfmessy",
+
+  PIGTAILS = "pigtails",
+  PIGTAILS_BUNCHES = "pigtails_bunches",
+  PIGTAILS_BANGS = "pigtails_bangs",
+
+  BOB = "bob",
+  BOB_LOB = "bob_lob",
+  BOB_SIDE_PART = "bob_side_part",
+
+  BRAIDS_PONYTAILS_UPDOS_HALF_UP = "braids_ponytails_updos_half_up",
+  BRAIDS_PONYTAILS_UPDOS_BANGS_BUN = "braids_ponytails_updos_bangs_bun",
+  BRAIDS_PONYTAILS_UPDOS_SHORTKNOT = "braids_ponytails_updos_shortknot",
+  BRAIDS_PONYTAILS_UPDOS_LONGKNOT = "braids_ponytails_updos_longknot",
+  BRAIDS_PONYTAILS_UPDOS_PONYTAIL = "braids_ponytails_updos_ponytail",
+  BRAIDS_PONYTAILS_UPDOS_PONYTAIL2 = "braids_ponytails_updos_ponytail2",
+  BRAIDS_PONYTAILS_UPDOS_HIGH_PONY_TAIL = "braids_ponytails_updos_high_ponytail",
+  BRAIDS_PONYTAILS_UPDOS_BRAID = "braids_ponytails_updos_braid",
+  BRAIDS_PONYTAILS_UPDOS_BRAID2 = "braids_ponytails_updos_braid2",
+  BRAIDS_PONYTAILS_UPDOS_SHOULDER_LEFT = "braids_ponytails_updos_shoulder_left",
+  BRAIDS_PONYTAILS_UPDOS_SHOUDLER_RIGHT = "braids_ponytails_updos_shoulder_right",
+  BRAIDS_PONYTAILS_UPDOS_LONG_TIED = "braids_ponytails_updos_long_tied",
+  BRAIDS_PONYTAILS_UPDOS_XLONG_PONYTAIL = "braids_ponytails_updos_xlong_ponytail",
+
+  LONG = "long",
+  LONG_LOOSE = "long_loose",
+  LONG_BANGSLONG = "long_bangslong",
+  LONG_BANGSLONG2 = "long_bangslong2",
+  LONG_MESSY = "long_messy",
+  LONG_MESSY2 = "long_messy2",
+  LONG_CURTAINS_LONG = "long_curtains_long",
+  LONG_WAVY = "long_wavy",
+  LONG_LONG_CENTER_PART = "long_long_center_part",
+  LONG_STRAIGHT = "long_straight",
+
+  VERY_LONG_PRINESS = "very_long_priness",
+  VERY_LONG_SARA = "very_long_sara",
+  VERY_LONG_BAND = "very_long_band",
+  VERY_LONG_XLONG = "very_long_xlong",
+}
+
+export enum CHARACTER_HAIR_EXTENSION_TYPE {
+  NONE = "",
+  BRAID = "braid",
+  XLONG_BANG = "xlong_bang",
+  XLONG_BRAID = "xlong_braid",
+}
+
+export enum CHARACTER_HORNS_TYPE {
+  NONE = "",
+  BACKWARDS_HORNS = "backwards_horns",
+  CURLED_HORNS = "curled_horns",
+}
+
+export enum CHARACTER_FINS_TYPE {
+  NONE = "",
+  FIN = "fin",
+  SHORT_FIN = "short_fin",
+}

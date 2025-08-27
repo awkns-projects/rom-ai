@@ -10,6 +10,7 @@ import { User } from 'next-auth';
 import useSWRInfinite from 'swr/infinite';
 import { fetcher } from '@/lib/utils';
 import { getChatHistoryPaginationKey } from './sidebar-history';
+import CharacterGenerate from './character/canva';
 
 interface WelcomeMessage {
   id: string;
@@ -372,6 +373,9 @@ Please create a personalized AI agent that can help me with these specific needs
                   <span>Build Your Digimon</span>
                 </div>
               </div>
+            </div>
+            <div className="text-center">
+              <CharacterGenerate showRandomCharacter={true} />
             </div>
           </motion.div>
 

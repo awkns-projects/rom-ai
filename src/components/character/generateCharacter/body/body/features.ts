@@ -1,0 +1,66 @@
+import {
+  CHARACTER_STYLE,
+  CHARACTER_FEATURE,
+  CharacterFeature,
+} from "../../definitions";
+import { CHARACTER_PERSON_TYPE } from "../../person/definitions";
+
+import { CHARACTER_BODY_TYPE } from "./types";
+
+export const body_stylemap = [
+  CHARACTER_STYLE.LIGHT,
+  CHARACTER_STYLE.AMBER,
+  CHARACTER_STYLE.OLIVE,
+  CHARACTER_STYLE.TAUPE,
+  CHARACTER_STYLE.BRONZE,
+  CHARACTER_STYLE.BROWN,
+  CHARACTER_STYLE.BLACK,
+  CHARACTER_STYLE.LAVENDER,
+  CHARACTER_STYLE.BLUE,
+  CHARACTER_STYLE.ZOMBIE_GREEN,
+  CHARACTER_STYLE.GREEN,
+  CHARACTER_STYLE.PALE_GREEN,
+  CHARACTER_STYLE.BRIGHT_GREEN,
+  CHARACTER_STYLE.DARK_GREEN,
+  CHARACTER_STYLE.FUR_BLACK,
+  CHARACTER_STYLE.FUR_BROWN,
+  CHARACTER_STYLE.FUR_TAN,
+  CHARACTER_STYLE.FUR_COPPER,
+  CHARACTER_STYLE.FUR_GOLD,
+  CHARACTER_STYLE.FUR_GREY,
+  CHARACTER_STYLE.FUR_WHITE,
+];
+
+export const body_zombie_stylemap = [CHARACTER_STYLE.ZOMBIE];
+
+export const body_skeleton_stylemap = [CHARACTER_STYLE.SKELETON];
+
+export const body_feature: CharacterFeature = {
+  [CHARACTER_BODY_TYPE.BASIC]: {
+    variant: CHARACTER_BODY_TYPE.BASIC,
+    stylemap: body_stylemap,
+    required: {},
+  },
+  [CHARACTER_BODY_TYPE.ZOMBIE]: {
+    variant: CHARACTER_BODY_TYPE.ZOMBIE,
+    stylemap: body_zombie_stylemap,
+    required: {
+      [CHARACTER_FEATURE.PERSON]: [
+        CHARACTER_PERSON_TYPE.MALE,
+        CHARACTER_PERSON_TYPE.FEMALE,
+        CHARACTER_PERSON_TYPE.CHILD,
+      ],
+    },
+  },
+  [CHARACTER_BODY_TYPE.SKELETON]: {
+    variant: CHARACTER_BODY_TYPE.SKELETON,
+    stylemap: body_skeleton_stylemap,
+    required: {
+      [CHARACTER_FEATURE.PERSON]: [
+        CHARACTER_PERSON_TYPE.MALE,
+        CHARACTER_PERSON_TYPE.FEMALE,
+        CHARACTER_PERSON_TYPE.CHILD,
+      ],
+    },
+  },
+};
