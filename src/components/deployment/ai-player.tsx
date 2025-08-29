@@ -3,6 +3,11 @@
 import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
+import { useAgents, type Agent } from "@/hooks/use-agents"
+import { useRomCards, type RomCard } from "@/hooks/use-rom-cards"
+import { CompositeUnicorn } from "@/components/composite-unicorn"
+import { CardPurchaseModal } from "@/components/card-purchase-modal"
+import Image from "next/image"
 import {
   Brain,
   Cpu,
@@ -42,6 +47,7 @@ interface AICassette {
   matrixCode: string
   costPerHour: number
   lastUsed: string
+  originalAgent?: Agent
 }
 
 interface AIAgent {
@@ -196,105 +202,85 @@ const ProgressBar = ({ progress }: { progress: number }) => {
   )
 }
 
-export default function Component() {
-  const [cassettes, setCassettes] = useState<AICassette[]>([
-    {
-      id: "neural-core",
-      name: "NEURAL_CORE_ROM.bin",
-      type: "CONSCIOUSNESS",
-      description: "{'>>> PRIMARY ROM CONSCIOUSNESS PROTOCOLS <<<'}",
-      color: "from-green-500 to-lime-400",
-      gradient: "bg-gradient-to-r from-green-500 to-lime-400",
-      icon: <Brain className="w-5 h-5" />,
-      balance: 247.5,
-      capacity: "2.4TB",
-      isInserted: false,
-      slotId: null,
-      matrixCode: "01001110 01000101 01010101",
-      costPerHour: 12.5,
-      lastUsed: "2 hours ago",
-    },
-    {
-      id: "quantum-proc",
-      name: "QUANTUM_PROC_ROM.sys",
-      type: "COMPUTATION",
-      description: "{'>>> ADVANCED QUANTUM ROM PROCESSING CORE <<<'}",
-      color: "from-cyan-400 to-green-500",
-      gradient: "bg-gradient-to-r from-cyan-400 to-green-500",
-      icon: <Cpu className="w-5 h-5" />,
-      balance: 89.25,
-      capacity: "1.8TB",
-      isInserted: false,
-      slotId: null,
-      matrixCode: "01010001 01010101 01000001",
-      costPerHour: 8.75,
-      lastUsed: "1 day ago",
-    },
-    {
-      id: "creative-spark",
-      name: "CREATIVE_SPARK_ROM.ai",
-      type: "INNOVATION",
-      description: "{'>>> CREATIVE ROM BREAKTHROUGH ALGORITHMS <<<'}",
-      color: "from-pink-500 to-cyan-400",
-      gradient: "bg-gradient-to-r from-pink-500 to-cyan-400",
-      icon: <Sparkles className="w-5 h-5" />,
-      balance: 156.8,
-      capacity: "3.1TB",
-      isInserted: false,
-      slotId: null,
-      matrixCode: "01000011 01010010 01000101",
-      costPerHour: 15.25,
-      lastUsed: "30 minutes ago",
-    },
-    {
-      id: "emotion-engine",
-      name: "EMOTION_ENGINE_ROM.dll",
-      type: "EMPATHY",
-      description: "{'>>> EMOTIONAL ROM INTELLIGENCE PROTOCOLS <<<'}",
-      color: "from-purple-500 to-pink-400",
-      gradient: "bg-gradient-to-r from-purple-500 to-pink-400",
-      icon: <Heart className="w-5 h-5" />,
-      balance: 23.4,
-      capacity: "1.5TB",
-      isInserted: false,
-      slotId: null,
-      matrixCode: "01000101 01001101 01001111",
-      costPerHour: 9.8,
-      lastUsed: "5 hours ago",
-    },
-    {
-      id: "strategy-matrix",
-      name: "STRATEGY_MATRIX_ROM.bin",
-      type: "PLANNING",
-      description: "{'>>> STRATEGIC ROM PLANNING DECISION CORE <<<'}",
-      color: "from-blue-500 to-cyan-400",
-      gradient: "bg-gradient-to-r from-blue-500 to-cyan-400",
-      icon: <Target className="w-5 h-5" />,
-      balance: 312.75,
-      capacity: "2.7TB",
-      isInserted: false,
-      slotId: null,
-      matrixCode: "01010011 01010100 01010010",
-      costPerHour: 11.3,
-      lastUsed: "15 minutes ago",
-    },
-    {
-      id: "lightning-core",
-      name: "LIGHTNING_CORE_ROM.exe",
-      type: "SPEED",
-      description: "{'>>> ULTRA-FAST ROM PROCESSING MATRIX <<<'}",
-      color: "from-yellow-400 to-green-500",
-      gradient: "bg-gradient-to-r from-yellow-400 to-green-500",
-      icon: <Zap className="w-5 h-5" />,
-      balance: 5.2,
-      capacity: "4.2TB",
-      isInserted: false,
-      slotId: null,
-      matrixCode: "01001100 01001001 01000111",
-      costPerHour: 13.9,
-      lastUsed: "3 days ago",
-    },
-  ])
+// Helper function to render agent avatar
+const renderAgentAvatar = (agent: Agent, size = 48) => {
+  const avatar = agent.agentData?.avatar
+  
+  if (avatar?.type === 'rom-unicorn' && avatar.unicornParts) {
+    return <CompositeUnicorn parts={avatar.unicornParts} size={size} />
+  } else if (avatar?.type === 'custom' && avatar.customType === 'upload' && avatar.uploadedImage) {
+    return (
+      <Image
+        src={avatar.uploadedImage}
+        alt={agent.agentData?.name || agent.title}
+        width={size}
+        height={size}
+        className="rounded-lg object-cover"
+      />
+    )
+  } else if (avatar?.type === 'custom' && avatar.customType === 'wallet' && avatar.selectedNFT) {
+    return <span className="text-xl">{avatar.selectedNFT.split(' ')[0]}</span>
+  } else {
+    return <span className="text-xl text-gray-400">🤖</span>
+  }
+}
+
+// Helper function to convert agent to cassette format
+const agentToCassette = (agent: Agent): AICassette => {
+  const getIconForDomain = (domain: string) => {
+    switch (domain?.toLowerCase()) {
+      case 'marketing': return <Target className="w-5 h-5" />
+      case 'health': return <Heart className="w-5 h-5" />
+      case 'content': return <Sparkles className="w-5 h-5" />
+      case 'development': return <Cpu className="w-5 h-5" />
+      case 'analysis': return <TrendingUp className="w-5 h-5" />
+      default: return <Brain className="w-5 h-5" />
+    }
+  }
+
+  const getThemeGradient = (theme?: string) => {
+    switch (theme) {
+      case 'blue': return 'from-blue-500 to-cyan-400'
+      case 'purple': return 'from-purple-500 to-pink-400'
+      case 'red': return 'from-red-500 to-pink-400'
+      case 'yellow': return 'from-yellow-400 to-green-500'
+      case 'pink': return 'from-pink-500 to-cyan-400'
+      case 'green':
+      default: return 'from-green-500 to-lime-400'
+    }
+  }
+
+  const gradient = getThemeGradient(agent.agentData?.theme)
+  const domain = agent.agentData?.domain || 'GENERAL'
+  const agentName = agent.agentData?.name || agent.title
+  
+  return {
+    id: agent.chatId,
+    name: `${agentName.toUpperCase().replace(/\s+/g, '_')}_ROM.bin`,
+    type: domain.toUpperCase(),
+    description: `{'>>> ${(agent.agentData?.description || 'AI AGENT PROTOCOLS').toUpperCase()} <<<'}`,
+    color: gradient,
+    gradient: `bg-gradient-to-r ${gradient}`,
+    icon: getIconForDomain(domain),
+    balance: Math.random() * 300 + 50, // Random balance for demo
+    capacity: `${(Math.random() * 3 + 1).toFixed(1)}TB`,
+    isInserted: false,
+    slotId: null,
+    matrixCode: Array(3).fill(0).map(() => 
+      Math.floor(Math.random() * 256).toString(2).padStart(8, '0')
+    ).join(' '),
+    costPerHour: Math.random() * 10 + 5, // Random cost between 5-15
+    lastUsed: `${Math.floor(Math.random() * 24)} hours ago`,
+    // Store the original agent for access to full data
+    originalAgent: agent,
+  }
+}
+
+export default function AIPlayer() {
+  const { agents, isLoading } = useAgents({ limit: 20 })
+  const { romCards: dbRomCards, isLoading: loadingCards, refreshCards } = useRomCards()
+  const [cassettes, setCassettes] = useState<AICassette[]>([])
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false)
 
   const [availableAgents] = useState<AIAgent[]>([
     {
@@ -331,43 +317,8 @@ export default function Component() {
     },
   ])
 
-  // New state for multiple ROM Cards
-  const [romCards, setRomCards] = useState<ROMCard[]>([
-    {
-      id: "card-1",
-      name: "Project Alpha",
-      description: "Main development workspace",
-      color: "from-green-500 to-cyan-400",
-      gradient: "bg-gradient-to-r from-green-500 to-cyan-400",
-      slots: [
-        { id: 1, isOccupied: false, cassetteId: null, agentId: null, isActive: false, startTime: null, totalSpent: 0 },
-        { id: 2, isOccupied: false, cassetteId: null, agentId: null, isActive: false, startTime: null, totalSpent: 0 },
-        { id: 3, isOccupied: false, cassetteId: null, agentId: null, isActive: false, startTime: null, totalSpent: 0 },
-        { id: 4, isOccupied: false, cassetteId: null, agentId: null, isActive: false, startTime: null, totalSpent: 0 },
-      ],
-      totalBalance: 500.0,
-      isDeployed: false,
-      createdAt: "2024-01-15",
-      lastUsed: "2 hours ago",
-    },
-    {
-      id: "card-2", 
-      name: "Client Beta",
-      description: "Client project workspace",
-      color: "from-purple-500 to-pink-400",
-      gradient: "bg-gradient-to-r from-purple-500 to-pink-400",
-      slots: [
-        { id: 1, isOccupied: false, cassetteId: null, agentId: null, isActive: false, startTime: null, totalSpent: 0 },
-        { id: 2, isOccupied: false, cassetteId: null, agentId: null, isActive: false, startTime: null, totalSpent: 0 },
-        { id: 3, isOccupied: false, cassetteId: null, agentId: null, isActive: false, startTime: null, totalSpent: 0 },
-        { id: 4, isOccupied: false, cassetteId: null, agentId: null, isActive: false, startTime: null, totalSpent: 0 },
-      ],
-      totalBalance: 250.0,
-      isDeployed: true,
-      createdAt: "2024-01-10",
-      lastUsed: "1 day ago",
-    }
-  ])
+  // Transform database ROM cards to component format
+  const [romCards, setRomCards] = useState<ROMCard[]>([])
 
   // Legacy state - keeping for now but will use romCards primarily
   const [slots, setSlots] = useState<CassetteSlot[]>([
@@ -380,12 +331,77 @@ export default function Component() {
   const [isPowered, setIsPowered] = useState(true)
   const [activeSlot, setActiveSlot] = useState<number | null>(null)
   const [selectedCassette, setSelectedCassette] = useState<string | null>(null)
-  const [selectedRomCard, setSelectedRomCard] = useState<string | null>("card-1") // Default to first ROM Card
+  const [selectedRomCard, setSelectedRomCard] = useState<string | null>(null) // Will be set from database
   const [isMobile, setIsMobile] = useState(false)
   const [bootSequence, setBootSequence] = useState(true)
   const [bootProgress, setBootProgress] = useState(0)
   const [systemTime, setSystemTime] = useState(new Date())
   const [originalBalances, setOriginalBalances] = useState<Record<string, number>>({})
+
+  // Helper function to format time ago
+  const formatTimeAgo = (date: Date) => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffHours > 0) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return 'Just now';
+  }
+
+  // Transform database cards to component format
+  useEffect(() => {
+    if (dbRomCards && dbRomCards.length > 0) {
+      const transformedCards: ROMCard[] = dbRomCards.map((dbCard) => {
+        const getCardColor = (cardType: string) => {
+          switch (cardType) {
+            case 'regular': return { color: 'from-green-500 to-cyan-400', gradient: 'bg-gradient-to-r from-green-500 to-cyan-400' };
+            case 'marketplace': return { color: 'from-blue-500 to-purple-400', gradient: 'bg-gradient-to-r from-blue-500 to-purple-400' };
+            case 'publish': return { color: 'from-purple-500 to-pink-400', gradient: 'bg-gradient-to-r from-purple-500 to-pink-400' };
+            default: return { color: 'from-green-500 to-cyan-400', gradient: 'bg-gradient-to-r from-green-500 to-cyan-400' };
+          }
+        };
+
+        const cardStyle = getCardColor(dbCard.cardType.name);
+        const maxSlots = dbCard.cardType.maxSlots || 4;
+        
+        // Create empty slots based on card type
+        const slots: CassetteSlot[] = [];
+        for (let i = 1; i <= maxSlots; i++) {
+          slots.push({
+            id: i,
+            isOccupied: false,
+            cassetteId: null,
+            agentId: null,
+            isActive: false,
+            startTime: null,
+            totalSpent: 0
+          });
+        }
+
+        return {
+          id: dbCard.id,
+          name: dbCard.name,
+          description: `${dbCard.cardType.displayName} - ${maxSlots} slots`,
+          color: cardStyle.color,
+          gradient: cardStyle.gradient,
+          slots,
+          totalBalance: parseFloat(dbCard.balance),
+          isDeployed: dbCard.isDeployed,
+          createdAt: new Date(dbCard.createdAt).toISOString().split('T')[0],
+          lastUsed: dbCard.lastUsed ? formatTimeAgo(new Date(dbCard.lastUsed)) : 'Never used',
+        };
+      });
+
+      setRomCards(transformedCards);
+      
+      // Set first card as selected if none selected
+      if (!selectedRomCard && transformedCards.length > 0) {
+        setSelectedRomCard(transformedCards[0].id);
+      }
+    }
+  }, [dbRomCards, selectedRomCard])
 
   // Helper functions for consistent cost calculations
   const getSelectedCassette = () => cassettes.find((c) => c.id === selectedCassette)
@@ -473,36 +489,11 @@ export default function Component() {
 
   // ROM Card management functions
   const addNewRomCard = () => {
-    const newId = `card-${Date.now()}`
-    const colors = [
-      { color: "from-blue-500 to-cyan-400", gradient: "bg-gradient-to-r from-blue-500 to-cyan-400" },
-      { color: "from-purple-500 to-pink-400", gradient: "bg-gradient-to-r from-purple-500 to-pink-400" },
-      { color: "from-yellow-400 to-orange-500", gradient: "bg-gradient-to-r from-yellow-400 to-orange-500" },
-      { color: "from-green-500 to-teal-400", gradient: "bg-gradient-to-r from-green-500 to-teal-400" },
-      { color: "from-indigo-500 to-purple-400", gradient: "bg-gradient-to-r from-indigo-500 to-purple-400" },
-    ]
-    const randomColor = colors[Math.floor(Math.random() * colors.length)]
-    
-    const newRomCard: ROMCard = {
-      id: newId,
-      name: `Project ${String.fromCharCode(65 + romCards.length)}`,
-      description: "New workspace for ROM agents",
-      color: randomColor.color,
-      gradient: randomColor.gradient,
-      slots: [
-        { id: 1, isOccupied: false, cassetteId: null, agentId: null, isActive: false, startTime: null, totalSpent: 0 },
-        { id: 2, isOccupied: false, cassetteId: null, agentId: null, isActive: false, startTime: null, totalSpent: 0 },
-        { id: 3, isOccupied: false, cassetteId: null, agentId: null, isActive: false, startTime: null, totalSpent: 0 },
-        { id: 4, isOccupied: false, cassetteId: null, agentId: null, isActive: false, startTime: null, totalSpent: 0 },
-      ],
-      totalBalance: 100.0,
-      isDeployed: false,
-      createdAt: new Date().toISOString().split('T')[0],
-      lastUsed: "Just created",
-    }
-    
-    setRomCards([...romCards, newRomCard])
-    setSelectedRomCard(newId)
+    setShowPurchaseModal(true)
+  }
+
+  const handlePurchaseComplete = () => {
+    refreshCards() // Refresh the cards from database
   }
 
   const deleteRomCard = (cardId: string) => {
@@ -629,6 +620,14 @@ export default function Component() {
       return () => clearInterval(progressTimer)
     }
   }, [bootSequence])
+
+  // Convert agents to cassettes when agents load
+  useEffect(() => {
+    if (agents && agents.length > 0) {
+      const agentCassettes = agents.map(agentToCassette)
+      setCassettes(agentCassettes)
+    }
+  }, [agents])
 
   const insertCassette = (cassetteId: string, slotId: number) => {
     if (!selectedRomCard) return
@@ -880,7 +879,7 @@ export default function Component() {
         </Card>
 
         {/* Cost Preview Section */}
-        {selectedCassette && (
+        {/* {selectedCassette && (
           <Card className="bg-black/90 backdrop-blur-sm border-yellow-500/50 border-2 p-4 mb-4 shadow-lg shadow-yellow-500/20">
             <div className="text-center">
               <div className="text-yellow-400 font-mono text-sm mb-2">{">>> COST_CALCULATOR.EXE <<<"}</div>
@@ -942,7 +941,7 @@ export default function Component() {
               )}
             </div>
           </Card>
-        )}
+        )} */}
 
         {/* Mobile Layout */}
         {isMobile ? (
@@ -953,76 +952,97 @@ export default function Component() {
                 <h3 className="text-green-400 font-mono text-sm font-bold">{">>> MY_AGENTS.DIR <<<"}</h3>
               </div>
 
-              {/* Horizontal Matrix Scroll */}
+              {/* Horizontal Agent Scroll */}
               <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-                {cassettes.slice(0, 4).map((cassette) => {
-                  const isLowBalance = cassette.balance < cassette.costPerHour
-                  const deploymentCount = getAgentDeploymentCount(cassette.id)
-                  const activeCount = getAgentActiveCount(cassette.id)
-                  const isInCurrentCard = !canInsertCassetteInCurrentCard(cassette.id)
-                  return (
-                    <Card
-                      key={cassette.id}
-                      className={`${cassette.gradient} p-3 flex-shrink-0 w-40 transition-all duration-200 border-2 border-black/20 shadow-lg ${
-                        selectedCassette === cassette.id
-                          ? "ring-2 ring-white/70 scale-105 shadow-2xl"
-                          : "hover:scale-102 hover:shadow-xl"
-                      } ${isLowBalance ? "ring-2 ring-red-400" : ""} ${
-                        isInCurrentCard ? "opacity-60 ring-2 ring-orange-400" : ""
-                      }`}
-                      onClick={() => handleCassetteSelect(cassette.id)}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="text-black flex-shrink-0">{cassette.icon}</div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-black font-bold text-xs font-mono truncate">{cassette.name}</div>
-                          <div className="text-black/80 text-xs font-mono">{cassette.type}</div>
-                        </div>
-                        {isLowBalance && <AlertTriangle className="w-3 h-3 text-red-600" />}
-                      </div>
-                      <div className="text-black/90 text-xs font-mono mb-2 leading-relaxed">
-                        {cassette.description}
-                      </div>
-                      <div className="text-black/60 text-xs font-mono">${cassette.costPerHour}/hr</div>
-
-                      {/* Deployment Status */}
-                      {deploymentCount > 0 && (
-                        <div className="mt-2 text-center">
-                          <div className="inline-flex items-center gap-2 bg-black/20 rounded px-3 py-1">
-                            <div className="text-black text-xs font-mono font-bold">
-                              DEPLOYED TO {deploymentCount} ROM CARD{deploymentCount > 1 ? 'S' : ''}
-                              {activeCount > 0 && (
-                                <div className="text-green-800 mt-1">
-                                  {activeCount} ACTIVELY RUNNING
+                {isLoading ? (
+                  <div className="flex items-center gap-2 text-green-400 font-mono text-sm">
+                    <div className="animate-spin w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full"></div>
+                    Loading agents...
+                  </div>
+                ) : cassettes.length === 0 ? (
+                  <div className="text-green-400 font-mono text-sm">No agents found</div>
+                ) : (
+                  cassettes.slice(0, 6).map((cassette) => {
+                    const isLowBalance = cassette.balance < cassette.costPerHour
+                    const deploymentCount = getAgentDeploymentCount(cassette.id)
+                    const activeCount = getAgentActiveCount(cassette.id)
+                    const isInCurrentCard = !canInsertCassetteInCurrentCard(cassette.id)
+                    const isSelected = selectedCassette === cassette.id
+                    
+                    return (
+                      <div 
+                        key={cassette.id}
+                        className="relative group cursor-pointer flex-shrink-0 w-64"
+                        onClick={() => handleCassetteSelect(cassette.id)}
+                      >
+                        <div className={`block p-3 rounded-xl border-2 transition-all duration-300 hover:shadow-lg hover:scale-[1.02] ${
+                          isSelected 
+                            ? 'bg-green-900/30 border-green-400/80 shadow-xl shadow-green-500/20 scale-[1.02]' 
+                            : 'bg-gray-900/50 border-gray-700/50 hover:bg-gray-800/60 hover:border-gray-600/70'
+                        } ${isInCurrentCard ? 'opacity-60' : ''}`}>
+                          
+                          <div className="flex items-start gap-3">
+                            {/* Agent Avatar */}
+                            <div className="w-10 h-10 bg-gray-700 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                              {cassette.originalAgent ? renderAgentAvatar(cassette.originalAgent, 40) : cassette.icon}
+                            </div>
+                            
+                            <div className="flex-1 min-w-0">
+                              {/* Title and Status */}
+                              <div className="flex items-start justify-between gap-2 mb-2">
+                                <h3 className="font-medium text-xs leading-tight truncate text-green-100">
+                                  {cassette.originalAgent?.agentData?.name || cassette.originalAgent?.title || cassette.name}
+                                </h3>
+                                <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 font-mono ${
+                                  isSelected 
+                                    ? 'bg-green-500/20 text-green-300' 
+                                    : 'bg-gray-500/20 text-gray-300'
+                                }`}>
+                                  {(cassette.originalAgent?.agentData?.domain || cassette.type).substring(0, 8)}
+                                </span>
+                              </div>
+                              
+                              {/* Description */}
+                              <p className="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">
+                                {cassette.originalAgent?.agentData?.description || cassette.description.replace(/[{}'>'"<]/g, '')}
+                              </p>
+                              
+                              {/* Stats */}
+                              <div className="text-xs space-y-1">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-500">Cost:</span>
+                                  <span className="text-cyan-400 font-bold">${cassette.costPerHour.toFixed(2)}/hr</span>
                                 </div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Status Badges */}
+                          {(deploymentCount > 0 || activeCount > 0 || isLowBalance) && (
+                            <div className="mt-2 flex gap-1 flex-wrap">
+                              {deploymentCount > 0 && (
+                                <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full font-mono">
+                                  Deployed: {deploymentCount}
+                                </span>
+                              )}
+                              {activeCount > 0 && (
+                                <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full font-mono">
+                                  Active: {activeCount}
+                                </span>
+                              )}
+                              {isLowBalance && (
+                                <span className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded-full font-mono">
+                                  Low Balance
+                                </span>
                               )}
                             </div>
-                          </div>
+                          )}
                         </div>
-                      )}
+                      </div>
+                    )
+                  })
+                )}
 
-                      {/* Current ROM Card Status */}
-                      {isInCurrentCard && (
-                        <div className="text-center mb-3">
-                          <div className="inline-flex items-center gap-2 bg-orange-500/20 rounded px-3 py-1">
-                            <div className="text-orange-800 text-xs font-mono font-bold">
-                              ALREADY IN THIS ROM CARD
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {selectedCassette === cassette.id && (
-                        <div className="text-center mb-3">
-                          <div className="inline-flex items-center gap-2 bg-black/30 rounded px-3 py-1">
-                            <div className="w-2 h-2 bg-black rounded-full animate-pulse"></div>
-                            <span className="text-black text-xs font-mono font-bold">{">>> SELECTED <<<"}</span>
-                          </div>
-                        </div>
-                      )}
-                    </Card>
-                  )
-                })}
               </div>
             </div>
 
@@ -1301,83 +1321,116 @@ export default function Component() {
                 <GlitchText className="text-green-400 font-semibold text-lg mb-4 font-mono">
                   My Agents
                 </GlitchText>
-                {cassettes.map((cassette) => {
-                  const isLowBalance = cassette.balance < cassette.costPerHour
-                  const deploymentCount = getAgentDeploymentCount(cassette.id)
-                  const activeCount = getAgentActiveCount(cassette.id)
-                  const isInCurrentCard = !canInsertCassetteInCurrentCard(cassette.id)
-                  return (
-                    <Card
-                      key={cassette.id}
-                      className={`${cassette.gradient} p-4 cursor-pointer transform transition-all duration-200 shadow-lg hover:shadow-2xl border-2 border-black/20 ${
-                        selectedCassette === cassette.id ? "ring-4 ring-white/70 scale-105" : "hover:scale-105"
-                      } ${isLowBalance ? "ring-2 ring-red-400" : ""} ${
-                        isInCurrentCard ? "opacity-60 ring-2 ring-orange-400" : ""
-                      }`}
-                      onClick={() => handleCassetteSelect(cassette.id)}
-                    >
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="text-black flex-shrink-0">{cassette.icon}</div>
-                        <div className="flex-1">
-                          <div className="text-black font-bold text-base font-mono">{cassette.name}</div>
-                          <div className="text-black/90 text-sm font-mono">{cassette.type}</div>
-                        </div>
-                        {isLowBalance && <AlertTriangle className="w-5 h-5 text-red-600" />}
-                      </div>
-
-                      <div className="text-black/90 text-sm mb-3 leading-relaxed font-mono">
-                        {cassette.description}
-                      </div>
-
-                      <div className="flex justify-between items-center text-sm mb-3 font-mono">
-                        <span className="text-black/90">Cost/Hour:</span>
-                        <span className="text-black font-bold text-lg">${cassette.costPerHour}</span>
-                      </div>
-
-                      {/* Deployment Status */}
-                      {deploymentCount > 0 && (
-                        <div className="text-center mb-3">
-                          <div className="inline-flex items-center gap-2 bg-black/20 rounded px-3 py-1">
-                            <div className="text-black text-xs font-mono font-bold">
-                              DEPLOYED TO {deploymentCount} ROM CARD{deploymentCount > 1 ? 'S' : ''}
-                              {activeCount > 0 && (
-                                <div className="text-green-800 mt-1">
-                                  {activeCount} ACTIVELY RUNNING
+                {isLoading ? (
+                  <div className="p-4 text-center">
+                    <div className="animate-spin w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full mx-auto mb-2"></div>
+                    <p className="text-sm text-green-400 font-mono">Loading agents...</p>
+                  </div>
+                ) : cassettes.length === 0 ? (
+                  <div className="p-4 text-center">
+                    <p className="text-sm text-green-400 font-mono mb-2">No agents found</p>
+                    <p className="text-xs text-green-300 font-mono">Create an agent to get started!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {cassettes.map((cassette) => {
+                      const isLowBalance = cassette.balance < cassette.costPerHour
+                      const deploymentCount = getAgentDeploymentCount(cassette.id)
+                      const activeCount = getAgentActiveCount(cassette.id)
+                      const isInCurrentCard = !canInsertCassetteInCurrentCard(cassette.id)
+                      const isSelected = selectedCassette === cassette.id
+                      
+                      return (
+                        <div 
+                          key={cassette.id}
+                          className="relative group cursor-pointer"
+                          onClick={() => handleCassetteSelect(cassette.id)}
+                        >
+                          <div className={`block p-4 rounded-xl border-2 transition-all duration-300 hover:shadow-lg hover:scale-[1.02] ${
+                            isSelected 
+                              ? 'bg-green-900/30 border-green-400/80 shadow-xl shadow-green-500/20 scale-[1.02]' 
+                              : 'bg-gray-900/50 border-gray-700/50 hover:bg-gray-800/60 hover:border-gray-600/70'
+                          } ${isInCurrentCard ? 'opacity-60' : ''}`}>
+                            
+                            <div className="flex items-start gap-3">
+                              {/* Agent Avatar */}
+                              <div className="w-12 h-12 bg-gray-700 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
+                                {cassette.originalAgent ? renderAgentAvatar(cassette.originalAgent, 48) : cassette.icon}
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                {/* Title and Status */}
+                                <div className="flex items-start justify-between gap-2 mb-2">
+                                  <h3 className="font-medium text-sm leading-tight truncate text-green-100">
+                                    {cassette.originalAgent?.agentData?.name || cassette.originalAgent?.title || cassette.name}
+                                  </h3>
+                                  <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 font-mono ${
+                                    isSelected 
+                                      ? 'bg-green-500/20 text-green-300' 
+                                      : 'bg-gray-500/20 text-gray-300'
+                                  }`}>
+                                    {cassette.originalAgent?.agentData?.domain || cassette.type}
+                                  </span>
                                 </div>
-                              )}
+                                
+                                {/* Description */}
+                                <p className="text-xs text-gray-400 mb-3 leading-relaxed">
+                                  {cassette.originalAgent?.agentData?.description || cassette.description.replace(/[{}'>'"<]/g, '')}
+                                </p>
+                                
+                                {/* Stats Grid */}
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div>
+                                    <span className="text-gray-500 font-mono">Balance:</span>
+                                    <span className="text-green-400 ml-2 font-bold">${cassette.balance.toFixed(2)}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500 font-mono">Cost:</span>
+                                    <span className="text-cyan-400 ml-2 font-bold">${cassette.costPerHour.toFixed(2)}/hr</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500 font-mono">Capacity:</span>
+                                    <span className="text-blue-400 ml-2 font-bold">{cassette.capacity}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-gray-500 font-mono">Updated:</span>
+                                    <span className="text-purple-400 ml-2 font-bold">{cassette.lastUsed}</span>
+                                  </div>
+                                </div>
+                                
+                                {/* Status Badges */}
+                                {(deploymentCount > 0 || activeCount > 0 || isLowBalance || isInCurrentCard) && (
+                                  <div className="mt-3 flex gap-1 flex-wrap">
+                                    {deploymentCount > 0 && (
+                                      <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full font-mono">
+                                        Deployed: {deploymentCount}
+                                      </span>
+                                    )}
+                                    {activeCount > 0 && (
+                                      <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full font-mono">
+                                        Active: {activeCount}
+                                      </span>
+                                    )}
+                                    {isLowBalance && (
+                                      <span className="text-xs bg-red-500/20 text-red-400 px-2 py-1 rounded-full font-mono">
+                                        Low Balance
+                                      </span>
+                                    )}
+                                    {isInCurrentCard && (
+                                      <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-1 rounded-full font-mono">
+                                        In Current Card
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      )}
-
-                      {/* Current ROM Card Status */}
-                      {isInCurrentCard && (
-                        <div className="text-center mb-3">
-                          <div className="inline-flex items-center gap-2 bg-orange-500/20 rounded px-3 py-1">
-                            <div className="text-orange-800 text-xs font-mono font-bold">
-                              ALREADY IN THIS ROM CARD
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {selectedCassette === cassette.id && (
-                        <div className="text-center mb-3">
-                          <div className="inline-flex items-center gap-2 bg-black/30 rounded px-3 py-1">
-                            <div className="w-2 h-2 bg-black rounded-full animate-pulse"></div>
-                            <span className="text-black text-xs font-mono font-bold">{">>> SELECTED <<<"}</span>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex gap-1">
-                        {[...Array(12)].map((_, i) => (
-                          <div key={i} className="w-1 h-1 bg-black/40 rounded-full"></div>
-                        ))}
-                      </div>
-                    </Card>
-                  )
-                })}
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1397,7 +1450,34 @@ export default function Component() {
 
               {/* ROM Cards Grid */}
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                {romCards.map((romCard) => (
+                {loadingCards ? (
+                  <div className="col-span-full flex items-center justify-center py-12">
+                    <div className="text-center">
+                      <div className="animate-spin w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+                      <p className="text-green-400 font-mono">Loading ROM Cards...</p>
+                    </div>
+                  </div>
+                ) : romCards.length === 0 ? (
+                  <div className="col-span-full flex items-center justify-center py-12">
+                    <div className="text-center max-w-md">
+                      <div className="w-16 h-16 bg-gray-700 rounded-xl flex items-center justify-center mx-auto mb-4">
+                        <Plus className="w-8 h-8 text-gray-400" />
+                      </div>
+                      <h4 className="text-lg font-bold text-green-100 mb-2 font-mono">No ROM Cards Yet</h4>
+                      <p className="text-gray-400 font-mono text-sm mb-6">
+                        Purchase your first ROM card to start deploying AI agents
+                      </p>
+                      <Button
+                        onClick={addNewRomCard}
+                        className="bg-green-600 hover:bg-green-700 font-mono"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Purchase ROM Card
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  romCards.map((romCard) => (
                   <Card 
                     key={romCard.id} 
                     className={`bg-black/90 backdrop-blur-sm border-2 p-6 shadow-2xl transition-all duration-200 ${
@@ -1612,7 +1692,8 @@ export default function Component() {
                       })}
                     </div>
                   </Card>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -1635,6 +1716,13 @@ export default function Component() {
           display: none;
         }
       `}</style>
+
+      {/* Purchase Modal */}
+      <CardPurchaseModal
+        isOpen={showPurchaseModal}
+        onClose={() => setShowPurchaseModal(false)}
+        onPurchaseComplete={handlePurchaseComplete}
+      />
     </div>
   )
 }

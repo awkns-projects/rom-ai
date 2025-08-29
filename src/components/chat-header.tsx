@@ -81,12 +81,24 @@ const PureChatHeader = forwardRef<ModelSelectorRef, {
         asChild
       >
         <Link
-          href={`/deployment`}
+          href={`/marketplace`}
         >
-          <span className="md:hidden">🤖</span>
+          <span className="md:hidden">💎</span>
           <span className="hidden md:inline">Marketplace</span>
         </Link>
-      </Button> 
+      </Button>
+
+      <Button
+        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white border border-blue-500/30 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 py-1.5 px-2 h-fit md:h-[34px] order-5 font-mono font-medium"
+        asChild
+      >
+        <Link
+          href={`/play`}
+        >
+          <span className="md:hidden">🤖</span>
+          <span className="hidden md:inline">Play</span>
+        </Link>
+      </Button>
     </header>
   );
 });

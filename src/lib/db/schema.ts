@@ -9,6 +9,9 @@ import {
   primaryKey,
   foreignKey,
   boolean,
+  decimal,
+  integer,
+  unique,
 } from 'drizzle-orm/pg-core';
 
 export const user = pgTable('User', {
@@ -75,27 +78,19 @@ export const vote = pgTable(
 
 export type Vote = InferSelectModel<typeof vote>;
 
-export const document = pgTable(
-  'Document',
-  {
-    id: uuid('id').notNull().defaultRandom(),
-    createdAt: timestamp('createdAt').notNull(),
-    title: text('title').notNull(),
-    content: text('content'),
-    kind: varchar('kind', { enum: ['text', 'code', 'image', 'sheet', 'agent'] })
-      .notNull()
-      .default('text'),
-    userId: uuid('userId')
-      .notNull()
-      .references(() => user.id),
-    metadata: json('metadata'),
-  },
-  (table) => {
-    return {
-      pk: primaryKey({ columns: [table.id, table.createdAt] }),
-    };
-  },
-);
+export const document = pgTable('Document', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  createdAt: timestamp('createdAt').notNull(),
+  title: text('title').notNull(),
+  content: text('content'),
+  kind: varchar('kind', { enum: ['text', 'code', 'image', 'sheet', 'agent'] })
+    .notNull()
+    .default('text'),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id),
+  metadata: json('metadata'),
+});
 
 export type Document = InferSelectModel<typeof document>;
 
@@ -103,7 +98,9 @@ export const suggestion = pgTable(
   'Suggestion',
   {
     id: uuid('id').notNull().defaultRandom(),
-    documentId: uuid('documentId').notNull(),
+    documentId: uuid('documentId')
+      .notNull()
+      .references(() => document.id),
     documentCreatedAt: timestamp('documentCreatedAt').notNull(),
     originalText: text('originalText').notNull(),
     suggestedText: text('suggestedText').notNull(),
@@ -116,10 +113,6 @@ export const suggestion = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.id] }),
-    documentRef: foreignKey({
-      columns: [table.documentId, table.documentCreatedAt],
-      foreignColumns: [document.id, document.createdAt],
-    }),
   }),
 );
 
@@ -194,3 +187,100 @@ export const stream = pgTable(
 );
 
 export type Stream = InferSelectModel<typeof stream>;
+
+// Card Types Table
+export const cardType = pgTable('CardType', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  name: varchar('name', { length: 50 }).notNull(), // 'regular', 'marketplace', 'publish'
+  displayName: varchar('displayName', { length: 100 }).notNull(), // 'Regular Card', 'Marketplace Card', 'Publish Card'
+  description: text('description'),
+  price: decimal('price', { precision: 10, scale: 2 }).notNull(), // $5.00, $10.00, $50.00
+  maxSlots: integer('maxSlots').notNull().default(4), // Number of agent slots
+  features: json('features'), // JSON array of features
+  isActive: boolean('isActive').notNull().default(true),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type CardType = InferSelectModel<typeof cardType>;
+
+// ROM Cards Table
+export const romCard = pgTable('RomCard', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  cardTypeId: uuid('cardTypeId')
+    .notNull()
+    .references(() => cardType.id),
+  name: varchar('name', { length: 100 }).notNull(),
+  isDeployed: boolean('isDeployed').notNull().default(false),
+  balance: decimal('balance', { precision: 10, scale: 2 }).notNull().default('0.00'),
+  totalSpent: decimal('totalSpent', { precision: 10, scale: 2 }).notNull().default('0.00'),
+  lastUsed: timestamp('lastUsed'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type RomCard = InferSelectModel<typeof romCard>;
+
+// Card Slots Table (for tracking which agents are in which slots)
+export const cardSlot = pgTable('CardSlot', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  romCardId: uuid('romCardId')
+    .notNull()
+    .references(() => romCard.id, { onDelete: 'cascade' }),
+  slotNumber: integer('slotNumber').notNull(), // 1, 2, 3, 4
+  agentId: uuid('agentId') // Reference to chat.id (the agent)
+    .references(() => chat.id, { onDelete: 'set null' }),
+  isActive: boolean('isActive').notNull().default(false),
+  startTime: timestamp('startTime'),
+  endTime: timestamp('endTime'),
+  totalCost: decimal('totalCost', { precision: 10, scale: 2 }).notNull().default('0.00'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type CardSlot = InferSelectModel<typeof cardSlot>;
+
+// Orders Table
+export const order = pgTable('Order', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  userId: uuid('userId')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  cardTypeId: uuid('cardTypeId')
+    .notNull()
+    .references(() => cardType.id),
+  status: varchar('status', { enum: ['pending', 'completed', 'failed', 'refunded'] })
+    .notNull()
+    .default('pending'),
+  amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+  currency: varchar('currency', { length: 3 }).notNull().default('USD'),
+  paymentMethod: varchar('paymentMethod', { length: 50 }), // 'stripe', 'paypal', etc.
+  paymentIntentId: varchar('paymentIntentId', { length: 255 }), // Stripe payment intent ID
+  metadata: json('metadata'), // Additional order data
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type Order = InferSelectModel<typeof order>;
+
+// Order Items Table (for tracking what was purchased)
+export const orderItem = pgTable('OrderItem', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  orderId: uuid('orderId')
+    .notNull()
+    .references(() => order.id, { onDelete: 'cascade' }),
+  romCardId: uuid('romCardId') // Reference to the created ROM card
+    .references(() => romCard.id, { onDelete: 'set null' }),
+  cardTypeId: uuid('cardTypeId')
+    .notNull()
+    .references(() => cardType.id),
+  quantity: integer('quantity').notNull().default(1),
+  unitPrice: decimal('unitPrice', { precision: 10, scale: 2 }).notNull(),
+  totalPrice: decimal('totalPrice', { precision: 10, scale: 2 }).notNull(),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+});
+
+export type OrderItem = InferSelectModel<typeof orderItem>;

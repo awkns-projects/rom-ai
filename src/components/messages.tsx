@@ -46,6 +46,7 @@ function PureMessages({
   } = useMessages({
     chatId,
     status,
+    messages,
   });
 
   return (

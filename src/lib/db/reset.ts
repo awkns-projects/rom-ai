@@ -18,28 +18,22 @@ const resetDatabase = async () => {
   console.log('🗑️  Starting database reset...');
 
   try {
-    // Drop all tables in the correct order (respecting foreign key constraints)
-    console.log('⏳ Dropping tables...');
+    // Drop all tables completely (CASCADE will drop all dependencies)
+    console.log('⏳ Dropping all tables and schemas...');
     
-    // Drop tables with foreign key dependencies first
-    await db.execute(`DROP TABLE IF EXISTS "Vote" CASCADE;`);
-    await db.execute(`DROP TABLE IF EXISTS "Message" CASCADE;`);
-    await db.execute(`DROP TABLE IF EXISTS "Suggestion" CASCADE;`);
-    await db.execute(`DROP TABLE IF EXISTS "Stream" CASCADE;`);
-    await db.execute(`DROP TABLE IF EXISTS "Document" CASCADE;`);
-    await db.execute(`DROP TABLE IF EXISTS "Chat" CASCADE;`);
-    await db.execute(`DROP TABLE IF EXISTS "User" CASCADE;`);
+    // First, disable all foreign key checks and drop everything with CASCADE
+    await db.execute(`DROP SCHEMA IF EXISTS "drizzle" CASCADE;`);
+    await db.execute(`DROP SCHEMA IF EXISTS "public" CASCADE;`);
+    await db.execute(`CREATE SCHEMA "public";`);
+    await db.execute(`GRANT ALL ON SCHEMA "public" TO PUBLIC;`);
     
-    // Drop the migrations table to ensure clean migration state
-    await db.execute(`DROP TABLE IF EXISTS "__drizzle_migrations" CASCADE;`);
-    
-    console.log('✅ All tables dropped successfully');
+    console.log('✅ All tables and schemas reset successfully');
 
     // Run migrations to recreate all tables
     console.log('⏳ Running migrations to recreate tables...');
     
     const start = Date.now();
-    await migrate(db, { migrationsFolder: './lib/db/migrations' });
+    await migrate(db, { migrationsFolder: './src/lib/db/migrations' });
     const end = Date.now();
 
     console.log('✅ Database reset completed successfully in', end - start, 'ms');
