@@ -762,7 +762,7 @@ export default function HomePage() {
         </div>
 
         {/* Stats Overview */}
-        <StatsCard stats={stats} loading={loading} />
+        <StatsCard loading={loading} />
 
         {/* Quick Actions */}
         <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3\`}>
@@ -2376,17 +2376,10 @@ export default function ScheduleCard({ schedule }: ScheduleCardProps) {
 import { useAgent } from '@/contexts/AgentContext';
 
 interface StatsCardProps {
-  stats: {
-    totalRecords: number;
-    activeSchedules: number;
-    totalModels: number;
-    totalActions: number;
-    totalSchedules: number;
-  };
   loading: boolean;
 }
 
-export default function StatsCard({ stats, loading }: StatsCardProps) {
+export default function StatsCard({ loading }: StatsCardProps) {
   // Use the global agent context
   const { config: agentConfig } = useAgent();
   
@@ -2417,19 +2410,23 @@ export default function StatsCard({ stats, loading }: StatsCardProps) {
       <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light} mb-3\`}>System Overview</h3>
       <div className="grid grid-cols-2 gap-3">
         <div className="text-center">
-          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.totalRecords}</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{'0'}</div>
           <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Records</div>
         </div>
         <div className="text-center">
-          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.activeSchedules}</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{
+            agentConfig?.schedules.filter((scheduleData)=>{
+              return scheduleData.trigger?.active
+            }).length || '0'
+          }</div>
           <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Active Tasks</div>
         </div>
         <div className="text-center">
-          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.totalModels}</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{agentConfig?.models.length || '0'}</div>
           <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Models</div>
         </div>
         <div className="text-center">
-          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.totalActions}</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{agentConfig?.actions.length || '0'}</div>
           <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Actions</div>
         </div>
       </div>
