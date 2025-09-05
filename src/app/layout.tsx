@@ -2,9 +2,15 @@ import { Toaster } from 'sonner';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { ThemeProvider } from '@/components/theme-provider';
-
+import { AppWrapper } from '@/components/app-wrapper';
 import './globals.css';
 import { SessionProvider } from 'next-auth/react';
+import { cookies } from 'next/headers';
+
+import { AppSidebar } from '@/components/app-sidebar';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+import { auth } from './(auth)/auth';
+import Script from 'next/script';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://www.rom.cards'),
@@ -53,6 +59,9 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [session, cookieStore] = await Promise.all([auth(), cookies()]);
+  const isCollapsed = cookieStore.get('sidebar:state')?.value !== 'true';
+
   return (
     <html
       lang="en"
@@ -78,7 +87,20 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <Toaster position="top-center" />
-          <SessionProvider>{children}</SessionProvider>
+         
+          <SessionProvider>
+          <AppWrapper>
+
+<Script
+        src="https://cdn.jsdelivr.net/pyodide/v0.23.4/full/pyodide.js"
+        strategy="beforeInteractive"
+      />
+      <SidebarProvider defaultOpen={!isCollapsed}>
+        <AppSidebar user={session?.user} />
+        <SidebarInset>{children}</SidebarInset>
+      </SidebarProvider>
+            </AppWrapper>
+            </SessionProvider>
         </ThemeProvider>
       </body>
     </html>
