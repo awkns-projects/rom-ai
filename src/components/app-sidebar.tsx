@@ -24,7 +24,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
 
   return (
     <Sidebar className="group-data-[side=left]:border-r-0 bg-black border-r border-green-500/20">
-      <SidebarHeader className="border-b border-green-500/20 bg-black/50 backdrop-blur-sm">
+      <SidebarHeader className="bg-black/50 backdrop-blur-sm">
         <SidebarMenu>
           <div className="flex flex-row justify-between items-center">
             <Link
