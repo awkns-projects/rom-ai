@@ -988,15 +988,14 @@ class ApiClient {
     };
   }
 
-  async executeAction(actionName: string, input: any) {
-    // Get fresh credentials for action execution
-    const { credentials } = await this.getCredentialsAndConfig();
-    
+  async executeAction(actionName: string, documentId: string, code: string, inputParameters: any, envVars: any) {
     return this.request(\`/api/actions/\${actionName}\`, {
       method: 'POST',
       body: JSON.stringify({ 
-        input,
-        credentials // Pass credentials to action
+        documentId,
+        code,
+        inputParameters,
+        envVars
       }),
     });
   }
@@ -2415,18 +2414,18 @@ export default function StatsCard({ loading }: StatsCardProps) {
         </div>
         <div className="text-center">
           <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{
-            agentConfig?.schedules.filter((scheduleData)=>{
+            agentConfig ? agentConfig.schedules.filter((scheduleData)=>{
               return scheduleData.trigger?.active
-            }).length || '0'
+            }).length : '0'
           }</div>
           <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Active Tasks</div>
         </div>
         <div className="text-center">
-          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{agentConfig?.models.length || '0'}</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{agentConfig ? agentConfig.models.length : '0'}</div>
           <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Models</div>
         </div>
         <div className="text-center">
-          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{agentConfig?.actions.length || '0'}</div>
+          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{agentConfig ? agentConfig.actions.length : '0'}</div>
           <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Actions</div>
         </div>
       </div>
@@ -2547,8 +2546,10 @@ export default function LoadingSpinner({ size = 'md', color = 'green' }: Loading
 
   private generateActionExecutionModal(): string {
     return `import { useState, useEffect } from 'react';
+import { useAgent } from '@/contexts/AgentContext';
 import api from '@/lib/api';
 import LoadingSpinner from './LoadingSpinner';
+import ActionExecutionModal from './ActionExecutionModal';
 
 interface ActionExecutionModalProps {
   action: {
@@ -2571,6 +2572,9 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
   const [inputParameters, setInputParameters] = useState<Record<string, any>>({});
   const [result, setResult] = useState<any>(null);
   const [step, setStep] = useState<'input' | 'executing' | 'result'>('input');
+
+  // Use the global agent context
+  const { config: agentConfig } = useAgent();
 
   // Generate mock UI components if none provided
   const uiComponents = action.uiComponentsDesign || [
@@ -2608,10 +2612,26 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
 
     try {
       let actionResult;
-      
+
       if (executionMode === 'local') {
         // Execute action locally (fetches code from main app, runs on sub-agent)
-        actionResult = await api.executeAction(action.name, inputParameters);
+
+        const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+        const matchedAction = agentConfig.actions.find(( actionItem ) => {
+          return actionItem.name === action.name
+        })
+        const { credentials } = await api.getCredentialsAndConfig();
+        const envVars = { ...credentials, ...process.env };
+
+        console.log('matchedAction',matchedAction)
+
+        if(matchedAction) {
+          matchedAction.execute.code.envVars.forEach((envItem)=>{
+            envVars[envItem.name] = process.env[envItem.name]
+          })
+        }
+        
+        actionResult = await api.executeAction(matchedAction.name || '', DOCUMENT_ID, matchedAction.execute.code.script || '', inputParameters, envVars);
       } else {
         // Execute action on main app directly
         actionResult = await api.triggerActionOnMainApp(action.id, inputParameters);
@@ -3658,7 +3678,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 import { prisma } from '@/lib/prisma'
 
 // Fetch action definition from main app
-async function getActionFromMainApp(actionName: string) {
+async function getActionFromMainApp(query: any, body: any) {
   const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
   const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
   const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
@@ -3673,8 +3693,14 @@ async function getActionFromMainApp(actionName: string) {
         'Authorization': \`Bearer \${AGENT_TOKEN}\`,
       },
       body: JSON.stringify({
-        actionName: actionName,
-        getDefinitionOnly: true // Only fetch definition, don't execute
+        // actionName: actionName,
+        // getDefinitionOnly: true // Only fetch definition, don't execute
+
+        documentId: body.documentId,
+        code: body.code,
+        inputParameters: body.inputParameters,
+        envVars: body.envVars,
+        testMode: false
       })
     });
 
@@ -3683,7 +3709,7 @@ async function getActionFromMainApp(actionName: string) {
     }
 
     const data = await response.json();
-    return data.success ? data.action : null;
+    return data.success ? data : null;
   } catch (error) {
     console.error('Failed to fetch action from main app:', error);
     throw error;
@@ -3726,7 +3752,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     console.log('🚀 Executing dynamic action:', actionName);
     
     // Fetch action definition from main app
-    const action = await getActionFromMainApp(actionName);
+    const action = await getActionFromMainApp( req.query, req.body );
     if (!action) {
       return res.status(404).json({ error: \`Action '\${actionName}' not found\` });
     }
