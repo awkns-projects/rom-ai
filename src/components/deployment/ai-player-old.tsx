@@ -599,27 +599,27 @@ export default function AIPlayer() {
   }, [])
 
   // Boot sequence timer
-  // useEffect(() => {
-  //   if (bootSequence) {
-  //     const duration = 3000 // 3 seconds
-  //     const interval = 50 // Update every 50ms for smooth animation
-  //     const steps = duration / interval
-  //     let currentStep = 0
+  useEffect(() => {
+    if (bootSequence) {
+      const duration = 3000 // 3 seconds
+      const interval = 50 // Update every 50ms for smooth animation
+      const steps = duration / interval
+      let currentStep = 0
 
-  //     const progressTimer = setInterval(() => {
-  //       currentStep++
-  //       const progress = Math.min((currentStep / steps) * 100, 100)
-  //       setBootProgress(progress)
+      const progressTimer = setInterval(() => {
+        currentStep++
+        const progress = Math.min((currentStep / steps) * 100, 100)
+        setBootProgress(progress)
 
-  //       if (currentStep >= steps) {
-  //         clearInterval(progressTimer)
-  //         setBootSequence(false)
-  //       }
-  //     }, interval)
+        if (currentStep >= steps) {
+          clearInterval(progressTimer)
+          setBootSequence(false)
+        }
+      }, interval)
 
-  //     return () => clearInterval(progressTimer)
-  //   }
-  // }, [bootSequence])
+      return () => clearInterval(progressTimer)
+    }
+  }, [bootSequence])
 
   // Convert agents to cassettes when agents load
   useEffect(() => {
@@ -790,42 +790,42 @@ export default function AIPlayer() {
     }
   }
 
-  // if (bootSequence) {
-  //   return (
-  //     <div className="min-h-screen bg-black flex items-center justify-center relative overflow-hidden">
-  //       <MatrixRain />
-  //       <div className="relative z-10 text-center">
-  //         <div className="mb-8">
-  //           <div className="text-green-400 font-mono text-2xl mb-4 animate-pulse">
-  //             <Terminal className="w-8 h-8 mx-auto mb-2" />
-  //             ROM CARDS DEPLOYMENT SYSTEM
-  //           </div>
-  //           <div className="text-green-300 font-mono text-sm space-y-2">
-  //             <div>
-  //               <TypewriterText text="INITIALIZING ROM CARD PROTOCOLS..." speed={30} />
-  //             </div>
-  //             <div className="mt-2">
-  //               <TypewriterText text="LOADING ROM CARDS PAYMENT SYSTEM..." speed={25} />
-  //             </div>
-  //             <div className="mt-2">
-  //               <TypewriterText text="ESTABLISHING ROM CARDS CONNECTIONS..." speed={35} />
-  //             </div>
-  //           </div>
-  //         </div>
-  //         <div className="text-green-400 font-mono text-xs">
-  //           <div className="flex justify-center space-x-4 mb-4">
-  //             <ProgressBar progress={bootProgress} />
-  //           </div>
-  //           <div>ROM CARDS SYSTEM READY - ENTERING...</div>
-  //         </div>
-  //       </div>
-  //     </div>
-  //   )
-  // }
+  if (bootSequence) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center relative overflow-hidden">
+        <MatrixRain />
+        <div className="relative z-10 text-center">
+          <div className="mb-8">
+            <div className="text-green-400 font-mono text-2xl mb-4 animate-pulse">
+              <Terminal className="w-8 h-8 mx-auto mb-2" />
+              ROM CARDS DEPLOYMENT SYSTEM
+            </div>
+            <div className="text-green-300 font-mono text-sm space-y-2">
+              <div>
+                <TypewriterText text="INITIALIZING ROM CARD PROTOCOLS..." speed={30} />
+              </div>
+              <div className="mt-2">
+                <TypewriterText text="LOADING ROM CARDS PAYMENT SYSTEM..." speed={25} />
+              </div>
+              <div className="mt-2">
+                <TypewriterText text="ESTABLISHING ROM CARDS CONNECTIONS..." speed={35} />
+              </div>
+            </div>
+          </div>
+          <div className="text-green-400 font-mono text-xs">
+            <div className="flex justify-center space-x-4 mb-4">
+              <ProgressBar progress={bootProgress} />
+            </div>
+            <div>ROM CARDS SYSTEM READY - ENTERING...</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
-      {/* <MatrixRain /> */}
+      <MatrixRain />
 
       {/* Scanlines Effect */}
       <div className="fixed inset-0 pointer-events-none z-10 opacity-10">
@@ -841,19 +841,19 @@ export default function AIPlayer() {
       <div className="max-w-6xl mx-auto px-4 py-4 relative z-20">
         {/* Matrix Header */}
         <div className="text-center mb-4">
-          {/* <div className="inline-flex items-center gap-3 bg-black/80 backdrop-blur-sm rounded border border-green-500/50 px-4 py-2 mb-3">
+          <div className="inline-flex items-center gap-3 bg-black/80 backdrop-blur-sm rounded border border-green-500/50 px-4 py-2 mb-3">
             <div className={`w-2 h-2 rounded-full ${isPowered ? "bg-green-400 animate-pulse" : "bg-red-500"}`} />
             <span className="text-green-400 font-mono text-xs tracking-widest">ROM_CARDS_v0.0.1</span>
             <div className="text-green-300 font-mono text-xs">{systemTime.toLocaleTimeString()}</div>
-          </div> */}
+          </div>
           <GlitchText className="text-xl sm:text-2xl font-bold text-green-400 font-mono tracking-wider">
-            UPGRADE
+            {"◤ ROM CARDS DEPLOYMENT ◥"}
           </GlitchText>
-          {/* <div className="text-green-300 font-mono text-xs mt-1">Deploy your AI Agents</div> */}
+          <div className="text-green-300 font-mono text-xs mt-1">Deploy your AI Agents</div>
         </div>
 
         {/* Account Summary */}
-        {/* <Card className="bg-black/90 backdrop-blur-sm border-green-500/50 border-2 p-4 mb-4 shadow-lg shadow-green-500/20">
+        <Card className="bg-black/90 backdrop-blur-sm border-green-500/50 border-2 p-4 mb-4 shadow-lg shadow-green-500/20">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
             <div>
               <div className="text-green-400 font-mono text-xs mb-1">TOTAL_BALANCE</div>
@@ -876,7 +876,7 @@ export default function AIPlayer() {
               <div className="text-orange-400 font-mono text-lg font-bold">${getTotalSessionSpentAllCards().toFixed(2)}</div>
             </div>
           </div>
-        </Card> */}
+        </Card>
 
         {/* Cost Preview Section */}
         {/* {selectedCassette && (
@@ -990,15 +990,15 @@ export default function AIPlayer() {
                             <div className="flex-1 min-w-0">
                               {/* Title and Status */}
                               <div className="flex items-start justify-between gap-2 mb-2">
-                                <h3 className="font-medium text-xs leading-tight truncate text-green-100 flex-1 min-w-0">
+                                <h3 className="font-medium text-xs leading-tight truncate text-green-100">
                                   {cassette.originalAgent?.agentData?.name || cassette.originalAgent?.title || cassette.name}
                                 </h3>
-                                <span className={`text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 font-mono whitespace-nowrap ${
+                                <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 font-mono ${
                                   isSelected 
                                     ? 'bg-green-500/20 text-green-300' 
                                     : 'bg-gray-500/20 text-gray-300'
                                 }`}>
-                                  {(cassette.originalAgent?.agentData?.domain || cassette.type).substring(0, 6)}
+                                  {(cassette.originalAgent?.agentData?.domain || cassette.type).substring(0, 8)}
                                 </span>
                               </div>
                               
@@ -1008,12 +1008,12 @@ export default function AIPlayer() {
                               </p>
                               
                               {/* Stats */}
-                              {/* <div className="text-xs space-y-1">
+                              <div className="text-xs space-y-1">
                                 <div className="flex justify-between">
                                   <span className="text-gray-500">Cost:</span>
                                   <span className="text-cyan-400 font-bold">${cassette.costPerHour.toFixed(2)}/hr</span>
                                 </div>
-                              </div> */}
+                              </div>
                             </div>
                           </div>
                           
@@ -1212,7 +1212,7 @@ export default function AIPlayer() {
                                   <div className="text-black/80 text-xs font-mono">
                                     {insertedCassette.type}
                                   </div>
-                                  {/* <div className="text-black/90 text-xs font-mono font-bold">
+                                  <div className="text-black/90 text-xs font-mono font-bold">
                                     ${displayBalance.toFixed(2)}
                                     {slot.isActive && (
                                       <span className="text-black/60 block text-xs">
@@ -1220,7 +1220,7 @@ export default function AIPlayer() {
                                         {slot.totalSpent.toFixed(2)})
                                       </span>
                                     )}
-                                  </div> */}
+                                  </div>
                                 </div>
                               )}
 
@@ -1361,10 +1361,10 @@ export default function AIPlayer() {
                               <div className="flex-1 min-w-0">
                                 {/* Title and Status */}
                                 <div className="flex items-start justify-between gap-2 mb-2">
-                                  <h3 className="font-medium text-sm leading-tight truncate text-green-100 flex-1 min-w-0">
+                                  <h3 className="font-medium text-sm leading-tight truncate text-green-100">
                                     {cassette.originalAgent?.agentData?.name || cassette.originalAgent?.title || cassette.name}
                                   </h3>
-                                  <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 font-mono whitespace-nowrap max-w-20 truncate ${
+                                  <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 font-mono ${
                                     isSelected 
                                       ? 'bg-green-500/20 text-green-300' 
                                       : 'bg-gray-500/20 text-gray-300'
@@ -1379,7 +1379,7 @@ export default function AIPlayer() {
                                 </p>
                                 
                                 {/* Stats Grid */}
-                                {/* <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div className="grid grid-cols-2 gap-2 text-xs">
                                   <div>
                                     <span className="text-gray-500 font-mono">Balance:</span>
                                     <span className="text-green-400 ml-2 font-bold">${cassette.balance.toFixed(2)}</span>
@@ -1396,7 +1396,7 @@ export default function AIPlayer() {
                                     <span className="text-gray-500 font-mono">Updated:</span>
                                     <span className="text-purple-400 ml-2 font-bold">{cassette.lastUsed}</span>
                                   </div>
-                                </div> */}
+                                </div>
                                 
                                 {/* Status Badges */}
                                 {(deploymentCount > 0 || activeCount > 0 || isLowBalance || isInCurrentCard) && (
@@ -1537,14 +1537,14 @@ export default function AIPlayer() {
                         <span>SLOTS_OCCUPIED:</span>
                         <span className="text-cyan-400">{romCard.slots.filter(s => s.isOccupied).length}/4</span>
                       </div>
-                      {/* <div className="flex justify-between mb-1">
+                      <div className="flex justify-between mb-1">
                         <span>BALANCE:</span>
                         <span className="text-yellow-400">${romCard.totalBalance.toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>COST/HOUR:</span>
                         <span className="text-red-400">${getRomCardHourlyCost(romCard).toFixed(2)}</span>
-                      </div> */}
+                      </div>
                     </div>
 
                     {/* ROM Card Slots Grid */}

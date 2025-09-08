@@ -35,7 +35,7 @@ const PureChatHeader = forwardRef<ModelSelectorRef, {
   const { width: windowWidth } = useWindowSize();
 
   return (
-    <header className="flex sticky top-0 bg-black border-b border-green-500/20 py-1.5 items-center px-2 md:px-2 gap-2 backdrop-blur-xl z-50">
+    <header className="flex sticky top-0 bg-black py-1.5 items-center px-2 md:px-2 gap-2 backdrop-blur-xl z-50">
       <SidebarToggle />
 
       {(!open || windowWidth < 768) && (
@@ -76,29 +76,7 @@ const PureChatHeader = forwardRef<ModelSelectorRef, {
         />
       )}
 
-      <Button
-        className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-black border border-green-500/30 shadow-lg shadow-green-500/20 hover:shadow-green-500/40 py-1.5 px-2 h-fit md:h-[34px] order-4 md:ml-auto font-mono font-medium"
-        asChild
-      >
-        <Link
-          href={`/marketplace`}
-        >
-          <span className="md:hidden">💎</span>
-          <span className="hidden md:inline">Marketplace</span>
-        </Link>
-      </Button>
 
-      <Button
-        className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white border border-blue-500/30 shadow-lg shadow-blue-500/20 hover:shadow-blue-500/40 py-1.5 px-2 h-fit md:h-[34px] order-5 font-mono font-medium"
-        asChild
-      >
-        <Link
-          href={`/play`}
-        >
-          <span className="md:hidden">🤖</span>
-          <span className="hidden md:inline">Play</span>
-        </Link>
-      </Button>
     </header>
   );
 });
