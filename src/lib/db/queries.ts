@@ -1101,3 +1101,128 @@ export async function getDocumentsByUserId({ userId }: { userId: string }) {
     );
   }
 }
+
+// ==================== PRIVY-SPECIFIC FUNCTIONS ====================
+
+/**
+ * Create a new user with Privy authentication data
+ */
+export async function createPrivyUser({
+  email,
+  privyId,
+  walletAddress,
+  walletType,
+  name,
+}: {
+  email?: string
+  privyId: string
+  walletAddress?: string
+  walletType?: 'ethereum' | 'solana'
+  name?: string
+}) {
+  try {
+    console.log(`👤 Creating Privy user: ${privyId}`);
+    const result = await db.insert(user).values({
+      email: email || `${privyId}@privy.local`, // Fallback email if none provided
+      privyId,
+      // Store wallet info in existing schema or extend as needed
+      // For now, we'll use the existing fields and potentially add metadata
+    }).returning({
+      id: user.id,
+      email: user.email,
+      privyId: user.privyId,
+    });
+    
+    console.log('✅ Privy user created successfully:', result[0]?.email);
+    return result;
+  } catch (error) {
+    console.error('❌ Failed to create Privy user:', {
+      privyId,
+      email,
+      error: error instanceof Error ? error.message : error,
+    });
+    throw new ChatSDKError('bad_request:database', 'Failed to create Privy user');
+  }
+}
+
+/**
+ * Update existing user with Privy ID
+ */
+export async function updateUserPrivyId(userId: string, privyId: string) {
+  try {
+    console.log(`🔄 Updating user ${userId} with Privy ID: ${privyId}`);
+    const result = await db.update(user)
+      .set({ 
+        privyId,
+        updatedAt: new Date(),
+      })
+      .where(eq(user.id, userId))
+      .returning({
+        id: user.id,
+        email: user.email,
+        privyId: user.privyId,
+      });
+    
+    console.log('✅ User Privy ID updated successfully');
+    return result;
+  } catch (error) {
+    console.error('❌ Failed to update user Privy ID:', {
+      userId,
+      privyId,
+      error: error instanceof Error ? error.message : error,
+    });
+    throw new ChatSDKError('bad_request:database', 'Failed to update user Privy ID');
+  }
+}
+
+/**
+ * Get user by Privy ID
+ */
+export async function getUserByPrivyId(privyId: string): Promise<Array<User>> {
+  try {
+    console.log(`🔍 Looking up user by Privy ID: ${privyId}`);
+    const result = await db.select().from(user).where(eq(user.privyId, privyId));
+    console.log(`✅ Privy user lookup completed: ${result.length} results found`);
+    return result;
+  } catch (error) {
+    console.error('❌ Failed to get user by Privy ID:', {
+      privyId,
+      error: error instanceof Error ? error.message : error,
+    });
+    throw new ChatSDKError('bad_request:database', 'Failed to get user by Privy ID');
+  }
+}
+
+/**
+ * Link Privy ID to existing user account
+ */
+export async function linkPrivyToExistingUser(email: string, privyId: string) {
+  try {
+    console.log(`🔗 Linking Privy ID ${privyId} to existing user: ${email}`);
+    const result = await db.update(user)
+      .set({ 
+        privyId,
+        updatedAt: new Date(),
+      })
+      .where(eq(user.email, email))
+      .returning({
+        id: user.id,
+        email: user.email,
+        privyId: user.privyId,
+      });
+    
+    if (result.length === 0) {
+      throw new Error(`No user found with email: ${email}`);
+    }
+    
+    console.log('✅ Privy ID linked to existing user successfully');
+    return result[0];
+  } catch (error) {
+    console.error('❌ Failed to link Privy ID to existing user:', {
+      email,
+      privyId,
+      error: error instanceof Error ? error.message : error,
+    });
+    throw new ChatSDKError('bad_request:database', 'Failed to link Privy ID to existing user');
+  }
+}
