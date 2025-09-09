@@ -7,6 +7,7 @@ import { toast } from '@/components/toast';
 
 import { AuthForm } from '@/components/auth-form';
 import { SubmitButton } from '@/components/submit-button';
+import { PrivyLoginButton, PrivyWalletButton } from '@/components/privy-login-button';
 
 import { login, type LoginActionState } from '../actions';
 import { useSession } from 'next-auth/react';
@@ -61,19 +62,38 @@ export default function Page() {
             Use your email and password to sign in
           </p>
         </div>
-        <AuthForm action={handleSubmit} defaultEmail={email}>
-          <SubmitButton isSuccessful={isSuccessful}>Sign in</SubmitButton>
-          <p className="text-center text-sm text-gray-600 mt-4 dark:text-zinc-400">
-            {"Don't have an account? "}
-            <Link
-              href="/register"
-              className="font-semibold text-gray-800 hover:underline dark:text-zinc-200"
-            >
-              Sign up
-            </Link>
-            {' for free.'}
-          </p>
-        </AuthForm>
+        <div className="space-y-6">
+          {/* Privy Authentication Options */}
+          <div className="space-y-3">
+            <PrivyLoginButton className="w-full" />
+            <PrivyWalletButton className="w-full" />
+          </div>
+          
+          {/* Divider */}
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="bg-background px-3 text-gray-500 dark:text-gray-400">or continue with email</span>
+            </div>
+          </div>
+          
+          {/* Traditional Email/Password Form */}
+          <AuthForm action={handleSubmit} defaultEmail={email}>
+            <SubmitButton isSuccessful={isSuccessful}>Sign in</SubmitButton>
+            <p className="text-center text-sm text-gray-600 mt-4 dark:text-zinc-400">
+              {"Don't have an account? "}
+              <Link
+                href="/register"
+                className="font-semibold text-gray-800 hover:underline dark:text-zinc-200"
+              >
+                Sign up
+              </Link>
+              {' for free.'}
+            </p>
+          </AuthForm>
+        </div>
       </div>
     </div>
   );

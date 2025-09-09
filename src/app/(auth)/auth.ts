@@ -2,10 +2,11 @@ import { compare } from 'bcrypt-ts';
 import NextAuth, { type DefaultSession } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import FacebookProvider from 'next-auth/providers/facebook';
-import { createGuestUser, getUser } from '@/lib/db/queries';
+import { createGuestUser, getUser, createPrivyUser, getUserByPrivyId } from '@/lib/db/queries';
 import { authConfig } from './auth.config';
 import { DUMMY_PASSWORD } from '@/lib/constants';
 import type { DefaultJWT } from 'next-auth/jwt';
+import { PrivyClient } from '@privy-io/server-auth';
 
 // Validate required environment variables
 const requiredEnvVars = {
@@ -29,6 +30,16 @@ if (missingEnvVars.length > 0) {
   if (process.env.NODE_ENV === 'production') {
     throw new Error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
   }
+}
+
+// Check optional Privy configuration
+const privyConfigured = !!(process.env.PRIVY_APP_ID && process.env.PRIVY_APP_SECRET);
+if (privyConfigured) {
+  console.log('✅ Privy authentication is configured');
+} else {
+  console.warn('⚠️  Privy authentication is not configured');
+  console.warn('💡 To enable Privy: set PRIVY_APP_ID and PRIVY_APP_SECRET in .env.local');
+  console.warn('📖 See setup-privy.md for instructions');
 }
 
 // Enhanced production validation
@@ -86,6 +97,9 @@ declare module 'next-auth' {
     user: {
       id: string;
       type: UserType;
+      // Privy-specific fields
+      privyDid?: string;
+      privySessionId?: string;
     } & DefaultSession['user'];
   }
 
@@ -93,6 +107,9 @@ declare module 'next-auth' {
     id?: string;
     email?: string | null;
     type: UserType;
+    // Privy-specific fields
+    privyDid?: string;
+    privySessionId?: string;
   }
 
   interface Account {
@@ -112,6 +129,9 @@ declare module 'next-auth/jwt' {
   interface JWT extends DefaultJWT {
     id: string;
     type: UserType;
+    // Privy-specific fields
+    privyDid?: string;
+    privySessionId?: string;
     accounts?: Array<{
       provider: string;
       access_token?: string;
@@ -411,7 +431,11 @@ export const {
 
           if (!passwordsMatch) return null;
 
-          return { ...user, type: 'regular' };
+          return { 
+            ...user, 
+            type: 'regular',
+            privyId: user.privyId || undefined,
+          };
         } catch (error) {
           console.error('❌ Credentials auth failed:', error);
           return null;
@@ -431,6 +455,112 @@ export const {
         } catch (error) {
           console.error('❌ Guest auth failed:', error);
           throw error;
+        }
+      },
+    }),
+        // Privy JWT verification
+    Credentials({
+      id: 'privy',
+      name: 'Privy',
+      credentials: { 
+        token: { label: 'Privy JWT', type: 'text' } 
+      },
+      async authorize({ token }: any) {
+        console.log('🔐 Privy authorize called with token:', token ? `${token.substring(0, 20)}...` : 'null');
+        
+        if (!token) {
+          console.error('❌ Privy authorize: No token provided');
+          return null;
+        }
+        
+        // Check if Privy is configured
+        if (!process.env.PRIVY_APP_ID || !process.env.PRIVY_APP_SECRET) {
+          console.error('❌ Privy is not configured on server side');
+          console.error('📝 Missing server-side environment variables:');
+          if (!process.env.PRIVY_APP_ID) console.error('   - PRIVY_APP_ID (same as your App ID)');
+          if (!process.env.PRIVY_APP_SECRET) console.error('   - PRIVY_APP_SECRET (from Settings → API Keys)');
+          console.error('💡 Add these to .env.local and restart the server');
+          console.error('📖 See setup-privy.md for complete setup guide');
+          return null;
+        }
+        
+        console.log('✅ Privy environment variables are configured');
+        console.log('🔍 App ID:', process.env.PRIVY_APP_ID);
+        console.log('🔍 App Secret:', process.env.PRIVY_APP_SECRET ? `${process.env.PRIVY_APP_SECRET.substring(0, 10)}...` : 'missing');
+        
+        try {
+          console.log('🔐 Verifying Privy JWT...');
+          
+          // Verify the Privy JWT token
+          const privy = new PrivyClient(
+            process.env.PRIVY_APP_ID,
+            process.env.PRIVY_APP_SECRET
+          );
+          
+          const claims = await privy.verifyAuthToken(token);
+          console.log('✅ Privy JWT verified:', { userId: claims.userId });
+          
+          // Find or create user in our database using Privy DID
+          const privyId = claims.userId; // This is the Privy DID (did:privy:...)
+          
+          try {
+            // First, try to find existing user by Privy ID
+            console.log('🔍 Looking up user by Privy ID in database...');
+            const existingUsers = await getUserByPrivyId(privyId);
+            
+            if (existingUsers.length > 0) {
+              // User exists, return their database ID
+              const dbUser = existingUsers[0];
+              console.log('✅ Found existing user:', { id: dbUser.id, email: dbUser.email });
+              
+              return {
+                id: dbUser.id, // Use database ID as NextAuth user ID
+                email: dbUser.email,
+                privyDid: privyId,
+                privySessionId: claims.sessionId,
+                type: 'regular' as const,
+              };
+            } else {
+              // User doesn't exist, create new one
+              console.log('👤 Creating new user for Privy ID:', privyId);
+              
+              // Create user with Privy ID (email will be set to fallback)
+              const newUsers = await createPrivyUser({
+                privyId,
+                email: `${privyId.replace('did:privy:', '')}@privy.local`, // Fallback email
+              });
+              
+              if (newUsers.length > 0) {
+                const newUser = newUsers[0];
+                console.log('✅ Created new user:', { id: newUser.id, email: newUser.email });
+                
+                return {
+                  id: newUser.id, // Use database ID as NextAuth user ID
+                  email: newUser.email,
+                  privyDid: privyId,
+                  privySessionId: claims.sessionId,
+                  type: 'regular' as const,
+                };
+              } else {
+                console.error('❌ Failed to create user: no user returned');
+                return null;
+              }
+            }
+          } catch (dbError) {
+            console.error('❌ Database error during user lookup/creation:', dbError);
+            console.error('💡 This usually means:');
+            console.error('   - Database connection issues');
+            console.error('   - Missing POSTGRES_URL environment variable');
+            console.error('   - Database schema not migrated');
+            return null;
+          }
+        } catch (error) {
+          console.error('❌ Privy JWT verification failed:', error);
+          console.error('💡 Common causes:');
+          console.error('   - Invalid or expired JWT token');
+          console.error('   - Wrong PRIVY_APP_SECRET');
+          console.error('   - Network connectivity issues');
+          return null;
         }
       },
     }),
@@ -468,6 +598,17 @@ export const {
       if (user) {
         token.id = user.id as string;
         token.type = user.type;
+        
+        // Store Privy-specific data in JWT token
+        if (user.privyDid) {
+          token.privyDid = user.privyDid;
+          token.privySessionId = user.privySessionId;
+          console.log('💾 Stored Privy data in token:', { 
+            privyDid: token.privyDid, 
+            privySessionId: token.privySessionId
+          });
+        }
+        
         console.log('💾 Stored user in token:', { id: token.id, type: token.type });
       }
 
@@ -496,6 +637,17 @@ export const {
       if (session.user && token.id) {
         session.user.id = token.id;
         session.user.type = token.type;
+        
+        // Add Privy-specific data to session
+        if (token.privyDid) {
+          session.user.privyDid = token.privyDid;
+          session.user.privySessionId = token.privySessionId;
+          console.log('✅ Added Privy data to session:', { 
+            privyDid: session.user.privyDid,
+            privySessionId: session.user.privySessionId
+          });
+        }
+        
         console.log('✅ Session updated:', { id: session.user.id, type: session.user.type });
       }
 
