@@ -1005,10 +1005,23 @@ class ApiClient {
   }
 
   // Direct action trigger (executes on main app)
-  async triggerActionOnMainApp(actionId: string, input: any = {}, member?: any) {
-    return this.request(\`/api/trigger/action/\${actionId}\`, {
+  // async triggerActionOnMainApp(actionId: string, input: any = {}, member?: any) {
+  //   return this.request(\`/api/trigger/action/\${actionId}\`, {
+  //     method: 'POST',
+  //     body: JSON.stringify({ input, member }),
+  //   });
+  // }
+
+  // Direct action trigger (executes on client app)
+  async triggerActionBySelf(actionObject:any, inputParams:any, envVars:any, testMode: boolean) {
+    return this.request(\`/api/trigger/action/\${actionObject.id}\`, {
       method: 'POST',
-      body: JSON.stringify({ input, member }),
+      body: JSON.stringify({ 
+        actionObject,
+        inputParams,
+        envVars,
+        testMode
+      }),
     });
   }
 
@@ -2613,29 +2626,40 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
     try {
       let actionResult;
 
-      if (executionMode === 'local') {
-        // Execute action locally (fetches code from main app, runs on sub-agent)
+      // if (executionMode === 'local') {
+      //   // Execute action locally (fetches code from main app, runs on sub-agent)
 
-        const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-        const matchedAction = agentConfig.actions.find(( actionItem ) => {
-          return actionItem.name === action.name
-        })
-        const { credentials } = await api.getCredentialsAndConfig();
-        const envVars = { ...credentials, ...process.env };
+      //   const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
+      //   const matchedAction = agentConfig.actions.find(( actionItem ) => {
+      //     return actionItem.name === action.name
+      //   })
+      //   const { credentials } = await api.getCredentialsAndConfig();
+      //   const envVars = { ...credentials, ...process.env };
 
-        console.log('matchedAction',matchedAction)
-
-        if(matchedAction) {
-          matchedAction.execute.code.envVars.forEach((envItem)=>{
-            envVars[envItem.name] = process.env[envItem.name]
-          })
-        }
+      //   if(matchedAction) {
+      //     matchedAction.execute.code.envVars.forEach((envItem)=>{
+      //       envVars[envItem.name] = process.env[envItem.name]
+      //     })
+      //   }
         
-        actionResult = await api.executeAction(matchedAction.name || '', DOCUMENT_ID, matchedAction.execute.code.script || '', inputParameters, envVars);
-      } else {
-        // Execute action on main app directly
-        actionResult = await api.triggerActionOnMainApp(action.id, inputParameters);
-      }
+      //   actionResult = await api.executeAction(matchedAction.name || '', DOCUMENT_ID, matchedAction.execute.code.script || '', inputParameters, envVars);
+      // } else {
+      //   // Execute action on main app directly
+      //   actionResult = await api.triggerActionOnMainApp(action.id, inputParameters);
+      // }
+
+      console.log('action',action)
+
+      // Execute on client itself
+      const matchedActionObject = agentConfig.actions.find(( actionItem ) => {
+        return actionItem.name === action.name
+      })
+      const { credentials } = await api.getCredentialsAndConfig();
+      const envVars = { ...credentials, ...process.env };
+      const testMode = false;
+
+      console.log('matchedActionObject',matchedActionObject);
+      actionResult = await api.triggerActionBySelf(matchedActionObject, inputParameters, envVars, testMode);
 
       setResult(actionResult);
       setStep('result');
@@ -4043,6 +4067,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   private generateDirectActionTriggerEndpoint(): string {
     return `import type { NextApiRequest, NextApiResponse } from 'next'
+import { prisma } from '@/lib/prisma'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { actionId } = req.query;
@@ -4064,39 +4089,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
     
     // Extract input from request body
-    const { input = {}, member } = req.body || {};
+    // const { input = {}, member } = req.body || {};
+    const { actionObject, inputParams, envVars, testMode } = req.body || {};
     
     // Call main app to execute action directly
-    const response = await fetch(\`\${MAIN_APP_URL}/api/agent/execute-action\`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-      },
-      body: JSON.stringify({
-        actionId: actionId,
-        input: input,
-        member: member || {
-          id: 'sub-agent-user',
-          role: 'admin',
-          email: 'sub-agent@deployed.app'
-        }
-      })
-    });
+    // const response = await fetch(\`\${MAIN_APP_URL}/api/agent/execute-action\`, {
+    //   method: 'POST',
+    //   headers: {
+    //     'Content-Type': 'application/json',
+    //     'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+    //   },
+    //   body: JSON.stringify({
+    //     actionId: actionId,
+    //     input: input,
+    //     member: member || {
+    //       id: 'sub-agent-user',
+    //       role: 'admin',
+    //       email: 'sub-agent@deployed.app'
+    //     }
+    //   })
+    // });
 
-    if (!response.ok) {
-      throw new Error(\`Main app responded with status: \${response.status}\`);
-    }
+    // if (!response.ok) {
+    //   throw new Error(\`Main app responded with status: \${response.status}\`);
+    // }
 
-    const result = await response.json();
+    // So far it is fail to use
+    const result = await prisma.$queryRaw\`SELECT 1\`;
     
     console.log('✅ Action executed successfully on main app');
+    // res.status(200).json({
+    //   success: true,
+    //   data: result.data,
+    //   triggeredRemotely: true,
+    //   actionId: actionId,
+    //   timestamp: new Date().toISOString()
+    // });
     res.status(200).json({
       success: true,
-      data: result.data,
-      triggeredRemotely: true,
-      actionId: actionId,
-      timestamp: new Date().toISOString()
+      result: result
     });
     
   } catch (error) {
