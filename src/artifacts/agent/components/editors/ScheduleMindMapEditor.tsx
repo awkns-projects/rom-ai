@@ -262,7 +262,7 @@ export const ScheduleMindMapEditor = memo(({
         : (
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <Label className="text-orange-300 font-mono text-sm">✨ Schedule Name</Label>
                 <Input
                   value={schedule.name || ''}
@@ -273,7 +273,7 @@ export const ScheduleMindMapEditor = memo(({
                 <p className="text-xs text-orange-400/70 font-mono">
                   Internal identifier (camelCase, no spaces)
                 </p>
-              </div>
+              </div> */}
 
               <div className="space-y-2">
                 <Label className="text-orange-300 font-mono text-sm">🏷️ Display Title</Label>
@@ -1177,7 +1177,7 @@ export const ScheduleMindMapEditor = memo(({
           <div className="flex items-center justify-between">
             <div>
               <div className="text-white font-mono font-medium">
-                {schedule.name || 'Unnamed Schedule'}
+                {schedule.title || 'Unnamed Schedule'}
               </div>
               <div className="text-orange-300 text-sm font-mono">
                 {schedule.steps?.length || 0} action{schedule.steps?.length === 1 ? '' : 's'} • 

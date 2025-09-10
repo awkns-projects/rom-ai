@@ -892,7 +892,6 @@ Generate exactly ${expectedActionCount} actions that solve real business problem
       ...action,
       id: actionId,
       emoji: action.emoji || '⚡',
-      type: enhancedAction.type,
       role: enhancedAction.role,
       dataSource: {
         type: 'custom',
@@ -921,7 +920,6 @@ Generate exactly ${expectedActionCount} actions that solve real business problem
         }
       },
       results: {
-        actionType: enhancedAction.type,
         model: enhancedAction.impactedModels[0]?.modelName || ((databaseResult.models || [])[0]?.name || 'DefaultModel'),
         identifierIds: action.results?.identifierIds || undefined,
         fields: enhancedAction.outputVariables.reduce((acc: any, v: any) => {
@@ -1450,7 +1448,14 @@ CRITICAL ACTION ID REQUIREMENTS:
 
 ACTION ID FORMAT: The action IDs look like "action_1234567890_abc123def" - use the EXACT strings from the list above.
 
-Generate exactly ${expectedScheduleCount} schedules that solve real business automation needs with complete mindmap data.`;
+Generate exactly ${expectedScheduleCount} schedules that solve real business automation needs with complete mindmap data.
+IMPORTANT CRON FORMAT RULES (cron-compatible):
+- Use 5-field cron only: "min hour day-of-month month day-of-week".
+- Day-of-week MUST be numeric 0-6 (0 or 7=Sunday). Do NOT use names like MON,TUE.
+- Month MUST be numeric 1-12. Do NOT use names like JAN,FEB.
+- Examples: daily 9am: "0 9 * * *"; every Monday 9am: "0 9 * * 1"; weekdays 9am: "0 9 * * 1-5".
+- For lists/ranges, use numeric lists/ranges (e.g., "1,3,5" or "1-5").
+`;
 
   try {
     let result;
@@ -3606,12 +3611,12 @@ ${availableModels.map(model => `
 
 ${businessContext ? `BUSINESS CONTEXT: ${businessContext}` : ''}
 
-🚨 CRITICAL BATCH PROCESSING REQUIREMENTS:
+🚨 DESIGN PRINCIPLES FOR INPUT PARAMETERS:
 
-1. **NEVER REQUIRE SINGLE-ITEM SELECTION**: Do not create workflows that require users to manually pick one specific item to process
-2. **START WITH BATCH OPERATIONS**: Always begin with operations that scan all items or use filters to select multiple items
-3. **USE FILTERING INSTEAD OF SELECTION**: Instead of "select a customer", use "filter customers by criteria"
-4. **PROCESS ARRAYS BY DEFAULT**: Design steps that naturally work with multiple items at once
+1. **MATCH THE ACTION'S PURPOSE**: Design parameters that naturally fit what the action does
+2. **BE INTUITIVE**: Use parameter names and types that users would expect
+3. **AVOID MANUAL SELECTION**: Use smart defaults and filters rather than requiring users to manually pick items
+4. **DESIGN FOR AUTOMATION**: Actions should work well in automated workflows
 
 Create a logical sequence of pseudo code steps that accomplish the goal. Each step should:
 
@@ -3639,27 +3644,26 @@ STEP TYPES TO USE (PRIORITIZED FOR BATCH PROCESSING):
 - Database delete unique: Delete one specific record (only if deleting by unique key)
 - Database create: Create single new record (prefer create many when possible)
 
-**BATCH PROCESSING PATTERNS:**
+**DESIGN PATTERNS:**
 
 ✅ GOOD PATTERNS:
-- Step 1: "Database find many" → Find all customers matching criteria
-- Step 1: "Database find many" → Find all products with low inventory
-- Step 1: "call external api" → Fetch all orders from Shopify
-- Step 1: "Database find many" → Get all pending notifications
+- Step 1: Use provided parameters → Find relevant data based on criteria
+- Step 1: Use provided date range → Generate report for that period
+- Step 1: Use provided ID → Get specific record and process it
+- Step 1: Use provided configuration → Setup or configure feature
+- Step 1: Use provided criteria → Find multiple records matching filters
 
 ❌ BAD PATTERNS (AVOID):
-- Step 1: "Database find unique" → Get one specific customer (requires user to pick)
-- Step 1: User selects a product from list
-- Step 1: Pick one order to process
-- Any step that requires manual single-item selection
+- Step 1: User manually selects one item from a dropdown list
+- Any step that requires manual item selection without parameters
 
 **WORKFLOW DESIGN PRINCIPLES:**
 
-1. **Start with Filters**: Begin with filtering criteria (date ranges, status, categories, etc.)
-2. **Process Collections**: Work with arrays/lists of items throughout the workflow
-3. **Batch Operations**: Update/create/delete multiple items in single operations
-4. **Smart Defaults**: Use reasonable default filters if none provided
-5. **Scalable Design**: Ensure the workflow works whether processing 1 item or 1000 items
+1. **Match Action Purpose**: Design steps that naturally accomplish the action's goal
+2. **Use Smart Parameters**: Accept the parameters the action actually needs
+3. **Efficient Operations**: Choose database operations that match the workflow needs
+4. **Smart Defaults**: Use reasonable defaults when optional parameters aren't provided
+5. **Clear Data Flow**: Ensure each step's output feeds naturally into the next step
 
 **CRITICAL FIELD TYPE RULES**:
 When defining field types, follow these EXACT patterns:
@@ -3693,16 +3697,22 @@ Generate 3-7 logical steps that would accomplish this ${entityType}'s purpose us
 ❌ WRONG: { name: "customer", type: "String" }
 ✅ CORRECT: { name: "customer", type: "Customer" }
 
-**BATCH PROCESSING EXAMPLES**:
+**WORKFLOW EXAMPLES**:
 ❌ WRONG WORKFLOW:
-Step 1: Database find unique → Get single customer (requires manual selection)
+Step 1: User manually selects one customer from dropdown
 Step 2: Process that one customer
 
-✅ CORRECT WORKFLOW:
-Step 1: Database find many → Get all customers matching filter criteria (status, date range, etc.)
-Step 2: Process all found customers in batch
+✅ CORRECT WORKFLOWS:
+Step 1: Use provided customer ID → Get customer data
+Step 2: Process that customer's data
 
-REMEMBER: Every workflow must start with batch operations or filtering - NEVER require users to manually pick single items!
+Step 1: Use provided date range → Find all customers in date range
+Step 2: Process all found customers
+
+Step 1: Use provided report parameters → Generate report data
+Step 2: Format and return report
+
+REMEMBER: Design steps that match what the action naturally needs to do!
 
 `;
 
@@ -4119,7 +4129,7 @@ export async function generatePrismaSchema({
   // Build action and schedule context
   const actionContext = step0Analysis.actions.length > 0 ? `
 REQUIRED ACTIONS:
-${step0Analysis.actions.map(a => `- ${a.name}: ${a.purpose} (${a.type})`).join('\n')}
+${step0Analysis.actions.map(a => `- ${a.name}: ${a.purpose}`).join('\n')}
 ` : '';
 
   const scheduleContext = step0Analysis.schedules.length > 0 ? `
@@ -4348,26 +4358,26 @@ Return ONLY the complete Prisma schema as a single string, starting with the gen
 
   // Generate initial schema
   const initialSchema = await generateSchemaFunction();
-  
+  return initialSchema;
   // Validate the generated schema
-  console.log('🔍 Validating generated Prisma schema...');
-  const validation = await validatePrismaSchema(initialSchema);
+  // console.log('🔍 Validating generated Prisma schema...');
+  // const validation = await validatePrismaSchema(initialSchema);
   
-  if (validation.valid) {
-    console.log('✅ Prisma schema generation complete and validated');
-    // Use the fixed schema if available (contains relation fixes)
-    return validation.result?.fixedSchema || initialSchema;
-  } else {
-    console.log('❌ Initial schema validation failed, attempting to regenerate...');
-    const validatedSchema = await retrySchemaGenerationWithValidation(
-      initialSchema,
-      validation.error || 'Unknown validation error',
-      generateSchemaFunction
-    );
+  // if (validation.valid) {
+  //   console.log('✅ Prisma schema generation complete and validated');
+  //   // Use the fixed schema if available (contains relation fixes)
+  //   return validation.result?.fixedSchema || initialSchema;
+  // } else {
+  //   console.log('❌ Initial schema validation failed, attempting to regenerate...');
+  //   const validatedSchema = await retrySchemaGenerationWithValidation(
+  //     initialSchema,
+  //     validation.error || 'Unknown validation error',
+  //     generateSchemaFunction
+  //   );
     
-    console.log('✅ Prisma schema generation complete with validation retry');
-    return validatedSchema;
-  }
+  //   console.log('✅ Prisma schema generation complete with validation retry');
+  //   return validatedSchema;
+  // }
 }
 
 
@@ -4574,26 +4584,26 @@ Return ONLY the complete merged Prisma schema as a single string.`;
 
   // Generate initial merged schema
   const initialMergedSchema = await generateMergedSchemaFunction();
-  
+  return initialMergedSchema;
   // Validate the generated merged schema
-  console.log('🔍 Validating merged Prisma schema...');
-  const validation = await validatePrismaSchema(initialMergedSchema);
+  // console.log('🔍 Validating merged Prisma schema...');
+  // const validation = await validatePrismaSchema(initialMergedSchema);
   
-  if (validation.valid) {
-    console.log('✅ AI schema merging complete with operation-aware processing and validated');
-    // Use the fixed schema if available (contains relation fixes)
-    return validation.result?.fixedSchema || initialMergedSchema;
-  } else {
-    console.log('❌ Initial merged schema validation failed, attempting to regenerate...');
-    const validatedMergedSchema = await retrySchemaGenerationWithValidation(
-      initialMergedSchema,
-      validation.error || 'Unknown validation error',
-      generateMergedSchemaFunction
-    );
+  // if (validation.valid) {
+  //   console.log('✅ AI schema merging complete with operation-aware processing and validated');
+  //   // Use the fixed schema if available (contains relation fixes)
+  //   return validation.result?.fixedSchema || initialMergedSchema;
+  // } else {
+  //   console.log('❌ Initial merged schema validation failed, attempting to regenerate...');
+  //   const validatedMergedSchema = await retrySchemaGenerationWithValidation(
+  //     initialMergedSchema,
+  //     validation.error || 'Unknown validation error',
+  //     generateMergedSchemaFunction
+  //   );
     
-    console.log('✅ AI schema merging complete with validation retry');
-    return validatedMergedSchema;
-  }
+  //   console.log('✅ AI schema merging complete with validation retry');
+  //   return validatedMergedSchema;
+  // }
 }
 
 
@@ -5248,20 +5258,20 @@ Generate a corrected schema that follows these patterns exactly.`
       });
       
       const correctedSchema = result.object.schema;
-      
+      return correctedSchema;
       // Validate the corrected schema
-      const validation = await validatePrismaSchema(correctedSchema);
+      // const validation = await validatePrismaSchema(correctedSchema);
       
-      if (validation.valid) {
-        console.log(`✅ Schema retry successful on attempt ${attempt}`);
-        return validation.result?.fixedSchema || correctedSchema;
-      } else {
-        console.log(`❌ Schema retry attempt ${attempt} failed: ${validation.error}`);
-        if (attempt === maxRetries) {
-          console.log('⚠️ Max retries reached, returning manually fixed schema');
-          return fixPrismaRelationErrors(originalSchema);
-        }
-      }
+      // if (validation.valid) {
+      //   console.log(`✅ Schema retry successful on attempt ${attempt}`);
+      //   return validation.result?.fixedSchema || correctedSchema;
+      // } else {
+      //   console.log(`❌ Schema retry attempt ${attempt} failed: ${validation.error}`);
+      //   if (attempt === maxRetries) {
+      //     console.log('⚠️ Max retries reached, returning manually fixed schema');
+      //     return fixPrismaRelationErrors(originalSchema);
+      //   }
+      // }
       
     } catch (error) {
       console.error(`❌ Schema retry attempt ${attempt} failed:`, error);

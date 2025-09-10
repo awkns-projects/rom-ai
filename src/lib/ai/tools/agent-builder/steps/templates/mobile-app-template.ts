@@ -13,6 +13,18 @@ function normalizeSchedule(schedule: any) {
   };
 }
 
+// Helper function to escape strings for safe JavaScript generation
+function escapeJSString(str: string): string {
+  if (!str) return '';
+  return str
+    .replace(/\\/g, '\\\\')  // Escape backslashes first
+    .replace(/'/g, "\\'")    // Escape single quotes
+    .replace(/"/g, '\\"')    // Escape double quotes
+    .replace(/\n/g, '\\n')   // Escape newlines
+    .replace(/\r/g, '\\r')   // Escape carriage returns
+    .replace(/\t/g, '\\t');  // Escape tabs
+}
+
 interface MobileAppTemplateOptions {
   projectName: string;
   models: any[];
@@ -35,16 +47,20 @@ interface MobileAppTemplateOptions {
  * Unified Mobile App Template Generator
  * Consolidates all file generation into one cohesive system
  * 
- * 🚀 SELF-CONTAINED ARCHITECTURE:
- * 1. Static Action Execution: /api/actions/[actionName] - embedded action code, executes locally
- * 2. Static Cron Jobs: /api/cron/[scheduleName] - embedded schedule code with cron timing
- * 3. Direct Model CRUD: /api/models/[modelName] + /api/models/[modelName]/[id] - PostgreSQL operations via Prisma
- * 4. Self-managed API Keys: Client manages its own OpenAI/Anthropic/Grok keys
- * 5. Interactive Action UI: Modal-based action execution with input parameters and results display
- * 6. Persistent Database: PostgreSQL with provided Prisma schema
+ * 🚀 HYBRID ARCHITECTURE:
+ * 1. UI Elements from Main App: avatar, theme, name, description - fetched dynamically
+ * 2. Functional Data Embedded: models, actions, schedules - embedded for performance
+ * 3. Static Action Execution: /api/actions/[actionName] - embedded action code, executes locally
+ * 4. Static Cron Jobs: /api/cron/[scheduleName] - embedded schedule code with cron timing
+ * 5. Direct Model CRUD: /api/models/[modelName] + /api/models/[modelName]/[id] - PostgreSQL operations via Prisma
+ * 6. Self-managed API Keys: Client manages its own OpenAI/Anthropic/Grok keys
+ * 7. Interactive Action UI: Modal-based action execution with input parameters and results display
+ * 8. Persistent Database: PostgreSQL with provided Prisma schema
  * 
  * Benefits: 
- * - Complete independence from main app
+ * - Real-time UI updates from main app (avatar, theme, name, description)
+ * - Fast performance with embedded functional data (models, actions, schedules)
+ * - Complete independence from main app for execution
  * - Persistent database with no resets
  * - Embedded action and schedule code
  * - Self-managed API keys and configuration
@@ -329,6 +345,11 @@ GROK_API_KEY="your_grok_api_key_here"`;
 
     envContent += `
 
+# Main App Integration (Required for UI elements: avatar, theme, name, description)
+NEXT_PUBLIC_MAIN_APP_URL="https://app.rom.cards"
+NEXT_PUBLIC_DOCUMENT_ID=""  # Your agent document ID from main app
+NEXT_PUBLIC_AGENT_TOKEN=""  # Your agent token for authentication
+
 # Security
 NEXTAUTH_SECRET="your-secret-here"
 NEXTAUTH_URL="http://localhost:3000"
@@ -370,6 +391,12 @@ GROK_API_KEY="your_grok_api_key_here"
 # AI Model Configuration
 AI_MODEL_PROVIDER="openai"
 AI_MODEL_NAME="gpt-4o-mini"
+
+# Main App Integration (Required for UI elements: avatar, theme, name, description)
+# These will be set automatically during deployment
+NEXT_PUBLIC_MAIN_APP_URL="https://app.rom.cards"
+# NEXT_PUBLIC_DOCUMENT_ID=
+# NEXT_PUBLIC_AGENT_TOKEN=
 
 # Security tokens (auto-generated)
 NEXTAUTH_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}"
@@ -433,7 +460,6 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
       'src/components/ModelCard.tsx': this.generateModelCardComponent(),
       'src/components/ActionCard.tsx': this.generateActionCardComponent(),
       'src/components/ScheduleCard.tsx': this.generateScheduleCardComponent(),
-      'src/components/StatsCard.tsx': this.generateStatsCardComponent(),
       'src/components/ChatMessage.tsx': this.generateChatMessageComponent(),
       'src/components/LoadingSpinner.tsx': this.generateLoadingSpinnerComponent(),
       'src/components/ActionExecutionModal.tsx': this.generateActionExecutionModal()
@@ -670,23 +696,12 @@ export default function MobileNav({ currentTheme }: MobileNavProps) {
     const { projectName, models, actions, schedules } = this.options;
     
     return `import Layout from '@/components/Layout';
-import StatsCard from '@/components/StatsCard';
-import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
-import api from '@/lib/api';
 import { themes } from '@/lib/theme';
 import { useAgent } from '@/contexts/AgentContext';
 
 export default function HomePage() {
   const router = useRouter();
-  const [stats, setStats] = useState({
-    totalRecords: 0,
-    activeSchedules: 0,
-    totalModels: ${models.length},
-    totalActions: ${actions.length},
-    totalSchedules: ${schedules.length}
-  });
-  const [loading, setLoading] = useState(true);
 
   // Use the global agent context
   const { config: agentConfig } = useAgent();
@@ -698,21 +713,6 @@ export default function HomePage() {
   
   // Extract avatar URL from config
   const avatarUrl = agentConfig?.avatar?.uploadedImage || null;
-
-  useEffect(() => {
-    fetchStats();
-  }, []);
-
-  const fetchStats = async () => {
-    try {
-      const response = await api.getStats();
-      setStats(response);
-    } catch (error) {
-      console.error('Failed to fetch stats:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const quickActions = [
     { 
@@ -774,9 +774,6 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Stats Overview */}
-        <StatsCard stats={stats} loading={loading} />
-
         {/* Quick Actions */}
         <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3\`}>
           <h3 className={\`font-mono font-semibold text-xs \${currentTheme.light} mb-2\`}>Quick Actions</h3>
@@ -798,21 +795,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* System Status */}
-        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3\`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className={\`w-2 h-2 \${currentTheme.accent.replace('text-', 'bg-')} rounded-full animate-pulse\`}></div>
-              <div>
-                <div className={\`font-mono font-semibold text-xs \${currentTheme.light}\`}>System Status</div>
-                <div className={\`font-mono text-xs \${currentTheme.dim}\`}>All systems operational</div>
-              </div>
-            </div>
-            <div className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg\`}>
-              <span className={\`font-mono text-xs \${currentTheme.accent}\`}>LIVE</span>
-            </div>
-          </div>
-        </div>
+
       </div>
     </Layout>
   );
@@ -838,16 +821,18 @@ export default function App({ Component, pageProps }: AppProps) {
   // For brevity, I'll implement the key ones and indicate where others would go
 
   private generateApiClient(): string {
-    return `// API client for mobile app
+    return `// API client for mobile app - Hybrid Architecture
+// UI elements (avatar, theme, name, description) come from main app
+// Functional data (models, actions, schedules) is embedded for performance
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
-const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://app.rom.cards';
 const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
 const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
 const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
 class ApiClient {
   private cachedCredentials: any = null;
-  private cachedAgentConfig: any = null;
+  private cachedUIConfig: any = null; // Only UI elements cached
   private credentialsLastFetch: number = 0;
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
@@ -869,23 +854,23 @@ class ApiClient {
     return response.json();
   }
 
-  // Fetch credentials and agent config from main app
-  async getCredentialsAndConfig() {
+  // Fetch credentials and UI config from main app (avatar, theme, name, description only)
+  async getCredentialsAndUIConfig() {
     const now = Date.now();
     
     // Return cached data if still valid
-    if (this.cachedCredentials && this.cachedAgentConfig && 
+    if (this.cachedCredentials && this.cachedUIConfig && 
         (now - this.credentialsLastFetch) < this.CACHE_DURATION) {
       return {
         credentials: this.cachedCredentials,
-        agentConfig: this.cachedAgentConfig
+        uiConfig: this.cachedUIConfig
       };
     }
 
     try {
       if (!DOCUMENT_ID) {
         console.warn('No document ID provided for agent credentials');
-        return { credentials: {}, agentConfig: {} };
+        return { credentials: {}, uiConfig: {} };
       }
 
       // Use JWT token for authentication with main app
@@ -903,27 +888,34 @@ class ApiClient {
 
       if (!response.ok) {
         console.error('Failed to fetch agent credentials:', response.status);
-        return { credentials: {}, agentConfig: {} };
+        return { credentials: {}, uiConfig: {} };
       }
 
       const data = await response.json();
       
       if (data.success) {
         this.cachedCredentials = data.credentials || {};
-        this.cachedAgentConfig = data.agentConfig || {};
+        // Extract ONLY UI elements from agentConfig
+        this.cachedUIConfig = {
+          name: data.agentConfig?.name,
+          description: data.agentConfig?.description,
+          theme: data.agentConfig?.theme,
+          avatar: data.agentConfig?.avatar,
+          domain: data.agentConfig?.domain
+        };
         this.credentialsLastFetch = now;
         
         return {
           credentials: this.cachedCredentials,
-          agentConfig: this.cachedAgentConfig
+          uiConfig: this.cachedUIConfig
         };
       } else {
         console.error('Failed to get credentials:', data.error);
-        return { credentials: {}, agentConfig: {} };
+        return { credentials: {}, uiConfig: {} };
       }
     } catch (error) {
-      console.error('Error fetching credentials and config:', error);
-      return { credentials: {}, agentConfig: {} };
+      console.error('Error fetching credentials and UI config:', error);
+      return { credentials: {}, uiConfig: {} };
     }
   }
 
@@ -1041,21 +1033,21 @@ class ApiClient {
     }
   }
 
-  // Call back to main app for agent configuration (UI elements only)
-  async getAgentConfiguration() {
+  // Get UI configuration from main app (avatar, theme, name, description only)
+  async getAgentUIConfiguration() {
     try {
-      const { agentConfig } = await this.getCredentialsAndConfig();
-      return agentConfig || null;
+      const { uiConfig } = await this.getCredentialsAndUIConfig();
+      return uiConfig || null;
     } catch (error) {
-      console.error('Error fetching agent configuration:', error);
+      console.error('Error fetching agent UI configuration:', error);
       return null;
     }
   }
 
-  // Get agent configuration from local endpoint (which calls main app for UI config)
+  // Get complete hybrid agent configuration (UI from main app + embedded functional data)
   async getLocalAgentConfig() {
     try {
-      const response = await fetch('/api/agent/config');
+      const response = await fetch(\`\${process.env.NEXT_PUBLIC_MAIN_APP_URL}/api/agent/config\`);
       if (!response.ok) {
         throw new Error(\`Failed to fetch config: \${response.status}\`);
       }
@@ -1110,13 +1102,13 @@ class ApiClient {
     }
   }
 
-  // Call back to main app for avatar image
+  // Get avatar image URL from main app UI config
   async getAvatarImageUrl() {
     try {
-      const config = await this.getAgentConfiguration();
-      if (!config?.avatar) return null;
+      const uiConfig = await this.getAgentUIConfiguration();
+      if (!uiConfig?.avatar) return null;
 
-      const { avatar } = config;
+      const { avatar } = uiConfig;
       
       if (avatar.type === 'custom' && avatar.uploadedImage) {
         return avatar.uploadedImage;
@@ -1370,7 +1362,7 @@ export default function ModelsPage() {
       setLoading(true);
       setError(null);
       
-      // Call sub-agent's own API endpoint
+      // Call sub-agent's own API endpoint (returns embedded models)
       const response = await fetch('/api/agent/models');
       
       if (!response.ok) {
@@ -1379,38 +1371,35 @@ export default function ModelsPage() {
       
       const data = await response.json();
       
-      let currentModels = [];
       if (data.success && data.models) {
-        // Use models from sub-agent API
-        currentModels = data.models.map((model: any) => ({
+        // Use embedded models from sub-agent API
+        const currentModels = data.models.map((model: any) => ({
           name: model.name,
           emoji: model.emoji || '📋',
           description: model.description || 'Data model',
           fields: model.fields || []
         }));
         
-        // Data is embedded, no connection issues
+        setModels(currentModels);
+        
+        // Fetch data for each model
+        const promises = currentModels.map(async (model) => {
+          try {
+            const records = await api.getModelRecords(model.name);
+            return { ...model, recordCount: records.length, records: records.slice(0, 3) };
+          } catch (error) {
+            return { ...model, recordCount: 0, records: [], error: true };
+          }
+        });
+        
+        const results = await Promise.all(promises);
+        setModelsData(results);
       } else {
         throw new Error('No models data received');
       }
-      
-      setModels(currentModels);
-      
-      // Fetch data for each model
-      const promises = currentModels.map(async (model) => {
-        try {
-          const records = await api.getModelRecords(model.name);
-          return { ...model, recordCount: records.length, records: records.slice(0, 3) };
-        } catch (error) {
-          return { ...model, recordCount: 0, records: [], error: true };
-        }
-      });
-      
-      const results = await Promise.all(promises);
-      setModelsData(results);
     } catch (error) {
       console.error('Failed to fetch embedded model data:', error);
-      setError('Failed to load models from embedded data.');
+      setError('Failed to load models. Please refresh the page.');
       setModels([]);
       setModelsData([]);
     } finally {
@@ -1623,7 +1612,7 @@ export default function ActionsPage() {
       setLoading(true);
       setError(null);
       
-      // Call sub-agent's own API endpoint
+      // Call sub-agent's own API endpoint (returns embedded actions)
       const response = await fetch('/api/agent/actions');
       
       if (!response.ok) {
@@ -1634,7 +1623,7 @@ export default function ActionsPage() {
       
       if (data.success && data.actions) {
         const formattedActions = data.actions.map((action: any) => ({
-          id: action.id || action.name,
+          id: action.name, // Use name as ID for consistency
           name: action.name,
           emoji: action.emoji || '⚡',
           description: action.description || 'Execute action',
@@ -1644,15 +1633,13 @@ export default function ActionsPage() {
           pseudoSteps: action.pseudoSteps || []
         }));
         setActions(formattedActions);
-        
-        // Data is embedded, no connection issues
       } else {
         throw new Error('No actions data received');
       }
     } catch (err) {
       console.error('Failed to fetch embedded actions:', err);
-      setError('Failed to load actions from embedded data.');
-      setActions([]); // No fallback needed since data is embedded
+      setError('Failed to load actions. Please refresh the page.');
+      setActions([]);
     } finally {
       setLoading(false);
     }
@@ -1699,8 +1686,8 @@ export default function ActionsPage() {
 
         <div className={\`mb-4 p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
           <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
-            💡 <strong>Interactive Actions:</strong> Click any action card to open the execution modal. 
-            Choose between local execution (runs on this sub-agent) or remote execution (runs on main app).
+            💡 <strong>Embedded Actions:</strong> Click any action card to open the execution modal. 
+            All action code is embedded and executes locally on this sub-agent for optimal performance.
           </p>
         </div>
 
@@ -1763,7 +1750,7 @@ export default function SchedulesPage() {
       setLoading(true);
       setError(null);
       
-      // Call sub-agent's own API endpoint
+      // Call sub-agent's own API endpoint (returns embedded schedules)
       const response = await fetch('/api/agent/schedules');
       
       if (!response.ok) {
@@ -1774,7 +1761,7 @@ export default function SchedulesPage() {
       
       if (data.success && data.schedules) {
         const formattedSchedules = data.schedules.map((schedule: any) => ({
-          id: schedule.id || schedule.name,
+          id: schedule.name, // Use name as ID for consistency
           name: schedule.name,
           emoji: schedule.emoji || '⏰',
           description: schedule.description || 'Scheduled task',
@@ -1784,14 +1771,12 @@ export default function SchedulesPage() {
           steps: schedule.steps || []
         }));
         setSchedules(formattedSchedules);
-        
-        // Data is embedded, no connection issues
       } else {
         throw new Error('No schedules data received');
       }
     } catch (err) {
       console.error('Failed to fetch embedded schedules:', err);
-      setError('Failed to load schedules from embedded data.');
+      setError('Failed to load schedules. Please refresh the page.');
       setSchedules([]);
     } finally {
       setLoading(false);
@@ -2094,10 +2079,10 @@ What would you like to explore first?\`,
           {error && (
             <div className="bg-red-500/15 border border-red-400/30 rounded-xl p-4">
               <div className="text-red-400 font-mono text-sm">
-                ⚠️ Error: {error.message}
+                ⚠️ Chat Error: {error.message}
               </div>
               <div className="text-red-300/70 font-mono text-xs mt-2">
-                Please check your API configuration and try again.
+                Please check your AI API keys in environment variables and try again.
               </div>
             </div>
           )}
@@ -2369,72 +2354,7 @@ export default function ScheduleCard({ schedule }: ScheduleCardProps) {
 }`;
   }
 
-  private generateStatsCardComponent(): string {
-    return `import { themes } from '@/lib/theme';
-import { useAgent } from '@/contexts/AgentContext';
 
-interface StatsCardProps {
-  stats: {
-    totalRecords: number;
-    activeSchedules: number;
-    totalModels: number;
-    totalActions: number;
-    totalSchedules: number;
-  };
-  loading: boolean;
-}
-
-export default function StatsCard({ stats, loading }: StatsCardProps) {
-  // Use the global agent context
-  const { config: agentConfig } = useAgent();
-  
-  // Use agent config theme if available, fallback to green
-  const selectedTheme = agentConfig?.theme || 'green';
-  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
-
-  if (loading) {
-    return (
-      <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
-        <div className="animate-pulse">
-          <div className={\`h-4 \${currentTheme.bg} rounded w-1/3 mb-3\`}></div>
-          <div className="grid grid-cols-2 gap-3">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="text-center">
-                <div className={\`h-6 \${currentTheme.bg} rounded w-8 mx-auto mb-1\`}></div>
-                <div className={\`h-3 \${currentTheme.bg} rounded w-12 mx-auto\`}></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
-      <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light} mb-3\`}>System Overview</h3>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="text-center">
-          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.totalRecords}</div>
-          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Records</div>
-        </div>
-        <div className="text-center">
-          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.activeSchedules}</div>
-          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Active Tasks</div>
-        </div>
-        <div className="text-center">
-          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.totalModels}</div>
-          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Models</div>
-        </div>
-        <div className="text-center">
-          <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>{stats.totalActions}</div>
-          <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Actions</div>
-        </div>
-      </div>
-    </div>
-  );
-}`;
-  }
   private generateChatMessageComponent(): string {
     return `import { memo } from 'react';
 
@@ -3031,7 +2951,7 @@ export default async function handler(req, res) {
     
            // Execute the action with proper context
        const context = {
-         db: prisma,
+         db: prisma,  // Prisma client instance
          ai: { generateObject },
          input: parameters || {},
          envVars: process.env
@@ -3068,6 +2988,7 @@ import { PrismaClient } from '@prisma/client';
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
+import { z } from 'zod';
 
 const prisma = new PrismaClient();
 
@@ -3100,7 +3021,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { parameters } = req.body;
     
     // Action: ${action.name}
-    // Description: ${action.description || 'No description provided'}
+    // Description: ${escapeJSString(action.description || 'No description provided')}
     // Type: ${action.results?.actionType || 'generated'}
     // Has Generated Code: ${!!hasGeneratedCode}
     
@@ -3130,9 +3051,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Schedules work by executing a sequence of actions, not standalone code
     const hasSteps = schedule.steps && schedule.steps.length > 0;
     
-    // Create action ID to name mapping
+    // Create action ID to name mapping for schedules that might reference actions by ID
     const actionIdToNameMap = this.options.actions.reduce((map: any, action: any) => {
-      map[action.id] = action.name;
+      if (action.id && action.id !== action.name) {
+        map[action.id] = action.name;
+      }
       return map;
     }, {});
     
@@ -3148,15 +3071,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
-      const actionName = actionIdToNameMap[step.actionId];
+      // Resolve action name: use direct name if available, otherwise map from ID
+      const actionName = step.actionName || actionIdToNameMap[step.actionId] || step.actionId;
       
-      console.log(\`🔄 Step \${i + 1}/\${steps.length}: \${step.description || step.actionId} (action: \${actionName})\`);
+      console.log(\`🔄 Step \${i + 1}/\${steps.length}: \${escapeJSString(step.description || actionName)} (action: \${actionName})\`);
       
       if (!actionName) {
-        console.error(\`❌ Action ID "\${step.actionId}" not found in action mapping\`);
+        console.error(\`❌ Action "\${step.actionId || step.actionName}" not found\`);
         results.push({
           step: i + 1,
-          actionId: step.actionId,
+          actionId: step.actionId || step.actionName,
           success: false,
           error: 'Action not found',
           executedAt: new Date().toISOString()
@@ -3216,6 +3140,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         }
         results.push({
           step: i + 1,
+          actionName: actionName,
           actionId: step.actionId,
           success: actionResult.success,
           result: actionResult.result || actionResult.data,
@@ -3234,6 +3159,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.error(\`❌ Step \${i + 1} failed:\`, stepError);
         results.push({
           step: i + 1,
+          actionName: actionName,
           actionId: step.actionId,
           success: false,
           error: stepError instanceof Error ? stepError.message : 'Unknown error',
@@ -3279,6 +3205,7 @@ import { PrismaClient } from '@prisma/client';
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
+import { z } from 'zod';
 
 const prisma = new PrismaClient();
 
@@ -3315,7 +3242,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     console.log('🕐 Executing schedule: ${schedule.name}');
-    console.log('📝 Description: ${schedule.description || 'No description provided'}');
+    console.log('📝 Description: ${escapeJSString(schedule.description || 'No description provided')}');
     console.log('⏰ Pattern: ${schedule.trigger?.pattern || '*/5 * * * *'}');
     console.log('🔢 Steps: ${schedule.steps?.length || 0} action steps');
     console.log('🔑 Auth method:', isVercelCron ? 'Vercel Cron' : 'Manual with secret');
@@ -3809,506 +3736,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 }`;
   }
 
-  private generateDynamicActionEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
-import { prisma } from '@/lib/prisma'
-
-// Fetch action definition from main app
-async function getActionFromMainApp(actionName: string) {
-  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-  const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-  const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
-  const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-
-  try {
-    // Call main app to get action definition
-    let response = await fetch(\`\${MAIN_APP_URL}/api/agent/execute-action\`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-      },
-      body: JSON.stringify({
-        actionName: actionName,
-        getDefinitionOnly: true // Only fetch definition, don't execute
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(\`Failed to fetch action definition: \${response.status}\`);
-    }
-
-    const data = await response.json();
-    return data.success ? data.action : null;
-  } catch (error) {
-    console.error('Failed to fetch action from main app:', error);
-    throw error;
-  }
-}
-
-// Fetch credentials from main app
-async function getCredentials() {
-  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-  const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-  const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
-  const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-
-  try {
-    let response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public\`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-      },
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      return data.success ? data.credentials : {};
-    }
-  } catch (error) {
-    console.error('Failed to fetch credentials:', error);
-  }
-  return {};
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { actionName } = req.query;
-
-  if (!actionName || typeof actionName !== 'string') {
-    return res.status(400).json({ error: 'Action name is required' });
-  }
-
-  try {
-    console.log('🚀 Executing dynamic action:', actionName);
-    
-    // Fetch action definition from main app
-    const action = await getActionFromMainApp(actionName);
-    if (!action) {
-      return res.status(404).json({ error: \`Action '\${actionName}' not found\` });
-    }
-
-    // Verify HTTP method matches action type
-    const expectedMethod = action.type === 'query' ? 'GET' : 'POST';
-    if (req.method !== expectedMethod) {
-      return res.status(405).json({ error: \`Method not allowed. Expected \${expectedMethod}\` });
-    }
-
-    // Extract input and get credentials
-    const { input } = req.body || {};
-    const credentials = await getCredentials();
-    
-    console.log('🔑 Using credentials for external APIs:', Object.keys(credentials));
-    
-    // Mock member object for action execution
-    const member = {
-      id: 'demo-user',
-      role: 'admin',
-      email: 'demo@example.com'
-    };
-    
-    // Mock AI object for action execution
-    const ai = {
-      generateText: async (prompt: string) => {
-        return { text: \`Mock AI response for: \${prompt}\` };
-      }
-    };
-    
-    let result;
-    
-    if (action.execute?.code?.script) {
-      // Execute the fetched action code against local SQLite database
-      const actionCode = action.execute.code.script;
-      const envVars = { ...credentials, ...process.env };
-      
-      // Create function from action code and execute it
-      const actionFunction = new Function('database', 'input', 'member', 'ai', 'envVars', \`
-        \${actionCode}
-        return executeAction(database, input, member, ai, envVars);
-      \`);
-      
-      result = await actionFunction(prisma, input, member, ai, envVars);
-    } else {
-      // Basic fallback execution logic
-      result = {
-        actionName: actionName,
-        type: action.type || 'query',
-        description: action.description || 'Dynamic action',
-        input: input,
-        success: true,
-        timestamp: new Date().toISOString(),
-        usedCredentials: Object.keys(credentials),
-        executedLocally: true
-      };
-    }
-    
-    console.log(\`✅ Dynamic action '\${actionName}' completed successfully\`);
-    res.status(200).json({ success: true, data: result });
-    
-  } catch (error) {
-    console.error(\`❌ Error executing dynamic action '\${actionName}':\`, error);
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Internal server error',
-      actionName: actionName
-    });
-  }
-}`;
-  }
-
-  private generateDynamicCronEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
-import { prisma } from '@/lib/prisma'
-
-// Get schedules from sub-agent's own API (which calls main app)
-async function getSchedulesToRun() {
-  try {
-    // Call sub-agent's own schedules API
-    const response = await fetch('http://localhost:3000/api/agent/schedules');
-
-    if (!response.ok) {
-      console.log('Failed to get schedules from sub-agent API:', response.status);
-      return [];
-    }
-
-    const data = await response.json();
-    
-    if (data.success && data.schedules) {
-      // Filter schedules that should run now
-      const now = new Date();
-      const schedulesToRun = [];
-      
-      for (const schedule of data.schedules) {
-        if (schedule.trigger?.active && schedule.trigger?.pattern) {
-          // Simple check - in a real app, use a proper cron parser
-          // For now, run all active schedules every minute
-          schedulesToRun.push(schedule);
-        }
-      }
-      
-      return schedulesToRun;
-    }
-    
-    return [];
-  } catch (error) {
-    console.error('Failed to get schedules from sub-agent API:', error);
-    return [];
-  }
-}
-
-// Fetch credentials from main app
-async function getCredentials() {
-  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-  const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-  const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-
-  try {
-    const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-        'X-Agent-Token': AGENT_TOKEN,
-        'X-Document-ID': DOCUMENT_ID,
-      },
-    });
-    
-    if (response.ok) {
-      const data = await response.json();
-      return data.success ? data.credentials : {};
-    }
-  } catch (error) {
-    console.error('Failed to fetch credentials:', error);
-  }
-  return {};
-}
-
-// Execute a schedule's steps locally
-async function executeScheduleSteps(schedule: any, credentials: any) {
-  const stepResults = [];
-  const steps = schedule.steps || [];
-
-  for (let i = 0; i < steps.length; i++) {
-    const step = steps[i];
-    try {
-      console.log(\`Executing step \${i + 1}: \${step.description || step.name}\`);
-      
-      // Call the main app to execute the step's action
-      const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-      const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-      
-      const actionResponse = await fetch(\`\${MAIN_APP_URL}/api/agent/execute-action\`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-        },
-        body: JSON.stringify({
-          actionId: step.actionId,
-          input: step.input || {},
-          credentials: credentials
-        }),
-      });
-      
-      const actionResult = await actionResponse.json();
-      stepResults.push({
-        step: i + 1,
-        actionId: step.actionId,
-        success: actionResult.success,
-        result: actionResult.data
-      });
-      
-      // Add delay if specified
-      if (step.delay?.duration) {
-        await new Promise(resolve => setTimeout(resolve, step.delay.duration));
-      }
-      
-    } catch (stepError) {
-      console.error(\`Error in step \${i + 1}:\`, stepError);
-      stepResults.push({
-        step: i + 1,
-        actionId: step.actionId,
-        success: false,
-        error: stepError instanceof Error ? stepError.message : 'Unknown error'
-      });
-      
-      // Stop execution if step is configured to stop on error
-      if (step.onError?.action === 'stop') {
-        break;
-      }
-    }
-  }
-
-  return stepResults;
-}
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Verify this is a cron request (optional security check)
-  if (req.headers.authorization !== \`Bearer \${process.env.CRON_SECRET}\` && process.env.NODE_ENV === 'production') {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    console.log('🕐 Checking for schedules to run...');
-    
-    // Get schedules that need to run from main app
-    const schedulesToRun = await getSchedulesToRun();
-    
-    if (schedulesToRun.length === 0) {
-      console.log('✅ No schedules need to run at this time');
-      return res.status(200).json({ 
-        success: true, 
-        message: 'No schedules to run',
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    console.log(\`🔄 Found \${schedulesToRun.length} schedule(s) to run\`);
-    
-    // Get credentials for external API calls
-    const credentials = await getCredentials();
-    console.log('🔑 Retrieved credentials for schedules:', Object.keys(credentials));
-    
-    const results = [];
-    
-    // Execute each schedule
-    for (const schedule of schedulesToRun) {
-      try {
-        console.log(\`🚀 Executing schedule: \${schedule.name}\`);
-        
-        let stepResults = [];
-        if (schedule.steps && schedule.steps.length > 0) {
-          stepResults = await executeScheduleSteps(schedule, credentials);
-        }
-        
-        const result = {
-          scheduleName: schedule.name,
-          description: schedule.description || 'Scheduled task',
-          pattern: schedule.trigger?.pattern || '* * * * *',
-          executedAt: new Date().toISOString(),
-          success: true,
-          stepResults: stepResults,
-          totalSteps: stepResults.length,
-          completedSteps: stepResults.filter(r => r.success).length,
-          executedLocally: true
-        };
-        
-        results.push(result);
-        console.log(\`✅ Schedule '\${schedule.name}' completed successfully\`);
-        
-      } catch (scheduleError) {
-        console.error(\`❌ Error executing schedule '\${schedule.name}':\`, scheduleError);
-        results.push({
-          scheduleName: schedule.name,
-          success: false,
-          error: scheduleError instanceof Error ? scheduleError.message : 'Unknown error',
-          executedAt: new Date().toISOString()
-        });
-      }
-    }
-    
-    console.log(\`✅ Completed \${results.length} schedule(s)\`);
-    res.status(200).json({ 
-      success: true, 
-      data: results,
-      summary: {
-        totalSchedules: results.length,
-        successfulSchedules: results.filter(r => r.success).length,
-        timestamp: new Date().toISOString()
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Error in dynamic scheduler:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Internal server error',
-      timestamp: new Date().toISOString()
-    });
-  }
-}`;
-  }
-
-  private generateDirectActionTriggerEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { actionId } = req.query;
-
-  if (!actionId || typeof actionId !== 'string') {
-    return res.status(400).json({ error: 'Action ID is required' });
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    console.log('🔗 Triggering action directly on main app:', actionId);
-    
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-    const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
-    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-    
-    // Extract input from request body
-    const { input = {}, member } = req.body || {};
-    
-    // Call main app to execute action directly
-    const response = await fetch(\`\${MAIN_APP_URL}/api/agent/execute-action\`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-      },
-      body: JSON.stringify({
-        actionId: actionId,
-        input: input,
-        member: member || {
-          id: 'sub-agent-user',
-          role: 'admin',
-          email: 'sub-agent@deployed.app'
-        }
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(\`Main app responded with status: \${response.status}\`);
-    }
-
-    const result = await response.json();
-    
-    console.log('✅ Action executed successfully on main app');
-    res.status(200).json({
-      success: true,
-      data: result.data,
-      triggeredRemotely: true,
-      actionId: actionId,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('❌ Error triggering action on main app:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to trigger action',
-      actionId: actionId
-    });
-  }
-}`;
-  }
-
-  private generateDirectScheduleTriggerEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { scheduleId } = req.query;
-
-  if (!scheduleId || typeof scheduleId !== 'string') {
-    return res.status(400).json({ error: 'Schedule ID is required' });
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    console.log('🔗 Triggering schedule directly on main app:', scheduleId);
-    
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-    const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
-    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-    
-    // Extract any additional parameters from request body
-    const { member, force = false } = req.body || {};
-    
-    // Call main app to execute schedule directly
-    const response = await fetch(\`\${MAIN_APP_URL}/api/agent/execute-schedule\`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-      },
-      body: JSON.stringify({
-        scheduleId: scheduleId,
-        force: force, // Force execution even if not scheduled
-        member: member || {
-          id: 'sub-agent-user',
-          role: 'admin',
-          email: 'sub-agent@deployed.app'
-        }
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(\`Main app responded with status: \${response.status}\`);
-    }
-
-    const result = await response.json();
-    
-    console.log('✅ Schedule executed successfully on main app');
-    res.status(200).json({
-      success: true,
-      data: result.data,
-      triggeredRemotely: true,
-      scheduleId: scheduleId,
-      forced: force,
-      timestamp: new Date().toISOString()
-    });
-    
-  } catch (error) {
-    console.error('❌ Error triggering schedule on main app:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to trigger schedule',
-      scheduleId: scheduleId
-    });
-  }
-}`;
-  }
 
   private generatePrismaClient(): string {
     return `import { PrismaClient } from '@prisma/client'
@@ -4420,104 +3847,6 @@ main()
   }
 
 
-
-
-
-  private generateSQLiteInitScript(): string {
-    return `const fs = require('fs');
-const path = require('path');
-
-// Function to get the correct database path for the environment
-function getDatabasePath() {
-  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-    // Production/Vercel deployment - use /tmp directory
-    return '/tmp/dev.db';
-  } else {
-    // Local development - use project directory
-    return path.join(__dirname, '..', 'dev.db');
-  }
-}
-
-// Function to update .env.local with correct DATABASE_URL
-function updateEnvFile(dbPath) {
-  const envLocalPath = path.join(__dirname, '..', '.env.local');
-  const databaseUrl = \`DATABASE_URL="file:\${dbPath}"\`;
-  
-  try {
-    let envContent = '';
-    
-    // Read existing .env.local if it exists
-    if (fs.existsSync(envLocalPath)) {
-      envContent = fs.readFileSync(envLocalPath, 'utf8');
-      
-      // Replace existing DATABASE_URL or add it
-      if (envContent.includes('DATABASE_URL=')) {
-        envContent = envContent.replace(/DATABASE_URL=.*/g, databaseUrl);
-      } else {
-        envContent += \`\n\${databaseUrl}\n\`;
-      }
-    } else {
-      // Create new .env.local file
-      envContent = \`# Auto-generated database configuration
-\${databaseUrl}
-\`;
-    }
-    
-    fs.writeFileSync(envLocalPath, envContent);
-    console.log('📝 Updated .env.local with DATABASE_URL:', databaseUrl);
-  } catch (error) {
-    console.warn('⚠️ Could not update .env.local:', error.message);
-  }
-}
-
-// Determine the correct database path for different environments
-const dbPath = getDatabasePath();
-const dbDir = path.dirname(dbPath);
-
-console.log(\`🗄️ Initializing SQLite database at: \${dbPath}\`);
-
-// Ensure the directory exists
-if (!fs.existsSync(dbDir)) {
-  try {
-    fs.mkdirSync(dbDir, { recursive: true });
-    console.log('📁 Created database directory:', dbDir);
-  } catch (error) {
-    console.error('❌ Failed to create database directory:', error);
-    // Don't exit on directory creation failure in serverless environments
-    if (!process.env.VERCEL) {
-      process.exit(1);
-    }
-  }
-}
-
-// Create empty SQLite database file if it doesn't exist
-if (!fs.existsSync(dbPath)) {
-  try {
-    fs.writeFileSync(dbPath, '');
-    console.log('✅ SQLite database file created:', dbPath);
-  } catch (error) {
-    console.error('❌ Failed to create database file:', error);
-    // Don't exit on file creation failure in serverless environments
-    if (!process.env.VERCEL) {
-      process.exit(1);
-    }
-  }
-} else {
-  console.log('📋 SQLite database file already exists:', dbPath);
-}
-
-// Update environment configuration for local development
-if (!process.env.VERCEL && !process.env.NODE_ENV === 'production') {
-  updateEnvFile(dbPath);
-}
-
-// Set runtime environment variable for this process
-process.env.DATABASE_URL = \`file:\${dbPath}\`;
-console.log('🔗 Set DATABASE_URL:', process.env.DATABASE_URL);
-
-console.log('🗄️ SQLite database initialization complete');`;
-  }
-
   private generateGlobalStyles(): string {
     return `@tailwind base;
 @tailwind components;
@@ -4614,19 +3943,20 @@ A **fully self-contained** mobile-first AI agent application with embedded actio
 
 This sub-agent uses a **hybrid architecture** for optimal performance and user experience:
 
-### 🏠 **Embedded (Local)**
-- **Actions**: All action code is embedded and executes locally
-- **Schedules**: Execute sequences of actions automatically via Vercel cron  
-- **Models**: Data model definitions are embedded for fast access
-- **Database**: PostgreSQL operations happen locally
-
-### ☁️ **Live from Main App**
-- **Name & Description**: Agent branding updates in real-time
-- **Theme**: UI theme changes reflect immediately
-- **Avatar**: Profile image stays synchronized with main app
+### ☁️ **UI Elements from Main App (Dynamic)**
+- **Name**: Agent name updates in real-time
+- **Description**: Agent description stays synchronized
+- **Theme**: UI theme changes reflect immediately  
+- **Avatar**: Profile image updates automatically
 - **Domain**: Custom domain configuration
 
-This ensures fast, reliable execution while keeping the UI synchronized with your main agent configuration.
+### 🏠 **Functional Data Embedded (Static)**
+- **Models**: Data model definitions embedded for fast access
+- **Actions**: All action code embedded and executes locally
+- **Schedules**: Schedule definitions embedded, execute locally via Vercel cron
+- **Database**: PostgreSQL operations happen locally with embedded schema
+
+This ensures **real-time UI updates** from the main app while maintaining **fast performance** with embedded functional data and **complete independence** for execution.
 
 ## ⏰ How Schedules Work
 
@@ -4799,7 +4129,7 @@ CRON_SECRET=your-cron-secret
 - \`GET /api/models/[modelName]\` - Model data
 
 ### Action APIs
-${this.options.actions.map(a => `- \`POST /api/${a.name}\` - ${a.description || 'Execute action'}`).join('\n')}
+${this.options.actions.map(a => `- \`POST /api/actions/${a.name}\` - ${a.description || 'Execute action'}`).join('\n')}
 
 ### Cron APIs
 ${this.options.schedules.map(s => `- \`POST /api/cron/${s.name}\` - ${s.description || 'Scheduled task'}`).join('\n')}
@@ -4851,6 +4181,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Return embedded actions directly (no main app calls)
     const actions = ${JSON.stringify(this.options.actions)};
     
+    console.log('📦 Returning embedded actions:', {
+      count: actions.length,
+      names: actions.map(a => a.name)
+    });
+    
     res.status(200).json({
       success: true,
       actions: actions,
@@ -4877,6 +4212,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     // Return embedded schedules directly (no main app calls)
     const schedules = ${JSON.stringify(this.options.schedules)};
+    
+    console.log('📦 Returning embedded schedules:', {
+      count: schedules.length,
+      names: schedules.map(s => s.name)
+    });
     
     res.status(200).json({
       success: true,
@@ -4905,6 +4245,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Return embedded models directly (no main app calls)
     const models = ${JSON.stringify(this.options.models)};
     
+    console.log('📦 Returning embedded models:', {
+      count: models.length,
+      names: models.map(m => m.name)
+    });
+    
     res.status(200).json({
       success: true,
       models: models,
@@ -4929,15 +4274,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
+    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://app.rom.cards';
     const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
     const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
-    console.log('🔗 Config API calling main app for UI config:', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
+    console.log('🔗 Config API calling main app for UI config (avatar, theme, name, description):', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
 
-    let mainAppConfig = null;
+    let mainAppUIConfig = null;
     
-    // Try to get UI configuration from main app (name, description, theme, avatar)
+    // Try to get UI configuration from main app (avatar, theme, name, description ONLY)
     try {
       const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
         headers: {
@@ -4951,31 +4296,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.agentConfig) {
-          mainAppConfig = data.agentConfig;
+          // Extract ONLY UI elements from main app
+          mainAppUIConfig = {
+            name: data.agentConfig.name,
+            description: data.agentConfig.description,
+            theme: data.agentConfig.theme,
+            avatar: data.agentConfig.avatar,
+            domain: data.agentConfig.domain
+          };
           console.log('✅ Retrieved UI config from main app:', {
-            name: mainAppConfig.name,
-            theme: mainAppConfig.theme,
-            hasAvatar: !!mainAppConfig.avatar,
-            avatarType: mainAppConfig.avatar?.type
+            name: mainAppUIConfig.name,
+            theme: mainAppUIConfig.theme,
+            hasAvatar: !!mainAppUIConfig.avatar,
+            avatarType: mainAppUIConfig.avatar?.type,
+            hasDescription: !!mainAppUIConfig.description
           });
         }
       } else {
         console.warn('⚠️ Main app responded with status:', response.status);
       }
     } catch (fetchError) {
-      console.warn('⚠️ Failed to fetch from main app:', fetchError.message);
+      console.warn('⚠️ Failed to fetch UI config from main app:', fetchError.message);
     }
 
     // Combine main app UI config with embedded functional data
     const config = {
       // UI elements from main app (or fallbacks)
-      name: mainAppConfig?.name || '${this.options.projectName}',
-      description: mainAppConfig?.description || 'Self-contained AI agent application',
-      theme: mainAppConfig?.theme || 'green',
-      avatar: mainAppConfig?.avatar || null,
-      domain: mainAppConfig?.domain || null,
+      name: mainAppUIConfig?.name || '${this.options.projectName}',
+      description: mainAppUIConfig?.description || 'Self-contained AI agent application',
+      theme: mainAppUIConfig?.theme || 'green',
+      avatar: mainAppUIConfig?.avatar || null,
+      domain: mainAppUIConfig?.domain || null,
       
-      // Functional data embedded in sub-agent
+      // Functional data embedded in sub-agent (NOT from main app)
       models: ${JSON.stringify(this.options.models)},
       actions: ${JSON.stringify(this.options.actions)},
       schedules: ${JSON.stringify(this.options.schedules)}
@@ -4986,7 +4339,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       theme: config.theme,
       hasAvatar: !!config.avatar,
       avatarType: config.avatar?.type,
-      source: mainAppConfig ? 'main-app-ui + embedded-data' : 'fallback-ui + embedded-data',
+      hasDescription: !!config.description,
+      source: mainAppUIConfig ? 'main-app-ui + embedded-functional-data' : 'fallback-ui + embedded-functional-data',
       modelsCount: config.models.length,
       actionsCount: config.actions.length,
       schedulesCount: config.schedules.length
@@ -4995,7 +4349,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json({
       success: true,
       config,
-      source: mainAppConfig ? 'hybrid' : 'embedded-fallback'
+      source: mainAppUIConfig ? 'hybrid' : 'embedded-fallback'
     });
   } catch (error) {
     console.error('❌ Error fetching agent config:', error);
@@ -5021,106 +4375,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 }`;
   }
 
-  private generateAgentDataEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-
-    console.log('🔗 Data API calling main app:', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
-
-    if (!DOCUMENT_ID) {
-      return res.status(400).json({ error: 'No document ID configured' });
-    }
-
-    // Call main app to get agent document data
-    const response = await fetch(\`\${MAIN_APP_URL}/api/document?id=\${DOCUMENT_ID}\`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-        'X-Agent-Token': AGENT_TOKEN,
-        'X-Document-ID': DOCUMENT_ID,
-      },
-    });
-
-    console.log('🔗 Main app response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('🔗 Main app error:', errorText);
-      throw new Error(\`Failed to fetch from main app: \${response.status} - \${errorText}\`);
-    }
-
-    const data = await response.json();
-    console.log('🔗 Main app data received:', { success: data.success, hasDocument: !!data.document });
-    
-    if (data.success && data.document?.metadata) {
-      const metadata = data.document.metadata;
-      const agentData = {
-        name: metadata.name || '${this.options.projectName}',
-        description: metadata.description || '',
-        personality: metadata.personality || '',
-        theme: metadata.theme || 'green',
-        avatar: metadata.avatar || null,
-        models: metadata.models || [],
-        actions: metadata.actions || [],
-        schedules: metadata.schedules || []
-      };
-      
-      res.status(200).json({
-        success: true,
-        data: agentData
-      });
-    } else {
-      // Fallback data
-      const fallbackData = {
-        name: '${this.options.projectName}',
-        description: 'Agent application',
-        personality: '',
-        theme: 'green',
-        avatar: null,
-        models: ${JSON.stringify(this.options.models)},
-        actions: ${JSON.stringify(this.options.actions)},
-        schedules: ${JSON.stringify(this.options.schedules)}
-      };
-      
-      res.status(200).json({
-        success: true,
-        data: fallbackData,
-        source: 'fallback'
-      });
-    }
-  } catch (error) {
-    console.error('Error fetching agent data:', error);
-    
-    // Return fallback data on error
-    const fallbackData = {
-      name: '${this.options.projectName}',
-      description: 'Agent application',
-      personality: '',
-      theme: 'green',
-      avatar: null,
-      models: ${JSON.stringify(this.options.models)},
-      actions: ${JSON.stringify(this.options.actions)},
-      schedules: ${JSON.stringify(this.options.schedules)}
-    };
-    
-    res.status(200).json({
-      success: true,
-      data: fallbackData,
-      source: 'fallback',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
-}`;
-  }
 
   private generateAgentContext(): string {
     return `import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
@@ -5167,7 +4421,9 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      console.log('🔧 AgentProvider: Fetching hybrid agent config (UI from main app + embedded data)...');
+      console.log('🔧 AgentProvider: Fetching hybrid config from sub-agent API (avoids CORS)...');
+      
+      // Call sub-agent's own config endpoint (which will fetch UI data from main app server-side)
       const response = await fetch('/api/agent/config');
       
       if (!response.ok) {
@@ -5187,6 +4443,7 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({ children }) => {
           theme: data.config.theme,
           hasAvatar: !!data.config.avatar,
           avatarType: data.config.avatar?.type,
+          hasDescription: !!data.config.description,
           source: data.source,
           modelsCount: data.config.models?.length || 0,
           actionsCount: data.config.actions?.length || 0,
@@ -5212,6 +4469,7 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({ children }) => {
         actions: ${JSON.stringify(this.options.actions)},
         schedules: ${JSON.stringify(this.options.schedules)}
       };
+      console.log('🔄 Using fallback config with embedded functional data');
       setConfig(fallbackConfig);
     } finally {
       setLoading(false);
@@ -5239,89 +4497,6 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({ children }) => {
     </AgentContext.Provider>
   );
 };`;
-  }
-
-  private generateTestConnectionEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-
-    console.log('🔗 Testing connection to main app:', { 
-      MAIN_APP_URL, 
-      DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', 
-      hasToken: !!AGENT_TOKEN 
-    });
-
-    // Test authenticated endpoint
-    const authResponse = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-        'X-Agent-Token': AGENT_TOKEN,
-        'X-Document-ID': DOCUMENT_ID,
-      },
-    }).catch(error => {
-      console.error('❌ Auth test failed:', error);
-      return null;
-    });
-
-    const authOk = authResponse?.ok;
-    
-    let authData = null;
-    if (authOk) {
-      try {
-        authData = await authResponse.json();
-      } catch (e) {
-        console.error('❌ Failed to parse auth response:', e);
-      }
-    }
-
-    const result = {
-      success: true,
-      tests: {
-        authentication: {
-          status: authOk ? 'pass' : 'fail',
-          response: authOk ? 'Authentication successful' : 'Authentication failed'
-        },
-        dataRetrieval: {
-          status: (authData?.success && authData?.agentConfig) ? 'pass' : 'fail',
-          response: (authData?.success && authData?.agentConfig) ? 'Agent data retrieved' : 'Failed to retrieve agent data',
-          hasAvatar: !!authData?.agentConfig?.avatar,
-          theme: authData?.agentConfig?.theme || 'not found',
-          name: authData?.agentConfig?.name || 'not found'
-        }
-      },
-      environment: {
-        MAIN_APP_URL,
-        hasDocumentId: !!DOCUMENT_ID,
-        hasAgentToken: !!AGENT_TOKEN
-      },
-      debug: authData?.debug || null
-    };
-
-    console.log('🔍 Connection test results:', result);
-    
-    res.status(200).json(result);
-  } catch (error) {
-    console.error('❌ Test connection error:', error);
-    res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      tests: {
-        authentication: { status: 'error', response: 'Test failed with error' },
-        dataRetrieval: { status: 'error', response: 'Test failed with error' }
-      }
-    });
-  }
-}`;
   }
 }
 

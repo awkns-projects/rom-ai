@@ -103,7 +103,8 @@ export async function generateActionExecutableCode(
   businessContext?: string,
   inputParameters?: any[],
   enhancedAnalysis?: any,
-  testResults?: any
+  testResults?: any,
+  prismaSchema?: string
 ): Promise<{
   code: string;
   envVars: any[];
@@ -148,6 +149,32 @@ CONTEXT:
 - Business Context: ${businessContext || 'General business operations'}
 - Available Models: ${JSON.stringify(availableModels?.map((m: any) => ({ name: m.name, fields: m.fields?.map((f: any) => ({ name: f.name, type: f.type })) })) || [])}
 
+${prismaSchema ? `FULL PRISMA SCHEMA:
+The complete Prisma schema with all relationships, constraints, and field attributes:
+
+\`\`\`prisma
+${prismaSchema}
+\`\`\`
+
+Use this schema to understand:
+- Exact field names and types for each model
+- Database relationships and foreign keys
+- Required vs optional fields
+- Default values and constraints
+- Available enum values
+- Primary keys and unique constraints
+
+CRITICAL: Use the Prisma schema as the authoritative source for all database operations.
+
+🚨 MANDATORY FIELD VALIDATION:
+Before using ANY field in a database operation, you MUST verify it exists in the Prisma schema above.
+For example, if you want to use db.sleepPattern.findMany({ where: { deleted: false } }):
+1. Look at the SleepPattern model in the schema above
+2. Check if 'deleted' field exists - IT DOESN'T!
+3. Instead use existing fields like 'userId', 'sleepStartTime', 'sleepEndTime', 'qualityScore'
+4. NEVER assume common fields like 'deleted', 'createdAt', 'updatedAt' exist unless explicitly shown in schema
+` : ''}
+
 ${enhancedAnalysis ? `ENHANCED ANALYSIS (VALIDATED):
 ✅ This action has been fully analyzed and tested with real scenarios
 ✅ Test scenarios executed: ${enhancedAnalysis.analysis?.testScenarios?.length || 0}
@@ -165,10 +192,28 @@ ${testResults ? `REAL TEST EXECUTION RESULTS:
 ` : ''}
 
 PSEUDO STEPS TO IMPLEMENT:
+${pseudoSteps.map((step: any, index: number) => `
+STEP ${index + 1}: ${step.description}
+- Type: ${step.type}
+- Input Fields: ${step.inputFields?.map((f: any) => `${f.name} (${f.type}${f.required ? ', required' : ', optional'})`).join(', ') || 'None'}
+- Output Fields: ${step.outputFields?.map((f: any) => `${f.name} (${f.type}${f.required ? ', required' : ', optional'})`).join(', ') || 'None'}
+- Step Implementation: Based on type "${step.type}", implement the appropriate operation
+${index === 0 ? `- Access inputs as: ${extractedInputParams.map((p: any) => `input.${p.name}`).join(', ')} (action's main input parameters)` : step.inputFields?.length > 0 ? `- Access inputs from previous steps: ${step.inputFields.map((f: any) => `${f.name}`).join(', ')}` : ''}
+${step.outputFields?.length > 0 ? `- Must produce: ${step.outputFields.map((f: any) => `${f.name}`).join(', ')}` : ''}
+`).join('\n')}
+
+DETAILED STEP BREAKDOWN:
 ${JSON.stringify(pseudoSteps, null, 2)}
 
 REQUIRED INPUT PARAMETERS (from first step):
 ${JSON.stringify(extractedInputParams, null, 2)}
+
+BEFORE YOU START - SCHEMA FIELD VERIFICATION:
+${prismaSchema ? `
+Review the Prisma schema above and list the exact fields available for each model:
+
+⚠️ WARNING: If you reference ANY field not listed above, the code will fail at runtime!
+` : ''}
 
 CODE GENERATION REQUIREMENTS:
 
@@ -181,62 +226,129 @@ CODE GENERATION REQUIREMENTS:
    - input: User-provided input parameters (MUST include all parameters from the first step)
    - envVars: Environment variables for external APIs ONLY (do not include NODE_ENV, PORT, or other system variables)
 
-2. CRITICAL BATCH INPUT REQUIREMENT:
-   ⚡ ALL ACTIONS MUST ACCEPT BATCH INPUT WITH items[] ARRAY:
+2. INPUT PARAMETER STRUCTURE:
+   CRITICAL: Step 1 uses the action's main input parameters, NOT separate step input fields.
+   Access the action's input parameters directly as: input.parameterName
    
-   The input MUST always be structured as: input = { items: Array<{parameters}> }
-   
-   NEVER generate actions that accept single-item inputs like { userId: "123" }
-   ALWAYS generate actions that accept: { items: [{ userId: "123" }] }
-   
-   Your code MUST:
-   - Validate that input.items exists and is a non-empty array
-   - Process each item in the array (even if typically only one item)
-   - Return results that include count and processed items
-   - Use for-loop to iterate over input.items array
-   - Return object with success, data (array), count, and message properties
+   Example: If the action has input parameters { scheduledDate, userId, reportType }
+   Then Step 1 accesses them as: input.scheduledDate, input.userId, input.reportType
+   Step 1's inputFields in the pseudo steps are for reference only - use the actual action inputs!
 
 3. INPUT PARAMETER HANDLING:
    ${extractedInputParams.length > 0 ? `
-   The code MUST expect these input parameters wrapped in items array:
+   The code should expect these input parameters from step 1:
    ${extractedInputParams.map((param: any) => `
-   - input.items[].${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}
+   - input.${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}
      ${param.kind === 'object' ? `This is a database relation ID for ${param.relationModel} model` : ''}
    `).join('')}
    
-   Always validate required input parameters for each item:
-   Loop through input.items and check each required parameter exists on the item object.
-   ` : 'Each item in input.items array should contain the action-specific parameters.'}
+   Always validate required input parameters before processing.
+   ` : 'Parameters will be provided as defined in the first pseudo step.'}
 
-4. CODE STRUCTURE:
-   - Start with input.items array validation
-   - Process each item in the array sequentially
-   - Handle data flow between steps (output of step N becomes input of step N+1)
-   - Include proper error handling
-   - Return structured result with count and processed items
+4. CODE STRUCTURE - STEP-BY-STEP IMPLEMENTATION:
+   Each pseudo step should be implemented as a distinct code block that:
+   - Uses the exact inputFields defined in the step to access data
+   - Produces the exact outputFields defined in the step
+   - Implements the step type (Database find many, AI analysis, etc.)
+   - Passes outputFields from step N as inputFields to step N+1
+   
+   STEP-BY-STEP CODE PATTERN:
+   For each step, implement it as a separate code section with comments:
+   // Step 1: [Step Description]
+   // Input: [list of input field names]
+   // Output: [list of output field names]
+   // Implementation based on step type
+   
+   CRITICAL: Follow the exact data flow defined in pseudo steps:
+   - Only use inputFields that are defined for each step
+   - Produce all outputFields that are defined for each step
+   - Use step outputs as inputs for subsequent steps
+   - Each step's outputs become available for subsequent steps
+   
+   DATA FLOW IMPLEMENTATION:
+   - Step 1 inputs MUST BE the action's main input parameters (input.parameterName)
+   - Step 1 should not define separate input fields - it uses the action's input directly
+   - Step 2+ inputs come from previous step outputs
+   - Store each step's outputs in variables for use by subsequent steps
+   - Example: Step 1 uses input.userId, Step 1 outputs "customerData", Step 2 uses customerData
+   
+   STEP VARIABLE NAMING PATTERN:
+   - Step 1 outputs: step1_outputFieldName (e.g., step1_customerData)
+   - Step 2 outputs: step2_outputFieldName (e.g., step2_analysisResult)
+   - This ensures clear data flow tracking between steps
 
 5. DATABASE OPERATIONS:
-   For database operations, use the actual API format:
-   - db.findMany(modelName, { where: filter, limit: number }) - find multiple records
-   - db.findUnique(modelName, where) - find single record  
-   - db.create(modelName, data) - create new record
-   - db.createMany(modelName, dataArray) - create multiple records (returns { count, records })
-   - db.update(modelName, where, data) - update existing records
-   - db.updateMany(modelName, where, data) - update multiple records (returns { count, records })
-   - db.delete(modelName, where) - delete records
-   - db.deleteMany(modelName, where) - delete multiple records (returns { count, records })
+   For database operations, use Prisma client directly (the 'db' parameter is the PrismaClient instance):
+   - db.modelName.findMany({ where: filter, take: limit }) - find multiple records
+   - db.modelName.findUnique({ where: uniqueFilter }) - find single record  
+   - db.modelName.create({ data: recordData }) - create new record
+   - db.modelName.createMany({ data: recordsArray }) - create multiple records
+   - db.modelName.update({ where: uniqueFilter, data: updateData }) - update existing record
+   - db.modelName.updateMany({ where: filter, data: updateData }) - update multiple records
+   - db.modelName.delete({ where: uniqueFilter }) - delete record
+   - db.modelName.deleteMany({ where: filter }) - delete multiple records
    
    STEP TYPE TO DATABASE OPERATION MAPPING:
-   - "Database find unique" → db.findUnique(modelName, where)
-   - "Database find many" → db.findMany(modelName, { where: filter })
-   - "Database create" → db.create(modelName, data)
-   - "Database create many" → db.createMany(modelName, dataArray)
-   - "Database update unique" → db.update(modelName, where, data) 
-   - "Database update many" → db.updateMany(modelName, where, data)
-   - "Database delete unique" → db.delete(modelName, where)
-   - "Database delete many" → db.deleteMany(modelName, where)
+   - "Database find unique" → db.modelName.findUnique({ where: { id: recordId } })
+   - "Database find many" → db.modelName.findMany({ where: filter, include: relations })
+   - "Database create" → db.modelName.create({ data: newData })
+   - "Database create many" → db.modelName.createMany({ data: recordsArray })
+   - "Database update unique" → db.modelName.update({ where: { id: recordId }, data: updateData })
+   - "Database update many" → db.modelName.updateMany({ where: filter, data: updateData })
+   - "Database delete unique" → db.modelName.delete({ where: { id: recordId } })
+   - "Database delete many" → db.modelName.deleteMany({ where: filter })
 
-   IMPORTANT: The first parameter is always the MODEL NAME as a string, not db.ModelName.method()!
+   IMPORTANT: Use the actual Prisma client syntax - db.modelName.method() where modelName is the camelCase version of your model name!
+   
+   ⚠️ CRITICAL DATABASE FIELD RULE:
+   ONLY use fields that actually exist in the available models. DO NOT assume fields like 'deleted', 'createdAt', 'updatedAt', or any other fields unless they are explicitly defined in the model schema. Check the available models list to see what fields each model actually has.
+   
+   🚨 ABSOLUTELY FORBIDDEN FIELD ASSUMPTIONS:
+   - NEVER use 'deleted' field unless it exists in the schema
+   - NEVER use 'createdAt' or 'updatedAt' unless they exist in the schema  
+   - NEVER use 'isActive', 'status', or other common fields unless they exist
+   - ALWAYS verify field existence in the Prisma schema before using them
+   - If you need to filter records, use fields that actually exist in the model
+   
+   EXAMPLES OF CORRECT PRISMA USAGE:
+   // Find multiple water intake records - ONLY use fields that exist in the schema
+   const waterIntakeRecords = await db.waterIntake.findMany({
+     where: {
+       userId: input.userId,  // ✅ userId exists in WaterIntake model
+       date: { gte: input.startDate, lte: input.endDate }  // ✅ date exists in WaterIntake model
+     },
+     orderBy: { date: 'desc' }
+   });
+   
+   // ❌ WRONG - using non-existent fields:
+   // const records = await db.sleepPattern.findMany({
+   //   where: { deleted: false }  // ❌ 'deleted' field doesn't exist in SleepPattern model
+   // });
+   
+   // ✅ CORRECT - using only existing fields:
+   const sleepPatterns = await db.sleepPattern.findMany({
+     where: { 
+       userId: input.userId,  // ✅ userId exists in SleepPattern model
+       sleepStartTime: { gte: input.startDate }  // ✅ sleepStartTime exists in SleepPattern model
+     }
+   });
+   
+   // Create a new health report
+   const healthReport = await db.healthReport.create({
+     data: {
+       userId: input.userId,
+       reportDate: new Date(),
+       waterIntakeSummary: analysisResult.waterIntakeSummary,
+       workoutSummary: analysisResult.workoutSummary,
+       sleepSummary: analysisResult.sleepSummary
+     }
+   });
+   
+   // Update multiple workout logs
+   const updatedLogs = await db.workoutLog.updateMany({
+     where: { userId: input.userId, status: 'pending' },
+     data: { status: 'completed', processedAt: new Date() }
+   });
 
 6. AI OPERATIONS:
    For AI analysis/decisions, use:
@@ -272,8 +384,8 @@ CODE GENERATION REQUIREMENTS:
    // Use the oauth context provided by the system instead of environment variables
 
 8. RETURN FORMAT:
-   Always return: { success: boolean, data: any, count: number, message: string, executionTime: number }
-   Where data contains the processed results array and count is the number of items processed.
+   Always return: { success: boolean, data: any, message: string, executionTime: number }
+   Where data contains the result of the action execution.
 
 9. ENVIRONMENT VARIABLES:
    ONLY generate environment variables for external APIs that use API KEY authentication:
@@ -313,6 +425,20 @@ CODE GENERATION REQUIREMENTS:
    - OAuth APIs (no env vars needed): Gmail, Slack, Shopify, Facebook, LinkedIn, Instagram, Google Calendar, Microsoft Teams, Notion, Salesforce, HubSpot
    - API Key APIs (env vars needed): Stripe, OpenAI, generic REST APIs
 
+9. FUNCTION SIGNATURE AND CONTEXT:
+   Your generated function should accept a context object with these properties:
+   - db: Prisma client instance (use as db.modelName.method())
+   - ai: AI utilities ({ generateObject })
+   - input: User input parameters
+   - envVars: Environment variables
+   
+   CRITICAL: The 'db' parameter is a PrismaClient instance. Use it like:
+   - db.waterIntake.findMany() NOT db.findMany('WaterIntake')
+   - db.healthReport.create() NOT db.create('HealthReport')
+   - db.workoutLog.updateMany() NOT db.updateMany('WorkoutLog')
+   
+   Function return format: { success: boolean, data: any, message: string, executionTime: number }
+
 Generate production-ready, executable JavaScript code that implements the business logic described in the pseudo steps and properly uses the input parameters.`;
 
   const result = await generateObject({
@@ -340,7 +466,18 @@ Input Parameters Required:
 ${extractedInputParams.map((param: any) => `- ${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}`).join('\n')}
 ` : ''}
 
-Generate complete, executable code that can run in production with real data and properly handles all input parameters.`
+Generate complete, executable code that implements each pseudo step as a distinct code block:
+
+IMPLEMENTATION REQUIREMENTS:
+1. For each pseudo step, create a clearly commented code section
+2. STEP 1 SPECIAL RULE: Step 1 inputs are the action's main input parameters (input.paramName)
+3. STEP 2+ RULE: Use outputs from previous steps as inputs
+4. Produce all the outputFields defined for each step  
+5. Pass step outputs as inputs to subsequent steps using clear variable names
+6. Follow the exact step type implementation (Database find many, AI analysis, etc.)
+7. Handle the data flow between steps using the defined input/output structure
+
+Generate production-ready code that follows this step-by-step pattern and handles all input parameters correctly.`
       }
     ],
     temperature: 0.2,
@@ -380,7 +517,8 @@ export async function generateCompleteAction(
   availableModels: any[],
   businessContext: string,
   entityType: string = 'general',
-  existingActions: any[] = []
+  existingActions: any[] = [],
+  prismaSchema?: string
 ): Promise<any> {
   console.log(`🚀 Generating complete action using API route logic: ${actionSpec.name}`);
 
@@ -421,7 +559,11 @@ export async function generateCompleteAction(
       pseudoSteps,
       availableModels,
       entityType,
-      businessContext
+      businessContext,
+      undefined, // inputParameters
+      undefined, // enhancedAnalysis
+      undefined, // testResults
+      prismaSchema
     );
     
     console.log(`✅ Step 3/3 complete: Generated ${codeResult.code.length} chars of executable code`);

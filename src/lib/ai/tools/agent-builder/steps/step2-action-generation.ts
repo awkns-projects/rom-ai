@@ -1,9 +1,11 @@
-import { generateActions, generatePrismaActions } from '../generation';
+import { generateActions, generatePrismaActions, getAgentBuilderModel } from '../generation';
 import { generateCompleteAction } from '../action-generation-shared';
 import type { AgentAction, AgentData } from '../types';
 import type { Step0Output } from './step0-comprehensive-analysis';
 import type { Step1Output } from './step1-database-generation';
 import { generateTitleAndName, sanitizeAgentName } from '../utils';
+import { generateObject } from 'ai';
+import { z } from 'zod';
 
 /**
  * STEP 2: Action Generation & API Design
@@ -58,7 +60,6 @@ async function generateBusinessProcessActions(
 
 BUSINESS CONTEXT:
 - Business Goal: ${businessContext}
-- Available Models: ${availableModels.map(m => `${m.name} (${m.fields?.map((f: any) => `${f.name}: ${f.type}`).join(', ')})`).join(', ')}
 - External APIs: ${externalApis && externalApis.length > 0 ? 
   externalApis.map((api: any) => `${api.provider} (${api.connectionType})`).join('\n') :
   '- No external APIs specified'
@@ -136,26 +137,19 @@ REQUIREMENTS:
    - "Fetch User Preferences" → gets all user preferences → outputs preferences → feeds into "Customize Experience Campaign"
    - "Validate Product Data" → validates all products → outputs validatedData → feeds into "Sync to Catalog"
 
-8. CRITICAL BATCH INPUT REQUIREMENT:
-   ALL ACTIONS MUST BE DESIGNED TO ACCEPT BATCH INPUT WITH items[] ARRAYS:
-   - Never design actions that take single parameters like { userId: "123" }
-   - Always design actions that accept: { items: [{ userId: "123" }] }
-   - Actions should process arrays of items for scalability
-   - This ensures compatibility with schedules and automation workflows
+8. INPUT PARAMETER DESIGN:
+   Actions should accept parameters directly as defined in their pseudo steps.
+   Parameters should be intuitive and match the action's natural requirements.
 
-**BATCH PROCESSING EXAMPLES:**
+**ACTION DESIGN EXAMPLES:**
 
-❌ WRONG ACTION DESIGN:
-- "Update Customer Profile" (requires user to pick one customer)
-- "Process Single Order" (requires selecting one order)
-- "Send Email to Customer" (requires choosing one customer)
+✅ GOOD ACTION DESIGNS:
+- "Generate Weekly Report" (takes date range parameters)
+- "Update Customer Profile" (takes customer ID and update data)
+- "Process Order" (takes order ID and processing options)
+- "Send Email Campaign" (takes campaign parameters and recipient criteria)
 
-✅ CORRECT ACTION DESIGN:
-- "Update Customer Profiles by Segment" (filters customers by criteria, processes batch)
-- "Process Pending Orders" (finds all pending orders, processes batch)
-- "Send Email Campaign to Subscribers" (filters subscribers, sends to all)
-
-Generate 3-5 meaningful business process actions that can work independently OR be chained together for complex automation workflows. Each action MUST use batch processing patterns and NEVER require single-item selection.
+Generate 3-5 meaningful business process actions that can work independently OR be chained together for complex automation workflows.
 
 🚨 CRITICAL NAMING FORMAT REQUIREMENTS:
 
@@ -269,7 +263,8 @@ async function createCompleteAction(
   availableModels: any[],
   businessContext: string,
   entityType: string,
-  existingActions: any[] = []
+  existingActions: any[] = [],
+  prismaSchema?: string
 ): Promise<any> {
   // Use the AI-generated values directly - the AI should generate proper name and title
   const actionTitle = actionSpec.title;
@@ -291,7 +286,8 @@ async function createCompleteAction(
       availableModels,
       businessContext,
       entityType,
-      existingActions
+      existingActions,
+      prismaSchema
     );
   } catch (error) {
     console.error(`❌ Failed to create complete action using shared logic: ${actionName}`, error);
@@ -351,7 +347,8 @@ export async function executeStep2ActionGeneration(
           availableModels,
           businessContext,
           entityType,
-          existingAgent?.actions || []
+          existingAgent?.actions || [],
+          databaseGeneration?.prismaSchema
         );
       })
     );

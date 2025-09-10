@@ -5,6 +5,7 @@ import type { Step3Output } from './step3-schedule-generation';
 import type { AgentAction, AgentSchedule } from '../types';
 import { MobileAppTemplate } from './templates/mobile-app-template';
 
+
 /**
  * STEP 4: Vercel + Neon PostgreSQL Deployment
  * 
@@ -659,6 +660,9 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     
     const agentDeploymentUrl = `https://${vercelProject.name}.vercel.app`;
     
+    // Generate agent token for authentication with main app
+    const agentToken = generateRandomSecret(); // Simple token for now - could be enhanced with JWT
+    
     const allEnvVars = {
       // Database configuration
       DATABASE_URL: databaseUrl,
@@ -673,6 +677,11 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
       // AI Model Configuration
       AI_MODEL_PROVIDER: process.env.AI_MODEL_PROVIDER || 'openai',
       AI_MODEL_NAME: process.env.AI_MODEL_NAME || 'gpt-4o-mini',
+      
+      // Main App Integration (Required for UI elements: avatar, theme, name, description)
+      NEXT_PUBLIC_MAIN_APP_URL: process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app',
+      NEXT_PUBLIC_DOCUMENT_ID: input.documentId || '',
+      NEXT_PUBLIC_AGENT_TOKEN: agentToken,
       
       // Security
       NEXTAUTH_SECRET: generateRandomSecret(),

@@ -38,7 +38,6 @@ export interface AgentSchedule {
   title?: string; // User-friendly display title
   emoji?: string; // AI-generated emoji representing the schedule
   description: string;
-  role: 'admin' | 'member';
   
   // Timing configuration
   trigger: {
