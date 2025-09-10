@@ -990,6 +990,23 @@ export const ScheduleEditor = memo(({
                     placeholder="e.g., Daily Data Backup, Weekly Report Generation"
                     className="bg-black/50 border-orange-500/30 text-orange-100"
                   />
+                  <p className="text-xs text-orange-400/70 font-mono mt-1">
+                    Internal identifier (camelCase, no spaces)
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="schedule-title">Display Title</Label>
+                  <Input
+                    id="schedule-title"
+                    value={schedule.title || ''}
+                    onChange={(e) => onUpdate({ ...schedule, title: e.target.value })}
+                    placeholder="e.g., Daily Customer Data Backup, Weekly Sales Report"
+                    className="bg-black/50 border-orange-500/30 text-orange-100"
+                  />
+                  <p className="text-xs text-orange-400/70 font-mono mt-1">
+                    What users see in the interface
+                  </p>
                 </div>
 
                 <div>

@@ -269,57 +269,130 @@ export class VercelClient {
   async setEnvironmentVariables(projectId: string, envVars: Record<string, string>) {
     console.log(`🔧 Setting environment variables for project: ${projectId}`);
     
-    // CRITICAL FIX: Validate environment variable names before sending to Vercel API
-    // Vercel requires: Only letters, digits, and underscores are allowed. Furthermore, the name should not start with a digit.
-    const invalidEnvVars: string[] = [];
-    const validEnvVars: Record<string, string> = {};
-    
+    // Log all environment variables being set (with values masked for security)
+    console.log('📋 Environment variables being set:');
     Object.entries(envVars).forEach(([key, value]) => {
-      // Check if environment variable name is valid according to Vercel's requirements
-      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-        invalidEnvVars.push(key);
-        console.warn(`⚠️ Invalid environment variable name detected: "${key}"`);
-        
-        // Attempt to sanitize the key as a fallback
-        const sanitizedKey = key
-          .replace(/[^A-Za-z0-9_]/g, '_') // Replace invalid characters with underscores
-          .replace(/_+/g, '_') // Replace multiple underscores with single
-          .replace(/^_+|_+$/g, '') // Remove leading/trailing underscores
-          .replace(/^[0-9]+/, 'API_'); // If starts with digit, prefix with API_
-        
-        if (sanitizedKey && /^[A-Za-z_][A-Za-z0-9_]*$/.test(sanitizedKey)) {
-          console.log(`🔧 Auto-sanitized "${key}" to "${sanitizedKey}"`);
-          validEnvVars[sanitizedKey] = value;
-        } else {
-          console.error(`❌ Could not sanitize environment variable: "${key}"`);
-        }
-      } else {
-        validEnvVars[key] = value;
-      }
+      const maskedValue = key.toLowerCase().includes('key') || key.toLowerCase().includes('secret') || key.toLowerCase().includes('token') || key.toLowerCase().includes('password')
+        ? `${value.substring(0, 8)}...` 
+        : value;
+      console.log(`  ${key}: ${maskedValue}`);
     });
     
-    if (invalidEnvVars.length > 0) {
-      console.warn(`⚠️ Found ${invalidEnvVars.length} invalid environment variable names:`, invalidEnvVars);
-      console.log(`✅ Proceeding with ${Object.keys(validEnvVars).length} valid environment variables`);
+    // First, get existing environment variables to check for conflicts
+    let existingEnvVars: Record<string, any> = {};
+    try {
+      const existingEnvResponse = await this.request(`/v9/projects/${projectId}/env`);
+      existingEnvVars = existingEnvResponse.envs.reduce((acc: Record<string, any>, env: any) => {
+        acc[env.key] = env;
+        return acc;
+      }, {});
+      console.log(`📋 Found ${Object.keys(existingEnvVars).length} existing environment variables`);
+    } catch (error) {
+      console.log('📋 Could not fetch existing environment variables, will try to create all as new');
     }
     
-    const promises = Object.entries(validEnvVars).map(([key, value]) =>
-      this.request(`/v10/projects/${projectId}/env`, {
-        method: 'POST',
-        body: JSON.stringify({
-          key,
-          value,
-          type: 'encrypted',
-          target: ['production', 'preview', 'development']
-        }),
-      })
-    );
-
-    await Promise.all(promises);
-    console.log(`✅ Environment variables set (${Object.keys(validEnvVars).length} variables)`);
+    // Set environment variables sequentially with delays to prevent ongoing update conflicts
+    const envDelay = 1500; // 1.5 seconds between each environment variable operation
+    const envEntries = Object.entries(envVars);
+    let successCount = 0;
     
-    if (invalidEnvVars.length > 0) {
-      console.warn(`⚠️ Note: ${invalidEnvVars.length} environment variables were skipped or sanitized due to invalid naming`);
+    console.log(`🔧 Setting ${envEntries.length} environment variables with ${envDelay}ms delay between each...`);
+    
+    for (let i = 0; i < envEntries.length; i++) {
+      const [key, value] = envEntries[i];
+      const existingEnv = existingEnvVars[key];
+      
+      try {
+        if (existingEnv) {
+          // Update existing environment variable using the correct endpoint
+          console.log(`🔄 Updating existing environment variable: ${key} (${i + 1}/${envEntries.length})`);
+          await this.request(`/v9/projects/${projectId}/env/${existingEnv.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              value,
+              type: 'encrypted',
+              target: ['production', 'preview', 'development']
+            }),
+          });
+        } else {
+          // Create new environment variable
+          console.log(`➕ Creating new environment variable: ${key} (${i + 1}/${envEntries.length})`);
+          await this.request(`/v10/projects/${projectId}/env`, {
+            method: 'POST',
+            body: JSON.stringify({
+              key,
+              value,
+              type: 'encrypted',
+              target: ['production', 'preview', 'development']
+            }),
+          });
+        }
+        
+        successCount++;
+        console.log(`✅ Successfully set ${key}`);
+        
+      } catch (envError: any) {
+        const errorMessage = envError.message || '';
+        
+        // Check if it's an ENV_CONFLICT error - this means the variable exists but wasn't in our initial fetch
+        if (errorMessage.includes('ENV_CONFLICT') || errorMessage.includes('already exists')) {
+          console.log(`⚠️ Environment variable ${key} already exists but wasn't in initial fetch. Attempting to find and update...`);
+          
+          try {
+            // Add extra delay before refetch to avoid ongoing update conflicts
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Refetch environment variables to get the latest list
+            const refreshedEnvResponse = await this.request(`/v9/projects/${projectId}/env`);
+            const refreshedEnvVars = refreshedEnvResponse.envs.reduce((acc: Record<string, any>, env: any) => {
+              acc[env.key] = env;
+              return acc;
+            }, {});
+            
+            const refreshedExistingEnv = refreshedEnvVars[key];
+            if (refreshedExistingEnv) {
+              console.log(`🔄 Found existing environment variable ${key}, updating...`);
+              await this.request(`/v9/projects/${projectId}/env/${refreshedExistingEnv.id}`, {
+                method: 'PATCH',
+                body: JSON.stringify({
+                  value,
+                  type: 'encrypted',
+                  target: ['production', 'preview', 'development']
+                }),
+              });
+              successCount++;
+              console.log(`✅ Successfully updated ${key} after conflict resolution`);
+            } else {
+              console.warn(`⚠️ Could not find environment variable ${key} after refresh, skipping...`);
+            }
+          } catch (refreshError) {
+            console.warn(`⚠️ Failed to refresh and update environment variable ${key}:`, refreshError);
+            // Continue with other variables
+          }
+        } else if (errorMessage.includes('envs_ongoing_update')) {
+          console.warn(`⚠️ Environment variable ${key} failed due to ongoing update conflict. This shouldn't happen with proper delays.`);
+          console.warn(`   Error: ${errorMessage}`);
+          // Continue with other variables rather than failing entire deployment
+        } else {
+          // Re-throw other types of errors
+          console.error(`❌ Failed to set environment variable ${key}:`, errorMessage);
+          throw envError;
+        }
+      }
+      
+      // Add delay between environment variable operations (except for the last one)
+      if (i < envEntries.length - 1) {
+        console.log(`⏳ Waiting ${envDelay}ms before next environment variable...`);
+        await new Promise(resolve => setTimeout(resolve, envDelay));
+      }
+    }
+    
+    console.log(`✅ Environment variables completed: ${successCount}/${envEntries.length} successful`);
+    
+    if (successCount === 0) {
+      throw new Error('Failed to set any environment variables');
+    } else if (successCount < envEntries.length) {
+      console.warn(`⚠️ Only ${successCount}/${envEntries.length} environment variables were set successfully`);
     }
   }
 
@@ -447,11 +520,10 @@ function validateAndNormalizeActions(actions: AgentAction[]): AgentAction[] {
     return true;
   }).map(action => ({
     ...action,
-    id: action.id || `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    name: action.name.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase(),
-    description: action.description || `${action.type} action`,
+    // Action names should already be sanitized by Step 2 action generation
+    description: action.description || 'Generated action',
     role: action.role || 'member',
-    emoji: action.emoji || (action.type === 'query' ? '🔍' : '✏️'),
+    emoji: action.emoji || '⚡',
   }));
 }
 
@@ -472,7 +544,7 @@ function validateAndNormalizeSchedules(schedules: AgentSchedule[]): AgentSchedul
     return true;
   }).map(schedule => ({
     ...schedule,
-    name: schedule.name.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase(),
+    // Schedule names should already be sanitized by Step 3 schedule generation
     description: schedule.description || `Scheduled task: ${schedule.name}`,
     interval: {
       ...schedule.interval,
@@ -613,6 +685,12 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
       
       ...environmentVariables
     };
+    
+    // Debug logging: Show all environment variable names being prepared
+    console.log('🔍 DEBUG: Environment variables being prepared for Vercel:');
+    console.log('  Variable names:', Object.keys(allEnvVars));
+    console.log('  Total count:', Object.keys(allEnvVars).length);
+    console.log('  Project name used in NEXT_PUBLIC_APP_NAME:', projectName);
     
     await vercelClient.setEnvironmentVariables(vercelProjectId, allEnvVars);
     

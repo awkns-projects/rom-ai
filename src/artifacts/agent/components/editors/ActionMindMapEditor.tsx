@@ -996,6 +996,24 @@ Make the action self-contained but also chain-friendly.`
                 onClick={(e) => e.stopPropagation()}
                 onFocus={(e) => e.stopPropagation()}
               />
+              <p className="text-xs text-blue-400/70 font-mono">
+                Internal identifier (camelCase, no spaces)
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="action-title" className="text-blue-300 font-mono text-sm">🏷️ Display Title</Label>
+              <Input
+                id="action-title"
+                value={action.title || ''}
+                onChange={(e) => onUpdate({ ...action, title: e.target.value })}
+                placeholder="e.g., Create Customer Invoice Record"
+                className="bg-black/50 border-blue-500/30 text-blue-200 font-mono text-sm"
+                onClick={(e) => e.stopPropagation()}
+                onFocus={(e) => e.stopPropagation()}
+              />
+              <p className="text-xs text-blue-400/70 font-mono">
+                What users see in the interface
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="action-description" className="text-blue-300 font-mono text-sm">📝 Vision & Purpose</Label>

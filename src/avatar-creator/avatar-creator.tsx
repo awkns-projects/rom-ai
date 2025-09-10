@@ -1266,7 +1266,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
   }, [onThemeChange, documentId, avatarData, step]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-gray-100 p-3 sm:p-6 font-mono">
+    <div className="min-h-screen text-gray-100 p-3 sm:p-6 font-mono">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-6 sm:mb-8">

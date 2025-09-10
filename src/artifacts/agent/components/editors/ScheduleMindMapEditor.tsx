@@ -270,6 +270,22 @@ export const ScheduleMindMapEditor = memo(({
                   placeholder="e.g., Daily Reports, Weekly Sync"
                   className="bg-slate-800 border-slate-600 text-white font-mono"
                 />
+                <p className="text-xs text-orange-400/70 font-mono">
+                  Internal identifier (camelCase, no spaces)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-orange-300 font-mono text-sm">🏷️ Display Title</Label>
+                <Input
+                  value={schedule.title || ''}
+                  onChange={(e) => onUpdate({ ...schedule, title: e.target.value })}
+                  placeholder="e.g., Daily Customer Reports, Weekly Team Sync"
+                  className="bg-slate-800 border-slate-600 text-white font-mono"
+                />
+                <p className="text-xs text-orange-400/70 font-mono">
+                  What users see in the interface
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -434,14 +450,14 @@ export const ScheduleMindMapEditor = memo(({
         type: 'action',
         icon: action?.emoji || '🔧',
         title: `Action ${index + 1}`,
-        subtitle: action?.name || 'Select an action to configure',
+        subtitle: action?.title || action?.name || 'Select an action to configure',
         status: getActionStatus(step),
         position: getPosition(currentIndex++),
         content: getActionStatus(step) === 'complete' && expandedCard !== step.id
           ? (
             <div className="space-y-2">
               <div className="text-slate-300 text-sm font-mono leading-relaxed">
-                Execute "{action?.name}" with {step.delay?.duration ? `${step.delay.duration / 1000}s delay` : 'no delay'}. On error: {step.onError?.action || 'stop'}.
+                Execute "{action?.title || action?.name}" with {step.delay?.duration ? `${step.delay.duration / 1000}s delay` : 'no delay'}. On error: {step.onError?.action || 'stop'}.
               </div>
               
               {/* Parameter Summary */}
@@ -484,7 +500,7 @@ export const ScheduleMindMapEditor = memo(({
                       s.id === step.id ? { 
                         ...s, 
                         actionId,
-                        name: selectedAction?.name || s.name 
+                        name: selectedAction?.title || selectedAction?.name || s.name 
                       } : s
                     ) || [];
                     onUpdate({ ...schedule, steps: updatedSteps });
@@ -841,7 +857,7 @@ export const ScheduleMindMapEditor = memo(({
                     <div key={step.id} className="flex items-center gap-2 text-xs">
                       <span className="text-slate-400">{index + 1}.</span>
                       <span className="text-slate-300">
-                        {action?.name || 'Unconfigured Action'}
+                        {action?.title || action?.name || 'Unconfigured Action'}
                       </span>
                       {step.delay?.duration && step.delay.duration > 0 && (
                         <span className="text-orange-400">({step.delay.duration / 1000}s delay)</span>

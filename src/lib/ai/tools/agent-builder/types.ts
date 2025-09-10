@@ -1,7 +1,8 @@
 // Core agent interfaces
 export interface AgentModel {
   id: string;
-  name: string;
+  name: string; // Code-safe name for database tables and Prisma models
+  title: string; // Human-readable display name for UI
   emoji?: string;
   description?: string;
   idField: string;
@@ -42,7 +43,8 @@ export interface AgentEnumField {
 
 export interface AgentSchedule {
   id: string;
-  name: string;
+  name: string; // Code-safe name for cron jobs and deployments
+  title: string; // Human-readable display name for UI
   emoji?: string;
   description: string;
   interval: {
@@ -100,7 +102,8 @@ export interface AgentSchedule {
 
 export interface AgentAction {
   id: string;
-  name: string;
+  name: string; // Code-safe name for API endpoints and deployments
+  title: string; // Human-readable display name for UI
   emoji?: string;
   description: string;
   role: 'admin' | 'member';

@@ -154,7 +154,7 @@ export const StepFieldEditor = memo(({
                           <div className="px-2 py-1 text-xs font-medium text-gray-400 border-b border-gray-700 mt-1">Model Relations</div>
                           {allModels.map(model => (
                             <SelectItem key={model.name} value={model.name} className="font-mono text-sm">
-                              {model.name} (Relation)
+                              {model.title || model.name} (Relation)
                             </SelectItem>
                           ))}
                         </>

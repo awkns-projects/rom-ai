@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generateUIComponents } from '@/lib/ai/tools/agent-builder/generation';
+import { generateActionUIComponents } from '@/lib/ai/tools/agent-builder/action-generation-shared';
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate UI components using AI
-    const uiComponents = await generateUIComponents(
+    const uiComponents = await generateActionUIComponents(
       name,
       description,
       pseudoSteps,

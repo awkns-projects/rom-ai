@@ -144,7 +144,7 @@ export const ModelsListEditor = memo(({
           >
             ← Back
           </Button>
-          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Model: {editingModel.name}</h3>
+          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Model: {editingModel.title || editingModel.name}</h3>
          
         </div>
         <ModelEditor
@@ -193,7 +193,7 @@ export const ModelsListEditor = memo(({
                   <span className="text-lg sm:text-xl">{model.emoji || '🗃️'}</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{model.name || 'Unnamed Model'}</h4>
+                  <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{model.title || model.name || 'Unnamed Model'}</h4>
                   {model.description && (
                     <p className="text-green-300 text-xs sm:text-sm font-mono mt-1 opacity-80 leading-relaxed">
                       {/* Truncate on mobile for better layout */}

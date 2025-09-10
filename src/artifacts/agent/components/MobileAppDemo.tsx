@@ -566,7 +566,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
             <div className="flex items-center gap-2">
               <span className="text-lg">{selectedModel.emoji || '🗃️'}</span>
               <div>
-                <h3 className={`font-mono font-bold text-sm ${theme.light}`}>{selectedModel.name}</h3>
+                <h3 className={`font-mono font-bold text-sm ${theme.light}`}>{selectedModel.title || selectedModel.name}</h3>
                 <p className={`font-mono text-xs ${theme.dim}`}>
                   {selectedModel.fields?.length || 0} fields • {selectedModel.records?.length || 0} records
                 </p>
@@ -612,7 +612,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
                   <div className={`${theme.bg} border ${theme.border} rounded-lg p-2 space-y-1`}>
                     <div className="flex justify-between">
                       <span className={`font-mono text-xs ${theme.dim}`}>Name:</span>
-                      <span className={`font-mono text-xs ${theme.light}`}>{selectedModel.name}</span>
+                      <span className={`font-mono text-xs ${theme.light}`}>{selectedModel.title || selectedModel.name}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className={`font-mono text-xs ${theme.dim}`}>Status:</span>
@@ -637,7 +637,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
                       selectedModel.fields.slice(0, 4).map((field: any, index: number) => (
                         <div key={index} className={`${theme.bg} border ${theme.border} rounded-lg p-2`}>
                           <div className="flex justify-between items-center">
-                            <span className={`font-mono text-xs ${theme.light}`}>{field.name}</span>
+                            <span className={`font-mono text-xs ${theme.light}`}>{field.title || field.name}</span>
                             <span className={`font-mono text-xs px-1 py-0.5 rounded ${theme.bgActive} ${theme.accent}`}>
                               {field.type}
                             </span>
@@ -700,7 +700,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
                     {selectedModel.fields?.length > 0 ? (
                       selectedModel.fields.slice(0, 3).map((field: any, index: number) => (
                         <div key={index}>
-                          <label className={`font-mono text-xs ${theme.dim} block mb-1`}>{field.name}</label>
+                          <label className={`font-mono text-xs ${theme.dim} block mb-1`}>{field.title || field.name}</label>
                           {field.type === 'boolean' ? (
                             <select 
                               value={newRecordData[field.name] || ''}
@@ -770,7 +770,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
                               </div>
                               {selectedModel.fields?.slice(0, 2).map((field: any, fieldIndex: number) => (
                                 <div key={fieldIndex}>
-                                  <label className={`font-mono text-xs ${theme.dim} block mb-1`}>{field.name}</label>
+                                  <label className={`font-mono text-xs ${theme.dim} block mb-1`}>{field.title || field.name}</label>
                                   {field.type === 'boolean' ? (
                                     <select 
                                       value={editRecordData[field.name] !== undefined ? String(editRecordData[field.name]) : ''}
@@ -1037,7 +1037,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
                     <div className="flex items-center gap-3 mb-2">
                       <span className="text-2xl">{model.emoji || '🗃️'}</span>
                       <div className="flex-1">
-                        <div className={`font-mono text-sm font-medium ${theme.light}`}>{model.name}</div>
+                        <div className={`font-mono text-sm font-medium ${theme.light}`}>{model.title || model.name}</div>
                         <div className={`font-mono text-xs ${theme.dim}`}>
                           {model.fields?.length || 0} fields
                         </div>
@@ -1107,7 +1107,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
                           <span className="text-lg">⚡</span>
                         </div>
                         <div className="flex-1">
-                          <div className={`font-mono text-sm font-bold ${theme.light}`}>{action.name}</div>
+                          <div className={`font-mono text-sm font-bold ${theme.light}`}>{action.title || action.name}</div>
                           <div className={`font-mono text-xs ${theme.dim}`}>
                             {action.description || 'No description'}
                           </div>
@@ -1196,7 +1196,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
                         {schedule.interval?.active ? 'Active' : 'Inactive'}
                       </span>
                     </div>
-                    <div className={`font-mono text-sm ${theme.light}`}>{schedule.name}</div>
+                    <div className={`font-mono text-sm ${theme.light}`}>{(schedule as any).title || schedule.name}</div>
                     <div className={`font-mono text-xs mt-1 ${theme.dim}`}>
                       {schedule.description || 'No description'}
                     </div>

@@ -1,6 +1,7 @@
 export interface AgentModel {
   id: string;
   name: string;
+  title?: string; // User-friendly display title
   emoji?: string; // AI-generated emoji representing the model
   description?: string; // AI-generated description for preview
   hasPublishedField?: boolean; // Whether this model has a published field

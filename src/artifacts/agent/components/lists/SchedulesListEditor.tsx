@@ -362,7 +362,7 @@ export const SchedulesListEditor = memo(({
           >
             ← Back
           </Button>
-          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Schedule: {editingSchedule.name}</h3>
+          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Schedule: {editingSchedule.title || editingSchedule.name}</h3>
         </div>
         <ScheduleEditor
           schedule={editingSchedule}
@@ -416,7 +416,7 @@ export const SchedulesListEditor = memo(({
                     <span className="text-lg sm:text-xl">{schedule.emoji || '⏰'}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{schedule.name || 'Unnamed Schedule'}</h4>
+                    <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{schedule.title || schedule.name || 'Unnamed Schedule'}</h4>
                     <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
                       {schedule.steps?.length || 0} actions • {schedule.trigger?.pattern || schedule.trigger?.type || 'No trigger'} • {schedule.trigger?.active ? 'Active' : 'Inactive'}
                     </p>

@@ -113,7 +113,7 @@ export const ModelDataViewer = memo(({
             ← Back
           </Button>
           <div>
-            <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">{model.name} Data</h3>
+            <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">{model.title || model.name} Data</h3>
             <p className="text-green-400 text-xs sm:text-sm font-mono">
               {records.length} records • {model.fields.length} fields
             </p>
@@ -149,7 +149,7 @@ export const ModelDataViewer = memo(({
                     {model.fields.slice(0, 4).map(field => (
                       <th key={field.id} className="px-4 py-3 text-left">
                         <span className="text-green-300 text-sm font-medium font-mono">
-                          {field.name}
+                          {field.title || field.name}
                           {field.required && <span className="text-red-400 ml-1">*</span>}
                         </span>
                       </th>
@@ -205,10 +205,10 @@ export const ModelDataViewer = memo(({
                         
                         return (
                           <div key={field.id} className="flex justify-between items-start gap-3">
-                            <span className="text-green-300 text-xs font-medium font-mono flex-shrink-0">
-                              {field.name}
-                              {field.required && <span className="text-red-400 ml-1">*</span>}:
-                            </span>
+                            <div className="text-green-300 text-xs font-mono font-medium mb-1">
+                              {field.title || field.name}
+                              {field.required && <span className="text-red-400 ml-1">*</span>}
+                            </div>
                             <span className="text-green-200 text-xs font-mono text-right break-words">
                               {displayValue.length > 30 
                                 ? `${displayValue.substring(0, 30)}...` 
@@ -249,7 +249,7 @@ export const ModelDataViewer = memo(({
             <span className="text-2xl sm:text-4xl">📊</span>
           </div>
           <h4 className="text-lg sm:text-xl font-semibold text-green-300 mb-2 font-mono">No Records Yet</h4>
-          <p className="text-green-500 text-sm font-mono mb-6 px-4">Add the first record to your {model.name} model</p>
+          <p className="text-green-500 text-sm font-mono mb-6 px-4">Add the first record to your {model.title || model.name} model</p>
           <Button 
             onClick={addRecord}
             className="btn-matrix px-4 sm:px-6 py-2 sm:py-3 w-full sm:w-auto max-w-xs"

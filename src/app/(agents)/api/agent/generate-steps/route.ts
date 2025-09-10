@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { generatePseudoSteps } from '@/lib/ai/tools/agent-builder/generation';
+import { generateActionPseudoSteps } from '@/lib/ai/tools/agent-builder/action-generation-shared';
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,20 +14,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Default to 'mutation' if no type is provided, or validate the provided type
-    const actionType = type || 'mutation';
-    if (actionType !== 'query' && actionType !== 'mutation') {
-      return NextResponse.json(
-        { error: 'Invalid type. Must be "query" or "mutation"' },
-        { status: 400 }
-      );
-    }
+    // Action types removed - no longer used
 
     // Generate pseudo steps using AI
-    const pseudoSteps = await generatePseudoSteps(
+    const pseudoSteps = await generateActionPseudoSteps(
       name,
       description,
-      actionType,
       availableModels || [],
       entityType,
       businessContext

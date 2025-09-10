@@ -111,29 +111,21 @@ export const ModelEditor = memo(({
               placeholder="Model name (e.g., User, Post, Order)"
               className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
             />
+            <p className="text-xs text-green-400/70 font-mono">
+              Internal identifier (camelCase, no spaces)
+            </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`model-id-field-${model.id}`} className="text-green-300 font-mono font-medium">
-              ID Field
-              <span className="text-xs text-gray-400 ml-2">(Protected)</span>
-            </Label>
-            <div className="relative">
-              <Input
-                id={`model-id-field-${model.id}`}
-                value={model.idField}
-                readOnly
-                disabled
-                placeholder="ID field name (e.g., id)"
-                className="bg-gray-800/50 border-gray-500/30 text-gray-400 placeholder-gray-500/50 cursor-not-allowed font-mono"
-              />
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                <span className="text-xs bg-gray-700 text-gray-300 px-2 py-1 rounded font-mono">
-                  🔒
-                </span>
-              </div>
-            </div>
-            <p className="text-xs text-gray-400 font-mono">
-              Primary key is always "id" for consistency
+            <Label htmlFor={`model-title-${model.id}`} className="text-green-300 font-mono font-medium">Display Title</Label>
+            <Input
+              id={`model-title-${model.id}`}
+              value={model.title || ''}
+              onChange={(e) => onUpdate({ ...model, title: e.target.value })}
+              placeholder="User-friendly title (e.g., Customer Orders)"
+              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono"
+            />
+            <p className="text-xs text-green-400/70 font-mono">
+              What users see in the interface
             </p>
           </div>
           <div className="space-y-2">
@@ -218,7 +210,7 @@ export const ModelEditor = memo(({
                           {field.kind === 'object' && (
                             allModels.filter(model => model.name.trim() !== '').length > 0 ? (
                               allModels.filter(model => model.name.trim() !== '').map(model => (
-                                <SelectItem key={model.id} value={model.name} className="text-green-200 focus:bg-green-500/20 font-mono">{model.name}</SelectItem>
+                                <SelectItem key={model.id} value={model.name} className="text-green-200 focus:bg-green-500/20 font-mono">{model.title || model.name}</SelectItem>
                               ))
                             ) : (
                               <SelectItem key="no-models" value="NoModelsAvailable" className="text-gray-400 focus:bg-gray-500/20 font-mono" disabled>
@@ -345,13 +337,13 @@ export const ModelEditor = memo(({
                   <div className="flex items-center gap-3">
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="text-green-200 font-mono font-medium">{field.name}</span>
+                        <span className="text-green-200 font-mono font-medium">{field.title || field.name}</span>
                         <span className="text-green-400 text-sm">({field.type})</span>
                         {field.required && <span className="text-red-400 text-xs">*</span>}
                         {field.unique && <span className="text-blue-400 text-xs">unique</span>}
                         {field.list && <span className="text-purple-400 text-xs">[]</span>}
                       </div>
-                      {field.title && <span className="text-green-500 text-xs font-mono">{field.title}</span>}
+                      {field.title && field.title !== field.name && <span className="text-green-500 text-xs font-mono">Internal: {field.name}</span>}
                     </div>
                   </div>
                   <Button

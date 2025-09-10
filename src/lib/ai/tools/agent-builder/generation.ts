@@ -12,7 +12,7 @@ import type {
   AgentSchedule,
   AgentEnum
 } from './types';
-import { sanitizeAgentName, generateUniqueId } from './utils';
+import { sanitizeAgentName, generateUniqueId, generateTitleAndName } from './utils';
 import { 
   promptUnderstandingSchema,
   changeAnalysisSchema,
@@ -1327,6 +1327,36 @@ FOR NEW SYSTEM:
 6. Use operation tracking: all schedules should be 'create' since this is a new system
 `}
 
+🚨 CRITICAL NAMING FORMAT REQUIREMENTS:
+
+FOR EACH SCHEDULE, GENERATE TWO DISTINCT VALUES:
+
+1. **name**: MUST be camelCase with NO spaces (e.g., "dailyReportGeneration", "weeklyCustomerSync", "monthlyDataBackup")
+   - Start with lowercase letter
+   - No spaces, hyphens, underscores, or special characters
+   - Use camelCase for multiple words
+   - This will be used internally in cron jobs and code
+
+2. **title**: MUST be properly spaced, capitalized text (e.g., "Daily Report Generation", "Weekly Customer Sync", "Monthly Data Backup")
+   - Use normal spacing between words
+   - Proper capitalization (Title Case)
+   - This is what users will see in the interface
+   - Should be the human-readable version of the name
+
+EXAMPLES OF CORRECT NAMING:
+- ✅ name: "dailyHealthDataSync", title: "Daily Health Data Sync"
+- ✅ name: "weeklyReportGeneration", title: "Weekly Report Generation"
+- ✅ name: "monthlyCustomerCleanup", title: "Monthly Customer Cleanup"
+- ✅ name: "hourlyInventoryCheck", title: "Hourly Inventory Check"
+
+❌ WRONG NAMING PATTERNS:
+- name: "Daily Report" (has spaces)
+- name: "daily-report" (has hyphens)
+- title: "dailyReport" (no spaces, not user-friendly)
+- title: "daily report" (not properly capitalized)
+
+BOTH name AND title MUST BE PROVIDED FOR EVERY SCHEDULE.
+
 CRITICAL INSTRUCTIONS:
 - Generate schedules that match the Step 0 analysis specifications exactly
 - Include proper role-based access control (admin vs member)
@@ -1478,6 +1508,21 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
     const availableActionIds = new Set((availableActions || []).map(action => action.id));
     console.log(`🔍 Available action IDs for validation: [${Array.from(availableActionIds).join(', ')}]`);
 
+    // Validate that AI generated proper name and title formats
+    console.log(`✅ AI generated ${result.object.schedules.length} schedules`);
+    
+    result.object.schedules.forEach(schedule => {
+      // Validate name format (should be camelCase)
+      if (!schedule.name || /\s/.test(schedule.name) || /[-_]/.test(schedule.name)) {
+        console.warn(`⚠️ Schedule name "${schedule.name}" is not camelCase. Expected format: "dailyReportGeneration"`);
+      }
+      
+      // Validate title format (should have spaces and proper capitalization)
+      if (!schedule.title || !/\s/.test(schedule.title) || schedule.title === schedule.name) {
+        console.warn(`⚠️ Schedule title "${schedule.title}" is not user-friendly. Expected format: "Daily Report Generation"`);
+      }
+    });
+
     // Validate and fix the schedules
     const fixedSchedules = result.object.schedules.map((schedule: any, index: number) => {
       // Validate and fix action IDs in steps
@@ -1506,17 +1551,15 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
         };
       }).filter(Boolean); // Remove null steps
 
-      const rawName = schedule.name || 'Unnamed Schedule';
-      const sanitizedName = sanitizeAgentName(rawName);
-      
-      if (rawName !== sanitizedName) {
-        console.log(`🔧 Schedule name sanitized: "${rawName}" → "${sanitizedName}"`);
-      }
+      // Use AI-generated values directly - the AI should generate proper name and title
+      console.log(`🔧 Using AI-generated schedule values: name="${schedule.name}", title="${schedule.title}"`);
 
       return {
         ...schedule,
         id: schedule.id || generateUniqueId('schedule'),
-        name: sanitizedName,
+        // Keep AI-generated name and title as-is
+        name: schedule.name, // Code-safe name for cron jobs (AI-generated)
+        title: schedule.title, // Human-readable name for UI display (AI-generated)
         description: schedule.description || schedule.name || 'No description provided',
         steps: validatedSteps,
         trigger: schedule.trigger || {
@@ -1639,7 +1682,8 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
       
       const defaultSchedule = {
         id: generateUniqueId('schedule'),
-        name: sanitizeAgentName('Daily Status Check'),
+        name: 'dailyStatusCheck', // Code-safe name for cron jobs
+        title: 'Daily Status Check', // Human-readable name for UI display
         emoji: '⏰',
         description: 'A default daily schedule for system monitoring and basic automation',
         interval: {
@@ -2972,9 +3016,11 @@ export async function generateCompleteEnhancedAction(
   );
 
   // Step 4: Create action configuration for the system
+  const { title: actionTitle, name: actionName } = generateTitleAndName(imagination.title);
   const actionConfig: AgentAction = {
     id: codeGeneration.actionId,
-    name: imagination.title,
+    name: actionName, // Code-safe name for API endpoints
+    title: actionTitle, // Human-readable name for UI display
     emoji: '⚡', // Default, can be customized
     description: imagination.description,
     role: imagination.userRole,
@@ -4058,19 +4104,18 @@ const prismaSchemaGenerationSchema = z.object({
 });
 
 export async function generatePrismaSchema({
-  step0Analysis
+  step0Analysis,
+  targetDatabaseProvider = 'postgresql'
 }: {
-  step0Analysis?: Step0Output
+  step0Analysis?: Step0Output,
+  targetDatabaseProvider?: 'postgresql' | 'sqlite' | 'mysql'
 }): Promise<string> {
-  console.log('🗄️ Starting SQLite Prisma schema generation...');
-  console.log(`📊 Agent apps use SQLite exclusively for mobile compatibility`);
+  console.log('🗄️ Starting Prisma schema generation...');
+  console.log(`📊 Agent apps use ${targetDatabaseProvider.toUpperCase()} for deployments`);
 
   if (!step0Analysis) {
     throw new Error('step0Analysis is required for Prisma schema generation');
   }
-
-  // Agent apps always use SQLite
-  const targetDatabaseProvider = 'sqlite';
   
   const model = await getAgentBuilderModel();
   
@@ -4150,7 +4195,15 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    - @updatedAt: auto-updates on record changes
    - @map(): maps to different database column name
 
-5. **Relations:**
+5. **🚨 CRITICAL ID CONSISTENCY RULES:**
+   - ALL model IDs MUST be String type with @default(cuid())
+   - NEVER use Int for ID fields - always use String
+   - Primary key format: id String @id @default(cuid())
+   - Foreign key format: relationId String? (nullable String, never Int)
+   - Example correct ID: id String @id @default(cuid())
+   - Example correct foreign key: userId String?
+
+6. **Relations:**
    - One-to-One: use single field reference
    - One-to-Many: use array on "many" side
    - Many-to-Many: use explicit join table or implicit relations
@@ -4191,38 +4244,75 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    - Must use \`@unique\` on the foreign key field
    - Example: \`userId String? @unique\` and \`user User? @relation(fields: [userId], references: [id])\`
 
-6. **CRITICAL FIELD REQUIREMENTS:**
+7. **CRITICAL FIELD REQUIREMENTS:**
    - ONLY id fields should be required (no ? suffix)
    - ALL other fields should be optional (add ? suffix)
    - This provides flexibility in data entry and prevents validation errors
    - Example: String? (optional), Int? (optional), Boolean? (optional)
    - Only the primary key id field should NOT have the ? suffix
 
-7. **Common Patterns:**
+8. **Common Patterns:**
    - Always include @default(cuid()) for String IDs
    - Include createdAt DateTime? @default(now()) (note the ? for optional)
    - Include updatedAt DateTime? @updatedAt for audit trails (note the ? for optional)
    - Use enums for predefined values
    - Include status fields for workflow tracking
 
-8. **Best Practices:**
+9. **Best Practices:**
    - Use meaningful field names
    - Include proper indexes with @@index
    - Add constraints where needed
    - Consider soft deletes with deletedAt fields
    - Include user references for permissions
 
-9. **Enum Definitions:**
-   Define enums before models that use them:
-   \`\`\`
-   enum UserRole {
-     ADMIN
-     MEMBER
-     GUEST
-   }
-   \`\`\`
+10. **Enum Definitions:**
+     Define enums before models that use them:
+     \`\`\`
+     enum UserRole {
+       ADMIN
+       MEMBER
+       GUEST
+     }
+     \`\`\`
 
-CRITICAL RELATION SYNTAX RULES - PREVENT COMMON ERRORS:
+11. **CORRECT SCHEMA EXAMPLE:**
+     \`\`\`
+     model User {
+       id        String   @id @default(cuid())
+       name      String?
+       email     String?  @unique
+       createdAt DateTime? @default(now())
+       updatedAt DateTime? @updatedAt
+       posts     Post[]
+     }
+     
+     model Post {
+       id       String   @id @default(cuid())
+       title    String?
+       content  String?
+       userId   String?
+       user     User?    @relation(fields: [userId], references: [id])
+       createdAt DateTime? @default(now())
+       updatedAt DateTime? @updatedAt
+     }
+     \`\`\`
+
+CRITICAL SYNTAX RULES - PREVENT COMMON ERRORS:
+
+**ID FIELD CONSISTENCY:**
+- NEVER use Int for any ID field
+- ALWAYS use String @id @default(cuid()) for primary keys
+- ALWAYS use String? for foreign key references
+- WRONG: id Int @id @default(autoincrement())
+- RIGHT: id String @id @default(cuid())
+
+**NULLABLE FIELD SYNTAX:**
+- Use single ? for nullable fields: String?, Int?, DateTime?
+- NEVER use double ??: Int??, String??
+- WRONG: performanceMetricsId Int??
+- RIGHT: performanceMetricsId String?
+
+**RELATION RULES:**
 1. **Missing @relation fields error**: "The relation field \`lead\` on Model \`CRMRecord\` must specify the \`fields\` argument"
    - FIX: Add fields: [foreignKeyField], references: [id] to @relation attribute
    - Example: \`lead Lead? @relation(fields: [leadId], references: [id])\`
@@ -4296,20 +4386,21 @@ import type { Step0Output } from './steps/step0-comprehensive-analysis';
 
 export async function generatePrismaDatabase({
   existingAgent,
-  step0Analysis
+  step0Analysis,
+  targetDatabaseProvider = 'postgresql' // Changed from 'sqlite' to 'postgresql' for Vercel deployments
 }: {
   existingAgent?: AgentData,
-  step0Analysis?: Step0Output
+  step0Analysis?: Step0Output,
+  targetDatabaseProvider?: 'postgresql' | 'sqlite' | 'mysql'
 }) {
-  // Agent apps always use SQLite
-  const targetDatabaseProvider = 'sqlite';
+  // Agent apps use PostgreSQL (Neon) for Vercel deployments
+  console.log('🏗️ PostgreSQL Prisma Database Generation Strategy:');
+  console.log('📋 Agent apps use PostgreSQL (Neon) for Vercel deployments');
   
   // Get the existing Prisma schema if available
   const existingSchema = (existingAgent as any)?.prismaSchema || '';
   const hasExistingSchema = existingSchema.length > 0 || (existingAgent?.models?.length || 0) > 0;
   
-  console.log('🏗️ SQLite Prisma Database Generation Strategy:');
-  console.log('📋 Agent apps use SQLite exclusively for mobile compatibility');
   if (hasExistingSchema) {
     const existingModels = existingAgent?.models || [];
     console.log(`📋 Using existing Prisma schema as foundation (${existingModels.length} existing models)`);
@@ -4326,20 +4417,16 @@ export async function generatePrismaDatabase({
 
   // Use AI to intelligently merge schemas when existing schema is present
   const finalSchema = hasExistingSchema && step0Analysis ? 
-    await generateIntelligentMergedSchema({existingSchema, step0Analysis}) :
-    (await generatePrismaSchema({ step0Analysis}));
+    await generateIntelligentMergedSchema({existingSchema, step0Analysis, targetDatabaseProvider}) :
+    (await generatePrismaSchema({ step0Analysis, targetDatabaseProvider}));
 
   // Convert the final schema to AgentModel objects and enhance with proper field metadata
   const basicSchemaObject = new ConvertSchemaToObject(finalSchema).run();
 
-
   console.log(`✅ Database Generation Complete:
-    - Schema Strategy: ${hasExistingSchema ? 'AI-Intelligent Merging' : 'Complete Generation'}
-    - Final Models: ${basicSchemaObject?.models?.length || 0}
-    - Final Enums: ${basicSchemaObject?.enums?.length || 0}
-    - Operation Type: ${step0Analysis?.operation || 'create'}`);
-    
-    console.log('🔍 Final Schema:', finalSchema);
+    - Schema Strategy: ${hasExistingSchema ? 'Intelligent merge with existing schema' : 'New schema generation'}
+    - Target Database: ${targetDatabaseProvider.toUpperCase()}
+    - Generated Models: ${basicSchemaObject.models.length}`);
 
   return {
     models: mergeSchema(basicSchemaObject,'').models,
@@ -5202,6 +5289,8 @@ Generate a corrected schema that follows these patterns exactly.`
  * Validate and format Prisma schema using Prisma internals
  * This validates the schema string directly without creating temporary files
  */
+
+
 async function validatePrismaSchema(schemaString: string): Promise<{ valid: boolean; error?: string; result?: any }> {
   console.log('🔍 Validating Prisma schema programmatically...');
   

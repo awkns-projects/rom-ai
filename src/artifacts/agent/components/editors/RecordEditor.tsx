@@ -336,8 +336,8 @@ export const RecordEditor = memo(({
             ← Cancel
           </Button>
           <div className="flex-1">
-            <h3 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">
-              {record ? 'Edit' : 'Add'} {model.name} Record
+            <h3 className="text-xl font-bold text-green-200 font-mono mb-4">
+              {record ? 'Edit' : 'Add'} {model.title || model.name} Record
             </h3>
             <p className="text-green-400 text-xs sm:text-sm font-mono">
               Fill in the fields below using {formsToDisplay ? `${formsToDisplay.length} forms` : 'all fields'}

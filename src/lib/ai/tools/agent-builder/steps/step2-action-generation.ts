@@ -1,11 +1,9 @@
-import { generateActions, generatePrismaActions, generatePseudoSteps, generateUIComponents } from '../generation';
-import { generateObject } from 'ai';
-import { z } from 'zod';
-import { getAgentBuilderModel } from '../generation';
+import { generateActions, generatePrismaActions } from '../generation';
+import { generateCompleteAction } from '../action-generation-shared';
 import type { AgentAction, AgentData } from '../types';
 import type { Step0Output } from './step0-comprehensive-analysis';
 import type { Step1Output } from './step1-database-generation';
-import { sanitizeAgentName, generateUniqueId, sanitizeEnvironmentVariables } from '../utils';
+import { generateTitleAndName, sanitizeAgentName } from '../utils';
 
 /**
  * STEP 2: Action Generation & API Design
@@ -33,324 +31,11 @@ export interface Step2Output {
   implementationComplexity: 'low' | 'medium' | 'high';
 }
 
-// Schema for code generation - same as /generate-code route
-const CodeGenerationSchema = z.object({
-  code: z.string().describe('Complete JavaScript code that can be executed with new Function()'),
-  envVars: z.array(z.object({
-    name: z.string(),
-    description: z.string(),
-    required: z.boolean(),
-    sensitive: z.boolean().default(false)
-  })).describe('Environment variables needed for the code'),
-  inputParameters: z.array(z.object({
-    name: z.string(),
-    type: z.string(),
-    required: z.boolean(),
-    description: z.string(),
-    defaultValue: z.any().optional()
-  })).describe('Input parameters required before execution'),
-  outputParameters: z.array(z.object({
-    name: z.string(),
-    type: z.string(),
-    description: z.string()
-  })).describe('Expected output parameters'),
-  estimatedExecutionTime: z.string().describe('Estimated execution time'),
-  testData: z.object({
-    input: z.record(z.any()).optional().default({}),
-    expectedOutput: z.record(z.any()).optional().default({})
-  }).describe('Test data for validation')
-});
+// Schemas and functions moved to action-generation-shared.ts for reuse
 
-/**
- * STEP 2A: Generate Pseudo Steps (like /generate-steps route)
- */
-async function generateActionPseudoSteps(
-  actionName: string,
-  actionDescription: string,
-  availableModels: any[],
-  businessContext: string
-): Promise<any[]> {
-  console.log(`🧩 Step 2A: Generating pseudo steps for action: ${actionName}`);
-  
-  // Use the same logic as /generate-steps route
-  return await generatePseudoSteps(
-    actionName,
-    actionDescription,
-    availableModels || [],
-    'action', // entityType
-    businessContext
-  );
-}
+// Functions moved to action-generation-shared.ts for reuse with API routes
 
-/**
- * STEP 2B: Generate UI Components (like /generate-ui-components route)
- */
-async function generateActionUIComponents(
-  actionName: string,
-  actionDescription: string,
-  pseudoSteps: any[],
-  availableModels: any[],
-  businessContext: string
-): Promise<any[]> {
-  console.log(`🎨 Step 2B: Generating UI components for action: ${actionName}`);
-  
-  // Use the same logic as /generate-ui-components route
-  return await generateUIComponents(
-    actionName,
-    actionDescription,
-    pseudoSteps,
-    availableModels || [],
-    businessContext
-  );
-}
-
-/**
- * STEP 2C: Generate Executable Code (like /generate-code route)
- */
-async function generateActionExecutableCode(
-  actionName: string,
-  actionDescription: string,
-  pseudoSteps: any[],
-  availableModels: any[],
-  businessContext: string,
-  entityType: string = 'general'
-): Promise<{
-  code: string;
-  envVars: any[];
-  inputParameters: any[];
-  outputParameters: any[];
-  estimatedExecutionTime: string;
-  testData: any;
-}> {
-  console.log(`🔨 Step 2C: Generating executable code for action: ${actionName}`);
-  
-  const model = await getAgentBuilderModel();
-  
-  // Extract input parameters from first step if available - same logic as /generate-code route
-  const extractedInputParams = pseudoSteps.length > 0 && pseudoSteps[0].inputFields ? 
-    pseudoSteps[0].inputFields
-      .filter((field: any) => field.name && field.name.trim() !== '')
-      .map((field: any) => ({
-        name: field.name,
-        type: field.type,
-        required: field.required,
-        description: field.description || `Input parameter for ${field.name}`,
-        kind: field.kind === 'object' ? 'object' : 'scalar',
-        relationModel: field.relationModel
-      })) : [];
-
-  // Use the exact same system prompt as /generate-code route
-  const systemPrompt = `You are a senior JavaScript developer generating executable code for ${entityType} operations.
-
-TASK: Generate complete, executable JavaScript code based on the provided pseudo steps.
-
-CONTEXT:
-- Name: ${actionName}
-- Description: ${actionDescription}
-- Entity Type: ${entityType}
-- Business Context: ${businessContext}
-- Available Models: ${JSON.stringify(availableModels?.map((m: any) => ({ name: m.name, fields: m.fields?.map((f: any) => ({ name: f.name, type: f.type })) })) || [])}
-
-PSEUDO STEPS TO IMPLEMENT:
-${JSON.stringify(pseudoSteps, null, 2)}
-
-REQUIRED INPUT PARAMETERS (from first step):
-${JSON.stringify(extractedInputParams, null, 2)}
-
-CODE GENERATION REQUIREMENTS:
-
-1. EXECUTION CONTEXT:
-   The code will be executed using: new Function('context', code)
-   Where context = { db, ai, input, envVars }
-   
-   - db: Database operations (db.ModelName.find(), db.ModelName.create(), etc.)
-   - ai: AI operations using generateObject function
-   - input: User-provided input parameters (MUST include all parameters from the first step)
-   - envVars: Environment variables for external APIs
-
-2. CRITICAL BATCH INPUT REQUIREMENT:
-   ⚡ ALL ACTIONS MUST ACCEPT BATCH INPUT WITH items[] ARRAY:
-   
-   The input MUST always be structured as: input = { items: Array<{parameters}> }
-   
-   NEVER generate actions that accept single-item inputs like { userId: "123" }
-   ALWAYS generate actions that accept: { items: [{ userId: "123" }] }
-   
-   Your code MUST:
-   - Validate that input.items exists and is a non-empty array
-   - Process each item in the array (even if typically only one item)
-   - Return results that include count and processed items
-   - Use for-loop to iterate over input.items array
-   - Return object with success, data (array), count, and message properties
-
-3. INPUT PARAMETER HANDLING:
-   ${extractedInputParams.length > 0 ? `
-   The code MUST expect these input parameters wrapped in items array:
-   ${extractedInputParams.map((param: any) => `
-   - input.items[].${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}
-     ${param.kind === 'object' ? `This is a database relation ID for ${param.relationModel} model` : ''}
-   `).join('')}
-   
-   Always validate required input parameters for each item:
-   Loop through input.items and check each required parameter exists on the item object.
-   ` : 'Each item in input.items array should contain the action-specific parameters.'}
-
-4. CODE STRUCTURE:
-   - Start with input.items array validation
-   - Process each item in the array sequentially
-   - Handle data flow between steps (output of step N becomes input of step N+1)
-   - Include proper error handling
-   - Return structured result with count and processed items
-
-5. DATABASE OPERATIONS:
-   For database operations, use the actual API format:
-   - db.findMany(modelName, { where: filter, limit: number }) - find multiple records
-   - db.findUnique(modelName, where) - find single record  
-   - db.create(modelName, data) - create new record
-   - db.createMany(modelName, dataArray) - create multiple records (returns { count, records })
-   - db.update(modelName, where, data) - update existing records
-   - db.updateMany(modelName, where, data) - update multiple records (returns { count, records })
-   - db.delete(modelName, where) - delete records
-   - db.deleteMany(modelName, where) - delete multiple records (returns { count, records })
-   
-   STEP TYPE TO DATABASE OPERATION MAPPING:
-   - "Database find unique" → db.findUnique(modelName, where)
-   - "Database find many" → db.findMany(modelName, { where: filter })
-   - "Database create" → db.create(modelName, data)
-   - "Database create many" → db.createMany(modelName, dataArray)
-   - "Database update unique" → db.update(modelName, where, data) 
-   - "Database update many" → db.updateMany(modelName, where, data)
-   - "Database delete unique" → db.delete(modelName, where)
-   - "Database delete many" → db.deleteMany(modelName, where)
-
-   IMPORTANT: The first parameter is always the MODEL NAME as a string, not db.ModelName.method()!
-
-6. AI OPERATIONS:
-   For AI analysis/decisions, use:
-   const result = await ai.generateObject({
-     messages: [
-       { role: 'system', content: 'You are an expert analyst...' },
-       { role: 'user', content: 'Analyze this data: ' + JSON.stringify(dataToAnalyze) }
-     ],
-     schema: z.object({ 
-       analysis: z.string().describe('Analysis results'),
-       confidence: z.number().describe('Confidence score 0-100'),
-       recommendations: z.array(z.string()).describe('Recommendations')
-     })
-   });
-
-7. EXTERNAL API CALLS:
-   For "call external api" step type, use fetch() with proper authentication and environment handling:
-   
-   // API Key authentication example with test/live environment support:
-   const baseUrl = isTestMode ? envVars.API_BASE_URL_TEST : envVars.API_BASE_URL;
-   const apiKey = isTestMode ? envVars.API_KEY_TEST : envVars.API_KEY;
-   
-   const apiResponse = await fetch(\`\${baseUrl}/endpoint\`, {
-     method: 'POST',
-     headers: { 
-       'Authorization': \`Bearer \${apiKey}\`,
-       'Content-Type': 'application/json'
-     },
-     body: JSON.stringify(requestData)
-   });
-   
-   // For OAuth APIs, tokens are provided through user authentication flow, not envVars
-   // Use the oauth context provided by the system instead of environment variables
-
-8. RETURN FORMAT:
-   Always return: { success: boolean, data: any, count: number, message: string, executionTime: number }
-   Where data contains the processed results array and count is the number of items processed.
-
-9. ENVIRONMENT VARIABLES:
-   ONLY generate environment variables for external APIs that use API KEY authentication:
-   - API keys (e.g., STRIPE_API_KEY, OPENAI_API_KEY)
-   - API base URLs for API key services (e.g., OPENAI_BASE_URL)
-   - API-specific configuration for API key services (e.g., STRIPE_WEBHOOK_SECRET)
-   
-   CRITICAL ENVIRONMENT VARIABLE NAMING RULES:
-   ⚠️ ABSOLUTELY NO ACTION NAMES IN ENVIRONMENT VARIABLES ⚠️
-   
-   - Use ONLY the API provider name as the prefix (e.g., "INSTAGRAM", "GOOGLE_SHEETS", "STRIPE", "OPENAI")
-   - NEVER EVER include the action name in environment variable names
-   - NEVER use hyphens, spaces, or special characters - only letters, numbers, and underscores
-   - Environment variables must start with a letter or underscore, not a number
-   
-   ✅ CORRECT EXAMPLES:
-   - "INSTAGRAM_API_KEY" (not "TRACK-PERFORMANCE-ANALYTICS_INSTAGRAM_API_KEY")
-   - "GOOGLE_SHEETS_API_KEY" (not "PLAN-CONTENT-CALENDAR_GOOGLE_SHEETS_API_KEY")
-   - "STRIPE_API_KEY" (not "MANAGE-PAYMENTS_STRIPE_API_KEY")
-   
-   ❌ WRONG EXAMPLES (DO NOT GENERATE THESE):
-   - "TRACK-PERFORMANCE-ANALYTICS_INSTAGRAM_API_KEY" ← Contains action name + hyphens
-   - "PLAN-CONTENT-CALENDAR_LATER_API_KEY" ← Contains action name + hyphens
-   - "MANAGE-BRAND-OUTREACH_INSTAGRAM_API_BASE_URL" ← Contains action name + hyphens
-   
-   DO NOT generate environment variables for OAuth-based APIs:
-   - OAuth APIs (Gmail, Slack, Shopify, Facebook, LinkedIn, etc.) use user authentication flow
-   - OAuth tokens are provided by the system, not through environment variables
-   - If an API uses OAuth, generate NO environment variables for it
-   
-   NEVER generate system environment variables like:
-   - NODE_ENV, ENVIRONMENT, PORT, DATABASE_URL, NEXTAUTH_SECRET
-   - Any internal application configuration variables
-   - Any variables starting with NEXT_, VERCEL_, or other framework prefixes
-   
-   AUTHENTICATION METHOD REFERENCE:
-   - OAuth APIs (no env vars needed): Gmail, Slack, Shopify, Facebook, LinkedIn, Instagram, Google Calendar, Microsoft Teams, Notion, Salesforce, HubSpot
-   - API Key APIs (env vars needed): Stripe, OpenAI, generic REST APIs
-
-`;
-
-  const result = await generateObject({
-    model,
-    schema: CodeGenerationSchema,
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt
-      },
-      {
-        role: 'user',
-        content: `Generate executable JavaScript code for: ${actionName}
-
-Action Description: ${actionDescription}
-
-Pseudo Steps:
-${pseudoSteps.map((step: any, index: number) => 
-  `Step ${index + 1}: ${step.description}
-  - Type: ${step.type}
-  - Inputs: ${step.inputFields?.map((f: any) => `${f.name} (${f.type})`).join(', ') || 'None'}
-  - Outputs: ${step.outputFields?.map((f: any) => `${f.name} (${f.type})`).join(', ') || 'None'}`
-).join('\n\n')}
-
-${extractedInputParams.length > 0 ? `
-Input Parameters Required:
-${extractedInputParams.map((param: any) => `- ${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}`).join('\n')}
-` : ''}
-
-Generate complete, executable code that can run in production with real data and properly handles all input parameters.`
-      }
-    ],
-    temperature: 0.2,
-  });
-
-  // Sanitize environment variable names
-  const envVarSanitization = sanitizeEnvironmentVariables(result.object.envVars || []);
-  
-  if (envVarSanitization.invalid.length > 0) {
-    console.warn(`⚠️ Action "${actionName}": ${envVarSanitization.invalid.length} environment variables could not be sanitized:`, envVarSanitization.invalid);
-  }
-
-  return {
-    code: result.object.code,
-    envVars: envVarSanitization.sanitized,
-    inputParameters: extractedInputParams.length > 0 ? extractedInputParams : result.object.inputParameters,
-    outputParameters: result.object.outputParameters,
-    estimatedExecutionTime: result.object.estimatedExecutionTime,
-    testData: result.object.testData
-  };
-}
+// Old generateActionExecutableCode function moved to action-generation-shared.ts
 
 /**
  * AI-powered business process action generation (replaces hardcoded logic)
@@ -470,15 +155,45 @@ REQUIREMENTS:
 - "Process Pending Orders" (finds all pending orders, processes batch)
 - "Send Email Campaign to Subscribers" (filters subscribers, sends to all)
 
-Generate 3-5 meaningful business process actions that can work independently OR be chained together for complex automation workflows. Each action MUST use batch processing patterns and NEVER require single-item selection.`;
+Generate 3-5 meaningful business process actions that can work independently OR be chained together for complex automation workflows. Each action MUST use batch processing patterns and NEVER require single-item selection.
+
+🚨 CRITICAL NAMING FORMAT REQUIREMENTS:
+
+FOR EACH ACTION, GENERATE TWO DISTINCT VALUES:
+
+1. **name**: MUST be camelCase with NO spaces (e.g., "syncCustomerData", "generateSalesReport", "processOrderBatch")
+   - Start with lowercase letter
+   - No spaces, hyphens, underscores, or special characters
+   - Use camelCase for multiple words
+   - This will be used internally in code and APIs
+
+2. **title**: MUST be properly spaced, capitalized text (e.g., "Sync Customer Data", "Generate Sales Report", "Process Order Batch")
+   - Use normal spacing between words
+   - Proper capitalization (Title Case)
+   - This is what users will see in the interface
+   - Should be the human-readable version of the name
+
+EXAMPLES OF CORRECT NAMING:
+- ✅ name: "syncCustomerProfiles", title: "Sync Customer Profiles"
+- ✅ name: "generateWeeklyReport", title: "Generate Weekly Report"
+- ✅ name: "processOrderQueue", title: "Process Order Queue"
+- ✅ name: "updateInventoryLevels", title: "Update Inventory Levels"
+
+❌ WRONG NAMING PATTERNS:
+- name: "Sync Customer Data" (has spaces)
+- name: "sync-customer-data" (has hyphens)
+- title: "syncCustomerData" (no spaces, not user-friendly)
+- title: "sync customer data" (not properly capitalized)
+
+BOTH name AND title MUST BE PROVIDED FOR EVERY ACTION.`;
 
   const result = await generateObject({
     model,
     schema: z.object({
-      actions: z.array(z.object({
-        name: z.string().describe('Business process action name (e.g., "Sync Customer Data", "Generate Sales Report")'),
+            actions: z.array(z.object({
+        name: z.string().describe('camelCase identifier for internal use (e.g., "syncCustomerData", "generateSalesReport") - NO SPACES, will be used in code'),
+        title: z.string().describe('User-friendly display name with proper spacing and capitalization (e.g., "Sync Customer Data", "Generate Sales Report") - what users see'),
         purpose: z.string().describe('Detailed description of the complete workflow including external API integrations'),
-
         operation: z.literal('create').describe('All generated actions are new'),
         businessValue: z.string().describe('Explanation of the business value and automation benefit'),
         expectedOutputs: z.array(z.string()).describe('List of key outputs this action produces that could be used by other actions (e.g., "customerId", "reportUrl", "processedData")').optional(),
@@ -519,8 +234,24 @@ Generate actions that represent complete business processes AND can be chained t
 
   console.log(`✅ AI generated ${result.object.actions.length} business process actions`);
   
-  return result.object.actions.map(action => ({
+  // Validate that AI generated proper name and title formats
+  const validatedActions = result.object.actions.map(action => {
+    // Validate name format (should be camelCase)
+    if (!action.name || /\s/.test(action.name) || /[-_]/.test(action.name)) {
+      console.warn(`⚠️ Action name "${action.name}" is not camelCase. Expected format: "syncCustomerData"`);
+    }
+    
+    // Validate title format (should have spaces and proper capitalization)
+    if (!action.title || !/\s/.test(action.title) || action.title === action.name) {
+      console.warn(`⚠️ Action title "${action.title}" is not user-friendly. Expected format: "Sync Customer Data"`);
+    }
+    
+    return action;
+  });
+  
+  return validatedActions.map(action => ({
     name: action.name,
+    title: action.title,
     purpose: action.purpose,
     operation: action.operation,
     _aiGenerated: true,
@@ -531,7 +262,7 @@ Generate actions that represent complete business processes AND can be chained t
 }
 
 /**
- * Create a complete action by combining all three steps (like the API routes)
+ * Create a complete action using shared API route logic
  */
 async function createCompleteAction(
   actionSpec: any,
@@ -540,135 +271,31 @@ async function createCompleteAction(
   entityType: string,
   existingActions: any[] = []
 ): Promise<any> {
-  const rawActionName = actionSpec.name;
-  const actionName = sanitizeAgentName(rawActionName); // Sanitize the action name
-  const actionDescription = actionSpec.purpose || actionSpec.description;
+  // Use the AI-generated values directly - the AI should generate proper name and title
+  const actionTitle = actionSpec.title;
+  const actionName = actionSpec.name;
   
-  if (rawActionName !== actionName) {
-    console.log(`🔧 Action name sanitized: "${rawActionName}" → "${actionName}"`);
-  }
-  
-  console.log(`🚀 Creating complete action: ${actionName}`);
+  console.log(`🚀 Creating complete action using AI-generated values: ${actionName} (title: "${actionTitle}")`);
   
   try {
-    // Step 2A: Generate Pseudo Steps (like /generate-steps)
-    const pseudoSteps = await generateActionPseudoSteps(
-      actionName,
-      actionDescription,
-      availableModels,
-      businessContext
-    );
-    
-    console.log(`✅ Step 2A complete: Generated ${pseudoSteps.length} pseudo steps`);
-    
-    // Step 2B: Generate UI Components (like /generate-ui-components)
-    const uiComponents = await generateActionUIComponents(
-      actionName,
-      actionDescription,
-      pseudoSteps,
-      availableModels,
-      businessContext
-    );
-    
-    console.log(`✅ Step 2B complete: Generated ${uiComponents.length} UI components`);
-    
-    // Step 2C: Generate Executable Code (like /generate-code)
-    const codeResult = await generateActionExecutableCode(
-      actionName,
-      actionDescription,
-      pseudoSteps,
+    // Use the shared function that replicates the exact same logic as the API routes
+    return await generateCompleteAction(
+      {
+        name: actionName,
+        title: actionTitle,
+        purpose: actionSpec.purpose,
+        description: actionSpec.description,
+        role: actionSpec.role,
+        id: actionSpec.id
+      },
       availableModels,
       businessContext,
-      entityType
+      entityType,
+      existingActions
     );
-    
-    console.log(`✅ Step 2C complete: Generated ${codeResult.code.length} chars of executable code`);
-    
-    // Assemble complete action with all components
-    const completeAction: any = {
-      id: actionSpec.id || generateUniqueId('action'),
-      name: actionName,
-      description: actionDescription,
-      role: actionSpec.role || 'member',
-      
-      // Step 2A results: Pseudo Steps
-      pseudoSteps: pseudoSteps,
-      
-      // Step 2B results: UI Components  
-      uiComponentsDesign: uiComponents,
-      
-      // Step 2C results: Executable Code
-      execute: {
-        type: 'code' as const,
-        code: {
-          script: codeResult.code,
-          envVars: codeResult.envVars || []
-        }
-      },
-      
-      // Additional metadata from code generation
-      _internal: {
-        hasRealCode: true,
-        hasTestCases: !!codeResult.testData,
-        codeGenerationMetadata: {
-          inputParameters: codeResult.inputParameters,
-          outputParameters: codeResult.outputParameters,
-          estimatedExecutionTime: codeResult.estimatedExecutionTime,
-          testData: codeResult.testData
-        }
-      },
-      
-      // Required fields for AgentAction interface
-      dataSource: {
-        type: 'database' as const,
-        database: {
-          models: availableModels || []
-        }
-      },
-      results: {
-        model: actionName,
-        fields: {},
-        fieldsToUpdate: {}
-      }
-    };
-    
-    console.log(`🎉 Complete action created: ${actionName} with pseudo steps, UI components, and executable code`);
-    return completeAction;
-    
   } catch (error) {
-    console.error(`❌ Failed to create complete action: ${actionName}`, error);
-    
-    // Return a fallback action with basic structure
-    return {
-      id: actionSpec.id || generateUniqueId('action'),
-      name: actionName,
-      description: actionDescription,
-      role: actionSpec.role || 'member',
-      execute: {
-        type: 'prompt' as const,
-        prompt: {
-          content: `Execute action: ${actionDescription}`,
-          model: 'gpt-4',
-          temperature: 0.2
-        }
-      },
-      dataSource: {
-        type: 'database' as const,
-        database: {
-          models: availableModels || []
-        }
-      },
-      results: {
-        model: actionName,
-        fields: {},
-        fieldsToUpdate: {}
-      },
-      _internal: {
-        hasRealCode: false,
-        hasTestCases: false,
-        codeGenerationError: error instanceof Error ? error.message : 'Unknown error'
-      }
-    };
+    console.error(`❌ Failed to create complete action using shared logic: ${actionName}`, error);
+    throw error;
   }
 }
 
@@ -687,7 +314,7 @@ export async function executeStep2ActionGeneration(
     // Extract action requirements from Step 0 analysis
     const actionRequirements = step0Analysis.actions || [];
     console.log(`📊 Step 0 Action Analysis: ${actionRequirements.filter(a => a.operation === 'create').length} new actions, ${actionRequirements.filter(a => a.operation === 'update').length} action updates`);
-    console.log(`🔄 Action Types: ${actionRequirements.filter(a => a.type === 'query').length} queries, ${actionRequirements.filter(a => a.type === 'mutation').length} mutations`);
+    // Action type logging removed - actions no longer have type fields
 
     // Determine business context and entity type from step0 analysis
     const businessContext = step0Analysis.phaseAAnalysis?.userRequestAnalysis?.mainGoal || step0Analysis.agentDescription || 'Business operations';

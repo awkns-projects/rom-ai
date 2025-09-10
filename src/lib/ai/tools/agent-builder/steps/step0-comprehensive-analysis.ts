@@ -151,17 +151,17 @@ export interface Step0BOutput {
   }>;
   
   actions: Array<{
-    name: string;
+    name: string; // Code-safe name for API endpoints
+    title: string; // Human-readable display name for UI
     purpose: string;
-    type: 'query' | 'mutation';
     operation: 'create' | 'update';
     updateDescription?: string; // Only present when operation is 'update'
   }>;
   
   schedules: Array<{
-    name: string;
+    name: string; // Code-safe name for cron jobs
+    title: string; // Human-readable display name for UI
     purpose: string;
-    type: 'query' | 'mutation';
     frequency: 'hourly' | 'daily' | 'weekly' | 'monthly';
     operation: 'create' | 'update';
     updateDescription?: string; // Only present when operation is 'update'
@@ -481,7 +481,37 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    - For actions: "Enhance action to support Z functionality"
    - For schedules: "Update schedule to include X processing"
 
-Convert the semantic requirements into concrete technical specifications with proper create/update tracking, supporting multiple external API integrations as specified.`;
+Convert the semantic requirements into concrete technical specifications with proper create/update tracking, supporting multiple external API integrations as specified.
+
+🚨 CRITICAL NAMING FORMAT REQUIREMENTS FOR ALL ENTITIES:
+
+FOR EVERY MODEL, ACTION, AND SCHEDULE, GENERATE TWO DISTINCT VALUES:
+
+1. **name**: MUST be camelCase with NO spaces (e.g., "syncCustomerData", "dailyReportGeneration", "userProfileModel")
+   - Start with lowercase letter
+   - No spaces, hyphens, underscores, or special characters
+   - Use camelCase for multiple words
+   - This will be used internally in code, APIs, and database
+
+2. **title**: MUST be properly spaced, capitalized text (e.g., "Sync Customer Data", "Daily Report Generation", "User Profile Model")
+   - Use normal spacing between words
+   - Proper capitalization (Title Case)
+   - This is what users will see in the interface
+   - Should be the human-readable version of the name
+
+EXAMPLES OF CORRECT NAMING:
+- ✅ name: "customerProfileModel", title: "Customer Profile Model"
+- ✅ name: "syncInventoryData", title: "Sync Inventory Data"
+- ✅ name: "dailyHealthReport", title: "Daily Health Report"
+- ✅ name: "processOrderQueue", title: "Process Order Queue"
+
+❌ WRONG NAMING PATTERNS:
+- name: "Customer Profile" (has spaces)
+- name: "sync-inventory-data" (has hyphens)
+- title: "customerProfile" (no spaces, not user-friendly)
+- title: "sync inventory data" (not properly capitalized)
+
+BOTH name AND title MUST BE PROVIDED FOR EVERY ENTITY.`;
 
     const result = await generateObject({
       model,
@@ -504,7 +534,8 @@ Convert the semantic requirements into concrete technical specifications with pr
         })).max(5), // Support up to 5 external APIs
         
         models: z.array(z.object({
-          name: z.string(),
+          name: z.string().describe('camelCase model name for internal use (e.g., "socialMediaPost", "customerProfile") - NO SPACES'),
+          title: z.string().describe('User-friendly display name with proper spacing (e.g., "Social Media Post", "Customer Profile") - what users see'),
           purpose: z.string(),
           operation: z.enum(['create', 'update']),
           updateDescription: z.string().optional(),
@@ -524,17 +555,17 @@ Convert the semantic requirements into concrete technical specifications with pr
         })).max(5),
         
         actions: z.array(z.object({
-          name: z.string().describe('Business process name (e.g., "Sync Shopify Inventory", "Send Gmail Notifications")'),
+          name: z.string().describe('camelCase action name for internal use (e.g., "syncShopifyInventory", "generateWeeklyReport") - NO SPACES'),
+          title: z.string().describe('User-friendly display name with proper spacing (e.g., "Sync Shopify Inventory", "Generate Weekly Report") - what users see'),
           purpose: z.string().describe('Complete workflow description including external API integration and business logic'),
-          type: z.enum(['query', 'mutation']),
           operation: z.enum(['create', 'update']),
           updateDescription: z.string().optional()
         })).min(3).max(7).describe('Business process actions that integrate external APIs and orchestrate workflows - NOT basic CRUD operations'),
         
         schedules: z.array(z.object({
-          name: z.string(),
+          name: z.string().describe('camelCase schedule name for internal use (e.g., "weeklyReportGeneration", "dailyDataSync") - NO SPACES'),
+          title: z.string().describe('User-friendly display name with proper spacing (e.g., "Weekly Report Generation", "Daily Data Sync") - what users see'),
           purpose: z.string(),
-          type: z.enum(['query', 'mutation']),
           frequency: z.enum(['hourly', 'daily', 'weekly', 'monthly']),
           operation: z.enum(['create', 'update']),
           updateDescription: z.string().optional()
@@ -685,8 +716,8 @@ Generate 3-5 business process actions that represent complete workflows integrat
     console.log('✅ STEP 0B: Technical aggregation completed successfully');
     console.log(`📊 Phase B Summary:
 - Models: ${output.models.length} (${output.models.filter(m => m.operation === 'create').length} new, ${output.models.filter(m => m.operation === 'update').length} updates)
-- Actions: ${output.actions.length} (${output.actions.filter(a => a.operation === 'create').length} new, ${output.actions.filter(a => a.operation === 'update').length} updates, ${output.actions.filter(a => a.type === 'query').length} queries, ${output.actions.filter(a => a.type === 'mutation').length} mutations)
-- Schedules: ${output.schedules.length} (${output.schedules.filter(s => s.operation === 'create').length} new, ${output.schedules.filter(s => s.operation === 'update').length} updates, ${output.schedules.filter(s => s.type === 'query').length} queries, ${output.schedules.filter(s => s.type === 'mutation').length} mutations)`);
+- Actions: ${output.actions.length} (${output.actions.filter(a => a.operation === 'create').length} new, ${output.actions.filter(a => a.operation === 'update').length} updates)
+- Schedules: ${output.schedules.length} (${output.schedules.filter(s => s.operation === 'create').length} new, ${output.schedules.filter(s => s.operation === 'update').length} updates)`);  
 
     return output;
     
@@ -818,16 +849,7 @@ export function extractStep0Insights(step0Output: Step0Output) {
         update: step0Output.schedules.filter(s => s.operation === 'update').length
       }
     },
-    typeBreakdown: {
-      actions: {
-        query: step0Output.actions.filter(a => a.type === 'query').length,
-        mutation: step0Output.actions.filter(a => a.type === 'mutation').length
-      },
-      schedules: {
-        query: step0Output.schedules.filter(s => s.type === 'query').length,
-        mutation: step0Output.schedules.filter(s => s.type === 'mutation').length
-      }
-    },
+    // Type breakdown removed - actions and schedules no longer have type fields
     hasUpdates: step0Output.models.some(m => m.operation === 'update') || 
                 step0Output.actions.some(a => a.operation === 'update') || 
                 step0Output.schedules.some(s => s.operation === 'update'),

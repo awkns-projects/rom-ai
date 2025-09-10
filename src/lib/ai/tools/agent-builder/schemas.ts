@@ -28,7 +28,8 @@ export const unifiedAgentSchema = z.object({
 export const unifiedDatabaseSchema = z.object({
   models: z.array(z.object({
     id: z.string().describe('Unique identifier for the model'),
-    name: z.string().describe('Name of the data model'),
+    name: z.string().describe('camelCase name for code/database (will be auto-sanitized to camelCase, e.g., "socialMediaPost")'),
+    title: z.string().describe('Clean human-readable text for UI (e.g., "Social Media Post")'),
     emoji: z.string().optional().describe('Single emoji that visually represents this model (e.g., 👤 for User, 📧 for Email, 🛒 for Order)'),
     description: z.string().optional().describe('Detailed description of what this model represents and its purpose'),
     idField: z.string().describe('Name of the primary identifier field'),
@@ -64,7 +65,8 @@ export const unifiedDatabaseSchema = z.object({
 export const unifiedActionsSchema = z.object({
   actions: z.array(z.object({
     id: z.string().describe('Unique identifier for the action'),
-    name: z.string().describe('Name of the action'),
+    name: z.string().describe('camelCase name for API endpoints (will be auto-sanitized to camelCase, e.g., "generateReport")'),
+    title: z.string().describe('Clean human-readable text for UI (e.g., "Generate Report")'),
     emoji: z.string().optional().describe('Single emoji that visually represents this action (e.g., ✉️ for email, 📊 for reports, 🔄 for sync)'),
     description: z.string().describe('Detailed description of what this action does and its business purpose. CRITICAL: This action MUST accept batch input with items[] array structure.'),
     role: z.enum(['admin', 'member']).describe('Role required to execute this action'),
@@ -114,7 +116,8 @@ export const unifiedActionsSchema = z.object({
 export const prismaActionsSchema = z.object({
   actions: z.array(z.object({
     id: z.string().describe('Unique identifier for the action'),
-    name: z.string().describe('Name of the action'),
+    name: z.string().describe('camelCase name for API endpoints (will be auto-sanitized to camelCase, e.g., "generateReport")'),
+    title: z.string().describe('Clean human-readable text for UI (e.g., "Generate Report")'),
     emoji: z.string().optional().describe('Single emoji that visually represents this action (e.g., ✉️ for email, 📊 for reports, 🔄 for sync)'),
     description: z.string().describe('Detailed description of what this action does and its business purpose'),
     role: z.enum(['admin', 'member']).describe('Role required to execute this action'),
@@ -417,7 +420,8 @@ export const promptUnderstandingSchema = z.object({
 export const unifiedSchedulesSchema = z.object({
   schedules: z.array(z.object({
     id: z.string().describe('Unique identifier for the schedule'),
-    name: z.string().describe('Name of the schedule'),
+    name: z.string().describe('camelCase identifier for internal use (e.g., "dailyReport", "weeklySync") - NO SPACES, used in code'),
+    title: z.string().describe('User-friendly display name with proper spacing (e.g., "Daily Report", "Weekly Sync") - what users see in UI'),
     emoji: z.string().optional().describe('Single emoji that visually represents this schedule (e.g., ⏰ for daily tasks, 📊 for reports, 🔄 for sync)'),
     description: z.string().describe('Detailed description of what this schedule does and its business purpose'),
     

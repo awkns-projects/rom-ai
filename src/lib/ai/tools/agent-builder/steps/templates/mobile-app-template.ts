@@ -5,7 +5,7 @@ interface MobileAppTemplateOptions {
   models: any[];
   actions: AgentAction[];
   schedules: AgentSchedule[];
-  prismaSchema?: string; // Add optional schema - will be passed from main deployment
+  prismaSchema: string; // Required - Complete Prisma schema from database generation step
   neonOptions?: { region?: string; pgVersion?: number; autoSuspend?: boolean; };
   
   // Vercel deployment configuration
@@ -25,10 +25,10 @@ interface MobileAppTemplateOptions {
  * 🚀 SELF-CONTAINED ARCHITECTURE:
  * 1. Static Action Execution: /api/actions/[actionName] - embedded action code, executes locally
  * 2. Static Cron Jobs: /api/cron/[scheduleName] - embedded schedule code with cron timing
- * 3. Direct Model CRUD: /api/models/[modelName] + /api/models/[modelName]/[id] - Neon PostgreSQL operations
+ * 3. Direct Model CRUD: /api/models/[modelName] + /api/models/[modelName]/[id] - PostgreSQL operations via Prisma
  * 4. Self-managed API Keys: Client manages its own OpenAI/Anthropic/Grok keys
  * 5. Interactive Action UI: Modal-based action execution with input parameters and results display
- * 6. Persistent Database: Neon PostgreSQL for reliable data storage
+ * 6. Persistent Database: PostgreSQL with provided Prisma schema
  * 
  * Benefits: 
  * - Complete independence from main app
@@ -451,12 +451,8 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
       'prisma/seed.ts': this.generateSeedFile()
     };
 
-    // Add Prisma schema - use provided one (sanitized) or generate default
-    if (this.options.prismaSchema) {
-      files['prisma/schema.prisma'] = this.sanitizePrismaSchema(this.options.prismaSchema);
-    } else {
-      files['prisma/schema.prisma'] = this.generateDefaultPrismaSchema();
-    }
+    // Use the provided Prisma schema directly
+    files['prisma/schema.prisma'] = this.options.prismaSchema;
 
     return files;
   }
@@ -1628,9 +1624,9 @@ export default function ActionsPage() {
       const fallbackActions = ${JSON.stringify(this.options.actions.map(a => ({
         id: a.id,
         name: a.name,
+        title: a.title || a.name,
         emoji: a.emoji || '⚡',
         description: a.description || 'Execute action',
-        type: a.type || 'query',
         role: a.role || 'member',
         uiComponentsDesign: (a as any).uiComponentsDesign || [],
         pseudoSteps: (a as any).pseudoSteps || []
@@ -2183,10 +2179,10 @@ export default function ModelCard({ model }: ModelCardProps) {
         <span className="text-lg">{model.emoji || '📋'}</span>
         <div className="flex-1">
           <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light} capitalize\`}>
-            {model.name}
+            {model.title || model.name}
           </h3>
           <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
-            {model.description || \`Manage \${model.name} records\`}
+            {model.description || \`Manage \${model.title || model.name} records\`}
           </p>
         </div>
         <div className="text-right">
@@ -2249,15 +2245,15 @@ export default function ActionCard({ action }: ActionCardProps) {
           <span className="text-lg">{action.emoji || '⚡'}</span>
           <div className="flex-1">
             <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light}\`}>
-              {action.name}
+              {action.title || action.name}
             </h3>
             <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
-              {action.description || \`Execute \${action.name}\`}
+              {action.description || \`Execute \${action.title || action.name}\`}
             </p>
           </div>
           <div className="flex flex-col items-end gap-1">
             <span className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg font-mono text-xs \${currentTheme.light}\`}>
-              {action.type === 'query' ? '🔍 Query' : '⚡ Action'}
+              ⚡ Action
             </span>
             {lastExecutionTime && (
               <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
@@ -2330,7 +2326,7 @@ export default function ScheduleCard({ schedule }: ScheduleCardProps) {
         <span className="text-lg">{schedule.emoji || '⏰'}</span>
         <div className="flex-1">
           <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light}\`}>
-            {schedule.name}
+            {schedule.title || schedule.name}
           </h3>
           <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
             {schedule.description || \`Scheduled: \${schedule.pattern}\`}
@@ -2735,9 +2731,9 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
             <div className="flex items-center gap-3">
               <span className="text-lg">{action.emoji || '⚡'}</span>
               <div>
-                <h2 className="font-mono font-bold text-green-200">{action.name}</h2>
+                <h2 className="font-mono font-bold text-green-200">{action.title || action.name}</h2>
                 <p className="font-mono text-xs text-green-300/70">
-                  {action.description || \`Execute \${action.name}\`}
+                  {action.description || \`Execute \${action.title || action.name}\`}
                 </p>
               </div>
             </div>
@@ -2814,7 +2810,7 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
             <div className="text-center py-8">
               <LoadingSpinner size="lg" />
               <p className="font-mono text-sm text-green-300 mt-4">
-                Executing {action.name}...
+                Executing {action.title || action.name}...
               </p>
               <p className="font-mono text-xs text-green-300/50 mt-1">
                 Mode: {executionMode === 'local' ? 'Local Execution' : 'Remote Execution'}
@@ -4173,18 +4169,17 @@ const prisma = new PrismaClient()
 async function main() {
   console.log('🌱 Seeding database...')
   
-  // Add your custom seed data here for your models
-  ${this.options.models.map(model => `
-  // TODO: Add seed data for ${model.name}
+  // TODO: Add your custom seed data here based on your Prisma schema
   // Example:
-  // const sample${model.name} = await prisma.${model.name.charAt(0).toLowerCase() + model.name.slice(1)}.createMany({
+  // const sampleData = await prisma.yourModel.createMany({
   //   data: [
-  //     // Add your sample data here based on your ${model.name} model fields
+  //     { field1: 'value1', field2: 'value2' },
+  //     // Add more sample records here
   //   ]
   // });
-  // console.log(\`✅ Created \${sample${model.name}.count} ${model.name} records\`);`).join('\n')}
+  // console.log(\`✅ Created \${sampleData.count} records\`);
   
-  console.log('✅ Database seeded successfully - please uncomment and customize the seed data above')
+  console.log('✅ Database seeded successfully - please add seed data above based on your schema')
 }
 
 main()
@@ -4197,155 +4192,9 @@ main()
   })`;
   }
 
-  private sanitizePrismaSchema(schema: string): string {
-    try {
-      // Fix common relation issues that cause validation errors
-      let sanitizedSchema = schema;
-      
-      // 0. Convert SQLite provider to PostgreSQL for self-contained Neon deployment
-      sanitizedSchema = sanitizedSchema.replace(
-        /datasource\s+db\s*\{\s*provider\s*=\s*"sqlite"/g,
-        'datasource db {\n  provider = "postgresql"'
-      );
-      
-      // 1. Remove problematic one-to-one relations without @unique
-      // Pattern: fieldName ModelName @relation(fields: [fieldId], references: [id])
-      // where fieldId is not marked as @unique
-      const relationPattern = /(\w+)\s+(\w+)\s*@relation\(fields:\s*\[(\w+)\],\s*references:\s*\[[^\]]+\]\)/g;
-      
-      sanitizedSchema = sanitizedSchema.replace(relationPattern, (match, fieldName, modelName, foreignKeyField) => {
-        // Check if the foreign key field has @unique constraint
-        const uniquePattern = new RegExp(`${foreignKeyField}\\s+\\w+[^\\n]*@unique`, 'g');
-        const hasUnique = uniquePattern.test(sanitizedSchema);
-        
-        if (!hasUnique) {
-          // For now, remove the relation attribute to avoid validation errors
-          // Keep just the field without the relation
-          console.log(`Sanitizing relation: Removed @relation from ${fieldName} -> ${modelName} (missing @unique on ${foreignKeyField})`);
-          return `${fieldName} ${modelName}?`;
-        }
-        
-        return match;
-      });
-      
-      // 2. Ensure foreign key fields are optional if they have relations (but NOT ID fields)
-      const foreignKeyPattern = /(\w+Id)\s+(String|Int)(\s+@unique)?(?!\s*@id)/g;
-      sanitizedSchema = sanitizedSchema.replace(foreignKeyPattern, (match, fieldName, type, unique) => {
-        // Don't make ID fields optional - they must be required
-        if (match.includes('@id')) {
-          return match;
-        }
-        
-        if (unique) {
-          return `${fieldName} ${type}?${unique}`;
-        } else {
-          return `${fieldName} ${type}?`;
-        }
-      });
-      
-      // 3. Fix any ID fields that were accidentally made optional
-      const idFieldPattern = /(\w+)\s+(String|Int)\?\s+@id/g;
-      sanitizedSchema = sanitizedSchema.replace(idFieldPattern, (match, fieldName, type) => {
-        console.log(`Fixing ID field: Removing ? from ${fieldName} (ID fields must be required)`);
-        return `${fieldName} ${type} @id`;
-      });
-      
-      // 4. Add note about sanitization
-      if (sanitizedSchema !== schema) {
-        sanitizedSchema += '\n\n// Note: Schema was sanitized to remove problematic relations during deployment.';
-      }
-      
-      return sanitizedSchema;
-    } catch (error) {
-      console.error('Error sanitizing Prisma schema:', error);
-      // Fallback to generating a clean default schema
-      return this.generateDefaultPrismaSchema();
-    }
-  }
 
-  private generateDefaultPrismaSchema(): string {
-    const modelSchemas = this.options.models.map(model => {
-      // Check if model has an explicit ID field
-      const hasIdField = model.fields.some((field: any) => field.isId);
-      
-      let fieldsArray = [...model.fields];
-      
-      // Add default ID field if none exists
-      if (!hasIdField) {
-        fieldsArray.unshift({
-          name: 'id',
-          type: 'String',
-          isId: true,
-          required: true,
-          unique: false
-        });
-      }
-      
-      const fields = fieldsArray.map((field: any) => {
-        let prismaType = 'String';
-        switch (field.type.toLowerCase()) {
-          case 'int':
-          case 'integer':
-            prismaType = 'Int';
-            break;
-          case 'float':
-          case 'decimal':
-            prismaType = 'Float';
-            break;
-          case 'boolean':
-          case 'bool':
-            prismaType = 'Boolean';
-            break;
-          case 'datetime':
-          case 'date':
-            prismaType = 'DateTime';
-            break;
-          default:
-            prismaType = 'String';
-        }
 
-        const modifiers = [];
-        if (field.isId) {
-          // ID fields are ALWAYS required (no ?)
-          modifiers.push('@id @default(cuid())');
-        } else {
-          // Make all non-ID fields optional for flexibility
-          if (!field.required) modifiers.push('?');
-          
-          // Handle unique constraints carefully
-          if (field.unique && !field.isId) {
-            modifiers.push('@unique');
-          }
-        }
 
-        return `  ${field.name} ${prismaType}${modifiers.length > 0 ? ' ' + modifiers.join(' ') : ''}`;
-      }).join('\n');
-
-      return `model ${model.name} {
-${fields}
-  createdAt DateTime? @default(now())
-  updatedAt DateTime? @updatedAt
-}`;
-    }).join('\n\n');
-
-    return `// This file was auto-generated based on your agent models
-generator client {
-  provider = "prisma-client-js"
-  output   = "../node_modules/.prisma/client"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-${modelSchemas}
-
-// Note: This schema is automatically generated.
-// Any manual changes will be overwritten on next deployment.
-// Relations are simplified to avoid validation errors.
-`;
-  }
 
   private generateSQLiteInitScript(): string {
     return `const fs = require('fs');
@@ -4608,13 +4457,13 @@ The app will be available at \`http://localhost:3000\` with a fully functional A
 ## 📊 Your Agent Data
 
 ### Data Models (${this.options.models.length})
-${this.options.models.map(m => `- **${m.name}**: ${m.description || 'Data model'}`).join('\n')}
+${this.options.models.map(m => `- **${m.title || m.name}**: ${m.description || 'Data model'}`).join('\n')}
 
 ### Smart Actions (${this.options.actions.length})
-${this.options.actions.map(a => `- **${a.name}**: ${a.description || 'Action'} (${a.type})`).join('\n')}
+${this.options.actions.map(a => `- **${a.title || a.name}**: ${a.description || 'Action'}`).join('\n')}
 
 ### Scheduled Tasks (${this.options.schedules.length})
-${this.options.schedules.map(s => `- **${s.name}**: ${s.description || 'Scheduled task'} (\`${s.interval?.pattern || '* * * * *'}\`)`).join('\n')}
+${this.options.schedules.map(s => `- **${s.title || s.name}**: ${s.description || 'Scheduled task'} (\`${s.interval?.pattern || '* * * * *'}\`)`).join('\n')}
 
 ## 🛠️ Configuration
 

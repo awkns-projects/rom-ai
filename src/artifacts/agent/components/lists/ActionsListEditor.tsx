@@ -403,7 +403,7 @@ export const ActionsListEditor = memo(({
           >
             ← Back
           </Button>
-          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Action: {editingAction.name}</h3>
+          <h3 className="text-2xl font-bold text-green-200 font-mono">Editing Action: {editingAction.title || editingAction.name}</h3>
         </div>
         <ActionEditor
           action={editingAction}
@@ -452,7 +452,7 @@ export const ActionsListEditor = memo(({
                     <span className="text-lg sm:text-xl">{action.emoji || '⚡'}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{action.name || 'Unnamed Action'}</h4>
+                    <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{action.title || action.name || 'Unnamed Action'}</h4>
                     <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
                       {action.role} • {action.execute?.type || 'Not configured'}
                     </p>

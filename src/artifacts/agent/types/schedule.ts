@@ -76,6 +76,7 @@ export interface ActionChainStep {
 export interface AgentSchedule {
   id: string;
   name: string;
+  title?: string; // User-friendly display title
   emoji?: string; // AI-generated emoji representing the schedule
   description: string;
   role: 'admin' | 'member';

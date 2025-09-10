@@ -635,15 +635,23 @@ export default function ${stepTitle.replace(/\s+/g, '')}({ onNext, onPrevious, d
 } 
 
 /**
- * Sanitize names for actions and schedules to ensure they are valid for API endpoints and file names
- * Names must be lowercase and can only contain letters, digits, hyphens, and underscores
+ * Sanitize names to camelCase for code use (API endpoints, database tables, etc.)
+ * Converts "Track Performance Analytics" → "trackPerformanceAnalytics"
  */
 export function sanitizeAgentName(name: string): string {
   return name
-    .replace(/[^a-zA-Z0-9-_]/g, '-') // Replace invalid chars with hyphens
-    .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
-    .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
-    .toLowerCase()
+    .replace(/[^a-zA-Z0-9\s]/g, '') // Remove special characters, keep spaces
+    .split(/\s+/) // Split on whitespace
+    .filter(word => word.length > 0) // Remove empty strings
+    .map((word, index) => {
+      // First word lowercase, rest title case
+      if (index === 0) {
+        return word.toLowerCase();
+      } else {
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      }
+    })
+    .join('') // Join without spaces for camelCase
     .substring(0, 50); // Limit to 50 characters for reasonable length
 }
 
@@ -652,6 +660,24 @@ export function sanitizeAgentName(name: string): string {
  */
 export function generateUniqueId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Generate both title and name from user input
+ * @param userInput - The user-provided name/title
+ * @returns Object with title (display) and name (code-safe)
+ */
+export function generateTitleAndName(userInput: string): { title: string; name: string } {
+  // Clean title: proper human-readable text without special characters
+  const title = userInput
+    .replace(/[^a-zA-Z0-9\s]/g, '') // Remove special characters, keep spaces
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim(); // Remove leading/trailing spaces
+    
+  // Generate camelCase name for code use
+  const name = sanitizeAgentName(userInput);
+  
+  return { title, name };
 }
 
 /**

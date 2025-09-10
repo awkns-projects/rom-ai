@@ -52,6 +52,7 @@ export interface TestCase {
 export interface AgentAction {
   id: string;
   name: string;
+  title?: string; // User-friendly display title
   emoji?: string; // AI-generated emoji representing the action
   description: string;
   role: 'admin' | 'member';

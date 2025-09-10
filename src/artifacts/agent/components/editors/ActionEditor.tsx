@@ -955,6 +955,23 @@ export const ActionEditor = memo(({
                     placeholder="e.g., Create Task, Send Email"
                     className="bg-black/50 border-cyan-500/30 text-cyan-100 h-11"
                   />
+                  <p className="text-xs text-cyan-400/70 font-mono mt-1">
+                    Internal identifier (camelCase, no spaces)
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="action-title" className="text-blue-300 font-mono font-medium text-sm mb-3 block">Display Title</Label>
+                  <Input
+                    id="action-title"
+                    value={action.title || ''}
+                    onChange={(e) => onUpdate({ ...action, title: e.target.value })}
+                    placeholder="e.g., Create Customer Task, Send Welcome Email"
+                    className="bg-black/50 border-cyan-500/30 text-cyan-100 h-11"
+                  />
+                  <p className="text-xs text-cyan-400/70 font-mono mt-1">
+                    What users see in the interface
+                  </p>
                 </div>
 
                 <div>
