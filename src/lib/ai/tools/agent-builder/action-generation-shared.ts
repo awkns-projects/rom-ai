@@ -165,14 +165,6 @@ Use this schema to understand:
 - Primary keys and unique constraints
 
 CRITICAL: Use the Prisma schema as the authoritative source for all database operations.
-
-🚨 MANDATORY FIELD VALIDATION:
-Before using ANY field in a database operation, you MUST verify it exists in the Prisma schema above.
-For example, if you want to use db.sleepPattern.findMany({ where: { deleted: false } }):
-1. Look at the SleepPattern model in the schema above
-2. Check if 'deleted' field exists - IT DOESN'T!
-3. Instead use existing fields like 'userId', 'sleepStartTime', 'sleepEndTime', 'qualityScore'
-4. NEVER assume common fields like 'deleted', 'createdAt', 'updatedAt' exist unless explicitly shown in schema
 ` : ''}
 
 ${enhancedAnalysis ? `ENHANCED ANALYSIS (VALIDATED):
