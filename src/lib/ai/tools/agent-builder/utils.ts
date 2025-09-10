@@ -250,8 +250,6 @@ export function ensureRequiredScheduleFields(schedules: any[]): any[] {
     name: schedule.name || 'Unnamed Schedule',
     emoji: schedule.emoji,
     description: schedule.description || 'No description provided',
-    type: schedule.type || 'Create',
-    role: schedule.role || 'admin',
     interval: schedule.interval || {
       pattern: '0 0 * * *', // Daily at midnight
       timezone: 'UTC',
@@ -273,9 +271,10 @@ export function ensureRequiredScheduleFields(schedules: any[]): any[] {
         maxTokens: 1000
       }
     },
-    results: schedule.results || {
-      actionType: schedule.type || 'Create',
-      model: 'default'
+    results: {
+      model: schedule.results?.model || 'DefaultModel',
+      fields: schedule.results?.fields || {},
+      fieldsToUpdate: schedule.results?.fieldsToUpdate || {}
     }
   }));
 }
@@ -309,9 +308,10 @@ export function ensureRequiredActionFields(actions: any[]): any[] {
         maxTokens: 1000
       }
     },
-    results: action.results || {
-      actionType: action.type || 'Create',
-      model: 'default'
+    results: {
+      model: action.results?.model || 'DefaultModel',
+      fields: action.results?.fields || {},
+      fieldsToUpdate: action.results?.fieldsToUpdate || {}
     }
   }));
 }
@@ -632,4 +632,94 @@ export default function ${stepTitle.replace(/\s+/g, '')}({ onNext, onPrevious, d
   );
 }
 `;
+} 
+
+/**
+ * Sanitize names for actions and schedules to ensure they are valid for API endpoints and file names
+ * Names must be lowercase and can only contain letters, digits, hyphens, and underscores
+ */
+export function sanitizeAgentName(name: string): string {
+  return name
+    .replace(/[^a-zA-Z0-9-_]/g, '-') // Replace invalid chars with hyphens
+    .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
+    .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
+    .toLowerCase()
+    .substring(0, 50); // Limit to 50 characters for reasonable length
+}
+
+/**
+ * Generate a unique ID for actions and schedules
+ */
+export function generateUniqueId(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Sanitize environment variable names to meet Vercel/deployment requirements
+ * Vercel requires: Only letters, digits, and underscores are allowed. Name should not start with a digit.
+ * Also removes action name prefixes that violate naming conventions.
+ */
+export function sanitizeEnvironmentVariableName(name: string): string | null {
+  let sanitized = name;
+  
+  // First, remove action name prefixes that contain hyphens or invalid characters
+  // Pattern: ACTION-NAME-WITH-HYPHENS_API_PROVIDER_TYPE -> API_PROVIDER_TYPE
+  if (sanitized.includes('_') && sanitized.match(/^[^_]*-[^_]*_/)) {
+    // Find the first underscore after hyphens and extract everything after it
+    const firstUnderscoreIndex = sanitized.indexOf('_');
+    if (firstUnderscoreIndex > 0) {
+      sanitized = sanitized.substring(firstUnderscoreIndex + 1);
+      console.log(`🔧 Removed action name prefix: "${name}" → "${sanitized}"`);
+    }
+  }
+  
+  // Check if environment variable name is already valid after prefix removal
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(sanitized)) {
+    return sanitized;
+  }
+  
+  // Attempt to sanitize the name
+  sanitized = sanitized
+    .replace(/[^A-Za-z0-9_]/g, '_') // Replace invalid characters with underscores
+    .replace(/_+/g, '_') // Replace multiple underscores with single
+    .replace(/^_+|_+$/g, '') // Remove leading/trailing underscores
+    .replace(/^[0-9]+/, 'API_'); // If starts with digit, prefix with API_
+  
+  // Return sanitized name if valid, null if it couldn't be sanitized
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(sanitized) ? sanitized : null;
+}
+
+/**
+ * Sanitize a collection of environment variables
+ * Returns sanitized variables and reports any that couldn't be sanitized
+ */
+export function sanitizeEnvironmentVariables(envVars: Array<{name: string, description: string, required: boolean, sensitive: boolean}>): {
+  sanitized: Array<{name: string, description: string, required: boolean, sensitive: boolean}>;
+  invalid: string[];
+  sanitizedNames: Record<string, string>; // original -> sanitized mapping
+} {
+  const sanitized: Array<{name: string, description: string, required: boolean, sensitive: boolean}> = [];
+  const invalid: string[] = [];
+  const sanitizedNames: Record<string, string> = {};
+  
+  envVars.forEach(envVar => {
+    const sanitizedName = sanitizeEnvironmentVariableName(envVar.name);
+    
+    if (sanitizedName) {
+      if (sanitizedName !== envVar.name) {
+        console.log(`🔧 Environment variable sanitized: "${envVar.name}" → "${sanitizedName}"`);
+        sanitizedNames[envVar.name] = sanitizedName;
+      }
+      
+      sanitized.push({
+        ...envVar,
+        name: sanitizedName
+      });
+    } else {
+      console.warn(`⚠️ Could not sanitize environment variable: "${envVar.name}"`);
+      invalid.push(envVar.name);
+    }
+  });
+  
+  return { sanitized, invalid, sanitizedNames };
 } 

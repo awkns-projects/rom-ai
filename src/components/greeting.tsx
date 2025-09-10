@@ -177,6 +177,19 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
     }
   };
 
+  const goBackQuestion = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex(prev => prev - 1);
+    }
+  };
+
+  const returnToSelection = () => {
+    setCurrentPhase('selection');
+    setCurrentQuestionIndex(0);
+    setUserProfile({});
+    setUserInput('');
+  };
+
   const createDigitalCompanion = () => {
     // Build a comprehensive prompt from the user's answers
     const answers = Object.entries(userProfile).filter(([_, value]) => value && value.trim() !== '');
@@ -592,6 +605,16 @@ Please create a personalized AI agent that can help me with these specific needs
 
     return (
       <div className="w-full max-w-4xl mx-auto px-4 py-8">
+        {/* Back to Start Button */}
+        <div className="mb-6">
+          <button
+            onClick={returnToSelection}
+            className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm flex items-center gap-2"
+          >
+            ← Back to Start
+          </button>
+        </div>
+
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6">
@@ -699,8 +722,20 @@ Please create a personalized AI agent that can help me with these specific needs
           </div>
         </form>
 
+        {/* Navigation Options */}
+        {currentQuestionIndex > 0 && (
+          <div className="mt-8 flex justify-center">
+            <button
+              onClick={goBackQuestion}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm flex items-center gap-2"
+            >
+              ← Previous Question
+            </button>
+          </div>
+        )}
+
         {/* Option to use examples instead */}
-        <div className="mt-8 text-center">
+        <div className="mt-6 text-center">
           <p className="text-gray-600 dark:text-gray-400 mb-4 text-sm">
             Don't want to answer questions? No problem!
           </p>

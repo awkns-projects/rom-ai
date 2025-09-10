@@ -103,7 +103,7 @@ CODE GENERATION REQUIREMENTS:
    - db: Database operations (db.ModelName.find(), db.ModelName.create(), etc.)
    - ai: AI operations using generateObject function
    - input: User-provided input parameters (MUST include all parameters from the first step)
-   - envVars: Environment variables for external APIs
+   - envVars: Environment variables for external APIs ONLY (do not include NODE_ENV, PORT, or other system variables)
 
 2. INPUT PARAMETER HANDLING:
    ${extractedInputParams.length > 0 ? `
@@ -172,64 +172,54 @@ CODE GENERATION REQUIREMENTS:
 6. EXTERNAL API CALLS:
    For "call external api" step type, use fetch() with proper authentication and environment handling:
    
-   // OAuth2 API example with test/live environment support:
-   const isTestMode = envVars.ENVIRONMENT === 'test' || envVars.NODE_ENV === 'development';
-   const baseUrl = isTestMode ? envVars.API_BASE_URL_TEST : envVars.API_BASE_URL;
-   const accessToken = isTestMode ? envVars.OAUTH_ACCESS_TOKEN_TEST : envVars.OAUTH_ACCESS_TOKEN;
+   // API Key authentication example with test/live environment support:
+   const baseUrl = envVars.API_BASE_URL || envVars.API_BASE_URL_PROD;
+   const apiKey = envVars.API_KEY;
    
    const apiResponse = await fetch(\`\${baseUrl}/endpoint\`, {
      method: 'POST',
      headers: { 
-       'Authorization': \`Bearer \${accessToken}\`,
+       'Authorization': \`Bearer \${apiKey}\`,
        'Content-Type': 'application/json'
      },
      body: JSON.stringify(requestData)
    });
    
-   // Shopify API example with test/live store support:
-   const shopifyStoreName = isTestMode ? envVars.SHOPIFY_STORE_NAME_TEST : envVars.SHOPIFY_STORE_NAME;
-   const shopifyToken = isTestMode ? envVars.SHOPIFY_ACCESS_TOKEN_TEST : envVars.SHOPIFY_ACCESS_TOKEN;
-   
-   const shopifyResponse = await fetch(\`https://\${shopifyStoreName}.myshopify.com/admin/api/2023-10/products.json\`, {
-     headers: { 
-       'X-Shopify-Access-Token': shopifyToken,
-       'Content-Type': 'application/json'
-     }
-   });
-   
-   // Stripe API example with test/live keys:
-   const stripeKey = isTestMode ? envVars.STRIPE_SECRET_KEY_TEST : envVars.STRIPE_SECRET_KEY;
-   
-   const stripeResponse = await fetch('https://api.stripe.com/v1/customers', {
-     headers: { 
-       'Authorization': \`Bearer \${stripeKey}\`,
-       'Content-Type': 'application/x-www-form-urlencoded'
-     }
-   });
-   
-   // Generic API with environment variables:
-   const genericApiKey = isTestMode ? envVars.API_KEY_TEST : envVars.API_KEY;
-   const genericBaseUrl = envVars.API_BASE_URL || (isTestMode ? envVars.API_BASE_URL_TEST : envVars.API_BASE_URL_PROD);
-   
-   const genericResponse = await fetch(\`\${genericBaseUrl}/endpoint\`, {
-     method: 'POST',
-     headers: { 
-       'Authorization': \`Bearer \${genericApiKey}\`,
-       'Content-Type': 'application/json'
-     },
-     body: JSON.stringify(requestData)
-   });
-   
-   // Environment Variables Guide:
-   // For OAuth2: OAUTH_ACCESS_TOKEN, OAUTH_ACCESS_TOKEN_TEST, API_BASE_URL, API_BASE_URL_TEST
-   // For Shopify: SHOPIFY_STORE_NAME, SHOPIFY_STORE_NAME_TEST, SHOPIFY_ACCESS_TOKEN, SHOPIFY_ACCESS_TOKEN_TEST  
-   // For Stripe: STRIPE_SECRET_KEY (sk_live_...), STRIPE_SECRET_KEY_TEST (sk_test_...)
-   // General: ENVIRONMENT ('test'/'production'), NODE_ENV ('development'/'test'/'production')
+   // For OAuth APIs, tokens are provided through user authentication flow, not envVars
+   // Use the oauth context provided by the system instead of environment variables
 
-7. RETURN FORMAT:
+7. ENVIRONMENT VARIABLES:
+   ONLY generate environment variables for external APIs that use API KEY authentication:
+   - API keys (e.g., STRIPE_API_KEY, OPENAI_API_KEY)
+   - API base URLs for API key services (e.g., OPENAI_BASE_URL)
+   - API-specific configuration for API key services (e.g., STRIPE_WEBHOOK_SECRET)
+   
+   CRITICAL ENVIRONMENT VARIABLE NAMING RULES:
+   - Use ONLY the API provider name as the prefix (e.g., "GOOGLE_SHEETS", "STRIPE", "OPENAI")
+   - NEVER include the action name in environment variable names
+   - NEVER use spaces or special characters - only letters, numbers, and underscores
+   - Examples: "GOOGLE_SHEETS_API_KEY", "STRIPE_API_KEY", "OPENAI_API_KEY"
+   - WRONG: "UPDATE GOOGLE SHEETS DASHBOARD_GOOGLE_SHEETS_API_KEY"
+   - RIGHT: "GOOGLE_SHEETS_API_KEY"
+   
+   DO NOT generate environment variables for OAuth-based APIs:
+   - OAuth APIs (Gmail, Slack, Shopify, Facebook, LinkedIn, etc.) use user authentication flow
+   - OAuth tokens are provided by the system, not through environment variables
+   - If an API uses OAuth, generate NO environment variables for it
+   
+   NEVER generate system environment variables like:
+   - NODE_ENV, ENVIRONMENT, PORT, DATABASE_URL, NEXTAUTH_SECRET
+   - Any internal application configuration variables
+   - Any variables starting with NEXT_, VERCEL_, or other framework prefixes
+   
+   AUTHENTICATION METHOD REFERENCE:
+   - OAuth APIs (no env vars needed): Gmail, Slack, Shopify, Facebook, LinkedIn, Instagram, Google Calendar, Microsoft Teams, Notion, Salesforce, HubSpot
+   - API Key APIs (env vars needed): Stripe, OpenAI, generic REST APIs
+
+8. RETURN FORMAT:
    Always return: { success: boolean, data: any, message: string, executionTime: number }
 
-8. REAL-WORLD EXAMPLES:
+9. REAL-WORLD EXAMPLES:
    - "Find customers spending > $100 and upgrade to elite": Query customers, filter by spending, update status
    - "Generate weekly sales report": Aggregate sales data, create report, optionally send email
    - "Analyze sentiment of reviews": Fetch reviews, use AI for sentiment analysis, store results

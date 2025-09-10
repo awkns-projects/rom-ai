@@ -1772,19 +1772,19 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
                               id: 'send-email-action',
                               name: 'Send Recovery Email',
                               description: 'Send automated cart recovery email to customers',
-                              results: { actionType: 'Create', model: 'Email' }
+                              results: { model: 'Email', fields: {}, fieldsToUpdate: {} }
                             },
                             {
                               id: 'update-customer-action',
                               name: 'Update Customer Status',
                               description: 'Automatically update customer engagement status',
-                              results: { actionType: 'Update', model: 'Customer' }
+                              results: { model: 'Customer', fields: {}, fieldsToUpdate: {} }
                             },
                             {
                               id: 'slack-notification-action',
                               name: 'Slack Notification',
                               description: 'Send alerts to team when high-value carts are abandoned',
-                              results: { actionType: 'Create', model: 'Notification' }
+                              results: { model: 'Notification', fields: {}, fieldsToUpdate: {} }
                             }
                           ],
                           schedules: [

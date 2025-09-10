@@ -269,7 +269,41 @@ export class VercelClient {
   async setEnvironmentVariables(projectId: string, envVars: Record<string, string>) {
     console.log(`🔧 Setting environment variables for project: ${projectId}`);
     
-    const promises = Object.entries(envVars).map(([key, value]) =>
+    // CRITICAL FIX: Validate environment variable names before sending to Vercel API
+    // Vercel requires: Only letters, digits, and underscores are allowed. Furthermore, the name should not start with a digit.
+    const invalidEnvVars: string[] = [];
+    const validEnvVars: Record<string, string> = {};
+    
+    Object.entries(envVars).forEach(([key, value]) => {
+      // Check if environment variable name is valid according to Vercel's requirements
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+        invalidEnvVars.push(key);
+        console.warn(`⚠️ Invalid environment variable name detected: "${key}"`);
+        
+        // Attempt to sanitize the key as a fallback
+        const sanitizedKey = key
+          .replace(/[^A-Za-z0-9_]/g, '_') // Replace invalid characters with underscores
+          .replace(/_+/g, '_') // Replace multiple underscores with single
+          .replace(/^_+|_+$/g, '') // Remove leading/trailing underscores
+          .replace(/^[0-9]+/, 'API_'); // If starts with digit, prefix with API_
+        
+        if (sanitizedKey && /^[A-Za-z_][A-Za-z0-9_]*$/.test(sanitizedKey)) {
+          console.log(`🔧 Auto-sanitized "${key}" to "${sanitizedKey}"`);
+          validEnvVars[sanitizedKey] = value;
+        } else {
+          console.error(`❌ Could not sanitize environment variable: "${key}"`);
+        }
+      } else {
+        validEnvVars[key] = value;
+      }
+    });
+    
+    if (invalidEnvVars.length > 0) {
+      console.warn(`⚠️ Found ${invalidEnvVars.length} invalid environment variable names:`, invalidEnvVars);
+      console.log(`✅ Proceeding with ${Object.keys(validEnvVars).length} valid environment variables`);
+    }
+    
+    const promises = Object.entries(validEnvVars).map(([key, value]) =>
       this.request(`/v10/projects/${projectId}/env`, {
         method: 'POST',
         body: JSON.stringify({
@@ -282,7 +316,11 @@ export class VercelClient {
     );
 
     await Promise.all(promises);
-    console.log(`✅ Environment variables set`);
+    console.log(`✅ Environment variables set (${Object.keys(validEnvVars).length} variables)`);
+    
+    if (invalidEnvVars.length > 0) {
+      console.warn(`⚠️ Note: ${invalidEnvVars.length} environment variables were skipped or sanitized due to invalid naming`);
+    }
   }
 
   async getProject(projectId: string) {
@@ -401,23 +439,19 @@ export class NeonClient {
  */
 function validateAndNormalizeActions(actions: AgentAction[]): AgentAction[] {
   return actions.filter(action => {
-    if (!action.name || !action.results?.actionType) {
-      console.warn(`⚠️ Skipping invalid action: missing name or actionType`);
+    if (!action.name || !action.results?.model) {
+      console.warn(`⚠️ Skipping invalid action: missing name or model`);
       return false;
     }
-    
-    if (!['query', 'mutation'].includes(action.results.actionType)) {
-      console.warn(`⚠️ Skipping action "${action.name}": invalid actionType "${action.results.actionType}"`);
-      return false;
-    }
-    
+
     return true;
   }).map(action => ({
     ...action,
+    id: action.id || `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
     name: action.name.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase(),
-    description: action.description || `${action.results?.actionType} action`,
+    description: action.description || `${action.type} action`,
     role: action.role || 'member',
-    emoji: action.emoji || (action.results?.actionType === 'query' ? '🔍' : '✏️'),
+    emoji: action.emoji || (action.type === 'query' ? '🔍' : '✏️'),
   }));
 }
 

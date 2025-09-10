@@ -87,7 +87,6 @@ export interface AgentAction {
     };
   };
   results: {
-    actionType: 'Create' | 'Update';
     model: string;
     identifierIds?: string[];
     fields?: Record<string, any>;
@@ -134,4 +133,11 @@ export interface EnvVar {
   description: string;
   required: boolean;
   sensitive: boolean;
+  savedValue?: string; // Saved value for deployment
+}
+
+export interface ActionResult {
+  model: string;
+  fields: Record<string, any>;
+  fieldsToUpdate: Record<string, any>;
 } 

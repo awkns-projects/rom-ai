@@ -1127,9 +1127,9 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
                     {action.results && (
                       <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-opacity-30" style={{ borderColor: 'currentColor' }}>
                         <div>
-                          <div className={`font-mono text-xs ${theme.dim}`}>Type</div>
+                          <div className={`font-mono text-xs ${theme.dim}`}>Role</div>
                           <div className={`font-mono text-xs font-semibold ${theme.light}`}>
-                            {action.results.actionType || 'Unknown'}
+                            {action.role}
                           </div>
                         </div>
                         <div>

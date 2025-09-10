@@ -67,7 +67,6 @@ export const unifiedActionsSchema = z.object({
     name: z.string().describe('Name of the action'),
     emoji: z.string().optional().describe('Single emoji that visually represents this action (e.g., ✉️ for email, 📊 for reports, 🔄 for sync)'),
     description: z.string().describe('Detailed description of what this action does and its business purpose. CRITICAL: This action MUST accept batch input with items[] array structure.'),
-    type: z.enum(['query', 'mutation']).describe('Action type - query for reading data, mutation for writing data'),
     role: z.enum(['admin', 'member']).describe('Role required to execute this action'),
     dataSource: z.object({
       type: z.enum(['custom', 'database']).describe('Data source type'),
@@ -105,12 +104,10 @@ export const unifiedActionsSchema = z.object({
       }).describe('Code execution configuration - all actions use code execution'),
     }).describe('How the action is executed'),
     results: z.object({
-      actionType: z.enum(['query', 'mutation']).describe('Type of action result'),
-      model: z.string().describe('Target model for the results'),
-      identifierIds: z.array(z.string()).optional().describe('Fields that identify existing records for updates'),
-      fields: z.record(z.any()).optional().describe('Fields to set for Create actions'),
-      fieldsToUpdate: z.record(z.any()).optional().describe('Fields to update for Update actions')
-    }).optional().describe('Configuration for how results are processed')
+      model: z.string().describe('Model name for the action result'),
+      fields: z.record(z.any()).describe('Fields for the action result'),
+      fieldsToUpdate: z.record(z.any()).describe('Fields that can be updated by this action')
+    }).describe('Expected results structure'),
   }))
 });
 
@@ -120,7 +117,6 @@ export const prismaActionsSchema = z.object({
     name: z.string().describe('Name of the action'),
     emoji: z.string().optional().describe('Single emoji that visually represents this action (e.g., ✉️ for email, 📊 for reports, 🔄 for sync)'),
     description: z.string().describe('Detailed description of what this action does and its business purpose'),
-    type: z.enum(['query', 'mutation']).describe('Action type - query for reading data, mutation for writing data'),
     role: z.enum(['admin', 'member']).describe('Role required to execute this action'),
     
     // Mindmap Editor Fields
@@ -246,12 +242,10 @@ export const prismaActionsSchema = z.object({
       }).nullable().optional().describe('AI prompt configuration if type is prompt')
     }).optional().describe('Configuration for how the schedule is executed'),
     results: z.object({
-      actionType: z.enum(['query', 'mutation']).describe('Type of action result'),
-      model: z.string().describe('Target model for the results'),
-      identifierIds: z.array(z.string()).optional().describe('Fields that identify existing records for updates'),
-      fields: z.record(z.any()).optional().describe('Fields to set for Create actions'),
-      fieldsToUpdate: z.record(z.any()).optional().describe('Fields to update for Update actions')
-    }).optional().describe('Configuration for how results are processed')
+      model: z.string().describe('Model name for the action result'),
+      fields: z.record(z.any()).describe('Fields for the action result'),
+      fieldsToUpdate: z.record(z.any()).describe('Fields that can be updated by this action')
+    }).describe('Expected results structure'),
   }))
 });
 
@@ -426,7 +420,6 @@ export const unifiedSchedulesSchema = z.object({
     name: z.string().describe('Name of the schedule'),
     emoji: z.string().optional().describe('Single emoji that visually represents this schedule (e.g., ⏰ for daily tasks, 📊 for reports, 🔄 for sync)'),
     description: z.string().describe('Detailed description of what this schedule does and its business purpose'),
-    role: z.enum(['admin', 'member']).describe('Role required to execute this schedule'),
     
     // Mindmap Editor Trigger Configuration
     trigger: z.object({

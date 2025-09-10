@@ -325,9 +325,9 @@ export const SchedulesListEditor = memo(({
         }
       },
       results: {
-        actionType: 'Create',
-        model: '',
-        fields: {}
+        model: 'Customer',
+        fields: {},
+        fieldsToUpdate: {}
       }
     };
     onUpdate([...schedules, newSchedule]);

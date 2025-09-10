@@ -19,6 +19,19 @@ export interface DocumentCredentials {
 }
 
 /**
+ * Sanitize provider name to comply with Vercel's environment variable naming requirements
+ * Vercel requires: Only letters, digits, and underscores are allowed. Furthermore, the name should not start with a digit.
+ */
+export function sanitizeProviderNameForEnvVar(providerName: string): string {
+  return providerName
+    .toUpperCase()
+    .replace(/[^A-Z0-9_]/g, '_') // Replace any non-alphanumeric characters (including spaces) with underscores
+    .replace(/_+/g, '_') // Replace multiple consecutive underscores with single underscore
+    .replace(/^_+|_+$/g, '') // Remove leading/trailing underscores
+    .replace(/^[0-9]+/, 'API_'); // If it starts with a digit, prefix with "API_"
+}
+
+/**
  * Securely store external API credentials in document metadata
  */
 export async function storeDocumentCredentials(
@@ -167,7 +180,8 @@ export function credentialsToEnvVars(credentials: ExternalApiCredential[]): Reco
   const envVars: Record<string, string> = {};
 
   credentials.forEach(cred => {
-    const providerPrefix = cred.provider.toUpperCase().replace('-', '_');
+    // Use the centralized sanitization function for consistency
+    const providerPrefix = sanitizeProviderNameForEnvVar(cred.provider);
     
     if (cred.credentialType === 'oauth') {
       if (cred.accessToken) {

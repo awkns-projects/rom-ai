@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDocumentCredentials, credentialsToEnvVars, getDocumentOAuthConnections } from '@/lib/db/document-credentials';
+import { auth } from '@/app/(auth)/auth';
+import { 
+  getDocumentCredentials, 
+  getDocumentOAuthConnections, 
+  credentialsToEnvVars,
+  sanitizeProviderNameForEnvVar
+} from '@/lib/db/document-credentials';
 import { getDocumentById } from '@/lib/db/queries';
 import { checkAuthentication, hasAgentPermission } from '@/lib/auth-helpers';
 
@@ -62,7 +68,10 @@ async function processCredentials(documentId: string, document: any) {
   // Add OAuth tokens to environment variables
   if (oauthResult.success && oauthResult.connections) {
     oauthResult.connections.forEach(connection => {
-      const providerPrefix = connection.provider.toUpperCase().replace('-', '_');
+      // CRITICAL FIX: Sanitize provider name to comply with Vercel's environment variable naming requirements
+      // Vercel requires: Only letters, digits, and underscores are allowed. Furthermore, the name should not start with a digit.
+      const providerPrefix = sanitizeProviderNameForEnvVar(connection.provider);
+      
       envVars[`${providerPrefix}_ACCESS_TOKEN`] = connection.accessToken;
       if (connection.refreshToken) {
         envVars[`${providerPrefix}_REFRESH_TOKEN`] = connection.refreshToken;

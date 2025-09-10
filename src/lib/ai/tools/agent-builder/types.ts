@@ -45,8 +45,6 @@ export interface AgentSchedule {
   name: string;
   emoji?: string;
   description: string;
-  type: 'mutation' | 'query';
-  role: 'admin' | 'member';
   interval: {
     pattern: string;
     timezone?: string;
@@ -93,12 +91,10 @@ export interface AgentSchedule {
       maxTokens?: number;
     };
   };
-  results?: {
-    actionType: 'mutation' | 'query';
+  results: {
     model: string;
-    identifierIds?: string[];
     fields: Record<string, any>;
-    fieldsToUpdate?: Record<string, any>;
+    fieldsToUpdate: Record<string, any>;
   };
 }
 
@@ -107,7 +103,6 @@ export interface AgentAction {
   name: string;
   emoji?: string;
   description: string;
-  type: 'mutation' | 'query';
   role: 'admin' | 'member';
   dataSource?: {
     type: 'database' | 'custom';
@@ -149,12 +144,10 @@ export interface AgentAction {
       maxTokens?: number;
     };
   };
-  results?: {
-    actionType: 'mutation' | 'query';
+  results: {
     model: string;
-    identifierIds?: string[];
     fields: Record<string, any>;
-    fieldsToUpdate?: Record<string, any>;
+    fieldsToUpdate: Record<string, any>;
   };
   uiComponents?: {
     stepForms?: Array<{

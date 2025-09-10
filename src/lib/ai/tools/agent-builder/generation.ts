@@ -12,6 +12,7 @@ import type {
   AgentSchedule,
   AgentEnum
 } from './types';
+import { sanitizeAgentName, generateUniqueId } from './utils';
 import { 
   promptUnderstandingSchema,
   changeAnalysisSchema,
@@ -103,7 +104,6 @@ interface ActionStep {
 interface EnhancedActionAnalysis {
   actionName: string;
   description: string;
-  type: 'query' | 'mutation';
   role: 'admin' | 'member';
   steps: ActionStep[];
   inputVariables: Array<{
@@ -324,7 +324,6 @@ Expected Results:
     ${recurringSchedules.map(schedule => `
     - **${schedule.name}** (${schedule.frequency}, ${schedule.complexity} complexity)
       - Purpose: ${schedule.purpose}
-      - Role: ${schedule.role}
       - Steps: ${schedule.estimatedSteps.join(', ')}
       - Data Requirements: ${schedule.dataRequirements.join(', ')}
     `).join('')}
@@ -997,7 +996,7 @@ export async function generatePrismaActions(
   let existingActionsContext = '';
   if (existingAgent && existingAgent.actions && existingAgent.actions.length > 0) {
     existingActionsContext = `EXISTING ACTIONS (${existingAgent.actions.length} total):
-${existingAgent.actions.map(action => `- ${action.name} (${action.type}): ${action.description}`).join('\n')}
+${existingAgent.actions.map(action => `- ${action.name}: ${action.description}`).join('\n')}
 
 DO NOT recreate these existing actions. Only create NEW actions as specified in the requirements.
 `;
@@ -1265,7 +1264,6 @@ DO NOT recreate these existing schedules. Only create NEW schedules as specified
   const scheduleSpecifications = scheduleRequirements.map((schedule: any) => `
 **${schedule.name}** (${schedule.operation === 'create' ? 'NEW SCHEDULE' : 'UPDATE EXISTING'}):
 - Purpose: ${schedule.purpose}
-- Type: ${schedule.type} (${schedule.type === 'query' ? 'reads data' : 'writes/modifies data'})
 - Frequency: ${schedule.frequency}
 ${schedule.updateDescription ? `- Update: ${schedule.updateDescription}` : ''}
 ${schedule.operation === 'update' ? '- This schedule exists but needs modifications' : '- This is a completely new schedule'}
@@ -1508,13 +1506,18 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
         };
       }).filter(Boolean); // Remove null steps
 
+      const rawName = schedule.name || 'Unnamed Schedule';
+      const sanitizedName = sanitizeAgentName(rawName);
+      
+      if (rawName !== sanitizedName) {
+        console.log(`🔧 Schedule name sanitized: "${rawName}" → "${sanitizedName}"`);
+      }
+
       return {
         ...schedule,
-        id: schedule.id || `schedule_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        name: schedule.name || 'Unnamed Schedule',
+        id: schedule.id || generateUniqueId('schedule'),
+        name: sanitizedName,
         description: schedule.description || schedule.name || 'No description provided',
-        type: schedule.type || 'query',
-        role: schedule.role || 'admin',
         steps: validatedSteps,
         trigger: schedule.trigger || {
           type: 'manual',
@@ -1613,17 +1616,16 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
     // Final validation to ensure all schedules meet minimum requirements
     const validatedSchedules = fixedSchedules.filter((schedule: any) => {
       const isValid = schedule.name && schedule.description && schedule.trigger && 
-                     schedule.id && schedule.role;
+                     schedule.id;
       
       if (!isValid) {
         console.warn(`⚠️ Filtering out invalid schedule: ${schedule.name || 'Unnamed'}`);
-        console.warn(`Missing fields: ${JSON.stringify({
+                console.warn(`Missing fields: ${JSON.stringify({
           name: !schedule.name,
           description: !schedule.description, 
           trigger: !schedule.trigger,
-          id: !schedule.id,
-          role: !schedule.role
-        })}`);
+          id: !schedule.id
+        })}`);  
       }
       
       return isValid;
@@ -1636,12 +1638,10 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
       console.warn('⚠️ No valid schedules generated, creating default schedule');
       
       const defaultSchedule = {
-        id: `schedule_${Date.now()}_default`,
-        name: 'Daily Status Check',
+        id: generateUniqueId('schedule'),
+        name: sanitizeAgentName('Daily Status Check'),
         emoji: '⏰',
         description: 'A default daily schedule for system monitoring and basic automation',
-        type: 'query' as const,
-        role: 'admin' as const,
         interval: {
           pattern: '0 9 * * *', // 9 AM daily
           active: false
@@ -1660,6 +1660,11 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
             condition: { type: 'always' as const }
           }
         ] : [],
+        results: {
+          model: 'DefaultModel',
+          fields: {},
+          fieldsToUpdate: {}
+        },
         createdAt: new Date().toISOString()
       };
       
@@ -2972,7 +2977,6 @@ export async function generateCompleteEnhancedAction(
     name: imagination.title,
     emoji: '⚡', // Default, can be customized
     description: imagination.description,
-    type: analysis.analysis.databaseOperations.tablesToUpdate.some(t => t.operation === 'create') ? 'mutation' : 'query',
     role: imagination.userRole,
     dataSource: {
       type: 'custom',
@@ -3004,7 +3008,6 @@ export async function generateCompleteEnhancedAction(
       }
     },
     results: {
-      actionType: analysis.analysis.databaseOperations.tablesToUpdate.some(t => t.operation === 'create') ? 'mutation' : 'query',
       model: analysis.analysis.databaseOperations.tablesToUpdate[0]?.modelName || existingAgent?.models?.[0]?.name || 'DefaultModel',
       fields: {},
       fieldsToUpdate: {}
@@ -3544,7 +3547,6 @@ export {
 export async function generatePseudoSteps(
   name: string,
   description: string,
-  type: 'query' | 'mutation',
   availableModels: AgentModel[],
   entityType: 'action' | 'schedule',
   businessContext?: string
@@ -3558,7 +3560,6 @@ export async function generatePseudoSteps(
 ENTITY DETAILS:
 - Name: ${name}
 - Description: ${description}
-- Type: ${type}
 - Entity Type: ${entityType}
 
 AVAILABLE DATA MODELS:
@@ -3645,9 +3646,6 @@ ${availableModels.map(model => `
 `).join('')}
 
 **IMPORTANT**: When you see field names like "leadId", "customerId", "orderId", etc., the type should be "${availableModels.map(m => m.name).find(name => name.toLowerCase() === 'lead') ? 'LeadId' : 'ModelNameId'}", NOT "String"!
-
-For ${type} operations:
-${type === 'mutation' ? '- Focus on batch data validation, creation/updating multiple items, and bulk confirmation steps' : '- Focus on finding multiple records with filters, reading collections of data, and presenting aggregated results'}
 
 Generate 3-7 logical steps that would accomplish this ${entityType}'s purpose using BATCH PROCESSING PATTERNS. Be specific about database model relationships and connections.
 
@@ -4585,7 +4583,6 @@ const stepAnalysisSchema = z.object({
 const completeActionAnalysisSchema = z.object({
   actionName: z.string(),
   description: z.string(),
-  type: z.enum(['query', 'mutation']),
   role: z.enum(['admin', 'member']),
   inputVariables: z.array(z.object({
     name: z.string(),
@@ -4976,7 +4973,6 @@ Use generateObject() structure for consistent, type-safe analysis output.`;
 
   return {
     ...result.object,
-    type: result.object.type.toLowerCase() as 'query' | 'mutation',
     steps,
     assembledCode
   };

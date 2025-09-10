@@ -172,7 +172,7 @@ export const AgentCreator = memo(({ onComplete, initialAgentData, documentId }: 
               id: 'send-email-action',
               name: 'Send Welcome Email',
               description: 'Send automated welcome email to new customers',
-              results: { actionType: 'Email Automation', status: 'Ready', lastRun: 'Never', successRate: 'New' }
+              results: { status: 'Ready', lastRun: 'Never', successRate: 'New', model: 'Email', fields: {}, fieldsToUpdate: {} }
             }
           ]
         };
@@ -198,7 +198,7 @@ export const AgentCreator = memo(({ onComplete, initialAgentData, documentId }: 
             {
               id: 'send-email-action',
               name: 'Send Welcome Email',
-              results: { actionType: 'Email Automation' }
+              results: { model: 'Email', fields: {}, fieldsToUpdate: {} }
             }
           ],
           schedules: [

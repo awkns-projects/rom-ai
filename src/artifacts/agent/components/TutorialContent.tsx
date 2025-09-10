@@ -111,13 +111,13 @@ export const TutorialContent = memo(({ onTabChange, agentData, onDataChange }: T
               id: 'welcome-email-action',
               name: 'Welcome Email',
               description: 'Send welcome email to new customers',
-              results: { actionType: 'Email Automation', status: 'Active', lastRun: '2024-01-20T10:00:00Z', successRate: '98%' }
+              results: { status: 'Active', lastRun: '2024-01-20T10:00:00Z', successRate: '98%' }
             },
             {
               id: 'order-confirmation-action',
               name: 'Order Confirmation',
               description: 'Send order confirmation and tracking info',
-              results: { actionType: 'Notification', status: 'Active', lastRun: '2024-01-20T11:15:00Z', successRate: '100%' }
+              results: { status: 'Active', lastRun: '2024-01-20T11:15:00Z', successRate: '100%' }
             }
           ],
           schedules: [
@@ -215,19 +215,19 @@ export const TutorialContent = memo(({ onTabChange, agentData, onDataChange }: T
               id: 'send-email-action',
               name: 'Send Recovery Email',
               description: 'Send automated cart recovery email to customers',
-              results: { actionType: 'Email Automation', status: 'Active', lastRun: '2024-01-20T10:00:00Z', successRate: '94%' }
+              results: { status: 'Active', lastRun: '2024-01-20T10:00:00Z', successRate: '94%' }
             },
             {
               id: 'update-customer-action',
               name: 'Update Customer Status',
               description: 'Automatically update customer engagement status',
-              results: { actionType: 'Data Update', status: 'Ready', lastRun: '2024-01-20T09:30:00Z', successRate: '100%' }
+              results: { status: 'Ready', lastRun: '2024-01-20T09:30:00Z', successRate: '100%' }
             },
             {
               id: 'slack-notification-action',
               name: 'Slack Notification',
               description: 'Send alerts to team when high-value carts are abandoned',
-              results: { actionType: 'Notification', status: 'Active', lastRun: '2024-01-20T11:15:00Z', successRate: '98%' }
+              results: { status: 'Active', lastRun: '2024-01-20T11:15:00Z', successRate: '98%' }
             }
           ]
         };
@@ -254,7 +254,7 @@ export const TutorialContent = memo(({ onTabChange, agentData, onDataChange }: T
             {
               id: 'send-email-action',
               name: 'Send Recovery Email',
-              results: { actionType: 'Email Automation' }
+              results: { status: 'Email Automation' }
             }
           ],
           schedules: [
@@ -324,7 +324,7 @@ export const TutorialContent = memo(({ onTabChange, agentData, onDataChange }: T
               id: 'welcome-email-action',
               name: 'Welcome Email',
               description: 'Send welcome email to new customers',
-              results: { actionType: 'Email Automation', status: 'Active', lastRun: '2024-01-20T10:00:00Z', successRate: '98%' }
+              results: { status: 'Active', lastRun: '2024-01-20T10:00:00Z', successRate: '98%' }
             }
           ],
           schedules: [

@@ -773,6 +773,10 @@ const AgentBuilderContent = memo(({
   const [showDeploymentModal, setShowDeploymentModal] = useState(false);
   const [isDeploying, setIsDeploying] = useState(false);
   const [deploymentProgress, setDeploymentProgress] = useState('');
+  const [deploymentEnvVars, setDeploymentEnvVars] = useState<Record<string, Record<string, string>>>({});
+  const [isSavingEnvVars, setIsSavingEnvVars] = useState(false);
+  const [collapsedActions, setCollapsedActions] = useState<Set<string>>(new Set());
+  const [deploymentStep, setDeploymentStep] = useState<'confirm' | 'configure' | 'deploying'>('confirm');
   
   // Introduction state hooks
   const {
@@ -917,9 +921,25 @@ const AgentBuilderContent = memo(({
     if (!documentId) return;
     
     setIsDeploying(true);
+    setDeploymentStep('deploying');
     setDeploymentProgress('Initializing deployment...');
     
     try {
+      // Prepare environment variables for deployment
+      const deploymentEnvVarsFlat: Record<string, string> = {};
+      Object.entries(deploymentEnvVars).forEach(([actionId, actionEnvVars]) => {
+        Object.entries(actionEnvVars).forEach(([envVarName, value]) => {
+          if (value.trim()) {
+            // Prefix with action name to avoid conflicts
+            const action = agentData.actions?.find(a => a.id === actionId);
+            const actionName = action?.name || actionId;
+            deploymentEnvVarsFlat[`${actionName.toUpperCase()}_${envVarName}`] = value;
+          }
+        });
+      });
+      
+      console.log('🔧 Deploying with environment variables:', Object.keys(deploymentEnvVarsFlat));
+      
       const response = await fetch('/api/agent/deploy', {
         method: 'POST',
         headers: {
@@ -930,6 +950,7 @@ const AgentBuilderContent = memo(({
           documentId,
           projectName: agentData.name,
           description: agentData.description,
+          environmentVariables: deploymentEnvVarsFlat,
         }),
       });
 
@@ -985,6 +1006,126 @@ const AgentBuilderContent = memo(({
       }, 3000);
     }
   }, [agentData, documentId, onSaveContent]);
+
+  // Save environment variables to actions
+  const saveEnvVarsToActions = useCallback(async () => {
+    setIsSavingEnvVars(true);
+    try {
+      console.log('💾 Saving environment variables to actions...');
+      console.log('Current deploymentEnvVars:', deploymentEnvVars);
+      
+      // Update actions with saved environment variables
+      const updatedActions = agentData.actions?.map(action => {
+        const actionEnvVars = deploymentEnvVars[action.id];
+        if (actionEnvVars && action.execute?.code?.envVars) {
+          const updatedEnvVars = action.execute.code.envVars.map(envVar => ({
+            ...envVar,
+            savedValue: actionEnvVars[envVar.name] || envVar.savedValue || undefined
+          }));
+          
+          console.log(`Updating action ${action.name} with env vars:`, updatedEnvVars);
+          
+          return {
+            ...action,
+            execute: {
+              ...action.execute,
+              code: {
+                ...action.execute.code,
+                envVars: updatedEnvVars
+              }
+            }
+          };
+        }
+        return action;
+      }) || [];
+
+      // Update agent data with saved env vars
+      const updatedAgentData = {
+        ...agentData,
+        actions: updatedActions
+      };
+
+      // Save immediately to document
+      const agentContent = JSON.stringify(updatedAgentData, null, 2);
+      onSaveContent(agentContent, false); // Immediate save, no debounce
+      
+      // Update local state
+      updateAgentData(updatedAgentData);
+      
+      console.log('✅ Environment variables saved to actions and document');
+      toast.success('Environment variables saved successfully!');
+      
+    } catch (error) {
+      console.error('❌ Failed to save environment variables:', error);
+      toast.error('Failed to save environment variables');
+    } finally {
+      setIsSavingEnvVars(false);
+    }
+  }, [agentData, deploymentEnvVars, updateAgentData, onSaveContent]);
+
+  // Check if all required environment variables are filled
+  const areAllEnvVarsFilled = useCallback(() => {
+    const actionsWithEnvVars = agentData.actions?.filter(action => 
+      action.execute?.code?.envVars?.some(envVar => envVar.required)
+    ) || [];
+
+    for (const action of actionsWithEnvVars) {
+      const requiredEnvVars = action.execute?.code?.envVars?.filter(envVar => envVar.required) || [];
+      for (const envVar of requiredEnvVars) {
+        if (!deploymentEnvVars[action.id]?.[envVar.name]?.trim()) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }, [agentData.actions, deploymentEnvVars]);
+
+  // Helper functions for collapsible actions
+  const toggleActionCollapsed = useCallback((actionId: string) => {
+    setCollapsedActions(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(actionId)) {
+        newSet.delete(actionId);
+      } else {
+        newSet.add(actionId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const getUnfilledCount = useCallback((action: any) => {
+    const requiredEnvVars = action.execute?.code?.envVars?.filter((envVar: any) => envVar.required) || [];
+    return requiredEnvVars.filter((envVar: any) => !deploymentEnvVars[action.id]?.[envVar.name]?.trim()).length;
+  }, [deploymentEnvVars]);
+
+  // Initialize environment variables and reset deployment step when modal opens
+  useEffect(() => {
+    if (showDeploymentModal && agentData.actions) {
+      // Reset to confirmation step
+      setDeploymentStep('confirm');
+      setIsDeploying(false);
+      
+      const initialEnvVars: Record<string, Record<string, string>> = {};
+      
+      agentData.actions.forEach(action => {
+        if (action.execute?.code?.envVars?.length) {
+          initialEnvVars[action.id] = {};
+          action.execute.code.envVars.forEach(envVar => {
+            // Use saved value if available, otherwise empty string
+            initialEnvVars[action.id][envVar.name] = envVar.savedValue || '';
+          });
+        }
+      });
+      
+      setDeploymentEnvVars(initialEnvVars);
+      
+      // Initially collapse all actions
+      const actionIds = agentData.actions
+        .filter(action => action.execute?.code?.envVars?.length)
+        .map(action => action.id);
+      setCollapsedActions(new Set(actionIds));
+    }
+  }, [showDeploymentModal, agentData.actions]);
 
   // Agent actions hooks
   const { addModel, addSchedule, addAction } = useAgentActions(agentData, updateAgentData, updateMetadata);
@@ -1805,23 +1946,56 @@ const AgentBuilderContent = memo(({
         </div>
       </div>
       
-      {/* Deployment Modal */}
+      {/* Enhanced Deployment Modal */}
       <Dialog open={showDeploymentModal} onOpenChange={setShowDeploymentModal}>
-        <DialogContent className="w-[calc(100vw-2rem)] max-w-[500px] max-h-[80vh] overflow-y-auto bg-black/95 border-green-500/20 backdrop-blur-xl">
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-[550px] max-h-[90vh] overflow-y-auto bg-black/95 border-green-500/20 backdrop-blur-xl z-[70]">
           <DialogHeader>
             <DialogTitle className="text-green-200 font-mono text-xl flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-green-600 to-green-700 flex items-center justify-center">
                 <span className="text-black text-lg">🚀</span>
               </div>
-              Agent Saved Successfully!
+              {deploymentStep === 'confirm' ? 'Deploy Your Agent' : 
+               deploymentStep === 'configure' ? 'Configure Environment Variables' : 
+               'Deploying Agent...'}
             </DialogTitle>
             <DialogDescription className="text-green-400 font-mono">
-              Your agent "<span className="text-green-200 font-semibold">{agentData.name}</span>" has been saved.
+              {deploymentStep === 'confirm' ? `Ready to deploy "${agentData.name}" to production?` :
+               deploymentStep === 'configure' ? `Configure required environment variables for "${agentData.name}".` :
+               `Deploying "${agentData.name}" to production...`
+              }
             </DialogDescription>
           </DialogHeader>
           
-          {/* Deployment Progress */}
-          {isDeploying && (
+                    {/* Step 1: Deployment Confirmation */}
+          {deploymentStep === 'confirm' && (
+            <div className="space-y-4 mt-6">
+              <div className="p-4 rounded-xl bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/20 text-center">
+                <div className="flex items-center justify-center gap-3 mb-3">
+                  <div className="w-3 h-3 rounded-full bg-blue-400"></div>
+                  <span className="text-blue-200 font-medium">Ready for Deployment</span>
+                </div>
+                <p className="text-blue-400/80 text-sm">
+                  Your agent will be deployed to production with all current configurations.
+                </p>
+              </div>
+
+              {/* Show deployment info if already deployed */}
+              {deploymentInfo?.deploymentUrl && (
+                <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-emerald-500/20">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+                    <span className="text-emerald-200 font-medium">Currently Deployed</span>
+                  </div>
+                  <div className="text-sm text-emerald-400/80 ml-5">
+                    Live at: <span className="text-emerald-200 font-mono break-all">{deploymentInfo.deploymentUrl}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 2: Deployment Progress */}
+          {deploymentStep === 'deploying' && (
             <div className="flex flex-col gap-4 mt-6">
               <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
                 <div className="flex items-center gap-3 mb-2">
@@ -1835,83 +2009,235 @@ const AgentBuilderContent = memo(({
             </div>
           )}
 
-          {/* Show different content based on deployment state */}
-          {!isDeploying && (
-            <div className="flex flex-col gap-4 mt-6">
-              {deploymentInfo?.deploymentUrl ? (
-                // Agent is already deployed
-                <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/20">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-green-600 rounded-full" />
-                    <span className="text-green-200 font-medium font-mono">Already Deployed</span>
+          {/* Step 3: Environment Variables Configuration */}
+          {deploymentStep === 'configure' && (
+            <div className="space-y-4 mt-6">
+              {(() => {
+                const actionsWithEnvVars = agentData.actions?.filter(action => 
+                  action.execute?.code?.envVars?.length
+                ) || [];
+
+                if (actionsWithEnvVars.length === 0) {
+                  return (
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-emerald-500/20">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+                        <span className="text-emerald-200 font-medium">Ready to Deploy</span>
+                      </div>
+                      <p className="text-emerald-400/80 text-sm mt-2 ml-5">
+                        No environment variables required. Your agent is ready for deployment.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    {/* Header */}
+                    <div className="text-center py-2">
+                      <h3 className="text-white font-medium text-lg">Environment Variables</h3>
+                      <p className="text-gray-400 text-sm mt-1">
+                        Configure required variables for your actions
+                      </p>
+                    </div>
+
+                    {/* Actions List */}
+                    <div className="space-y-2">
+                      {actionsWithEnvVars.map(action => {
+                        const isCollapsed = collapsedActions.has(action.id);
+                        const unfilledCount = getUnfilledCount(action);
+                        const totalRequired = action.execute?.code?.envVars?.filter((envVar: any) => envVar.required).length || 0;
+                        const isComplete = unfilledCount === 0;
+                        
+                        return (
+                          <div key={action.id} className="border border-gray-700 rounded-xl overflow-hidden bg-gray-900/50">
+                            {/* Header */}
+                            <div 
+                              className="px-4 py-3 cursor-pointer hover:bg-gray-800/50 transition-colors flex items-center justify-between"
+                              onClick={() => toggleActionCollapsed(action.id)}
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="text-xl">{action.emoji || '⚡'}</span>
+                                <div className="flex-1">
+                                  <h4 className="text-white font-medium text-sm">{action.name}</h4>
+                                  <p className="text-gray-400 text-xs truncate max-w-[200px]">{action.description}</p>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-3">
+                                {/* Status indicator */}
+                                <div className="flex items-center gap-2">
+                                  {isComplete ? (
+                                    <div className="flex items-center gap-1">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div>
+                                      <span className="text-emerald-400 text-xs font-medium">Complete</span>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1">
+                                      <div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div>
+                                      <span className="text-amber-400 text-xs font-medium">{unfilledCount} missing</span>
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Expand icon */}
+                                <div className={`transform transition-transform duration-200 ${isCollapsed ? 'rotate-0' : 'rotate-180'}`}>
+                                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Content */}
+                            {!isCollapsed && (
+                              <div className="px-4 pb-4 border-t border-gray-700/50">
+                                <div className="space-y-3 pt-3">
+                                  {action.execute?.code?.envVars?.map((envVar, index) => (
+                                    <div key={index} className="space-y-1.5">
+                                      <div className="flex items-center gap-2">
+                                        <Label className="text-gray-300 text-sm font-medium">
+                                          {envVar.name}
+                                        </Label>
+                                        {envVar.required && (
+                                          <span className="text-red-400 text-xs">*</span>
+                                        )}
+                                        {envVar.sensitive && (
+                                          <span className="px-1.5 py-0.5 rounded text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                            Sensitive
+                                          </span>
+                                        )}
+                                      </div>
+                                      <Input
+                                        type={envVar.sensitive ? 'password' : 'text'}
+                                        value={deploymentEnvVars[action.id]?.[envVar.name] || ''}
+                                        onChange={(e) => setDeploymentEnvVars(prev => ({
+                                          ...prev,
+                                          [action.id]: {
+                                            ...prev[action.id],
+                                            [envVar.name]: e.target.value
+                                          }
+                                        }))}
+                                        placeholder={envVar.description}
+                                        className="h-9 bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg text-sm"
+                                      />
+                                      {envVar.description && (
+                                        <p className="text-xs text-gray-500">{envVar.description}</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Save Button */}
+                    {actionsWithEnvVars.length > 0 && (
+                      <div className="pt-2">
+                        <Button
+                          onClick={saveEnvVarsToActions}
+                          disabled={isSavingEnvVars}
+                          className="w-full h-10 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+                        >
+                          {isSavingEnvVars ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-4 h-4 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+                              <span>Saving...</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3-3m0 0l-3 3m3-3v12" />
+                              </svg>
+                              <span>Save Environment Variables</span>
+                            </div>
+                          )}
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-sm text-green-400 font-mono mb-3 ml-4">
-                    Your agent is live at: <span className="text-green-200 break-all">{deploymentInfo.deploymentUrl}</span>
-                  </div>
-                  <ul className="text-sm text-green-400 font-mono space-y-1 ml-4">
-                    <li>• Redeploy with latest changes</li>
-                    <li>• Manage deployment settings</li>
-                    <li>• Monitor performance</li>
-                  </ul>
-                </div>
-              ) : (
-                // Agent is being auto-deployed in background
-                <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/20">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-1 h-6 bg-gradient-to-b from-blue-500 to-blue-600 rounded-full animate-pulse" />
-                    <span className="text-blue-200 font-medium font-mono">Auto-Deploying</span>
-                  </div>
-                  <ul className="text-sm text-blue-400 font-mono space-y-1 ml-4">
-                    <li>• Configuring deployment environment</li>
-                    <li>• Setting up database connections</li>
-                    <li>• Deploying agent to production</li>
-                    <li>• Setting up monitoring</li>
-                  </ul>
-                  <div className="flex items-center gap-2 text-blue-300/60 text-xs font-mono mt-3">
-                    <span className="animate-spin">⚡</span>
-                    <span>Deployment happens automatically after database generation</span>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           )}
           
-          {!isDeploying && (
-            <DialogFooter className="gap-3 mt-6">
+          {/* Footer Buttons */}
+          {deploymentStep !== 'deploying' && (
+            <DialogFooter className="flex gap-3 mt-6 pt-4 border-t border-gray-700/50">
               <Button
                 variant="outline"
-                onClick={() => setShowDeploymentModal(false)}
-                className="btn-matrix border-green-500/30 hover:border-green-500/50 text-white hover:text-green-200 bg-transparent hover:bg-green-500/10"
+                onClick={() => {
+                  if (deploymentStep === 'confirm') {
+                    setShowDeploymentModal(false);
+                  } else if (deploymentStep === 'configure') {
+                    setDeploymentStep('confirm');
+                  }
+                }}
+                className="flex-1 h-10 bg-transparent border-gray-600 text-gray-300 hover:bg-gray-800 hover:border-gray-500 hover:text-white transition-colors"
               >
-                <span className="font-mono">Close</span>
+                {deploymentStep === 'confirm' ? 'Cancel' : 'Back'}
               </Button>
               
-              {deploymentInfo?.deploymentUrl ? (
-                // Show publish button for deployed agents
+              {deploymentStep === 'confirm' && (
+                <>
+                  {(() => {
+                    const actionsWithEnvVars = agentData.actions?.filter(action => 
+                      action.execute?.code?.envVars?.some(envVar => envVar.required)
+                    ) || [];
+                    
+                    if (actionsWithEnvVars.length > 0) {
+                      return (
+                        <Button
+                          onClick={() => setDeploymentStep('configure')}
+                          className="flex-1 h-10 bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                          <span>Configure Environment Variables</span>
+                        </Button>
+                      );
+                    } else {
+                      return (
+                        <Button
+                          onClick={deployAgent}
+                          className="flex-1 h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-medium transition-colors flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                          </svg>
+                          <span>
+                            {deploymentInfo?.deploymentUrl ? 'Redeploy Agent' : 'Deploy Agent'}
+                          </span>
+                        </Button>
+                      );
+                    }
+                  })()}
+                </>
+              )}
+              
+              {deploymentStep === 'configure' && (
                 <Button
-                  onClick={() => {
-                    setShowDeploymentModal(false);
-                    // Navigate to deployment page with chatId
-                    const deploymentUrl = chatId 
-                      ? `/deployment?chatId=${chatId}`
-                      : '/deployment';
-                    router.push(deploymentUrl);
-                  }}
-                  className="btn-matrix bg-green-600 hover:bg-green-700 text-black font-bold"
+                  onClick={deployAgent}
+                  disabled={!areAllEnvVarsFilled()}
+                  className={cn(
+                    "flex-1 h-10 font-medium transition-colors flex items-center justify-center gap-2",
+                    areAllEnvVarsFilled()
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "bg-gray-700 text-gray-500 cursor-not-allowed"
+                  )}
                 >
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono">Publish Agent</span>
-                    <span>🚀</span>
-                  </div>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                  <span>
+                    {deploymentInfo?.deploymentUrl ? 'Redeploy Agent' : 'Deploy Agent'}
+                  </span>
                 </Button>
-              ) : (
-                // Auto-deployment info for new agents
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg px-4 py-2">
-                  <div className="flex items-center gap-2 text-blue-300 text-sm font-mono">
-                    <span className="animate-pulse">🤖</span>
-                    <span>Auto-deploying after database setup...</span>
-                  </div>
-                </div>
               )}
             </DialogFooter>
           )}

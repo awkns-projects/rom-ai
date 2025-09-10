@@ -417,7 +417,7 @@ class FullOrchestratorTest {
           // Log operation metadata
           if (data.actionId) console.log(`   🔧 Action ID: ${data.actionId}`);
           if (data.actionName) console.log(`   📝 Action Name: ${data.actionName}`);
-          if (data.actionType) console.log(`   📊 Action Type: ${data.actionType}`);
+          if (data.model) console.log(`   📊 Model: ${data.model}`);
           if (data.timestamp) console.log(`   ⏰ Timestamp: ${data.timestamp}`);
 
           this.logResult(

@@ -386,7 +386,7 @@ export async function executeStep0BTechnicalAggregation(
 ${existingAgent ? `
 EXISTING SYSTEM:
 Models: ${existingAgent.models?.map(m => `${m.name} (${m.fields?.map(f => f.name).join(', ') || 'no fields'})`).join(', ') || 'none'}
-Actions: ${existingAgent.actions?.map(a => `${a.name} (${a.type})`).join(', ') || 'none'}
+Actions: ${existingAgent.actions?.map(a => a.name).join(', ') || 'none'}
 Schedules: ${existingAgent.schedules?.map(s => `${s.name} (${s.interval?.pattern || 'no pattern'})`).join(', ') || 'none'}
 
 IMPORTANT: For each model, field, enum, action, and schedule, determine if it should be:
@@ -441,7 +441,6 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    - For NEW actions: operation="create"
    - Existing actions: ${existingAgent.actions?.map(a => a.name).join(', ') || 'none'}
    ` : 'All actions are new (operation="create")'}
-   - Type: MUST be either 'query' (read data) or 'mutation' (write/modify data)
    - Operation: MUST be either 'create' (new action) or 'update' (modify existing action)
    
    CRITICAL: Generate BUSINESS PROCESS ACTIONS, not basic CRUD operations
@@ -468,12 +467,10 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    - For NEW schedules: operation="create"  
    - Existing schedules: ${existingAgent.schedules?.map(s => s.name).join(', ') || 'none'}
    ` : 'All schedules are new (operation="create")'}
-   - Type: MUST be either 'query' (read data) or 'mutation' (write/modify data)
    - Operation: MUST be either 'create' (new schedule) or 'update' (modify existing schedule)
    - Frequency: daily, weekly, or monthly
    - Automated recurring operations that run without user intervention
    - Define frequency and timing
-   - Include role requirements (admin/member)
    - Specify expected outputs
    - If external APIs are specified, design schedules that sync with or process those APIs' data
 
@@ -763,19 +760,7 @@ export function validateStep0Output(output: Step0Output): boolean {
       return false;
     }
     
-    // Validate type field for actions and schedules (query/mutation)
-    const actionsWithoutType = output.actions.filter(a => !a.type);
-    const schedulesWithoutType = output.schedules.filter(s => !s.type);
-    
-    if (actionsWithoutType.length > 0) {
-      console.warn(`⚠️ Actions missing type (query/mutation): ${actionsWithoutType.map(a => a.name).join(', ')}`);
-      return false;
-    }
-    
-    if (schedulesWithoutType.length > 0) {
-      console.warn(`⚠️ Schedules missing type (query/mutation): ${schedulesWithoutType.map(s => s.name).join(', ')}`);
-      return false;
-    }
+    // Type validation removed - actions and schedules no longer have type fields
     
     // Validate update descriptions for update operations
     const modelsNeedingDescriptions = output.models.filter(m => m.operation === 'update' && !m.updateDescription);

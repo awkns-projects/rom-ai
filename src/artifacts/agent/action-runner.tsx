@@ -42,7 +42,6 @@ interface AgentAction {
     };
   };
   results: {
-    actionType: 'Create' | 'Update';
     model: string;
     identifierIds?: string[];
     fields?: Record<string, any>;

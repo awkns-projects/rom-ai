@@ -5,6 +5,7 @@ import { getAgentBuilderModel } from '../generation';
 import type { AgentAction, AgentData } from '../types';
 import type { Step0Output } from './step0-comprehensive-analysis';
 import type { Step1Output } from './step1-database-generation';
+import { sanitizeAgentName, generateUniqueId, sanitizeEnvironmentVariables } from '../utils';
 
 /**
  * STEP 2: Action Generation & API Design
@@ -66,7 +67,6 @@ const CodeGenerationSchema = z.object({
 async function generateActionPseudoSteps(
   actionName: string,
   actionDescription: string,
-  actionType: 'query' | 'mutation',
   availableModels: any[],
   businessContext: string
 ): Promise<any[]> {
@@ -76,7 +76,6 @@ async function generateActionPseudoSteps(
   return await generatePseudoSteps(
     actionName,
     actionDescription,
-    actionType,
     availableModels || [],
     'action', // entityType
     businessContext
@@ -111,7 +110,6 @@ async function generateActionUIComponents(
 async function generateActionExecutableCode(
   actionName: string,
   actionDescription: string,
-  actionType: 'query' | 'mutation',
   pseudoSteps: any[],
   availableModels: any[],
   businessContext: string,
@@ -244,30 +242,63 @@ CODE GENERATION REQUIREMENTS:
 7. EXTERNAL API CALLS:
    For "call external api" step type, use fetch() with proper authentication and environment handling:
    
-   // OAuth2 API example with test/live environment support:
-   const isTestMode = envVars.ENVIRONMENT === 'test' || envVars.NODE_ENV === 'development';
+   // API Key authentication example with test/live environment support:
    const baseUrl = isTestMode ? envVars.API_BASE_URL_TEST : envVars.API_BASE_URL;
-   const accessToken = isTestMode ? envVars.OAUTH_ACCESS_TOKEN_TEST : envVars.OAUTH_ACCESS_TOKEN;
+   const apiKey = isTestMode ? envVars.API_KEY_TEST : envVars.API_KEY;
    
    const apiResponse = await fetch(\`\${baseUrl}/endpoint\`, {
      method: 'POST',
      headers: { 
-       'Authorization': \`Bearer \${accessToken}\`,
+       'Authorization': \`Bearer \${apiKey}\`,
        'Content-Type': 'application/json'
      },
      body: JSON.stringify(requestData)
    });
+   
+   // For OAuth APIs, tokens are provided through user authentication flow, not envVars
+   // Use the oauth context provided by the system instead of environment variables
 
 8. RETURN FORMAT:
    Always return: { success: boolean, data: any, count: number, message: string, executionTime: number }
    Where data contains the processed results array and count is the number of items processed.
 
-9. PERFORMANCE:
-   - Include execution time tracking
-   - Handle errors gracefully
-   - Use appropriate database queries (findUnique vs findMany)
-   - Minimize API calls
-   - Process items efficiently in batches where possible
+9. ENVIRONMENT VARIABLES:
+   ONLY generate environment variables for external APIs that use API KEY authentication:
+   - API keys (e.g., STRIPE_API_KEY, OPENAI_API_KEY)
+   - API base URLs for API key services (e.g., OPENAI_BASE_URL)
+   - API-specific configuration for API key services (e.g., STRIPE_WEBHOOK_SECRET)
+   
+   CRITICAL ENVIRONMENT VARIABLE NAMING RULES:
+   ⚠️ ABSOLUTELY NO ACTION NAMES IN ENVIRONMENT VARIABLES ⚠️
+   
+   - Use ONLY the API provider name as the prefix (e.g., "INSTAGRAM", "GOOGLE_SHEETS", "STRIPE", "OPENAI")
+   - NEVER EVER include the action name in environment variable names
+   - NEVER use hyphens, spaces, or special characters - only letters, numbers, and underscores
+   - Environment variables must start with a letter or underscore, not a number
+   
+   ✅ CORRECT EXAMPLES:
+   - "INSTAGRAM_API_KEY" (not "TRACK-PERFORMANCE-ANALYTICS_INSTAGRAM_API_KEY")
+   - "GOOGLE_SHEETS_API_KEY" (not "PLAN-CONTENT-CALENDAR_GOOGLE_SHEETS_API_KEY")
+   - "STRIPE_API_KEY" (not "MANAGE-PAYMENTS_STRIPE_API_KEY")
+   
+   ❌ WRONG EXAMPLES (DO NOT GENERATE THESE):
+   - "TRACK-PERFORMANCE-ANALYTICS_INSTAGRAM_API_KEY" ← Contains action name + hyphens
+   - "PLAN-CONTENT-CALENDAR_LATER_API_KEY" ← Contains action name + hyphens
+   - "MANAGE-BRAND-OUTREACH_INSTAGRAM_API_BASE_URL" ← Contains action name + hyphens
+   
+   DO NOT generate environment variables for OAuth-based APIs:
+   - OAuth APIs (Gmail, Slack, Shopify, Facebook, LinkedIn, etc.) use user authentication flow
+   - OAuth tokens are provided by the system, not through environment variables
+   - If an API uses OAuth, generate NO environment variables for it
+   
+   NEVER generate system environment variables like:
+   - NODE_ENV, ENVIRONMENT, PORT, DATABASE_URL, NEXTAUTH_SECRET
+   - Any internal application configuration variables
+   - Any variables starting with NEXT_, VERCEL_, or other framework prefixes
+   
+   AUTHENTICATION METHOD REFERENCE:
+   - OAuth APIs (no env vars needed): Gmail, Slack, Shopify, Facebook, LinkedIn, Instagram, Google Calendar, Microsoft Teams, Notion, Salesforce, HubSpot
+   - API Key APIs (env vars needed): Stripe, OpenAI, generic REST APIs
 
 `;
 
@@ -284,7 +315,6 @@ CODE GENERATION REQUIREMENTS:
         content: `Generate executable JavaScript code for: ${actionName}
 
 Action Description: ${actionDescription}
-Action Type: ${actionType}
 
 Pseudo Steps:
 ${pseudoSteps.map((step: any, index: number) => 
@@ -305,9 +335,16 @@ Generate complete, executable code that can run in production with real data and
     temperature: 0.2,
   });
 
+  // Sanitize environment variable names
+  const envVarSanitization = sanitizeEnvironmentVariables(result.object.envVars || []);
+  
+  if (envVarSanitization.invalid.length > 0) {
+    console.warn(`⚠️ Action "${actionName}": ${envVarSanitization.invalid.length} environment variables could not be sanitized:`, envVarSanitization.invalid);
+  }
+
   return {
     code: result.object.code,
-    envVars: result.object.envVars,
+    envVars: envVarSanitization.sanitized,
     inputParameters: extractedInputParams.length > 0 ? extractedInputParams : result.object.inputParameters,
     outputParameters: result.object.outputParameters,
     estimatedExecutionTime: result.object.estimatedExecutionTime,
@@ -441,7 +478,7 @@ Generate 3-5 meaningful business process actions that can work independently OR 
       actions: z.array(z.object({
         name: z.string().describe('Business process action name (e.g., "Sync Customer Data", "Generate Sales Report")'),
         purpose: z.string().describe('Detailed description of the complete workflow including external API integrations'),
-        type: z.enum(['query', 'mutation']).describe('query for data analysis/retrieval, mutation for data modification/creation'),
+
         operation: z.literal('create').describe('All generated actions are new'),
         businessValue: z.string().describe('Explanation of the business value and automation benefit'),
         expectedOutputs: z.array(z.string()).describe('List of key outputs this action produces that could be used by other actions (e.g., "customerId", "reportUrl", "processedData")').optional(),
@@ -485,7 +522,6 @@ Generate actions that represent complete business processes AND can be chained t
   return result.object.actions.map(action => ({
     name: action.name,
     purpose: action.purpose,
-    type: action.type,
     operation: action.operation,
     _aiGenerated: true,
     businessValue: action.businessValue,
@@ -504,18 +540,21 @@ async function createCompleteAction(
   entityType: string,
   existingActions: any[] = []
 ): Promise<any> {
-  const actionName = actionSpec.name;
+  const rawActionName = actionSpec.name;
+  const actionName = sanitizeAgentName(rawActionName); // Sanitize the action name
   const actionDescription = actionSpec.purpose || actionSpec.description;
-  const actionType = actionSpec.type || 'mutation';
   
-  console.log(`🚀 Creating complete action: ${actionName} (${actionType})`);
+  if (rawActionName !== actionName) {
+    console.log(`🔧 Action name sanitized: "${rawActionName}" → "${actionName}"`);
+  }
+  
+  console.log(`🚀 Creating complete action: ${actionName}`);
   
   try {
     // Step 2A: Generate Pseudo Steps (like /generate-steps)
     const pseudoSteps = await generateActionPseudoSteps(
       actionName,
       actionDescription,
-      actionType,
       availableModels,
       businessContext
     );
@@ -537,7 +576,6 @@ async function createCompleteAction(
     const codeResult = await generateActionExecutableCode(
       actionName,
       actionDescription,
-      actionType,
       pseudoSteps,
       availableModels,
       businessContext,
@@ -548,10 +586,9 @@ async function createCompleteAction(
     
     // Assemble complete action with all components
     const completeAction: any = {
-      id: actionSpec.id || `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: actionSpec.id || generateUniqueId('action'),
       name: actionName,
       description: actionDescription,
-      type: actionType,
       role: actionSpec.role || 'member',
       
       // Step 2A results: Pseudo Steps
@@ -589,10 +626,9 @@ async function createCompleteAction(
         }
       },
       results: {
-        actionType: 'Create' as const,
         model: actionName,
-        identifierIds: [],
-        fields: {}
+        fields: {},
+        fieldsToUpdate: {}
       }
     };
     
@@ -604,10 +640,9 @@ async function createCompleteAction(
     
     // Return a fallback action with basic structure
     return {
-      id: actionSpec.id || `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: actionSpec.id || generateUniqueId('action'),
       name: actionName,
       description: actionDescription,
-      type: actionType,
       role: actionSpec.role || 'member',
       execute: {
         type: 'prompt' as const,
@@ -624,10 +659,9 @@ async function createCompleteAction(
         }
       },
       results: {
-        actionType: 'Create' as const,
         model: actionName,
-        identifierIds: [],
-        fields: {}
+        fields: {},
+        fieldsToUpdate: {}
       },
       _internal: {
         hasRealCode: false,

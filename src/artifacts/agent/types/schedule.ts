@@ -43,11 +43,9 @@ export interface LegacyAgentSchedule {
     };
   };
   results: {
-    actionType: 'Create' | 'Update';
     model: string;
-    identifierIds?: string[];
-    fields?: Record<string, any>;
-    fieldsToUpdate?: Record<string, any>;
+    fields: Record<string, any>;
+    fieldsToUpdate: Record<string, any>;
   };
 }
 

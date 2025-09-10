@@ -351,9 +351,10 @@ export const ActionsListEditor = memo(({
         }
       },
       results: {
-        actionType: 'Create',
-        model: '',
-        fields: {}
+        model: 'Customer',
+        identifierIds: ['id'],
+        fields: {},
+        fieldsToUpdate: {}
       }
     };
     onUpdate([...actions, newAction]);
@@ -453,7 +454,7 @@ export const ActionsListEditor = memo(({
                   <div className="flex-1 min-w-0">
                     <h4 className="text-base sm:text-lg font-semibold text-green-200 font-mono break-words">{action.name || 'Unnamed Action'}</h4>
                     <p className="text-green-400 text-xs sm:text-sm font-mono mb-2">
-                      {action.role} • {action.execute?.type || 'Not configured'} • {action.results?.actionType || 'Not configured'}
+                      {action.role} • {action.execute?.type || 'Not configured'}
                     </p>
                     {action.description && (
                       <p className="text-green-300/80 text-xs sm:text-sm font-mono leading-relaxed">
