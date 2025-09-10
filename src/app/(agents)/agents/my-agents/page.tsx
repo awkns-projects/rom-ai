@@ -47,7 +47,7 @@ export default async function Page() {
                 </p>
                 <div className="flex justify-center gap-4">
                   <a 
-                    href="/my-agents/new" 
+                    href="/agents/my-agents/chat" 
                     className="bg-green-600/20 border border-green-500/30 text-green-200 hover:bg-green-600/30 hover:border-green-500/50 px-6 py-3 rounded-xl font-mono transition-all duration-200 flex items-center gap-2"
                   >
                     <span>✨</span>

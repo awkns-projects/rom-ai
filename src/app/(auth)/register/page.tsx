@@ -42,7 +42,7 @@ export default function Page() {
       setIsSuccessful(true);
       updateSession().then(() => {
         setTimeout(() => {
-          router.push('/chat');
+          router.push('/');
         }, 100);
       });
     }

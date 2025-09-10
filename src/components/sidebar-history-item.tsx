@@ -101,7 +101,7 @@ const PureChatItem = ({
   return (
     <div className={`relative group ${isActive ? 'ring-2 ring-green-500' : ''}`}>
       <Link 
-        href={`/chat/${chat.id}`} 
+        href={`/agents/my-agents/chat/${chat.id}`} 
         onClick={() => setOpenMobile(false)}
         className={`block p-4 rounded-xl border transition-all duration-200 hover:shadow-lg hover:scale-[1.02] ${
           isActive 

@@ -10,203 +10,36 @@ interface PrivyLoginButtonProps {
   callbackUrl?: string
 }
 
-export function PrivyLoginButton({ className, callbackUrl = '/chat' }: PrivyLoginButtonProps) {
+export function PrivyLoginButton({ className, callbackUrl = '/' }: PrivyLoginButtonProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [isPrivyConfigured, setIsPrivyConfigured] = useState<boolean | null>(null)
   const { login, authenticated, getAccessToken } = usePrivy()
 
-  // Check if Privy is configured
-  const isPrivyConfigured = process.env.NEXT_PUBLIC_PRIVY_APP_ID
-
-//   const handlePrivyLogin = async () => {
-//     if (!isPrivyConfigured) {
-//       console.error('❌ Privy is not configured. Please set NEXT_PUBLIC_PRIVY_APP_ID environment variable.')
-//       alert(`Privy authentication is not configured. 
-
-// To enable Privy:
-// 1. Go to console.privy.io
-// 2. Create an app and copy your App ID
-// 3. Add to .env.local:
-//    # Client-side (for React components)
-//    NEXT_PUBLIC_PRIVY_APP_ID="your-app-id"
-   
-//    # Server-side (for JWT verification)
-//    PRIVY_APP_ID="your-app-id"  
-//    PRIVY_APP_SECRET="your-app-secret"
-// 4. Restart the dev server
-
-// See setup-privy.md for details.`)
-//       return
-//     }
-
-//     try {
-//       setIsLoading(true)
-//       console.log('🔐 Starting Privy authentication...')
-
-//       // If not authenticated, trigger Privy login
-//       if (!authenticated) {
-//         console.log('🚀 Opening Privy login modal...')
-//         await login() // Opens Privy modal
-//         console.log('✅ Privy login completed')
-//       }
-      
-//       // Get the Privy access token (JWT)
-//       console.log('🔑 Getting Privy access token...')
-//       const token = await getAccessToken()
-//       if (!token) {
-//         console.error('❌ Failed to get Privy access token')
-//         console.log('🔍 Debug info:', { 
-//           authenticated, 
-//           hasPrivyAppId: !!process.env.NEXT_PUBLIC_PRIVY_APP_ID 
-//         })
-//         alert(`Failed to get authentication token. 
-
-// This usually means:
-// 1. Privy environment variables are missing
-// 2. User canceled the login process
-// 3. Network connectivity issues
-
-// Check the console for more details.`)
-//         return
-//       }
-
-//       console.log('✅ Got Privy token, signing in with NextAuth...')
-      
-//       // Hand the token to NextAuth Privy credentials provider
-//       const result = await signIn('privy', { 
-//         token,
-//         redirect: false,
-//       })
-      
-//       if (result?.ok) {
-//         console.log('✅ NextAuth sign-in successful, redirecting...')
-//         window.location.href = callbackUrl
-//       } else {
-//         console.error('❌ NextAuth sign-in failed:', result)
-//         alert(`NextAuth sign-in failed: ${result?.error || 'Unknown error'}
-
-// This usually means:
-// 1. Server-side Privy configuration is missing (PRIVY_APP_SECRET)
-// 2. JWT token verification failed
-// 3. Database connection issues
-
-// Check server logs for more details.`)
-//       }
-//     } catch (error) {
-//       console.error('❌ Privy login error:', error)
-//       alert(`Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}
-
-// Please try again or contact support if the issue persists.`)
-//     } finally {
-//       setIsLoading(false)
-//     }
-//   }
+  // Check if Privy is configured (client-side only to prevent hydration issues)
+  useEffect(() => {
+    setIsPrivyConfigured(!!process.env.NEXT_PUBLIC_PRIVY_APP_ID)
+  }, [])
 
   const handlePrivyLogin = async () => {
-//     if (!isPrivyConfigured) {
-//       console.error('❌ Privy is not configured. Please set NEXT_PUBLIC_PRIVY_APP_ID environment variable.')
-//       alert(`Privy authentication is not configured. 
-
-// To enable Privy:
-// 1. Go to console.privy.io
-// 2. Create an app and copy your App ID
-// 3. Add to .env.local:
-//    # Client-side (for React components)
-//    NEXT_PUBLIC_PRIVY_APP_ID="your-app-id"
-   
-//    # Server-side (for JWT verification)
-//    PRIVY_APP_ID="your-app-id"  
-//    PRIVY_APP_SECRET="your-app-secret"
-// 4. Restart the dev server
-
-// See setup-privy.md for details.`)
-//       return
-//     }
-
-//     try {
-//       setIsLoading(true)
-//       console.log('🔐 Starting Privy authentication...')
-
-//       // If not authenticated, trigger Privy login
-//       if (!authenticated) {
-//         console.log('🚀 Opening Privy login modal...')
-//         await login() // Opens Privy modal
-//         console.log('✅ Privy login completed')
-//       }
-      
-//       // Get the Privy access token (JWT)
-//       console.log('🔑 Getting Privy access token...')
-//       const token = await getAccessToken()
-//       if (!token) {
-//         console.error('❌ Failed to get Privy access token')
-//         console.log('🔍 Debug info:', { 
-//           authenticated, 
-//           hasPrivyAppId: !!process.env.NEXT_PUBLIC_PRIVY_APP_ID 
-//         })
-//         alert(`Failed to get authentication token. 
-
-// This usually means:
-// 1. Privy environment variables are missing
-// 2. User canceled the login process
-// 3. Network connectivity issues
-
-// Check the console for more details.`)
-//         return
-//       }
-
-//       console.log('✅ Got Privy token, signing in with NextAuth...')
-      
-//       // Hand the token to NextAuth Privy credentials provider
-//       const result = await signIn('privy', { 
-//         token,
-//         redirect: false,
-//       })
-      
-//       if (result?.ok) {
-//         console.log('✅ NextAuth sign-in successful, redirecting...')
-//         window.location.href = callbackUrl
-//       } else {
-//         console.error('❌ NextAuth sign-in failed:', result)
-//         alert(`NextAuth sign-in failed: ${result?.error || 'Unknown error'}
-
-// This usually means:
-// 1. Server-side Privy configuration is missing (PRIVY_APP_SECRET)
-// 2. JWT token verification failed
-// 3. Database connection issues
-
-// Check server logs for more details.`)
-//       }
-//     } catch (error) {
-//       console.error('❌ Privy login error:', error)
-//       alert(`Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}
-
-// Please try again or contact support if the issue persists.`)
-//     } finally {
-//       setIsLoading(false)
-//     }
-
-
-
     await login() // Opens Privy modal
-
   }
 
   useEffect(() => {
-   async function handlePrivyLogin() {
-    if (authenticated) {
+    async function handlePrivyLogin() {
+      if (authenticated) {
+        const token = await getAccessToken()
 
-      const token = await getAccessToken()
-
-      const result = await signIn('privy', { 
-        token,
-        redirect: false,
-      })
-      
-      if (result?.ok) {
-        console.log('✅ NextAuth sign-in successful, redirecting...')
-        window.location.href = callbackUrl
-      } else {
-        console.error('❌ NextAuth sign-in failed:', result)
-        alert(`NextAuth sign-in failed: ${result?.error || 'Unknown error'}
+        const result = await signIn('privy', { 
+          token,
+          redirect: false,
+        })
+        
+        if (result?.ok) {
+          console.log('✅ NextAuth sign-in successful, redirecting...')
+          window.location.href = callbackUrl
+        } else {
+          console.error('❌ NextAuth sign-in failed:', result)
+          alert(`NextAuth sign-in failed: ${result?.error || 'Unknown error'}
 
 This usually means:
 1. Server-side Privy configuration is missing (PRIVY_APP_SECRET)
@@ -214,14 +47,25 @@ This usually means:
 3. Database connection issues
 
 Check server logs for more details.`)
+        }
       }
-      // window.location.href = callbackUrl
     }
-   }
 
-   handlePrivyLogin()
-    
+    handlePrivyLogin()
   }, [authenticated, callbackUrl])
+
+  // Show loading state while checking configuration
+  if (isPrivyConfigured === null) {
+    return (
+      <Button
+        disabled
+        className={`bg-gray-400 text-gray-600 cursor-not-allowed ${className}`}
+      >
+        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-600 border-t-transparent" />
+        Loading...
+      </Button>
+    )
+  }
 
   if (!isPrivyConfigured) {
     return (
@@ -249,7 +93,7 @@ Check server logs for more details.`)
       ) : (
         <>
           <span className="mr-2">🔐</span>
-          Continue with Privy
+          Continue without wallet
         </>
       )}
     </Button>
@@ -259,12 +103,15 @@ Check server logs for more details.`)
 /**
  * Alternative Privy login button for wallet-first authentication
  */
-export function PrivyWalletButton({ className, callbackUrl = '/chat' }: PrivyLoginButtonProps) {
+export function PrivyWalletButton({ className, callbackUrl = '/' }: PrivyLoginButtonProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [isPrivyConfigured, setIsPrivyConfigured] = useState<boolean | null>(null)
   const { connectWallet, authenticated, getAccessToken } = usePrivy()
 
-  // Check if Privy is configured
-  const isPrivyConfigured = process.env.NEXT_PUBLIC_PRIVY_APP_ID
+  // Check if Privy is configured (client-side only to prevent hydration issues)
+  useEffect(() => {
+    setIsPrivyConfigured(!!process.env.NEXT_PUBLIC_PRIVY_APP_ID)
+  }, [])
 
   const handleWalletConnect = async () => {
     if (!isPrivyConfigured) {
@@ -350,6 +197,19 @@ Please try again or contact support if the issue persists.`)
     }
   }
 
+  // Show loading state while checking configuration
+  if (isPrivyConfigured === null) {
+    return (
+      <Button
+        disabled
+        className={`bg-gray-400 text-gray-600 cursor-not-allowed ${className}`}
+      >
+        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-gray-600 border-t-transparent" />
+        Loading...
+      </Button>
+    )
+  }
+
   if (!isPrivyConfigured) {
     return (
       <Button
@@ -357,7 +217,7 @@ Please try again or contact support if the issue persists.`)
         className={`bg-gray-400 text-gray-600 cursor-not-allowed ${className}`}
       >
         <span className="mr-2">👛</span>
-        Wallet Not Available
+        Privy Not Configured
       </Button>
     )
   }
@@ -366,7 +226,7 @@ Please try again or contact support if the issue persists.`)
     <Button
       onClick={handleWalletConnect}
       disabled={isLoading}
-      className={`bg-gradient-to-r from-orange-500 to-red-500 hover:opacity-90 text-white transition-all duration-150 ${className}`}
+      className={`bg-gradient-to-r from-blue-500 to-cyan-500 hover:opacity-90 text-white transition-all duration-150 ${className}`}
     >
       {isLoading ? (
         <>

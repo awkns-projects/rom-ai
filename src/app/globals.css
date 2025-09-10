@@ -146,24 +146,9 @@
         font-family: 'Geist Mono', monospace;
     }
 
-    /* Matrix-inspired scrollbar styling */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
 
-    ::-webkit-scrollbar-track {
-        @apply bg-transparent;
-    }
 
-    ::-webkit-scrollbar-thumb {
-        @apply bg-green-500/30 rounded-full border border-green-500/20;
-        background-clip: content-box;
-    }
 
-    ::-webkit-scrollbar-thumb:hover {
-        @apply bg-green-500/50;
-    }
 
     /* Matrix glass morphism utility */
     .glass-morphism {

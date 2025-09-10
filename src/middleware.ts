@@ -205,7 +205,9 @@ export async function middleware(request: NextRequest) {
     // Only protect specific sensitive routes
     const protectedRoutes = [
       '/deployment',
-      '/auth-test'
+      '/auth-test',
+      '/tournaments',
+      '/agents'
     ];
 
     const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
@@ -237,8 +239,8 @@ export async function middleware(request: NextRequest) {
   // Handle authenticated users trying to access login/register
   const isGuest = guestRegex.test(token?.email ?? '');
   if (token && !isGuest && ['/login', '/register'].includes(pathname)) {
-    console.log(`↩️ Authenticated user accessing ${pathname}, redirecting to chat`);
-    return NextResponse.redirect(new URL('/chat', request.url));
+    console.log(`↩️ Authenticated user accessing ${pathname}, redirecting to home`);
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
   // Allow the request to continue

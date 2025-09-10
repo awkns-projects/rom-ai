@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/db';
 import { notification } from '@/lib/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 
 // GET /api/users/[userId]/notifications - Get user notifications
 export async function GET(
@@ -9,6 +9,7 @@ export async function GET(
   { params }: { params: { userId: string } }
 ) {
   try {
+    const { userId } = await params;
     const { searchParams } = new URL(request.url);
     const unreadOnly = searchParams.get('unreadOnly') === 'true';
     const limit = parseInt(searchParams.get('limit') || '50');
@@ -16,7 +17,7 @@ export async function GET(
     let query = db
       .select()
       .from(notification)
-      .where(eq(notification.userId, params.userId))
+      .where(eq(notification.userId, userId))
       .orderBy(desc(notification.createdAt))
       .limit(limit);
 
@@ -24,8 +25,7 @@ export async function GET(
       query = db
         .select()
         .from(notification)
-        .where(eq(notification.userId, params.userId))
-        .where(eq(notification.read, false))
+        .where(and(eq(notification.userId, userId), eq(notification.read, false)))
         .orderBy(desc(notification.createdAt))
         .limit(limit);
     }

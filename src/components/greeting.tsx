@@ -206,7 +206,7 @@ Please create a personalized AI agent that can help me with these specific needs
 
   const triggerChatStart = (message: string) => {
     // Update the URL to reflect the chat session
-    window.history.replaceState({}, '', `/chat/${chatId}`);
+    window.history.replaceState({}, '', `/agents/my-agents/chat/${chatId}`);
     
     // Use the append function to start the chat
     append({
@@ -299,7 +299,7 @@ Please create a personalized AI agent that can help me with these specific needs
   };
 
   const selectExistingChat = (chatId: string) => {
-    router.push(`/chat/${chatId}`);
+    router.push(`/agents/my-agents/chat/${chatId}`);
   };
 
   // Get all chats from paginated data
@@ -322,9 +322,9 @@ Please create a personalized AI agent that can help me with these specific needs
               <div className="w-24 h-24 bg-gradient-to-br from-purple-400 via-blue-500 to-green-500 rounded-3xl flex items-center justify-center shadow-xl">
                 <img src="/images/logo.png" alt="ROM" className="w-14 h-14" />
               </div>
-              {/* <div className="absolute -top-2 -right-2 w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center text-xl animate-pulse">
+               <div className="absolute -top-2 -right-2 w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center text-xl animate-pulse">
                 ✨
-              </div> */}
+              </div> 
             </div>
           </motion.div>
           
@@ -334,7 +334,7 @@ Please create a personalized AI agent that can help me with these specific needs
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3, duration: 0.6 }}
           >
-            Welcome to ROM Cards
+            Build Your AI Agent
           </motion.h1>
           
           <motion.p 
@@ -343,7 +343,7 @@ Please create a personalized AI agent that can help me with these specific needs
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.6 }}
           >
-            Your AI Digital Companion Creation Hub
+            Your AI Digital Companion Builder
           </motion.p>
         </div>
 
@@ -452,7 +452,7 @@ Please create a personalized AI agent that can help me with these specific needs
                   {allChats.length > 5 && (
                     <div className="text-center pt-2">
                       <button
-                        onClick={() => router.push('/chat')}
+                        onClick={() => router.push('/agents/my-agents/chat')}
                         className="text-sm text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 font-medium"
                       >
                         View all {allChats.length} conversations →

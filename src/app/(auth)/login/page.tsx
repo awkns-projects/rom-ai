@@ -42,7 +42,7 @@ export default function Page() {
       setIsSuccessful(true);
       updateSession().then(() => {
         setTimeout(() => {
-          router.push('/chat');
+          router.push('/');
         }, 100);
       });
     }
@@ -70,7 +70,7 @@ export default function Page() {
           </div>
           
           {/* Divider */}
-          <div className="relative">
+          {/* <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
             </div>
@@ -78,9 +78,9 @@ export default function Page() {
               <span className="bg-background px-3 text-gray-500 dark:text-gray-400">or continue with email</span>
             </div>
           </div>
-          
+           */}
           {/* Traditional Email/Password Form */}
-          <AuthForm action={handleSubmit} defaultEmail={email}>
+          {/* <AuthForm action={handleSubmit} defaultEmail={email}>
             <SubmitButton isSuccessful={isSuccessful}>Sign in</SubmitButton>
             <p className="text-center text-sm text-gray-600 mt-4 dark:text-zinc-400">
               {"Don't have an account? "}
@@ -92,7 +92,7 @@ export default function Page() {
               </Link>
               {' for free.'}
             </p>
-          </AuthForm>
+          </AuthForm> */}
         </div>
       </div>
     </div>

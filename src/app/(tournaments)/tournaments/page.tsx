@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
 import CharacterGenerate from '../../../components/character/canva'
 import {
   useSeasons,
@@ -15,16 +17,14 @@ import {
 // Types from our hooks
 import type { Season, Mission, Solution, UserProfile } from '@/hooks/useTournament'
 
-// Current user ID for demo - replace with real auth
-const currentUserId = '550e8400-e29b-41d4-a716-446655440001'
-
 export default function TournamentPageConnected() {
-  // API Hooks
-  const { seasons, loading: seasonsLoading } = useSeasons()
-  const { createMission, submitSolution, vote, loading: mutationLoading } = useMissionMutations()
-  const { profile: currentUser, loading: profileLoading } = useUserProfile(currentUserId)
+  const { data: session, status } = useSession()
+  const router = useRouter()
 
-  // State
+  // Use the actual user ID from session instead of hardcoded one
+  const currentUserId = session?.user?.id || '550e8400-e29b-41d4-a716-446655440001'
+  
+  // State - ALL hooks must be called at the top level before any conditional returns
   const [selectedSeason, setSelectedSeason] = useState<string>('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all')
@@ -51,6 +51,11 @@ export default function TournamentPageConnected() {
   const [missionFiles, setMissionFiles] = useState<File[]>([])
   const [solutionFiles, setSolutionFiles] = useState<File[]>([])
   const [uploadLoading, setUploadLoading] = useState<boolean>(false)
+
+  // API Hooks - These must be called at the top level, before any conditional returns
+  const { seasons, loading: seasonsLoading } = useSeasons()
+  const { createMission, submitSolution, vote, loading: mutationLoading } = useMissionMutations()
+  const { profile: currentUser, loading: profileLoading } = useUserProfile(currentUserId)
 
   // Memoize filters to prevent infinite re-renders
   const missionFilters = useMemo(() => {
@@ -79,6 +84,16 @@ export default function TournamentPageConnected() {
   // Fetch notifications for current user
   const { notifications } = useNotifications(currentUserId)
 
+  // Handle authentication
+  useEffect(() => {
+    if (status === 'loading') return // Still loading
+    
+    if (!session) {
+      router.push('/login?callbackUrl=%2Ftournaments')
+      return
+    }
+  }, [session, status, router])
+
   // Initialize selected season when seasons load
   useEffect(() => {
     if (seasons.length > 0 && !selectedSeason) {
@@ -97,9 +112,6 @@ export default function TournamentPageConnected() {
     }
   }, [missions, selectedMission])
 
-  // Get current season
-  const currentSeason = seasons.find(s => s.id === selectedSeason) || seasons[0]
-
   // Prevent body scroll when modals are open
   useEffect(() => {
     const hasModal = showSubmitForm || selectedMission || showSolutionForm || showAchievements || showQuickTemplates || showLeaderboard || showSeasonInfo
@@ -111,6 +123,23 @@ export default function TournamentPageConnected() {
 
     return () => document.body.classList.remove('modal-open')
   }, [showSubmitForm, selectedMission, showSolutionForm, showAchievements, showQuickTemplates, showLeaderboard, showSeasonInfo])
+
+  // Get current season
+  const currentSeason = seasons.find(s => s.id === selectedSeason) || seasons[0]
+
+  // Show loading while checking authentication
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="text-green-400 font-mono">Loading...</div>
+      </div>
+    )
+  }
+
+  // Don't render content if not authenticated
+  if (!session) {
+    return null
+  }
 
   // Show loading state while user profile is loading
   if (profileLoading || !currentUser) {

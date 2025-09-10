@@ -6,7 +6,7 @@ interface MobileAppTemplateOptions {
   actions: AgentAction[];
   schedules: AgentSchedule[];
   prismaSchema?: string; // Add optional schema - will be passed from main deployment
-  sqliteOptions?: { filename?: string; enableWAL?: boolean; enableForeignKeys?: boolean; };
+  neonOptions?: { region?: string; pgVersion?: number; autoSuspend?: boolean; };
   
   // Vercel deployment configuration
   vercelConfig?: {
@@ -22,24 +22,23 @@ interface MobileAppTemplateOptions {
  * Unified Mobile App Template Generator
  * Consolidates all file generation into one cohesive system
  * 
- * 🚀 NEW DYNAMIC ARCHITECTURE:
- * 1. Dynamic Action Execution: /api/actions/[actionName] - fetches code from main app, executes locally
- * 2. Direct Action Trigger: /api/trigger/action/[actionId] - calls main app directly by ID
- * 3. Direct Schedule Trigger: /api/trigger/schedule/[scheduleId] - calls main app directly by ID  
- * 4. Dynamic Cron Scheduler: /api/cron/scheduler - runs every minute, checks main app for schedules
- * 5. Dynamic API Key Fetching: Chat interface fetches OpenAI/Grok/Anthropic keys from main app
- * 6. Direct Model CRUD: /api/models/[modelName] + /api/models/[modelName]/[id] - SQLite/Prisma operations
- * 7. Interactive Action UI: Modal-based action execution with input parameters and results display
+ * 🚀 SELF-CONTAINED ARCHITECTURE:
+ * 1. Static Action Execution: /api/actions/[actionName] - embedded action code, executes locally
+ * 2. Static Cron Jobs: /api/cron/[scheduleName] - embedded schedule code with cron timing
+ * 3. Direct Model CRUD: /api/models/[modelName] + /api/models/[modelName]/[id] - Neon PostgreSQL operations
+ * 4. Self-managed API Keys: Client manages its own OpenAI/Anthropic/Grok keys
+ * 5. Interactive Action UI: Modal-based action execution with input parameters and results display
+ * 6. Persistent Database: Neon PostgreSQL for reliable data storage
  * 
  * Benefits: 
- * - No redeployments needed for code changes
- * - Always up-to-date actions and schedules
- * - Local execution with fresh credentials
- * - Centralized API key management
+ * - Complete independence from main app
+ * - Persistent database with no resets
+ * - Embedded action and schedule code
+ * - Self-managed API keys and configuration
  * - Direct database operations for optimal performance
  * - Full CRUD operations with pagination and search
- * - Interactive UI components like main app
- * - No manual API key configuration required
+ * - Scalable PostgreSQL database
+ * - Production-ready deployment
  */
 export class MobileAppTemplate {
   private options: MobileAppTemplateOptions;
@@ -217,7 +216,9 @@ pids/
       tsx: "^4.6.2",
       autoprefixer: "^10.0.1",
       postcss: "^8",
-      "@tailwindcss/forms": "^0.5.7"
+      "@tailwindcss/forms": "^0.5.7",
+      pg: "^8.11.3",
+      "@types/pg": "^8.10.9"
     };
 
     // Add AI SDK packages for Vercel (enabled by default)
@@ -232,24 +233,23 @@ pids/
       });
     }
 
-    // Environment-aware scripts with improved SQLite support
+    // Environment-aware scripts with PostgreSQL support
     const baseScripts = {
       dev: "npm run db:setup && next dev",
       build: "npm run db:setup && next build",
       start: "next start",
       lint: "next lint",
       "db:generate": "prisma generate",
-      "db:push": "prisma db push --accept-data-loss",
+      "db:push": "prisma db push",
       "db:deploy": "prisma migrate deploy",
       "db:migrate": "prisma migrate dev",
       "db:studio": "prisma studio",
       "db:seed": "tsx prisma/seed.ts",
-      "db:init": "node scripts/init-sqlite.js",
-      "db:setup": "npm run db:init && npm run prisma:format && npm run db:generate && npm run db:push",
+      "db:setup": "npm run prisma:format && npm run db:generate && npm run db:deploy",
       "db:reset": "prisma migrate reset --force",
       "prisma:format": "prisma format",
       "prisma:validate": "prisma validate",
-      postinstall: "npm run db:init && npm run prisma:format && npm run db:generate",
+      postinstall: "npm run prisma:format && npm run db:generate",
       "vercel-build": "npm run db:setup && next build"
     };
 
@@ -284,39 +284,32 @@ module.exports = nextConfig`;
     const { vercelConfig } = this.options;
     const aiSdkEnabled = vercelConfig?.aiSdkEnabled !== false;
 
-    let envContent = `# Database - SQLite (automatically configured for environment)
-# Local development: file:./dev.db  
-# Vercel production: file:/tmp/dev.db
-DATABASE_URL="file:./dev.db"`;
+    let envContent = `# Database - Neon PostgreSQL
+DATABASE_URL="postgresql://user:password@host:5432/database"
+
+# Neon Database Configuration
+NEON_API_KEY="your_neon_api_key_here"
+NEON_PROJECT_ID="your_neon_project_id_here"`;
 
     if (aiSdkEnabled) {
       envContent += `
 
-# 🚀 AI Provider Configuration (Dynamic API Key Fetching)
-# API keys are automatically fetched from the main app - no local configuration needed!
-# The sub-agent will:
-# 1. First check user's saved API keys in main app (/api/user/api-keys)
-# 2. Fall back to agent-specific credentials (/api/agent-credentials-public)
-# 3. Support OpenAI, Anthropic, and Grok providers
+# 🚀 AI Provider Configuration (Self-contained API Keys)
+# Configure your own API keys for AI providers
 
-# Optional: Override AI Provider Selection (defaults to openai)
+# AI Provider Selection
 AI_MODEL_PROVIDER="openai"    # openai | anthropic | grok
 AI_MODEL_NAME="gpt-4o-mini"   # For OpenAI: gpt-4o-mini, gpt-4o, gpt-3.5-turbo
                               # For Anthropic: claude-3-haiku-20240307, claude-3-sonnet-20240229
                               # For Grok: grok-beta
 
-# Only set these if you want to override the main app's API keys
-# OPENAI_API_KEY=""      # Leave empty - fetched from main app
-# ANTHROPIC_API_KEY=""   # Leave empty - fetched from main app  
-# GROK_API_KEY=""        # Leave empty - fetched from main app`;
+# AI Provider API Keys (set at least one)
+OPENAI_API_KEY="your_openai_api_key_here"
+ANTHROPIC_API_KEY="your_anthropic_api_key_here"
+GROK_API_KEY="your_grok_api_key_here"`;
     }
 
     envContent += `
-
-# Main App Integration (Required for agent communication)
-NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
-NEXT_PUBLIC_DOCUMENT_ID=""  # Your agent document ID from main app
-NEXT_PUBLIC_AGENT_KEY=""    # Your agent key for authentication
 
 # Security
 NEXTAUTH_SECRET="your-secret-here"
@@ -342,48 +335,54 @@ NEXT_PUBLIC_THEME_COLOR="emerald"  # Options: emerald, blue, purple, pink
 
   private generateEnvLocal(): string {
     return `# Local Development Environment
-# Database URL - automatically configured by init script
-DATABASE_URL="file:./dev.db"
-NODE_ENV=development
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+# Database URL - Neon PostgreSQL connection string
+DATABASE_URL="postgresql://user:password@localhost:5432/mydb"
+
+# Neon Database Configuration
+NEON_API_KEY="your_neon_api_key_here"
+NEON_PROJECT_ID="your_neon_project_id_here"
+
+# AI Provider API Keys (choose one or more)
+OPENAI_API_KEY="your_openai_api_key_here"
+ANTHROPIC_API_KEY="your_anthropic_api_key_here"
+GROK_API_KEY="your_grok_api_key_here"
+
+# AI Model Configuration
+AI_MODEL_PROVIDER="openai"
+AI_MODEL_NAME="gpt-4o-mini"
 
 # Security tokens (auto-generated)
 NEXTAUTH_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}"
 NEXTAUTH_URL="http://localhost:3000"
 CRON_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}"
 
-# Main app integration (required for agent communication)
-NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
-
-# These will be set automatically during deployment
-# NEXT_PUBLIC_DOCUMENT_ID=
-# NEXT_PUBLIC_AGENT_TOKEN=
+# Application Configuration
+NODE_ENV=development
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 `;
   }
 
   private generateVercelConfig(): string {
+    // Generate cron configurations for each schedule
+    const cronConfigs = this.options.schedules.map(schedule => ({
+      path: `/api/cron/${schedule.name}`,
+      schedule: schedule.interval?.pattern || "0 0 * * *" // Default to daily if no pattern
+    }));
+
     return JSON.stringify({
       buildCommand: "npm run vercel-build",
       functions: {
         "src/pages/api/cron/*.ts": { maxDuration: 300 },
-        "src/pages/api/models/*.ts": { maxDuration: 60 }
+        "src/pages/api/models/*.ts": { maxDuration: 60 },
+        "src/pages/api/actions/*.ts": { maxDuration: 120 }
       },
-      crons: [{
-        path: "/api/cron/scheduler",
-        schedule: "* * * * *" // Run every minute to check main app for schedules
-      }],
+      crons: cronConfigs,
       installCommand: "npm install",
       build: { 
         env: { 
-          PRISMA_GENERATE_DATAPROXY: "false",
-          DATABASE_URL: "file:/tmp/dev.db",
+          PRISMA_GENERATE_DATAPROXY: "true",
           NODE_ENV: "production"
         } 
-      },
-      runtime: { 
-        env: {
-          DATABASE_URL: "file:/tmp/dev.db"
-        }
       }
     }, null, 2);
   }
@@ -426,27 +425,17 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
     files['src/pages/api/stats.ts'] = this.generateStatsEndpoint();
     files['src/pages/api/models/[modelName].ts'] = this.generateModelEndpoint();
     files['src/pages/api/models/[modelName]/[id].ts'] = this.generateModelRecordEndpoint();
-    files['src/pages/api/chat.ts'] = this.generateChatEndpoint();
+    files['src/pages/api/chat.ts'] = this.generateSelfContainedChatEndpoint();
 
-    // Dynamic action execution endpoint (fetches from main app)
-    files['src/pages/api/actions/[actionName].ts'] = this.generateDynamicActionEndpoint();
+    // Static action endpoints (one file per action with embedded code)
+    this.options.actions.forEach(action => {
+      files[`src/pages/api/actions/${action.name}.ts`] = this.generateStaticActionEndpoint(action);
+    });
 
-    // Direct action trigger endpoint (calls main app directly)
-    files['src/pages/api/trigger/action/[actionId].ts'] = this.generateDirectActionTriggerEndpoint();
-
-    // Direct schedule trigger endpoint (calls main app directly)
-    files['src/pages/api/trigger/schedule/[scheduleId].ts'] = this.generateDirectScheduleTriggerEndpoint();
-
-    // Single cron endpoint that checks main app for schedules to run
-    files['src/pages/api/cron/scheduler.ts'] = this.generateDynamicCronEndpoint();
-
-    // Sub-agent's own API endpoints that call main app
-    files['src/pages/api/agent/actions.ts'] = this.generateActionsEndpoint();
-    files['src/pages/api/agent/schedules.ts'] = this.generateSchedulesEndpoint();
-    files['src/pages/api/agent/models.ts'] = this.generateModelsEndpoint();
-          files['src/pages/api/agent/config.ts'] = this.generateAgentConfigEndpoint();
-      files['src/pages/api/agent/data.ts'] = this.generateAgentDataEndpoint();
-      files['src/pages/api/agent/test-connection.ts'] = this.generateTestConnectionEndpoint();
+    // Static cron endpoints (one file per schedule with embedded code)
+    this.options.schedules.forEach(schedule => {
+      files[`src/pages/api/cron/${schedule.name}.ts`] = this.generateStaticCronEndpoint(schedule);
+    });
 
     return files;
   }
@@ -459,8 +448,7 @@ NEXT_PUBLIC_MAIN_APP_URL="https://rewrite-complete.vercel.app"
       'src/contexts/AgentContext.tsx': this.generateAgentContext(),
       'src/hooks/useApi.ts': this.generateApiHook(),
       'src/hooks/useMobile.ts': this.generateMobileHook(),
-      'prisma/seed.ts': this.generateSeedFile(),
-      'scripts/init-sqlite.js': this.generateSQLiteInitScript()
+      'prisma/seed.ts': this.generateSeedFile()
     };
 
     // Add Prisma schema - use provided one (sanitized) or generate default
@@ -2909,7 +2897,7 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
 }`;
   }
 
-  private generateChatEndpoint(): string {
+  private generateSelfContainedChatEndpoint(): string {
     const modelsContext = this.options.models.map(m => `${m.name} (${m.description || 'data model'})`).join(', ');
     const actionsContext = this.options.actions.map(a => `${a.name} (${a.description || 'action'})`).join(', ');
     const schedulesContext = this.options.schedules.map(s => `${s.name} (${s.description || 'scheduled task'})`).join(', ');
@@ -2919,55 +2907,13 @@ import { anthropic } from '@ai-sdk/anthropic';
 import { streamText, convertToCoreMessages } from 'ai';
 import { z } from 'zod';
 
-// Fetch API keys and model configuration from main app
+// Self-contained AI model configuration with local API keys
 async function getAIModelWithApiKeys() {
-  const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-  const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-  const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
-  const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-
   try {
-    // First try to get user's API keys from main app
-    let response = await fetch(\`\${MAIN_APP_URL}/api/user/api-keys\`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-      },
-    });
-
-    let apiKeys = {};
-    if (response.ok) {
-      const data = await response.json();
-      if (data.success) {
-        apiKeys = data.apiKeys || {};
-      }
-    }
-
-    // If no user API keys, try to get agent credentials which might include API keys
-    if (!apiKeys.openai && !apiKeys.anthropic && !apiKeys.grok) {
-      response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public\`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.credentials) {
-          // Extract AI provider keys from credentials
-          if (data.credentials.openai_api_key) {
-            apiKeys.openai = data.credentials.openai_api_key;
-          }
-          if (data.credentials.anthropic_api_key) {
-            apiKeys.anthropic = data.credentials.anthropic_api_key;
-          }
-          if (data.credentials.grok_api_key) {
-            apiKeys.grok = data.credentials.grok_api_key;
-          }
-        }
-      }
-    }
+    // Use local environment variables for API keys
+    const openaiKey = process.env.OPENAI_API_KEY;
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const grokKey = process.env.GROK_API_KEY;
 
     // Determine which provider to use based on available keys
     const provider = process.env.AI_MODEL_PROVIDER || 'openai';
@@ -2975,98 +2921,38 @@ async function getAIModelWithApiKeys() {
     
     switch (provider) {
       case 'anthropic':
-        if (!apiKeys.anthropic) {
-          throw new Error('Anthropic API key not found. Please configure your API keys in the main app.');
+        if (!anthropicKey) {
+          throw new Error('ANTHROPIC_API_KEY environment variable is required');
         }
-        return anthropic(modelName, { apiKey: apiKeys.anthropic });
+        return anthropic(modelName, { apiKey: anthropicKey });
       case 'grok':
-        if (!apiKeys.grok) {
-          throw new Error('Grok API key not found. Please configure your API keys in the main app.');
+        if (!grokKey) {
+          throw new Error('GROK_API_KEY environment variable is required');
         }
         return openai(modelName, { 
-          apiKey: apiKeys.grok,
+          apiKey: grokKey,
           baseURL: 'https://api.x.ai/v1'
         });
       case 'openai':
       default:
-        if (!apiKeys.openai) {
-          throw new Error('OpenAI API key not found. Please configure your API keys in the main app.');
+        if (!openaiKey) {
+          throw new Error('OPENAI_API_KEY environment variable is required');
         }
-        return openai(modelName, { apiKey: apiKeys.openai });
+        return openai(modelName, { apiKey: openaiKey });
     }
   } catch (error) {
     console.error('Failed to get AI model configuration:', error);
-    throw new Error('Failed to configure AI model. Please check your API keys in the main app.');
+    throw new Error('Failed to configure AI model. Please check your API keys.');
   }
 }
 
-// Fetch agent data including personality directly from main app
-async function getAgentData() {
-  try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-
-    if (!DOCUMENT_ID) {
-      throw new Error('No document ID configured');
-    }
-
-    // Call main app directly to get agent document data
-    const response = await fetch(\`\${MAIN_APP_URL}/api/document?id=\${DOCUMENT_ID}\`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-        'X-Agent-Token': AGENT_TOKEN,
-        'X-Document-ID': DOCUMENT_ID,
-      },
-    });
-
-    if (!response.ok) {
-      console.warn('Main app call failed, using fallback');
-      throw new Error(\`API call failed: \${response.status}\`);
-    }
-
-    const data = await response.json();
-    
-    if (data.success && data.document?.metadata) {
-      const metadata = data.document.metadata;
-      return {
-        name: metadata.name || '${this.options.projectName}',
-        description: metadata.description || '',
-        personality: metadata.personality || '',
-        theme: metadata.theme || 'green',
-        avatar: metadata.avatar || null,
-        models: metadata.models || [],
-        actions: metadata.actions || [],
-        schedules: metadata.schedules || []
-      };
-    }
-    
-    throw new Error('No valid document data in response');
-  } catch (error) {
-    console.error('Error fetching agent data from main app:', error);
-    
-    // Fallback to static data
-    return {
-      name: '${this.options.projectName}',
-      description: 'Agent application',
-      personality: 'helpful and professional',
-      theme: 'green',
-      avatar: null,
-      models: ${JSON.stringify(this.options.models)},
-      actions: ${JSON.stringify(this.options.actions)},
-      schedules: ${JSON.stringify(this.options.schedules)}
-    };
-  }
-}
-
-// Build system prompt with fallback data (frontend has real agent data via context)
+// Build system prompt with embedded agent data
 async function buildSystemPrompt() {
   const baseName = "${this.options.projectName}";
   const personality = "helpful and professional";
-  const description = "A smart AI agent application";
+  const description = "A self-contained AI agent application";
   
-  return \`You are an AI assistant for "\${baseName}", a smart agent application.
+  return \`You are an AI assistant for "\${baseName}", a self-contained agent application.
 
 **Agent Description:** \${description}
 
@@ -3115,92 +3001,136 @@ export default async function handler(req, res) {
 
   try {
     const { messages } = req.body;
-    
+
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array is required' });
     }
 
+    // Get AI model with local API keys
     const model = await getAIModelWithApiKeys();
-    const systemPrompt = await buildSystemPrompt();
     
+    // Build system prompt
+    const systemPrompt = await buildSystemPrompt();
+
+    // Convert messages and add system message
+    const coreMessages = convertToCoreMessages([
+      { role: 'system', content: systemPrompt },
+      ...messages
+    ]);
+
+    // Stream the response
     const result = await streamText({
       model,
-      system: systemPrompt,
-      messages: convertToCoreMessages(messages),
+      messages: coreMessages,
       maxTokens: 1000,
       temperature: 0.7,
-      tools: {
-        getSystemInfo: {
-          description: 'Get current system information and status',
-          parameters: z.object({}),
-          execute: async () => {
-            return {
-              models: ${this.options.models.length},
-              actions: ${this.options.actions.length},
-              schedules: ${this.options.schedules.length},
-              activeSchedules: ${this.options.schedules.filter(s => s.interval?.active !== false).length},
-              status: 'operational',
-              timestamp: new Date().toISOString()
-            };
-          }
-        },
-        listModels: {
-          description: 'List all available data models',
-          parameters: z.object({}),
-          execute: async () => {
-            return {
-              models: ${JSON.stringify(this.options.models.map(m => ({
-                name: m.name,
-                description: m.description || 'Data model',
-                fields: m.fields?.length || 0
-              })))}
-            };
-          }
-        },
-        listActions: {
-          description: 'List all available smart actions',
-          parameters: z.object({}),
-          execute: async () => {
-            return {
-              actions: ${JSON.stringify(this.options.actions.map(a => ({
-                name: a.name,
-                description: a.description || 'Smart action',
-                type: a.type || 'query'
-              })))}
-            };
-          }
-        },
-        listSchedules: {
-          description: 'List all scheduled tasks',
-          parameters: z.object({}),
-          execute: async () => {
-            return {
-              schedules: ${JSON.stringify(this.options.schedules.map(s => ({
-                name: s.name,
-                description: s.description || 'Scheduled task',
-                pattern: s.interval?.pattern || '* * * * *',
-                active: s.interval?.active !== false
-              })))}
-            };
-          }
-        }
-      }
     });
 
     return result.toAIStreamResponse();
   } catch (error) {
     console.error('Chat API error:', error);
-    
-    if (error.message?.includes('API_KEY')) {
-      return res.status(500).json({ 
-        error: 'AI service configuration error. Please check your API keys.' 
-      });
-    }
-    
     return res.status(500).json({ 
       error: 'Failed to process chat request',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: error.message 
     });
+  }
+}`;
+  }
+
+  private generateStaticActionEndpoint(action: any): string {
+    // Extract action code or generate basic structure
+    const actionCode = action.results?.code || action.code || `
+    // Action: ${action.name}
+    // Description: ${action.description || 'No description provided'}
+    
+    console.log('Executing action: ${action.name}');
+    
+    // TODO: Implement action logic here
+    return { success: true, message: 'Action executed successfully' };
+    `;
+
+    return `import { NextApiRequest, NextApiResponse } from 'next';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    const { parameters } = req.body;
+    
+    // Action: ${action.name}
+    // Description: ${action.description || 'No description provided'}
+    // Type: ${action.results?.actionType || 'unknown'}
+    
+    ${actionCode}
+    
+    return res.status(200).json({ 
+      success: true, 
+      action: '${action.name}',
+      result: result 
+    });
+  } catch (error) {
+    console.error('Action execution error:', error);
+    return res.status(500).json({ 
+      error: 'Action execution failed',
+      details: error.message 
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+}`;
+  }
+
+  private generateStaticCronEndpoint(schedule: any): string {
+    // Extract schedule code or generate basic structure
+    const scheduleCode = schedule.results?.code || schedule.code || `
+    // Schedule: ${schedule.name}
+    // Description: ${schedule.description || 'No description provided'}
+    // Interval: ${schedule.interval?.pattern || '*/5 * * * *'}
+    
+    console.log('Executing scheduled task: ${schedule.name}');
+    
+    // TODO: Implement schedule logic here
+    return { success: true, message: 'Scheduled task executed successfully' };
+    `;
+
+    return `import { NextApiRequest, NextApiResponse } from 'next';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  // Verify cron secret to prevent unauthorized access
+  const cronSecret = req.headers['x-cron-secret'] || req.query.secret;
+  if (cronSecret !== process.env.CRON_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    // Schedule: ${schedule.name}
+    // Description: ${schedule.description || 'No description provided'}
+    // Interval: ${schedule.interval?.pattern || '*/5 * * * *'}
+    
+    ${scheduleCode}
+    
+    return res.status(200).json({ 
+      success: true, 
+      schedule: '${schedule.name}',
+      executedAt: new Date().toISOString(),
+      result: result 
+    });
+  } catch (error) {
+    console.error('Schedule execution error:', error);
+    return res.status(500).json({ 
+      error: 'Schedule execution failed',
+      details: error.message 
+    });
+  } finally {
+    await prisma.$disconnect();
   }
 }`;
   }
@@ -4160,43 +4090,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   private generatePrismaClient(): string {
     return `import { PrismaClient } from '@prisma/client'
 
-// Function to get the correct database URL for the environment
-function getDatabaseUrl(): string {
-  // If DATABASE_URL is already set, use it
-  if (process.env.DATABASE_URL) {
-    return process.env.DATABASE_URL;
-  }
-
-  // Auto-configure based on environment
-  if (process.env.VERCEL || process.env.NODE_ENV === 'production') {
-    // Production/Vercel deployment - use /tmp directory
-    return 'file:/tmp/dev.db';
-  } else {
-    // Local development - use project directory
-    return 'file:./dev.db';
-  }
-}
-
-// Set the DATABASE_URL if not already set
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = getDatabaseUrl();
-}
-
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-// Create Prisma client with connection configuration optimized for serverless
+// Create Prisma client with PostgreSQL connection configuration
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  datasources: {
-    db: {
-      url: getDatabaseUrl()
-    }
-  },
   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error']
 })
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma`;
+if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+
+export default prisma`;
   }
 
   private generateApiHook(): string {
@@ -4424,7 +4329,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
