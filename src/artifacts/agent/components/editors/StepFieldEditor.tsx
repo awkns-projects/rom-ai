@@ -142,7 +142,7 @@ export const StepFieldEditor = memo(({
                     <SelectTrigger className={`bg-black/50 ${classes.border} ${classes.text} ${classes.focus} font-mono text-sm`}>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-black border-gray-700 z-[70]">
                       <div className="px-2 py-1 text-xs font-medium text-gray-400 border-b border-gray-700">Scalar Types</div>
                       {FIELD_TYPES.map(type => (
                         <SelectItem key={type} value={type} className="font-mono text-sm">

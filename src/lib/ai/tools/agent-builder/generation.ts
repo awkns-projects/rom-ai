@@ -37,6 +37,7 @@ interface PseudoCodeStep {
   id: string;
   description: string;
   type: string;
+  model?: string; // For database operations, specifies which model/table to operate on
   inputFields: Array<{
     id: string;
     name: string;
@@ -489,7 +490,6 @@ ACTION-AWARE DATABASE DESIGN PRINCIPLES:
 6. Include enum fields for predefined values that actions will set
 7. Think about bulk operations - fields that support batch processing
 8. Consider approval workflows - fields for approval status, approver, etc.
-9. Think about soft deletes - deletedAt, isDeleted fields if needed
 10. Consider priority, order, or sequence fields for sorting
 
 ${isIncrementalUpdate ? `
@@ -3628,6 +3628,22 @@ Create a logical sequence of pseudo code steps that accomplish the goal. Each st
 6. **Error Handling**: Consider what could go wrong and how to handle it
 7. **Batch-First Workflow**: Always start with scanning/filtering operations, never single-item selection
 
+🚨 CRITICAL DATABASE STEP REQUIREMENTS:
+
+**MODEL FIELD SPECIFICATION:**
+For ALL database operations (Database find unique, Database find many, Database create, Database update unique, Database update many, Database delete unique, Database delete many), you MUST specify the "model" field with the exact model name from the available models.
+
+Available models: ${availableModels.map(m => m.name).join(', ')}
+
+**FIELD NAME VALIDATION:**
+For database steps, input field names MUST match the actual fields available in the specified model. Only use field names that exist in the model schema.
+
+Examples:
+- If using model "User", only use fields like: ${availableModels.find(m => m.name === 'User')?.fields?.map(f => f.name).join(', ') || 'id, name, email, etc.'}
+- If using model "Order", only use fields like: ${availableModels.find(m => m.name === 'Order')?.fields?.map(f => f.name).join(', ') || 'id, userId, total, status, etc.'}
+
+⚠️ DO NOT invent field names that don't exist in the model schema!
+
 STEP TYPES TO USE (PRIORITIZED FOR BATCH PROCESSING):
 
 **PREFERRED (Batch-Friendly):**
@@ -3731,6 +3747,7 @@ REMEMBER: Design steps that match what the action naturally needs to do!
         'call external api',
         'ai analysis'
       ]),
+      model: z.string().optional().describe(`For database operations only: specify which model to operate on. Must be one of: ${availableModels.map(m => m.name).join(', ')}. Leave empty for non-database steps.`),
       inputFields: z.array(z.object({
         name: z.string().describe('Field name'),
         type: z.string().describe(`Data type - CRITICAL: Use exact patterns: For relationships use "${availableModels.map(m => m.name).join('", "')}", for IDs use "${availableModels.map(m => `${m.name}Id`).join('", "')}", for scalars use String, Int, Boolean, etc. Example: "leadId" field should be type "LeadId" NOT "String"`),
@@ -3887,6 +3904,7 @@ REMEMBER: Design steps that match what the action naturally needs to do!
       id: `step_${Date.now()}_${index}`,
       step: index + 1,
       type: step.type,
+      model: step.model, // Include the model field for database operations
       title: step.title || step.description,
       description: step.description,
       inputFields: processedInputFields,
@@ -3895,14 +3913,46 @@ REMEMBER: Design steps that match what the action naturally needs to do!
     };
   });
 
-  console.log(`✅ Generated ${convertedSteps.length} pseudo steps for ${name}`);
-  console.log(`🔍 Detected relationship fields:`, convertedSteps.flatMap(step => 
+  // Validate database steps have proper model and field alignment
+  const validatedSteps = convertedSteps.map((step, index) => {
+    const isDatabaseStep = step.type.startsWith('Database');
+    
+    if (isDatabaseStep) {
+      if (!step.model) {
+        console.warn(`⚠️ Step ${index + 1}: Database operation "${step.type}" missing model field`);
+      } else {
+        const model = availableModels.find(m => m.name === step.model);
+        if (!model) {
+          console.warn(`⚠️ Step ${index + 1}: Model "${step.model}" not found in available models`);
+        } else {
+          // Validate input and output fields exist in the model
+          const modelFieldNames = model.fields?.map(f => f.name) || [];
+          
+          [...step.inputFields, ...step.outputFields].forEach(field => {
+            // Skip validation for special fields like IDs and relationships
+            if (field.kind === 'object' || field.name.endsWith('Id') || field.name === 'id') {
+              return;
+            }
+            
+            if (!modelFieldNames.includes(field.name)) {
+              console.warn(`⚠️ Step ${index + 1}: Field "${field.name}" not found in model "${step.model}". Available fields: ${modelFieldNames.join(', ')}`);
+            }
+          });
+        }
+      }
+    }
+    
+    return step;
+  });
+
+  console.log(`✅ Generated ${validatedSteps.length} pseudo steps for ${name}`);
+  console.log(`🔍 Detected relationship fields:`, validatedSteps.flatMap(step => 
     [...step.inputFields, ...step.outputFields]
       .filter(f => f.kind === 'object')
       .map(f => `${f.name} (${f.type}) -> ${f.relationModel}`)
   ));
   
-  return convertedSteps;
+  return validatedSteps;
 }
 
 /**

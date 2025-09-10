@@ -53,62 +53,62 @@ export class ConvertSchemaToObject extends PrismaReader {
             documentation = ''
           }
         }
-        if (!modelObject.fields.find((field) => field.name === 'createdAt')) {
-          modelObject.fields.push(
-            {
-              name: 'createdAt',
-              type: 'DateTime',
-              isId: false,
-              unique: false,
-              list: false,
-              required: false,
-              kind: 'scalar',
-              relationField: false,
-            }
-          )
-        }
-        if (!modelObject.fields.find((field) => field.name === 'updatedAt')) {
-          modelObject.fields.push(
-            {
-              name: 'updatedAt',
-              type: 'DateTime',
-              isId: false,
-              unique: false,
-              list: false,
-              required: false,
-              kind: 'scalar',
-              relationField: false,
-            }
-          )
-        }
-        if (!modelObject.fields.find((field) => field.name === 'deletedAt')) {
-          modelObject.fields.push(
-            {
-              name: 'deletedAt',
-              type: 'DateTime',
-              isId: false,
-              unique: false,
-              list: false,
-              required: false,
-              kind: 'scalar',
-              relationField: false,
-            }
-          )
-        }
-        if (!modelObject.fields.find((field) => field.name === 'deleted')) {
-          modelObject.fields.push(
-            {
-              name: 'deleted',
-              type: 'Boolean',
-              isId: false,
-              unique: false,
-              list: false,
-              required: false,
-              kind: 'scalar',
-              relationField: false,
-            }
-          )
-        }
+        // if (!modelObject.fields.find((field) => field.name === 'createdAt')) {
+        //   modelObject.fields.push(
+        //     {
+        //       name: 'createdAt',
+        //       type: 'DateTime',
+        //       isId: false,
+        //       unique: false,
+        //       list: false,
+        //       required: false,
+        //       kind: 'scalar',
+        //       relationField: false,
+        //     }
+        //   )
+        // }
+        // if (!modelObject.fields.find((field) => field.name === 'updatedAt')) {
+        //   modelObject.fields.push(
+        //     {
+        //       name: 'updatedAt',
+        //       type: 'DateTime',
+        //       isId: false,
+        //       unique: false,
+        //       list: false,
+        //       required: false,
+        //       kind: 'scalar',
+        //       relationField: false,
+        //     }
+        //   )
+        // }
+        // if (!modelObject.fields.find((field) => field.name === 'deletedAt')) {
+        //   modelObject.fields.push(
+        //     {
+        //       name: 'deletedAt',
+        //       type: 'DateTime',
+        //       isId: false,
+        //       unique: false,
+        //       list: false,
+        //       required: false,
+        //       kind: 'scalar',
+        //       relationField: false,
+        //     }
+        //   )
+        // }
+        // if (!modelObject.fields.find((field) => field.name === 'deleted')) {
+        //   modelObject.fields.push(
+        //     {
+        //       name: 'deleted',
+        //       type: 'Boolean',
+        //       isId: false,
+        //       unique: false,
+        //       list: false,
+        //       required: false,
+        //       kind: 'scalar',
+        //       relationField: false,
+        //     }
+        //   )
+        // }
         modelObject.documentation = documentation
         modelObject.fields
           .filter((item) => item.kind !== 'object')

@@ -1054,7 +1054,7 @@ Make the action self-contained but also chain-friendly.`
                         Step {index + 1}
                       </div>
                       <div className="px-2 py-1 rounded text-xs font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                        {step.type}
+                        {step.type}{step.model ? ` (${step.model})` : ''}
                       </div>
                     </div>
                     
@@ -2121,6 +2121,34 @@ Make the action self-contained but also chain-friendly.`
                   className="bg-black/50 border-blue-500/30 text-blue-200 font-mono text-sm min-h-[80px] resize-none"
                 />
               </div>
+
+              {/* Model Field (for database operations) */}
+              {editingStep.step.type.startsWith('Database') && (
+                <div className="space-y-2">
+                  <Label className="text-blue-300 font-mono text-sm">Database Model</Label>
+                  <Select
+                    value={editingStep.step.model || ''}
+                    onValueChange={(value) => {
+                      const updatedSteps = action.pseudoSteps?.map(s => 
+                        s.id === editingStep.step.id ? { ...s, model: value } : s
+                      ) || [];
+                      onUpdate({ ...action, pseudoSteps: updatedSteps });
+                      setEditingStep({ ...editingStep, step: { ...editingStep.step, model: value } });
+                    }}
+                  >
+                    <SelectTrigger className="bg-black/50 border-blue-500/30 text-blue-200 text-sm font-mono">
+                      <SelectValue placeholder="Select a model..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-black border-blue-500/30 z-[70]">
+                      {allModels.map((model) => (
+                        <SelectItem key={model.name} value={model.name} className="text-blue-200 font-mono">
+                          {model.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Input Fields */}
               <div className="space-y-3">

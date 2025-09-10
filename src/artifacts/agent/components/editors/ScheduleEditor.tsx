@@ -1097,7 +1097,7 @@ export const ScheduleEditor = memo(({
                           <SelectTrigger className="bg-black/50 border-orange-500/30 text-orange-200 focus:border-orange-400 focus:ring-orange-400/20 font-mono">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="bg-black border-gray-700 z-[70]">
                             {stepTypes.map(type => (
                               <SelectItem key={type.value} value={type.value} className="font-mono">
                                 {type.label}
@@ -1496,7 +1496,7 @@ export const ScheduleEditor = memo(({
                       <SelectTrigger className="bg-black/50 border-orange-500/30 text-orange-200 focus:border-orange-400 focus:ring-orange-400/20 font-mono">
                         <SelectValue placeholder="Select interval" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="bg-black border-gray-700 z-[70]">
                         {intervalOptions.map(option => (
                           <SelectItem key={option.value} value={option.value} className="font-mono">
                             {option.label}

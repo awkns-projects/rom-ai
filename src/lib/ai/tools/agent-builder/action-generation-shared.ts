@@ -187,6 +187,7 @@ PSEUDO STEPS TO IMPLEMENT:
 ${pseudoSteps.map((step: any, index: number) => `
 STEP ${index + 1}: ${step.description}
 - Type: ${step.type}
+${step.model ? `- Database Model: ${step.model} (use db.${step.model.charAt(0).toLowerCase() + step.model.slice(1)}.method())` : ''}
 - Input Fields: ${step.inputFields?.map((f: any) => `${f.name} (${f.type}${f.required ? ', required' : ', optional'})`).join(', ') || 'None'}
 - Output Fields: ${step.outputFields?.map((f: any) => `${f.name} (${f.type}${f.required ? ', required' : ', optional'})`).join(', ') || 'None'}
 - Step Implementation: Based on type "${step.type}", implement the appropriate operation
@@ -270,6 +271,8 @@ CODE GENERATION REQUIREMENTS:
    - This ensures clear data flow tracking between steps
 
 5. DATABASE OPERATIONS:
+   🚨 CRITICAL: Each database step includes a "model" field that specifies which model to use!
+   
    For database operations, use Prisma client directly (the 'db' parameter is the PrismaClient instance):
    - db.modelName.findMany({ where: filter, take: limit }) - find multiple records
    - db.modelName.findUnique({ where: uniqueFilter }) - find single record  
@@ -281,16 +284,20 @@ CODE GENERATION REQUIREMENTS:
    - db.modelName.deleteMany({ where: filter }) - delete multiple records
    
    STEP TYPE TO DATABASE OPERATION MAPPING:
-   - "Database find unique" → db.modelName.findUnique({ where: { id: recordId } })
-   - "Database find many" → db.modelName.findMany({ where: filter, include: relations })
-   - "Database create" → db.modelName.create({ data: newData })
-   - "Database create many" → db.modelName.createMany({ data: recordsArray })
-   - "Database update unique" → db.modelName.update({ where: { id: recordId }, data: updateData })
-   - "Database update many" → db.modelName.updateMany({ where: filter, data: updateData })
-   - "Database delete unique" → db.modelName.delete({ where: { id: recordId } })
-   - "Database delete many" → db.modelName.deleteMany({ where: filter })
+   For each database step, use the model field to determine the correct Prisma client method:
+   - "Database find unique" with model "User" → db.user.findUnique({ where: { id: recordId } })
+   - "Database find many" with model "Order" → db.order.findMany({ where: filter, include: relations })
+   - "Database create" with model "Product" → db.product.create({ data: newData })
+   - "Database create many" with model "Item" → db.item.createMany({ data: recordsArray })
+   - "Database update unique" with model "User" → db.user.update({ where: { id: recordId }, data: updateData })
+   - "Database update many" with model "Order" → db.order.updateMany({ where: filter, data: updateData })
+   - "Database delete unique" with model "Product" → db.product.delete({ where: { id: recordId } })
+   - "Database delete many" with model "Item" → db.item.deleteMany({ where: filter })
 
-   IMPORTANT: Use the actual Prisma client syntax - db.modelName.method() where modelName is the camelCase version of your model name!
+   IMPORTANT: 
+   - Use the model field from each step to determine the correct Prisma client method
+   - Convert model names to camelCase for Prisma client (e.g., "UserProfile" → db.userProfile)
+   - Each step's model field tells you exactly which table/model to operate on
    
    ⚠️ CRITICAL DATABASE FIELD RULE:
    ONLY use fields that actually exist in the available models. DO NOT assume fields like 'deleted', 'createdAt', 'updatedAt', or any other fields unless they are explicitly defined in the model schema. Check the available models list to see what fields each model actually has.

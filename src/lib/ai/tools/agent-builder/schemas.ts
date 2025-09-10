@@ -148,7 +148,8 @@ export const prismaActionsSchema = z.object({
         defaultValue: z.string().optional()
       })).describe('Output fields produced by this step'),
       description: z.string().describe('Clear description of what this step does'),
-      type: z.enum(['Database find unique', 'Database find many', 'Database update unique', 'Database update many', 'Database create', 'Database create many', 'Database delete unique', 'Database delete many', 'call external api', 'ai analysis']).describe('Type of operation this step performs')
+      type: z.enum(['Database find unique', 'Database find many', 'Database update unique', 'Database update many', 'Database create', 'Database create many', 'Database delete unique', 'Database delete many', 'call external api', 'ai analysis']).describe('Type of operation this step performs'),
+      model: z.string().optional().describe('For database operations, specifies which model/table to operate on')
     })).optional().describe('Step-by-step breakdown of the action logic for mindmap visualization'),
     
     uiComponentsDesign: z.array(z.object({

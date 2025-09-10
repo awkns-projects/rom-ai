@@ -361,7 +361,6 @@ export const ActionEditor = memo(({
           description: action.description || `Action to ${action.name}`,
           availableModels: allModels,
           entityType: 'action',
-          type: (action as any).type || 'mutation', // Default to mutation if type is not set
           businessContext: `Generate pseudo steps for ${action.name}. Make it comprehensive and realistic for business operations.`
         }),
       });
@@ -1063,7 +1062,7 @@ export const ActionEditor = memo(({
                           <SelectTrigger className="bg-black/50 border-blue-500/30 text-blue-200 focus:border-blue-400 focus:ring-blue-400/20 font-mono h-11">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent className="bg-black border-gray-700 z-[70]">
                             {stepTypes.map(type => (
                               <SelectItem key={type.value} value={type.value} className="font-mono">
                                 {type.label}

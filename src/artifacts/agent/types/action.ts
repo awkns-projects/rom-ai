@@ -16,6 +16,7 @@ export interface PseudoCodeStep {
   outputFields: StepField[];
   description: string;
   type: 'Database find unique' | 'Database find many' | 'Database update unique' | 'Database update many' | 'Database create' | 'Database create many' | 'Database delete unique' | 'Database delete many' | 'call external api' | 'ai analysis';
+  model?: string; // For database operations, specifies which model/table to operate on
 }
 
 export interface UIComponent {
