@@ -812,6 +812,22 @@ export const seasonAnalytics = pgTable('SeasonAnalytics', {
 
 export type SeasonAnalytics = InferSelectModel<typeof seasonAnalytics>;
 
+export const waitlist = pgTable('Waitlist', {
+  id: uuid('id').primaryKey().notNull().defaultRandom(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  agentIdea: text('agentIdea').notNull(),
+  xId: varchar('xId', { length: 50 }).notNull(),
+  cardType: varchar('cardType', { length: 50 }).notNull().default('free'),
+  status: varchar('status', { length: 20 }).notNull().default('pending'),
+  ipAddress: varchar('ipAddress', { length: 45 }),
+  userAgent: text('userAgent'),
+  metadata: json('metadata'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
+export type Waitlist = InferSelectModel<typeof waitlist>;
+
 // ==================== EXTENDED TYPES FOR FRONTEND ====================
 
 // Extended types that include relations (for frontend use)
