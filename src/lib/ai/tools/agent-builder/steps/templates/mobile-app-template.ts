@@ -33,6 +33,15 @@ interface MobileAppTemplateOptions {
   prismaSchema: string; // Required - Complete Prisma schema from database generation step
   neonOptions?: { region?: string; pgVersion?: number; autoSuspend?: boolean; };
   
+  // Local client app configuration
+  agentConfig?: {
+    name?: string;
+    description?: string;
+    theme?: string;
+    avatar?: any;
+    domain?: string;
+  };
+  
   // Vercel deployment configuration
   vercelConfig?: {
     team?: string;
@@ -47,20 +56,18 @@ interface MobileAppTemplateOptions {
  * Unified Mobile App Template Generator
  * Consolidates all file generation into one cohesive system
  * 
- * 🚀 HYBRID ARCHITECTURE:
- * 1. UI Elements from Main App: avatar, theme, name, description - fetched dynamically
- * 2. Functional Data Embedded: models, actions, schedules - embedded for performance
- * 3. Static Action Execution: /api/actions/[actionName] - embedded action code, executes locally
- * 4. Static Cron Jobs: /api/cron/[scheduleName] - embedded schedule code with cron timing
- * 5. Direct Model CRUD: /api/models/[modelName] + /api/models/[modelName]/[id] - PostgreSQL operations via Prisma
- * 6. Self-managed API Keys: Client manages its own OpenAI/Anthropic/Grok keys
- * 7. Interactive Action UI: Modal-based action execution with input parameters and results display
- * 8. Persistent Database: PostgreSQL with provided Prisma schema
+ * 🚀 FULLY LOCAL ARCHITECTURE:
+ * 1. All Configuration Embedded: name, description, theme, avatar, models, actions, schedules
+ * 2. Static Action Execution: /api/actions/[actionName] - embedded action code, executes locally
+ * 3. Static Cron Jobs: /api/cron/[scheduleName] - embedded schedule code with cron timing
+ * 4. Direct Model CRUD: /api/models/[modelName] + /api/models/[modelName]/[id] - PostgreSQL operations via Prisma
+ * 5. Self-managed API Keys: Client manages its own OpenAI/Anthropic/Grok keys
+ * 6. Interactive Action UI: Modal-based action execution with input parameters and results display
+ * 7. Persistent Database: PostgreSQL with provided Prisma schema
  * 
  * Benefits: 
- * - Real-time UI updates from main app (avatar, theme, name, description)
- * - Fast performance with embedded functional data (models, actions, schedules)
- * - Complete independence from main app for execution
+ * - Complete independence - no external dependencies
+ * - Fast performance with all data embedded locally
  * - Persistent database with no resets
  * - Embedded action and schedule code
  * - Self-managed API keys and configuration
@@ -345,10 +352,11 @@ GROK_API_KEY="your_grok_api_key_here"`;
 
     envContent += `
 
-# Main App Integration (Required for UI elements: avatar, theme, name, description)
-NEXT_PUBLIC_MAIN_APP_URL="https://app.rom.cards"
-NEXT_PUBLIC_DOCUMENT_ID=""  # Your agent document ID from main app
-NEXT_PUBLIC_AGENT_TOKEN=""  # Your agent token for authentication
+# Application Configuration
+NEXT_PUBLIC_APP_NAME="${this.options.agentConfig?.name || this.options.projectName}"
+NEXT_PUBLIC_APP_VERSION="1.0.0"
+NEXT_PUBLIC_APP_DESCRIPTION="${this.options.agentConfig?.description || 'Smart agent powered by AI'}"
+NEXT_PUBLIC_APP_THEME="${this.options.agentConfig?.theme || 'green'}"
 
 # Security
 NEXTAUTH_SECRET="your-secret-here"
@@ -356,15 +364,6 @@ NEXTAUTH_URL="http://localhost:3000"
 
 # Cron security (for production)
 CRON_SECRET="your-cron-secret-here"
-
-# Application Configuration
-NEXT_PUBLIC_APP_NAME="${this.options.projectName}"
-NEXT_PUBLIC_APP_VERSION="1.0.0"
-
-# Optional: Custom branding
-NEXT_PUBLIC_BRAND_NAME="${this.options.projectName}"
-NEXT_PUBLIC_BRAND_DESCRIPTION="Smart agent powered by AI"
-NEXT_PUBLIC_THEME_COLOR="emerald"  # Options: emerald, blue, purple, pink
 
 # Optional: Custom environment variables
 # Add your project-specific variables here`;
@@ -392,20 +391,17 @@ GROK_API_KEY="your_grok_api_key_here"
 AI_MODEL_PROVIDER="openai"
 AI_MODEL_NAME="gpt-4o-mini"
 
-# Main App Integration (Required for UI elements: avatar, theme, name, description)
-# These will be set automatically during deployment
-NEXT_PUBLIC_MAIN_APP_URL="https://app.rom.cards"
-# NEXT_PUBLIC_DOCUMENT_ID=
-# NEXT_PUBLIC_AGENT_TOKEN=
+# Application Configuration
+NODE_ENV=development
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_APP_NAME="${this.options.agentConfig?.name || this.options.projectName}"
+NEXT_PUBLIC_APP_DESCRIPTION="${this.options.agentConfig?.description || 'Smart agent powered by AI'}"
+NEXT_PUBLIC_APP_THEME="${this.options.agentConfig?.theme || 'green'}"
 
 # Security tokens (auto-generated)
 NEXTAUTH_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}"
 NEXTAUTH_URL="http://localhost:3000"
 CRON_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2)}"
-
-# Application Configuration
-NODE_ENV=development
-NEXT_PUBLIC_APP_URL=http://localhost:3000
 `;
   }
 
@@ -527,12 +523,16 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
   // Component generators
   private generateLayoutComponent(): string {
+    const agentName = escapeJSString(this.options.agentConfig?.name || this.options.projectName);
+    const agentTheme = this.options.agentConfig?.theme || 'green';
+    const agentDescription = escapeJSString(this.options.agentConfig?.description || 'Smart agent powered by AI');
+    const agentAvatar = this.options.agentConfig?.avatar;
+    
     return `import { useState, useEffect, ReactNode } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import MobileNav from './MobileNav';
 import { themes } from '@/lib/theme';
-import { useAgent } from '@/contexts/AgentContext';
 
 interface LayoutProps {
   children: ReactNode;
@@ -543,23 +543,20 @@ interface LayoutProps {
 
 export default function Layout({ 
   children, 
-  title = '${this.options.projectName}', 
-  agentName = '${this.options.projectName}', 
-  theme = 'green' 
+  title = '${agentName}', 
+  agentName = '${agentName}', 
+  theme = '${agentTheme}' 
 }: LayoutProps) {
   const [isMobile, setIsMobile] = useState(true);
   const router = useRouter();
   
-  // Use the global agent context
-  const { config: agentConfig, loading, error } = useAgent();
-  
-  // Use agent config theme if available, fallback to props
-  const selectedTheme = agentConfig?.theme || theme;
+  // Use embedded local configuration
+  const selectedTheme = theme;
   const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
-  const displayName = agentConfig?.name || agentName;
+  const displayName = agentName;
   
-  // Extract avatar URL from config
-  const avatarUrl = agentConfig?.avatar?.uploadedImage || null;
+  // Extract avatar URL from embedded config
+  const avatarUrl = ${agentAvatar?.uploadedImage ? `"${agentAvatar.uploadedImage}"` : 'null'};
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -694,25 +691,24 @@ export default function MobileNav({ currentTheme }: MobileNavProps) {
 
   private generateHomePage(): string {
     const { projectName, models, actions, schedules } = this.options;
-    
+    const agentName = escapeJSString(this.options.agentConfig?.name || this.options.projectName);
+    const agentTheme = this.options.agentConfig?.theme || 'green';
+    const agentAvatar = this.options.agentConfig?.avatar;
+    const agentDescription = this.options.agentConfig?.description || 'Smart agent powered by AI';
     return `import Layout from '@/components/Layout';
 import { useRouter } from 'next/router';
 import { themes } from '@/lib/theme';
-import { useAgent } from '@/contexts/AgentContext';
 
 export default function HomePage() {
   const router = useRouter();
 
-  // Use the global agent context
-  const { config: agentConfig } = useAgent();
-  
-  // Use agent config theme if available, fallback to green
-  const selectedTheme = agentConfig?.theme || 'green';
+  // Use embedded local configuration
+  const selectedTheme = '${agentTheme}';
   const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
-  const displayName = agentConfig?.name || '${projectName}';
+  const displayName = '${agentName}';
   
-  // Extract avatar URL from config
-  const avatarUrl = agentConfig?.avatar?.uploadedImage || null;
+  // Extract avatar URL from embedded config
+  const avatarUrl = ${agentAvatar?.uploadedImage ? `"${agentAvatar.uploadedImage}"` : 'null'};
 
   const quickActions = [
     { 
@@ -742,7 +738,7 @@ export default function HomePage() {
   ];
 
   return (
-    <Layout title="${projectName}">
+    <Layout title="${agentName}">
       <div className="p-2 space-y-3">
         {/* Hero Section */}
         <div className="text-center space-y-2 pt-3">
@@ -769,7 +765,7 @@ export default function HomePage() {
           <div className="space-y-1">
             <h1 className={\`font-mono font-bold text-xl \${currentTheme.light}\`}>{displayName}</h1>
             <p className={\`font-mono text-xs \${currentTheme.dim} max-w-xs mx-auto leading-tight\`}>
-              Your intelligent AI assistant
+              ${agentDescription}
             </p>
           </div>
         </div>
@@ -821,20 +817,11 @@ export default function App({ Component, pageProps }: AppProps) {
   // For brevity, I'll implement the key ones and indicate where others would go
 
   private generateApiClient(): string {
-    return `// API client for mobile app - Hybrid Architecture
-// UI elements (avatar, theme, name, description) come from main app
-// Functional data (models, actions, schedules) is embedded for performance
+    return `// API client for mobile app - Fully Local Architecture
+// All configuration (UI elements and functional data) is embedded locally
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
-const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://app.rom.cards';
-const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-const AGENT_KEY = process.env.NEXT_PUBLIC_AGENT_KEY || 'default-agent-key';
-const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
 class ApiClient {
-  private cachedCredentials: any = null;
-  private cachedUIConfig: any = null; // Only UI elements cached
-  private credentialsLastFetch: number = 0;
-  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
   async request(endpoint: string, options: RequestInit = {}) {
     const url = endpoint.startsWith('http') ? endpoint : \`\${API_BASE_URL}\${endpoint}\`;
@@ -854,70 +841,7 @@ class ApiClient {
     return response.json();
   }
 
-  // Fetch credentials and UI config from main app (avatar, theme, name, description only)
-  async getCredentialsAndUIConfig() {
-    const now = Date.now();
-    
-    // Return cached data if still valid
-    if (this.cachedCredentials && this.cachedUIConfig && 
-        (now - this.credentialsLastFetch) < this.CACHE_DURATION) {
-      return {
-        credentials: this.cachedCredentials,
-        uiConfig: this.cachedUIConfig
-      };
-    }
 
-    try {
-      if (!DOCUMENT_ID) {
-        console.warn('No document ID provided for agent credentials');
-        return { credentials: {}, uiConfig: {} };
-      }
-
-      // Use JWT token for authentication with main app
-      let response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public\`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-        },
-      });
-      
-      // Log error if authentication fails
-      if (!response.ok) {
-        console.error('Agent authentication failed:', response.status, response.statusText);
-      }
-
-      if (!response.ok) {
-        console.error('Failed to fetch agent credentials:', response.status);
-        return { credentials: {}, uiConfig: {} };
-      }
-
-      const data = await response.json();
-      
-      if (data.success) {
-        this.cachedCredentials = data.credentials || {};
-        // Extract ONLY UI elements from agentConfig
-        this.cachedUIConfig = {
-          name: data.agentConfig?.name,
-          description: data.agentConfig?.description,
-          theme: data.agentConfig?.theme,
-          avatar: data.agentConfig?.avatar,
-          domain: data.agentConfig?.domain
-        };
-        this.credentialsLastFetch = now;
-        
-        return {
-          credentials: this.cachedCredentials,
-          uiConfig: this.cachedUIConfig
-        };
-      } else {
-        console.error('Failed to get credentials:', data.error);
-        return { credentials: {}, uiConfig: {} };
-      }
-    } catch (error) {
-      console.error('Error fetching credentials and UI config:', error);
-      return { credentials: {}, uiConfig: {} };
-    }
-  }
 
   async getStats() {
     return this.request('/api/stats');
@@ -1033,97 +957,7 @@ class ApiClient {
     }
   }
 
-  // Get UI configuration from main app (avatar, theme, name, description only)
-  async getAgentUIConfiguration() {
-    try {
-      const { uiConfig } = await this.getCredentialsAndUIConfig();
-      return uiConfig || null;
-    } catch (error) {
-      console.error('Error fetching agent UI configuration:', error);
-      return null;
-    }
-  }
 
-  // Get complete hybrid agent configuration (UI from main app + embedded functional data)
-  async getLocalAgentConfig() {
-    try {
-      const response = await fetch(\`\${process.env.NEXT_PUBLIC_MAIN_APP_URL}/api/agent/config\`);
-      if (!response.ok) {
-        throw new Error(\`Failed to fetch config: \${response.status}\`);
-      }
-      const data = await response.json();
-      return data.success ? data.config : null;
-    } catch (error) {
-      console.error('Error fetching local agent config:', error);
-      return null;
-    }
-  }
-
-  // Get complete agent data including personality for chat
-  async getAgentData() {
-    try {
-      if (!DOCUMENT_ID) {
-        console.warn('No document ID provided for agent data');
-        return null;
-      }
-
-      const response = await fetch(\`\${MAIN_APP_URL}/api/document?id=\${DOCUMENT_ID}\`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Agent-Key': AGENT_KEY,
-        },
-      });
-
-      if (!response.ok) {
-        console.error('Failed to fetch agent data:', response.status);
-        return null;
-      }
-
-      const data = await response.json();
-      
-      if (data.success && data.document?.metadata) {
-        const metadata = data.document.metadata;
-        return {
-          name: metadata.name || '${this.options.projectName}',
-          description: metadata.description || '',
-          personality: metadata.personality || '',
-          theme: metadata.theme || 'green',
-          avatar: metadata.avatar || null,
-          models: metadata.models || [],
-          actions: metadata.actions || [],
-          schedules: metadata.schedules || []
-        };
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Error fetching agent data:', error);
-      return null;
-    }
-  }
-
-  // Get avatar image URL from main app UI config
-  async getAvatarImageUrl() {
-    try {
-      const uiConfig = await this.getAgentUIConfiguration();
-      if (!uiConfig?.avatar) return null;
-
-      const { avatar } = uiConfig;
-      
-      if (avatar.type === 'custom' && avatar.uploadedImage) {
-        return avatar.uploadedImage;
-      } else if (avatar.type === 'rom-unicorn' && avatar.unicornParts) {
-        // Build unicorn avatar URL from main app
-        const parts = avatar.unicornParts;
-        return \`\${MAIN_APP_URL}/api/avatar/generate?body=\${parts.body}&hair=\${parts.hair}&eyes=\${parts.eyes}&mouth=\${parts.mouth}&accessory=\${parts.accessory}\`;
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Error fetching avatar image:', error);
-      return null;
-    }
-  }
 }
 
 const api = new ApiClient();
@@ -1332,12 +1166,13 @@ export type Theme = typeof themes.green;`;
 
   // Complete page implementations
   private generateModelsListPage(): string {
+    const agentTheme = this.options.agentConfig?.theme || 'green';
+    
     return `import Layout from '@/components/Layout';
 import ModelCard from '@/components/ModelCard';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { themes } from '@/lib/theme';
-import { useAgent } from '@/contexts/AgentContext';
 
 export default function ModelsPage() {
   const [modelsData, setModelsData] = useState<any[]>([]);
@@ -1346,11 +1181,8 @@ export default function ModelsPage() {
   const [models, setModels] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Use the global agent context
-  const { config: agentConfig } = useAgent();
-  
-  // Use agent config theme if available, fallback to green
-  const selectedTheme = agentConfig?.theme || 'green';
+  // Use embedded local configuration
+  const selectedTheme = '${agentTheme}';
   const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
   useEffect(() => {
@@ -1584,23 +1416,21 @@ export default function ModelDetailPage() {
   }
 
   private generateActionsPage(): string {
+    const agentTheme = this.options.agentConfig?.theme || 'green';
+    
     return `import Layout from '@/components/Layout';
 import ActionCard from '@/components/ActionCard';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { themes } from '@/lib/theme';
-import { useAgent } from '@/contexts/AgentContext';
 
 export default function ActionsPage() {
   const [actions, setActions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Use the global agent context
-  const { config: agentConfig } = useAgent();
-  
-  // Use agent config theme if available, fallback to green
-  const selectedTheme = agentConfig?.theme || 'green';
+  // Use embedded local configuration
+  const selectedTheme = '${agentTheme}';
   const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
   useEffect(() => {
@@ -1722,23 +1552,21 @@ export default function ActionsPage() {
   }
 
   private generateSchedulesPage(): string {
+    const agentTheme = this.options.agentConfig?.theme || 'green';
+    
     return `import Layout from '@/components/Layout';
 import ScheduleCard from '@/components/ScheduleCard';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { themes } from '@/lib/theme';
-import { useAgent } from '@/contexts/AgentContext';
 
 export default function SchedulesPage() {
   const [schedules, setSchedules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Use the global agent context
-  const { config: agentConfig } = useAgent();
-  
-  // Use agent config theme if available, fallback to green
-  const selectedTheme = agentConfig?.theme || 'green';
+  // Use embedded local configuration
+  const selectedTheme = '${agentTheme}';
   const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
   useEffect(() => {
@@ -1873,20 +1701,28 @@ export default function SchedulesPage() {
   }
 
   private generateChatPage(): string {
+    const agentName = escapeJSString(this.options.agentConfig?.name || this.options.projectName);
+    const agentDescription = escapeJSString(this.options.agentConfig?.description || 'Smart agent powered by AI');
+    
     return `import Layout from '@/components/Layout';
 import ChatMessage from '@/components/ChatMessage';
 import { useChat } from '@ai-sdk/react';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
-import { useAgent } from '@/contexts/AgentContext';
 
 export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [showQuickActions, setShowQuickActions] = useState(false);
   
-  // Use global agent context
-  const { config: agentConfig } = useAgent();
+  // Use embedded local configuration
+  const agentConfig = {
+    name: '${agentName}',
+    description: '${agentDescription}',
+    models: ${JSON.stringify(this.options.models)},
+    actions: ${JSON.stringify(this.options.actions)},
+    schedules: ${JSON.stringify(this.options.schedules)}
+  };
   
   const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
     api: '/api/chat',
@@ -2146,8 +1982,9 @@ What would you like to explore first?\`,
 }`;
   }
   private generateModelCardComponent(): string {
+    const agentTheme = this.options.agentConfig?.theme || 'green';
+    
     return `import { themes } from '@/lib/theme';
-import { useAgent } from '@/contexts/AgentContext';
 
 interface ModelCardProps {
   model: {
@@ -2160,11 +1997,8 @@ interface ModelCardProps {
 }
 
 export default function ModelCard({ model }: ModelCardProps) {
-  // Use the global agent context
-  const { config: agentConfig } = useAgent();
-  
-  // Use agent config theme if available, fallback to green
-  const selectedTheme = agentConfig?.theme || 'green';
+  // Use embedded local configuration
+  const selectedTheme = '${agentTheme}';
   const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
   return (
@@ -2194,10 +2028,11 @@ export default function ModelCard({ model }: ModelCardProps) {
   }
 
   private generateActionCardComponent(): string {
+    const agentTheme = this.options.agentConfig?.theme || 'green';
+    
     return `import { useState } from 'react';
 import ActionExecutionModal from './ActionExecutionModal';
 import { themes } from '@/lib/theme';
-import { useAgent } from '@/contexts/AgentContext';
 
 interface ActionCardProps {
   action: {
@@ -2216,11 +2051,8 @@ export default function ActionCard({ action }: ActionCardProps) {
   const [lastResult, setLastResult] = useState<any>(null);
   const [lastExecutionTime, setLastExecutionTime] = useState<string | null>(null);
 
-  // Use the global agent context
-  const { config: agentConfig } = useAgent();
-  
-  // Use agent config theme if available, fallback to green
-  const selectedTheme = agentConfig?.theme || 'green';
+  // Use embedded local configuration
+  const selectedTheme = '${agentTheme}';
   const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
   const handleActionComplete = (result: any) => {
@@ -2291,8 +2123,9 @@ export default function ActionCard({ action }: ActionCardProps) {
   }
 
   private generateScheduleCardComponent(): string {
+    const agentTheme = this.options.agentConfig?.theme || 'green';
+    
     return `import { themes } from '@/lib/theme';
-import { useAgent } from '@/contexts/AgentContext';
 
 interface ScheduleCardProps {
   schedule: {
@@ -2307,11 +2140,8 @@ interface ScheduleCardProps {
 }
 
 export default function ScheduleCard({ schedule }: ScheduleCardProps) {
-  // Use the global agent context
-  const { config: agentConfig } = useAgent();
-  
-  // Use agent config theme if available, fallback to green
-  const selectedTheme = agentConfig?.theme || 'green';
+  // Use embedded local configuration
+  const selectedTheme = '${agentTheme}';
   const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
   return (
@@ -2846,9 +2676,9 @@ async function getAIModelWithApiKeys() {
 
 // Build system prompt with embedded agent data
 async function buildSystemPrompt() {
-  const baseName = "${this.options.projectName}";
+  const baseName = "${escapeJSString(this.options.agentConfig?.name || this.options.projectName)}";
   const personality = "helpful and professional";
-  const description = "A self-contained AI agent application";
+  const description = "${escapeJSString(this.options.agentConfig?.description || 'A self-contained AI agent application')}";
   
   return \`You are an AI assistant for "\${baseName}", a self-contained agent application.
 
@@ -4266,6 +4096,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   private generateAgentConfigEndpoint(): string {
+    const agentName = escapeJSString(this.options.agentConfig?.name || this.options.projectName);
+    const agentDescription = escapeJSString(this.options.agentConfig?.description || 'Self-contained AI agent application');
+    const agentTheme = this.options.agentConfig?.theme || 'green';
+    const agentAvatar = this.options.agentConfig?.avatar || null;
+    const agentDomain = this.options.agentConfig?.domain || null;
+    
     return `import type { NextApiRequest, NextApiResponse } from 'next'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -4274,73 +4110,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://app.rom.cards';
-    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
+    console.log('🔧 Config API returning fully embedded local configuration');
 
-    console.log('🔗 Config API calling main app for UI config (avatar, theme, name, description):', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
-
-    let mainAppUIConfig = null;
-    
-    // Try to get UI configuration from main app (avatar, theme, name, description ONLY)
-    try {
-      const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-          'X-Agent-Token': AGENT_TOKEN,
-          'X-Document-ID': DOCUMENT_ID,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.agentConfig) {
-          // Extract ONLY UI elements from main app
-          mainAppUIConfig = {
-            name: data.agentConfig.name,
-            description: data.agentConfig.description,
-            theme: data.agentConfig.theme,
-            avatar: data.agentConfig.avatar,
-            domain: data.agentConfig.domain
-          };
-          console.log('✅ Retrieved UI config from main app:', {
-            name: mainAppUIConfig.name,
-            theme: mainAppUIConfig.theme,
-            hasAvatar: !!mainAppUIConfig.avatar,
-            avatarType: mainAppUIConfig.avatar?.type,
-            hasDescription: !!mainAppUIConfig.description
-          });
-        }
-      } else {
-        console.warn('⚠️ Main app responded with status:', response.status);
-      }
-    } catch (fetchError) {
-      console.warn('⚠️ Failed to fetch UI config from main app:', fetchError.message);
-    }
-
-    // Combine main app UI config with embedded functional data
+    // Return fully embedded local configuration
     const config = {
-      // UI elements from main app (or fallbacks)
-      name: mainAppUIConfig?.name || '${this.options.projectName}',
-      description: mainAppUIConfig?.description || 'Self-contained AI agent application',
-      theme: mainAppUIConfig?.theme || 'green',
-      avatar: mainAppUIConfig?.avatar || null,
-      domain: mainAppUIConfig?.domain || null,
+      // All configuration embedded locally
+      name: '${agentName}',
+      description: '${agentDescription}',
+      theme: '${agentTheme}',
+      avatar: ${JSON.stringify(agentAvatar)},
+      domain: ${JSON.stringify(agentDomain)},
       
-      // Functional data embedded in sub-agent (NOT from main app)
+      // Functional data embedded locally
       models: ${JSON.stringify(this.options.models)},
       actions: ${JSON.stringify(this.options.actions)},
       schedules: ${JSON.stringify(this.options.schedules)}
     };
     
-    console.log('✅ Returning hybrid config:', {
+    console.log('✅ Returning fully local config:', {
       name: config.name,
       theme: config.theme,
       hasAvatar: !!config.avatar,
       avatarType: config.avatar?.type,
       hasDescription: !!config.description,
-      source: mainAppUIConfig ? 'main-app-ui + embedded-functional-data' : 'fallback-ui + embedded-functional-data',
+      source: 'fully-local-embedded',
       modelsCount: config.models.length,
       actionsCount: config.actions.length,
       schedulesCount: config.schedules.length
@@ -4349,27 +4142,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(200).json({
       success: true,
       config,
-      source: mainAppUIConfig ? 'hybrid' : 'embedded-fallback'
+      source: 'fully-local-embedded'
     });
   } catch (error) {
-    console.error('❌ Error fetching agent config:', error);
+    console.error('❌ Error returning local config:', error);
     
-    // Complete fallback configuration
-    const fallbackConfig = {
-      name: '${this.options.projectName}',
-      description: 'Self-contained AI agent application',
-      theme: 'green',
-      avatar: null,
-      domain: null,
-      models: ${JSON.stringify(this.options.models)},
-      actions: ${JSON.stringify(this.options.actions)},
-      schedules: ${JSON.stringify(this.options.schedules)}
-    };
-    
-    res.status(200).json({
-      success: true,
-      config: fallbackConfig,
-      source: 'error-fallback'
+    res.status(500).json({
+      success: false,
+      error: 'Failed to return local configuration',
+      details: error.message
     });
   }
 }`;

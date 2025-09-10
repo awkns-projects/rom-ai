@@ -73,7 +73,14 @@ export async function POST(request: NextRequest) {
       description: description || agentData.description,
       environmentVariables: environmentVariables || {},
       vercelTeam,
-      documentId
+      documentId,
+      agentConfig: {
+        name: agentData.name,
+        description: agentData.description,
+        theme: agentData.theme,
+        avatar: agentData.avatar,
+        domain: agentData.domain
+      }
     };
 
     const deploymentResult = await executeStep4VercelDeployment(step4Input);

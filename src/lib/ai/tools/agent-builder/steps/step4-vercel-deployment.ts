@@ -29,6 +29,14 @@ export interface Step4Input {
     pgVersion?: number; // Default: 16
     autoSuspend?: boolean; // Default: true
   };
+  // Local client app configuration
+  agentConfig?: {
+    name?: string;
+    description?: string;
+    theme?: string;
+    avatar?: any;
+    domain?: string;
+  };
 }
 
 export interface Step4Output {
@@ -562,7 +570,8 @@ export async function generateNextJsProject(
   step2Output: Step2Output, 
   step3Output: Step3Output, 
   projectName: string,
-  neonOptions?: { region?: string; pgVersion?: number; autoSuspend?: boolean; }
+  neonOptions?: { region?: string; pgVersion?: number; autoSuspend?: boolean; },
+  agentConfig?: { name?: string; description?: string; theme?: string; avatar?: any; domain?: string; }
 ) {
   console.log('📁 Generating Vercel-optimized Next.js project files...');
   
@@ -578,6 +587,7 @@ export async function generateNextJsProject(
     schedules,
     prismaSchema: step1Output.prismaSchema,
     neonOptions,
+    agentConfig,
     vercelConfig: {
       cronJobs: schedules.length > 0,
       aiSdkEnabled: true, // Enable AI SDK for Vercel deployments
@@ -653,15 +663,12 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     
     // Step 3: Generate Next.js project files
     sendProgress('📁 Generating project files...');
-    const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName, neonOptions);
+    const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName, neonOptions, input.agentConfig);
     
     // Step 4: Set up environment variables
     sendProgress('🔧 Configuring environment variables...');
     
     const agentDeploymentUrl = `https://${vercelProject.name}.vercel.app`;
-    
-    // Generate agent token for authentication with main app
-    const agentToken = generateRandomSecret(); // Simple token for now - could be enhanced with JWT
     
     const allEnvVars = {
       // Database configuration
@@ -678,10 +685,10 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
       AI_MODEL_PROVIDER: process.env.AI_MODEL_PROVIDER || 'openai',
       AI_MODEL_NAME: process.env.AI_MODEL_NAME || 'gpt-4o-mini',
       
-      // Main App Integration (Required for UI elements: avatar, theme, name, description)
-      NEXT_PUBLIC_MAIN_APP_URL: process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app',
-      NEXT_PUBLIC_DOCUMENT_ID: input.documentId || '',
-      NEXT_PUBLIC_AGENT_TOKEN: agentToken,
+      // Application Configuration (fully local)
+      NEXT_PUBLIC_APP_NAME: input.agentConfig?.name || projectName,
+      NEXT_PUBLIC_APP_DESCRIPTION: input.agentConfig?.description || description || 'Smart agent powered by AI',
+      NEXT_PUBLIC_APP_THEME: input.agentConfig?.theme || 'green',
       
       // Security
       NEXTAUTH_SECRET: generateRandomSecret(),
@@ -690,7 +697,6 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
       
       // Application
       NODE_ENV: 'production',
-      NEXT_PUBLIC_APP_NAME: projectName,
       
       ...environmentVariables
     };
@@ -756,6 +762,8 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
              deploymentNotes: [
         'Deployed to Vercel with Next.js',
         'Neon PostgreSQL database created and configured',
+        'Fully self-contained with local agent configuration',
+        'No external dependencies - all config embedded locally',
         'Self-contained API endpoints for all actions and schedules',
         'Prisma schema and migrations handled by Vercel build process',
         'Environment variables configured',
@@ -768,9 +776,11 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
        neonProjectId,
        vercelProjectId,
        warnings: [
-         '✅ BENEFITS: Persistent PostgreSQL database with no resets on deployment',
+         '✅ BENEFITS: Fully self-contained with all configuration embedded locally',
+         '✅ Persistent PostgreSQL database with no resets on deployment',
          '✅ Scalable and production-ready database solution',
-         '✅ Self-contained operation with no main app dependencies',
+         '✅ Complete independence - no external dependencies',
+         '✅ All agent config (name, theme, avatar, etc.) embedded at build time',
          '📝 Note: Database migrations are handled automatically during Vercel build'
        ]
      };
@@ -800,6 +810,7 @@ export async function updateExistingDeployment(input: {
   description?: string;
   environmentVariables?: Record<string, string>;
   executeMigrations?: boolean;
+  agentConfig?: { name?: string; description?: string; theme?: string; avatar?: any; domain?: string; };
 }): Promise<Step4Output> {
   console.log('🔄 Updating existing Vercel deployment...');
   
@@ -820,7 +831,7 @@ export async function updateExistingDeployment(input: {
     console.log('📝 Note: SQLite database file will not be modified, only Vercel files updated');
     
     // Generate updated project files (without modifying SQLite)
-    const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName, undefined);
+    const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName, undefined, input.agentConfig);
     
     // Update environment variables if provided
     if (Object.keys(environmentVariables).length > 0) {

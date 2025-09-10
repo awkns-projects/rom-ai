@@ -90,7 +90,14 @@ export async function POST(request: NextRequest) {
           projectName: projectName || agentData.name,
           description: description || agentData.description,
           environmentVariables: environmentVariables || {},
-          executeMigrations: updateCheck.requiresMigration
+          executeMigrations: updateCheck.requiresMigration,
+          agentConfig: {
+            name: agentData.name,
+            description: agentData.description,
+            theme: agentData.theme,
+            avatar: agentData.avatar,
+            domain: agentData.domain
+          }
         });
       } else {
         console.log('✅ No deployment update needed');
@@ -111,7 +118,14 @@ export async function POST(request: NextRequest) {
         description: description || agentData.description,
         environmentVariables: environmentVariables || {},
         vercelTeam,
-        documentId
+        documentId,
+        agentConfig: {
+          name: agentData.name,
+          description: agentData.description,
+          theme: agentData.theme,
+          avatar: agentData.avatar,
+          domain: agentData.domain
+        }
       };
 
       deploymentResult = await executeStep4VercelDeployment(step4Input);

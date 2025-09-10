@@ -918,6 +918,51 @@ const AgentBuilderContent = memo(({
     setDeploymentProgress('Initializing deployment...');
     
     try {
+      // First, save environment variables to actions (same as saveEnvVarsToActions)
+      setDeploymentProgress('Saving environment variables...');
+      console.log('💾 Saving environment variables before deployment...');
+      console.log('Current deploymentEnvVars:', deploymentEnvVars);
+      
+      // Update actions with saved environment variables
+      const updatedActions = agentData.actions?.map(action => {
+        const actionEnvVars = deploymentEnvVars[action.id];
+        if (actionEnvVars && action.execute?.code?.envVars) {
+          const updatedEnvVars = action.execute.code.envVars.map(envVar => ({
+            ...envVar,
+            savedValue: actionEnvVars[envVar.name] || envVar.savedValue || undefined
+          }));
+          
+          console.log(`Updating action ${action.name} with env vars:`, updatedEnvVars);
+          
+          return {
+            ...action,
+            execute: {
+              ...action.execute,
+              code: {
+                ...action.execute.code,
+                envVars: updatedEnvVars
+              }
+            }
+          };
+        }
+        return action;
+      }) || [];
+
+      // Update agent data with saved env vars
+      const agentDataWithEnvVars = {
+        ...agentData,
+        actions: updatedActions
+      };
+
+      // Save immediately to document
+      const agentContent = JSON.stringify(agentDataWithEnvVars, null, 2);
+      onSaveContent(agentContent, false); // Immediate save, no debounce
+      
+      // Update local state (using updateAgentData like saveEnvVarsToActions)
+      updateAgentData(agentDataWithEnvVars);
+      
+      console.log('✅ Environment variables saved to actions and document');
+      
       // Prepare environment variables for deployment
       const deploymentEnvVarsFlat: Record<string, string> = {};
       Object.entries(deploymentEnvVars).forEach(([actionId, actionEnvVars]) => {
@@ -930,7 +975,7 @@ const AgentBuilderContent = memo(({
       });
       
       console.log('🔧 Deploying agent with:', {
-        agentName: agentData.name,
+        agentName: agentDataWithEnvVars.name,
         documentId,
         envVarsCount: Object.keys(deploymentEnvVarsFlat).length,
         envVarNames: Object.keys(deploymentEnvVarsFlat),
@@ -945,10 +990,10 @@ const AgentBuilderContent = memo(({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          agentData, // This now includes the saved environment variables
+          agentData: agentDataWithEnvVars, // This now includes the saved environment variables
           documentId,
-          projectName: agentData.name,
-          description: agentData.description,
+          projectName: agentDataWithEnvVars.name,
+          description: agentDataWithEnvVars.description,
           environmentVariables: deploymentEnvVarsFlat,
           isRedeploy: false,
           existingDeployment: null
@@ -971,7 +1016,7 @@ const AgentBuilderContent = memo(({
         
         // Update agent data with deployment info
         const updatedAgentData = {
-          ...agentData,
+          ...agentDataWithEnvVars,
           deployment: result.deploymentResult || result.deployment || {
             deploymentUrl: result.deploymentUrl,
             status: 'deployed',
@@ -1026,6 +1071,51 @@ const AgentBuilderContent = memo(({
     setDeploymentProgress('Initializing complete redeployment...');
     
     try {
+      // First, save environment variables to actions (same as saveEnvVarsToActions)
+      setDeploymentProgress('Saving environment variables...');
+      console.log('💾 Saving environment variables before redeployment...');
+      console.log('Current deploymentEnvVars:', deploymentEnvVars);
+      
+      // Update actions with saved environment variables
+      const updatedActions = agentData.actions?.map(action => {
+        const actionEnvVars = deploymentEnvVars[action.id];
+        if (actionEnvVars && action.execute?.code?.envVars) {
+          const updatedEnvVars = action.execute.code.envVars.map(envVar => ({
+            ...envVar,
+            savedValue: actionEnvVars[envVar.name] || envVar.savedValue || undefined
+          }));
+          
+          console.log(`Updating action ${action.name} with env vars:`, updatedEnvVars);
+          
+          return {
+            ...action,
+            execute: {
+              ...action.execute,
+              code: {
+                ...action.execute.code,
+                envVars: updatedEnvVars
+              }
+            }
+          };
+        }
+        return action;
+      }) || [];
+
+      // Update agent data with saved env vars
+      const agentDataWithEnvVars = {
+        ...agentData,
+        actions: updatedActions
+      };
+
+      // Save immediately to document
+      const agentContent = JSON.stringify(agentDataWithEnvVars, null, 2);
+      onSaveContent(agentContent, false); // Immediate save, no debounce
+      
+      // Update local state (using updateAgentData like saveEnvVarsToActions)
+      updateAgentData(agentDataWithEnvVars);
+      
+      console.log('✅ Environment variables saved to actions and document');
+      
       // Prepare environment variables for deployment
       const deploymentEnvVarsFlat: Record<string, string> = {};
       Object.entries(deploymentEnvVars).forEach(([actionId, actionEnvVars]) => {
@@ -1038,7 +1128,7 @@ const AgentBuilderContent = memo(({
       });
       
       console.log('🔧 Redeploying agent with complete rebuild:', {
-        agentName: agentData.name,
+        agentName: agentDataWithEnvVars.name,
         documentId,
         envVarsCount: Object.keys(deploymentEnvVarsFlat).length,
         envVarNames: Object.keys(deploymentEnvVarsFlat),
@@ -1054,10 +1144,10 @@ const AgentBuilderContent = memo(({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          agentData, // This now includes the saved environment variables
+          agentData: agentDataWithEnvVars, // This now includes the saved environment variables
           documentId,
-          projectName: agentData.name,
-          description: agentData.description,
+          projectName: agentDataWithEnvVars.name,
+          description: agentDataWithEnvVars.description,
           environmentVariables: deploymentEnvVarsFlat,
           isRedeploy: true,
           existingDeployment: deploymentInfo
@@ -1080,7 +1170,7 @@ const AgentBuilderContent = memo(({
         
         // Update agent data with deployment info
         const updatedAgentData = {
-          ...agentData,
+          ...agentDataWithEnvVars,
           deployment: result.deploymentResult || result.deployment || {
             deploymentUrl: result.deploymentUrl,
             status: 'deployed',
@@ -1217,31 +1307,57 @@ const AgentBuilderContent = memo(({
   // Initialize environment variables and reset deployment step when modal opens
   useEffect(() => {
     if (showDeploymentModal && agentData.actions) {
-      // Reset to confirmation step
-      setDeploymentStep('confirm');
-      setIsDeploying(false);
+      // Only reset deployment state when modal first opens, not when agentData.actions changes during deployment
+      const isModalJustOpened = deploymentStep === 'confirm' && !isDeploying;
       
-      const initialEnvVars: Record<string, Record<string, string>> = {};
-      
-      agentData.actions.forEach(action => {
-        if (action.execute?.code?.envVars?.length) {
-          initialEnvVars[action.id] = {};
-          action.execute.code.envVars.forEach(envVar => {
-            // Use saved value if available, otherwise empty string
-            initialEnvVars[action.id][envVar.name] = envVar.savedValue || '';
+      if (isModalJustOpened) {
+        console.log('🔧 Initializing deployment modal environment variables');
+        
+        const initialEnvVars: Record<string, Record<string, string>> = {};
+        
+        agentData.actions.forEach(action => {
+          if (action.execute?.code?.envVars?.length) {
+            initialEnvVars[action.id] = {};
+            action.execute.code.envVars.forEach(envVar => {
+              // Use saved value if available, otherwise empty string
+              initialEnvVars[action.id][envVar.name] = envVar.savedValue || '';
+            });
+          }
+        });
+        
+        setDeploymentEnvVars(initialEnvVars);
+        
+        // Initially collapse all actions
+        const actionIds = agentData.actions
+          .filter(action => action.execute?.code?.envVars?.length)
+          .map(action => action.id);
+        setCollapsedActions(new Set(actionIds));
+      } else {
+        console.log('🔧 Updating deployment environment variables with saved values (deployment in progress)');
+        
+        // Update environment variables with newly saved values, but don't reset deployment state
+        setDeploymentEnvVars(prevEnvVars => {
+          const updatedEnvVars = { ...prevEnvVars };
+          
+          agentData.actions.forEach(action => {
+            if (action.execute?.code?.envVars?.length) {
+              if (!updatedEnvVars[action.id]) {
+                updatedEnvVars[action.id] = {};
+              }
+              action.execute.code.envVars.forEach(envVar => {
+                // Update with saved value if it exists, otherwise keep current value
+                if (envVar.savedValue) {
+                  updatedEnvVars[action.id][envVar.name] = envVar.savedValue;
+                }
+              });
+            }
           });
-        }
-      });
-      
-      setDeploymentEnvVars(initialEnvVars);
-      
-      // Initially collapse all actions
-      const actionIds = agentData.actions
-        .filter(action => action.execute?.code?.envVars?.length)
-        .map(action => action.id);
-      setCollapsedActions(new Set(actionIds));
+          
+          return updatedEnvVars;
+        });
+      }
     }
-  }, [showDeploymentModal, agentData.actions]);
+  }, [showDeploymentModal, agentData.actions, deploymentStep, isDeploying]);
 
   // Agent actions hooks
   const { addModel, addSchedule, addAction } = useAgentActions(agentData, updateAgentData, updateMetadata);
