@@ -310,7 +310,7 @@ export const ScheduleMindMapEditor = memo(({
                   <SelectTrigger className="bg-slate-800 border-slate-600 text-white font-mono">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-600">
+                  <SelectContent className="bg-slate-800 border-slate-600 z-[70]">
                     <SelectItem value="cron" className="text-white font-mono">Cron Schedule</SelectItem>
                     <SelectItem value="interval" className="text-white font-mono">Regular Interval</SelectItem>
                     <SelectItem value="date" className="text-white font-mono">Specific Date</SelectItem>
@@ -321,25 +321,48 @@ export const ScheduleMindMapEditor = memo(({
 
               {schedule.trigger?.type === 'cron' && (
                 <div className="space-y-2">
-                  <Label className="text-orange-300 font-mono text-sm">Pattern</Label>
+                  <Label className="text-orange-300 font-mono text-sm">⏰ Pattern</Label>
                   <Select
                     value={schedule.trigger?.pattern || '0 0 * * *'}
                     onValueChange={(value) => onUpdate({
                       ...schedule,
-                      trigger: { ...schedule.trigger, pattern: value }
+                      trigger: { ...schedule.trigger, type: 'cron', pattern: value }
                     })}
                   >
                     <SelectTrigger className="bg-slate-800 border-slate-600 text-white font-mono">
-                      <SelectValue />
+                      <SelectValue placeholder="Select a schedule pattern" />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-600">
-                      <SelectItem value="*/10 * * * *">Every 10 minutes</SelectItem>
-                      <SelectItem value="0 * * * *">Every hour</SelectItem>
-                      <SelectItem value="0 9 * * 1-5">Weekdays at 9 AM</SelectItem>
-                      <SelectItem value="0 0 * * *">Daily at midnight</SelectItem>
-                      <SelectItem value="0 0 * * 0">Weekly on Sunday</SelectItem>
+                    <SelectContent className="bg-slate-800 border-slate-600 z-[70]">
+                      <SelectItem value="*/10 * * * *" className="text-white font-mono">Every 10 minutes</SelectItem>
+                      <SelectItem value="*/30 * * * *" className="text-white font-mono">Every 30 minutes</SelectItem>
+                      <SelectItem value="0 * * * *" className="text-white font-mono">Every hour</SelectItem>
+                      <SelectItem value="0 9 * * *" className="text-white font-mono">Daily at 9 AM</SelectItem>
+                      <SelectItem value="0 0 * * *" className="text-white font-mono">Daily at midnight</SelectItem>
+                      <SelectItem value="0 9 * * 1-5" className="text-white font-mono">Weekdays at 9 AM</SelectItem>
+                      <SelectItem value="0 0 * * 1" className="text-white font-mono">Weekly on Monday</SelectItem>
+                      <SelectItem value="0 0 1 * *" className="text-white font-mono">Monthly on 1st</SelectItem>
+                      <SelectItem value="custom" className="text-white font-mono">🔧 Custom Pattern</SelectItem>
                     </SelectContent>
                   </Select>
+                  
+                  {schedule.trigger?.pattern === 'custom' && (
+                    <div className="space-y-2">
+                      <Label className="text-orange-300 font-mono text-sm">Custom Cron Pattern</Label>
+                      <Input
+                        value=""
+                        onChange={(e) => onUpdate({
+                          ...schedule,
+                          trigger: { ...schedule.trigger, type: 'cron', pattern: e.target.value }
+                        })}
+                        placeholder="0 9 * * *"
+                        className="bg-slate-800 border-slate-600 text-white font-mono"
+                      />
+                    </div>
+                  )}
+                  
+                  <p className="text-xs text-orange-400/70 font-mono">
+                    Cron expression: minute hour day month weekday
+                  </p>
                 </div>
               )}
 
@@ -381,7 +404,7 @@ export const ScheduleMindMapEditor = memo(({
                       <SelectTrigger className="bg-slate-800 border-slate-600 text-white font-mono">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="z-[70]">
                         <SelectItem value="minutes">Minutes</SelectItem>
                         <SelectItem value="hours">Hours</SelectItem>
                         <SelectItem value="days">Days</SelectItem>
@@ -391,6 +414,75 @@ export const ScheduleMindMapEditor = memo(({
                   </div>
                 </div>
               )}
+
+              {schedule.trigger?.type === 'date' && (
+                <div className="space-y-2">
+                  <Label className="text-orange-300 font-mono text-sm">📅 Execution Date</Label>
+                  <Input
+                    type="datetime-local"
+                    value={schedule.trigger?.date ? new Date(schedule.trigger.date).toISOString().slice(0, 16) : ''}
+                    onChange={(e) => onUpdate({
+                      ...schedule,
+                      trigger: { 
+                        ...schedule.trigger, 
+                        type: 'date',
+                        date: e.target.value ? new Date(e.target.value).toISOString() : undefined
+                      }
+                    })}
+                    className="bg-slate-800 border-slate-600 text-white font-mono"
+                  />
+                  <p className="text-xs text-orange-400/70 font-mono">
+                    Schedule will run once at this date and time
+                  </p>
+                </div>
+              )}
+
+              {schedule.trigger?.type === 'manual' && (
+                <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                  <div className="text-blue-300 font-mono text-sm font-medium mb-1">📋 Manual Execution</div>
+                  <div className="text-blue-200 text-xs">
+                    This schedule will only run when manually triggered. No automatic timing.
+                  </div>
+                </div>
+              )}
+
+                              <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-orange-300 font-mono text-sm">🌍 Timezone</Label>
+                    <Input
+                      value={schedule.trigger?.timezone || 'UTC'}
+                      onChange={(e) => onUpdate({
+                        ...schedule,
+                        trigger: { ...schedule.trigger, timezone: e.target.value }
+                      })}
+                      placeholder="UTC"
+                      className="bg-slate-800 border-slate-600 text-white font-mono"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-orange-300 font-mono text-sm">🔄 Status</Label>
+                    <Select
+                      value={schedule.trigger?.active ? 'active' : 'inactive'}
+                      onValueChange={(value) => onUpdate({
+                        ...schedule,
+                        trigger: { ...schedule.trigger, active: value === 'active' }
+                      })}
+                    >
+                      <SelectTrigger className="bg-slate-800 border-slate-600 text-white font-mono">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-slate-600 z-[70]">
+                        <SelectItem value="inactive" className="text-white font-mono">🔴 Inactive</SelectItem>
+                        <SelectItem value="active" className="text-white font-mono">🟢 Active</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                
+                <p className="text-xs text-orange-400/70 font-mono">
+                  Timezone for execution • Status controls automatic running
+                </p>
             </div>
           </div>
         ),
@@ -513,7 +605,7 @@ export const ScheduleMindMapEditor = memo(({
                         : "Choose an action..."
                     } />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-600 max-h-60 overflow-y-auto">
+                  <SelectContent className="bg-slate-800 border-slate-600 max-h-60 overflow-y-auto z-[70]">
                     {availableActions.length === 0 ? (
                       <div className="p-4 text-slate-400 text-sm font-mono text-center">
                         <div className="mb-2">🔧 No actions available</div>
@@ -593,7 +685,7 @@ export const ScheduleMindMapEditor = memo(({
                     <SelectTrigger className="bg-slate-800 border-slate-600 text-white font-mono">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[70]">
                       <SelectItem value="stop">Stop Chain</SelectItem>
                       <SelectItem value="continue">Continue</SelectItem>
                       <SelectItem value="retry">Retry</SelectItem>

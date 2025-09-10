@@ -103,14 +103,25 @@ interface UnicornParts {
 interface AgentSchedule {
   id: string;
   name: string;
+  title?: string;
+  emoji?: string;
   description: string;
-  interval: {
-    type: 'cron' | 'interval';
+  trigger: {
+    type: 'cron' | 'interval' | 'date' | 'manual';
     pattern?: string;
-    value?: number;
-    unit?: 'minutes' | 'hours' | 'days' | 'weeks';
+    interval?: {
+      value: number;
+      unit: 'minutes' | 'hours' | 'days' | 'weeks';
+    };
+    timezone?: string;
+    active?: boolean;
   };
-  active: boolean;
+  steps: Array<{
+    id: string;
+    actionId: string;
+    name: string;
+    description?: string;
+  }>;
 }
 
 interface SimpleAgentCreatorProps {
@@ -169,13 +180,16 @@ export const SimpleAgentCreator = memo(({ onComplete, initialAgentData, document
   const addSchedule = useCallback(() => {
     const newSchedule: AgentSchedule = {
       id: generateNewId('schedule', agentData.schedules || []),
-      name: `Schedule ${(agentData.schedules?.length || 0) + 1}`,
+      name: `schedule${(agentData.schedules?.length || 0) + 1}`,
+      title: `Schedule ${(agentData.schedules?.length || 0) + 1}`,
+      emoji: '⏰',
       description: '',
-      interval: {
+      trigger: {
         type: 'cron',
-        pattern: '0 9 * * *' // Daily at 9 AM
+        pattern: '0 9 * * *', // Daily at 9 AM
+        active: false
       },
-      active: false
+      steps: []
     };
     handleDataChange({ 
       schedules: [...(agentData.schedules || []), newSchedule] 

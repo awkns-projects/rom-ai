@@ -1511,7 +1511,7 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
     // Validate that AI generated proper name and title formats
     console.log(`✅ AI generated ${result.object.schedules.length} schedules`);
     
-    result.object.schedules.forEach(schedule => {
+    result.object.schedules.forEach((schedule: any) => {
       // Validate name format (should be camelCase)
       if (!schedule.name || /\s/.test(schedule.name) || /[-_]/.test(schedule.name)) {
         console.warn(`⚠️ Schedule name "${schedule.name}" is not camelCase. Expected format: "dailyReportGeneration"`);
@@ -1563,12 +1563,12 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
         description: schedule.description || schedule.name || 'No description provided',
         steps: validatedSteps,
         trigger: schedule.trigger || {
-          type: 'manual',
-          active: false
-        },
-        interval: schedule.interval || {
-          pattern: schedule.frequency || 'daily',
-          value: 1
+          type: 'cron',
+          pattern: schedule.frequency === 'daily' ? '0 9 * * *' : 
+                   schedule.frequency === 'weekly' ? '0 9 * * 1' :
+                   schedule.frequency === 'monthly' ? '0 9 1 * *' :
+                   schedule.interval?.pattern || '0 9 * * *',
+          active: schedule.trigger?.active ?? schedule.interval?.active ?? false
         },
       // dataSource: schedule.dataSource || {
       //   type: 'custom',
@@ -1686,10 +1686,6 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
         title: 'Daily Status Check', // Human-readable name for UI display
         emoji: '⏰',
         description: 'A default daily schedule for system monitoring and basic automation',
-        interval: {
-          pattern: '0 9 * * *', // 9 AM daily
-          active: false
-        },
         trigger: {
           type: 'cron' as const,
           pattern: '0 9 * * *', // 9 AM daily
@@ -1704,11 +1700,6 @@ Generate exactly ${expectedScheduleCount} schedules that solve real business aut
             condition: { type: 'always' as const }
           }
         ] : [],
-        results: {
-          model: 'DefaultModel',
-          fields: {},
-          fieldsToUpdate: {}
-        },
         createdAt: new Date().toISOString()
       };
       

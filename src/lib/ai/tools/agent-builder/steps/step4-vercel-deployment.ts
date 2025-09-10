@@ -292,7 +292,7 @@ export class VercelClient {
     }
     
     // Set environment variables sequentially with delays to prevent ongoing update conflicts
-    const envDelay = 1500; // 1.5 seconds between each environment variable operation
+    const envDelay = 300; // 0.3 seconds between each environment variable operation
     const envEntries = Object.entries(envVars);
     let successCount = 0;
     
@@ -529,15 +529,15 @@ function validateAndNormalizeActions(actions: AgentAction[]): AgentAction[] {
 
 function validateAndNormalizeSchedules(schedules: AgentSchedule[]): AgentSchedule[] {
   return schedules.filter(schedule => {
-    if (!schedule.name || !schedule.interval?.pattern) {
-      console.warn(`⚠️ Skipping invalid schedule: missing name or interval.pattern`);
+    if (!schedule.name || !schedule.trigger?.pattern) {
+      console.warn(`⚠️ Skipping invalid schedule: missing name or trigger.pattern`);
       return false;
     }
     
-    // Basic cron validation for interval.pattern
-    const parts = schedule.interval.pattern.split(' ');
+    // Basic cron validation for trigger.pattern
+    const parts = schedule.trigger.pattern.split(' ');
     if (parts.length !== 5) {
-      console.warn(`⚠️ Skipping schedule "${schedule.name}": invalid cron expression "${schedule.interval.pattern}"`);
+      console.warn(`⚠️ Skipping schedule "${schedule.name}": invalid cron expression "${schedule.trigger.pattern}"`);
       return false;
     }
     
@@ -546,9 +546,9 @@ function validateAndNormalizeSchedules(schedules: AgentSchedule[]): AgentSchedul
     ...schedule,
     // Schedule names should already be sanitized by Step 3 schedule generation
     description: schedule.description || `Scheduled task: ${schedule.name}`,
-    interval: {
-      ...schedule.interval,
-      active: schedule.interval?.active !== false
+    trigger: {
+      ...schedule.trigger,
+      active: schedule.trigger?.active !== false
     },
     emoji: schedule.emoji || '⏰',
   }));
@@ -735,7 +735,7 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     const schedules = validateAndNormalizeSchedules(step3Output.schedules);
     
     const apiEndpoints = actions.map(action => `${deploymentUrl}/api/${action.name}`);
-    const cronJobs = schedules.map(schedule => `${schedule.interval.pattern} - /api/cron/${schedule.name}`);
+    const cronJobs = schedules.map(schedule => `${schedule.trigger.pattern} - /api/cron/${schedule.name}`);
     
          const result: Step4Output = {
        deploymentId,
@@ -831,7 +831,7 @@ export async function updateExistingDeployment(input: {
     const schedules = validateAndNormalizeSchedules(step3Output.schedules);
     
     const apiEndpoints = actions.map(action => `${deploymentUrl}/api/${action.name}`);
-    const cronJobs = schedules.map(schedule => `${schedule.interval.pattern} - /api/cron/${schedule.name}`);
+    const cronJobs = schedules.map(schedule => `${schedule.trigger.pattern} - /api/cron/${schedule.name}`);
     
     const result: Step4Output = {
       deploymentId: deployment.id,

@@ -1,6 +1,6 @@
 import type { AgentModel } from './model';
 import type { AgentAction } from './action';
-import type { LegacyAgentSchedule } from './schedule';
+import type { AgentSchedule } from './schedule';
 
 export interface AgentData {
   id?: string; // Optional for new agents, required for existing ones
@@ -10,7 +10,7 @@ export interface AgentData {
   models: AgentModel[];
   enums?: any[]; // Generated database enums for deployment
   actions: AgentAction[];
-  schedules: LegacyAgentSchedule[];
+  schedules: AgentSchedule[];
   prismaSchema?: string; // Generated database schema for deployment
   createdAt: string;
   theme?: string; // Stored theme selection for the agent

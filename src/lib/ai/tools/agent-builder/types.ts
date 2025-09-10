@@ -41,63 +41,85 @@ export interface AgentEnumField {
   defaultValue?: string;
 }
 
+// ParamValue type for supporting static values, references to previous actions, and alias-based references during loops
+export type ParamValue = 
+  | { type: 'static'; value: any }
+  | { type: 'ref'; fromActionIndex: number; outputKey: string }
+  | { type: 'alias'; fromAlias: string; outputKey: string };
+
+// Interface for step execution in action chains
+export interface ActionChainStep {
+  id: string;
+  actionId: string; // Reference to an existing Action
+  name: string; // Display name for this step
+  description?: string;
+  delay?: {
+    duration: number; // duration in the specified unit
+    unit: 'seconds' | 'minutes' | 'hours';
+  };
+  // Updated to use ParamValue system for parameter chaining
+  inputParams?: Record<string, ParamValue>;
+  condition?: {
+    type: 'always' | 'if' | 'unless';
+    expression?: string; // Future feature for conditional execution
+  };
+  onError?: {
+    action: 'stop' | 'continue' | 'retry';
+    retryCount?: number;
+    retryDelay?: number;
+  };
+}
+
+// Interface for scheduled action chains
 export interface AgentSchedule {
   id: string;
-  name: string; // Code-safe name for cron jobs and deployments
-  title: string; // Human-readable display name for UI
-  emoji?: string;
+  name: string;
+  title?: string; // User-friendly display title
+  emoji?: string; // AI-generated emoji representing the schedule
   description: string;
-  interval: {
-    pattern: string;
+  
+  // Timing configuration
+  trigger: {
+    type: 'cron' | 'interval' | 'date' | 'manual';
+    pattern?: string; // cron expression for cron type
+    interval?: {
+      value: number;
+      unit: 'minutes' | 'hours' | 'days' | 'weeks';
+    };
+    date?: string; // ISO date string for one-time execution
     timezone?: string;
     active?: boolean;
-    value?: number;
   };
-  dataSource?: {
-    type: 'database' | 'custom';
-    customFunction?: {
-      code: string;
-      envVars: Array<{
-        name: string;
-        description: string;
-        required: boolean;
-        sensitive: boolean;
-      }>;
-    };
-    database?: {
-      models: Array<{
-        id: string;
-        name: string;
-        fields: Array<{
-          id: string;
-          name: string;
-        }>;
-      }>;
-    };
+
+  // Action chain configuration
+  steps: ActionChainStep[];
+  
+  // Global configuration for the entire chain
+  globalInputs?: Record<string, any>; // Inputs available to all steps
+  environment?: {
+    envVars: Array<{
+      name: string;
+      description: string;
+      required: boolean;
+      sensitive: boolean;
+    }>;
   };
-  execute?: {
-    type: 'code' | 'prompt';
-    code?: {
-      script: string;
-      envVars: Array<{
-        name: string;
-        description: string;
-        required: boolean;
-        sensitive: boolean;
-      }>;
-    };
-    prompt?: {
-      content: string;
-      model?: string;
-      temperature?: number;
-      maxTokens?: number;
-    };
+  
+  // Execution history and results
+  lastExecution?: {
+    timestamp: string;
+    success: boolean;
+    duration: number;
+    stepsCompleted: number;
+    totalSteps: number;
+    error?: string;
+    results?: Record<string, any>[];
   };
-  results: {
-    model: string;
-    fields: Record<string, any>;
-    fieldsToUpdate: Record<string, any>;
-  };
+  
+  // Metadata
+  createdAt?: string;
+  updatedAt?: string;
+  version?: number;
 }
 
 export interface AgentAction {

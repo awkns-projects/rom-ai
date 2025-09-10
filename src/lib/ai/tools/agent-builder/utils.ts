@@ -248,34 +248,18 @@ export function ensureRequiredScheduleFields(schedules: any[]): any[] {
   return schedules.map(schedule => ({
     id: schedule.id || generateNewId('schedule', []),
     name: schedule.name || 'Unnamed Schedule',
-    emoji: schedule.emoji,
+    title: schedule.title || schedule.name || 'Unnamed Schedule',
+    emoji: schedule.emoji || '⏰',
     description: schedule.description || 'No description provided',
-    interval: schedule.interval || {
+    trigger: schedule.trigger || {
+      type: 'cron',
       pattern: '0 0 * * *', // Daily at midnight
       timezone: 'UTC',
       active: false
     },
-    dataSource: schedule.dataSource || {
-      type: 'custom',
-      customFunction: {
-        code: '// Custom function code here',
-        envVars: []
-      }
-    },
-    execute: schedule.execute || {
-      type: 'prompt',
-      prompt: {
-        template: 'Default prompt template',
-        model: 'gpt-4',
-        temperature: 0.7,
-        maxTokens: 1000
-      }
-    },
-    results: {
-      model: schedule.results?.model || 'DefaultModel',
-      fields: schedule.results?.fields || {},
-      fieldsToUpdate: schedule.results?.fieldsToUpdate || {}
-    }
+    steps: schedule.steps || [],
+    globalInputs: schedule.globalInputs || {},
+    environment: schedule.environment || { envVars: [] }
   }));
 }
 

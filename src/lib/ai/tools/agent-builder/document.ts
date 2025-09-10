@@ -190,12 +190,12 @@ export function validateAgentData(agent: AgentData): { valid: boolean; errors: s
       errors.push(`Schedule ${index + 1} is missing a name`);
     }
     
-    if (!schedule.execute) {
-      errors.push(`Schedule "${schedule.name}" is missing execute configuration`);
+    if (!schedule.steps || schedule.steps.length === 0) {
+      errors.push(`Schedule "${schedule.name}" is missing action steps`);
     }
     
-    if (!schedule.interval) {
-      errors.push(`Schedule "${schedule.name}" is missing interval configuration`);
+    if (!schedule.trigger) {
+      errors.push(`Schedule "${schedule.name}" is missing trigger configuration`);
     }
   });
   

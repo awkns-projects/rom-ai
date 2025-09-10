@@ -147,7 +147,7 @@ export function validateStep3Output(output: Step3Output): boolean {
     
     // Check that schedules have proper structure
     const invalidSchedules = output.schedules.filter(s => 
-      !s.name || !s.description || !s.interval?.pattern
+      !s.name || !s.description || !s.trigger?.pattern
     );
     
     if (invalidSchedules.length > 0) {

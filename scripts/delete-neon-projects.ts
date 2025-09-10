@@ -6,8 +6,8 @@ import { execSync } from 'child_process';
  * Script to delete all Neon projects
  * 
  * Prerequisites:
- * - Install Neon CLI: npm install -g @neondatabase/cli
- * - Login to Neon: neon auth login
+ * - Install Neon CLI: npm install -g neonctl
+ * - Set API key: export NEON_API_KEY=your_api_key_here
  * 
  * Usage:
  * - Run with confirmation: npx tsx scripts/delete-neon-projects.ts
@@ -24,13 +24,15 @@ interface NeonProject {
 async function getNeonProjects(): Promise<NeonProject[]> {
   try {
     console.log('📋 Fetching Neon projects...');
-    const output = execSync('neon projects list --output json', { encoding: 'utf8' });
-    return JSON.parse(output);
+    const output = execSync('neonctl projects list --output json', { encoding: 'utf8' });
+    const response = JSON.parse(output);
+    return response.projects || [];
   } catch (error) {
     console.error('❌ Error fetching Neon projects:', error);
-    console.error('Make sure you have the Neon CLI installed and are logged in:');
-    console.error('  npm install -g @neondatabase/cli');
-    console.error('  neon auth login');
+    console.error('Make sure you have the Neon CLI installed and your API key is set:');
+    console.error('  npm install -g neonctl');
+    console.error('  export NEON_API_KEY=your_api_key_here');
+    console.error('Or use: neonctl projects list --api-key your_api_key_here');
     process.exit(1);
   }
 }
@@ -38,7 +40,7 @@ async function getNeonProjects(): Promise<NeonProject[]> {
 async function deleteNeonProject(projectId: string, projectName: string): Promise<boolean> {
   try {
     console.log(`🗑️  Deleting Neon project: ${projectName} (${projectId})`);
-    execSync(`neon projects delete ${projectId} --confirm`, { encoding: 'utf8' });
+    execSync(`neonctl projects delete ${projectId}`, { encoding: 'utf8' });
     console.log(`✅ Successfully deleted: ${projectName}`);
     return true;
   } catch (error) {

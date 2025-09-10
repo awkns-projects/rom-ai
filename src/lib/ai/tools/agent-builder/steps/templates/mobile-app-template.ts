@@ -1,5 +1,18 @@
 import type { AgentAction, AgentSchedule } from '../../types';
 
+// Helper function to normalize schedule structure (handles both old and new formats)
+function normalizeSchedule(schedule: any) {
+  // Handle both old (interval) and new (trigger) format
+  const pattern = schedule.trigger?.pattern || schedule.interval?.pattern || '0 0 * * *';
+  const active = schedule.trigger?.active ?? schedule.interval?.active ?? false;
+  
+  return {
+    ...schedule,
+    normalizedPattern: pattern,
+    normalizedActive: active
+  };
+}
+
 interface MobileAppTemplateOptions {
   projectName: string;
   models: any[];
@@ -240,12 +253,12 @@ pids/
       start: "next start",
       lint: "next lint",
       "db:generate": "prisma generate",
-      "db:push": "prisma db push",
+      "db:push": "prisma db push --accept-data-loss",
       "db:deploy": "prisma migrate deploy",
       "db:migrate": "prisma migrate dev",
       "db:studio": "prisma studio",
       "db:seed": "tsx prisma/seed.ts",
-      "db:setup": "npm run prisma:format && npm run db:generate && npm run db:deploy",
+      "db:setup": "npm run prisma:format && npm run db:generate && npm run db:push",
       "db:reset": "prisma migrate reset --force",
       "prisma:format": "prisma format",
       "prisma:validate": "prisma validate",
@@ -284,12 +297,17 @@ module.exports = nextConfig`;
     const { vercelConfig } = this.options;
     const aiSdkEnabled = vercelConfig?.aiSdkEnabled !== false;
 
-    let envContent = `# Database - Neon PostgreSQL
+    let envContent = `# Database - PostgreSQL (Neon recommended for production)
+# For local development, you can use a local PostgreSQL instance
+# For production, create a Neon database and use the connection string
 DATABASE_URL="postgresql://user:password@host:5432/database"
 
-# Neon Database Configuration
+# Neon Database Configuration (for production)
 NEON_API_KEY="your_neon_api_key_here"
-NEON_PROJECT_ID="your_neon_project_id_here"`;
+NEON_PROJECT_ID="your_neon_project_id_here"
+
+# Note: You need to create the PostgreSQL database first before running the app
+# The tables will be created automatically when you run 'npm run db:setup'`;
 
     if (aiSdkEnabled) {
       envContent += `
@@ -335,10 +353,12 @@ NEXT_PUBLIC_THEME_COLOR="emerald"  # Options: emerald, blue, purple, pink
 
   private generateEnvLocal(): string {
     return `# Local Development Environment
-# Database URL - Neon PostgreSQL connection string
-DATABASE_URL="postgresql://user:password@localhost:5432/mydb"
+# Database URL - PostgreSQL connection string
+# For local development: Create a PostgreSQL database named '${this.options.projectName.toLowerCase().replace(/[^a-z0-9]/g, '_')}'
+# For production: Use your Neon database connection string
+DATABASE_URL="postgresql://postgres:password@localhost:5432/${this.options.projectName.toLowerCase().replace(/[^a-z0-9]/g, '_')}"
 
-# Neon Database Configuration
+# Neon Database Configuration (for production deployment)
 NEON_API_KEY="your_neon_api_key_here"
 NEON_PROJECT_ID="your_neon_project_id_here"
 
@@ -363,18 +383,21 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
   }
 
   private generateVercelConfig(): string {
-    // Generate cron configurations for each schedule
-    const cronConfigs = this.options.schedules.map(schedule => ({
-      path: `/api/cron/${schedule.name}`,
-      schedule: schedule.interval?.pattern || "0 0 * * *" // Default to daily if no pattern
-    }));
+    // Generate cron configurations for each schedule using the normalize function
+    const cronConfigs = this.options.schedules.map(schedule => {
+      const normalized = normalizeSchedule(schedule);
+      return {
+        path: `/api/cron/${schedule.name}`,
+        schedule: normalized.normalizedPattern
+      };
+    });
 
     return JSON.stringify({
       buildCommand: "npm run vercel-build",
       functions: {
-        "src/pages/api/cron/*.ts": { maxDuration: 300 },
-        "src/pages/api/models/*.ts": { maxDuration: 60 },
-        "src/pages/api/actions/*.ts": { maxDuration: 120 }
+        "src/pages/api/cron/**": { maxDuration: 300 },
+        "src/pages/api/models/**": { maxDuration: 60 },
+        "src/pages/api/actions/**": { maxDuration: 120 }
       },
       crons: cronConfigs,
       installCommand: "npm install",
@@ -426,6 +449,12 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
     files['src/pages/api/models/[modelName].ts'] = this.generateModelEndpoint();
     files['src/pages/api/models/[modelName]/[id].ts'] = this.generateModelRecordEndpoint();
     files['src/pages/api/chat.ts'] = this.generateSelfContainedChatEndpoint();
+    
+    // Agent configuration endpoints (embedded data)
+    files['src/pages/api/agent/actions.ts'] = this.generateActionsEndpoint();
+    files['src/pages/api/agent/schedules.ts'] = this.generateSchedulesEndpoint();
+    files['src/pages/api/agent/models.ts'] = this.generateModelsEndpoint();
+    files['src/pages/api/agent/config.ts'] = this.generateAgentConfigEndpoint();
 
     // Static action endpoints (one file per action with embedded code)
     this.options.actions.forEach(action => {
@@ -973,14 +1002,11 @@ class ApiClient {
   }
 
   async executeAction(actionName: string, input: any) {
-    // Get fresh credentials for action execution
-    const { credentials } = await this.getCredentialsAndConfig();
-    
+    // Execute action locally using the embedded action endpoint
     return this.request(\`/api/actions/\${actionName}\`, {
       method: 'POST',
       body: JSON.stringify({ 
-        input,
-        credentials // Pass credentials to action
+        parameters: input // Use parameters key expected by static action endpoints
       }),
     });
   }
@@ -989,29 +1015,54 @@ class ApiClient {
     return this.request('/api/health');
   }
 
-  // Direct action trigger (executes on main app)
-  async triggerActionOnMainApp(actionId: string, input: any = {}, member?: any) {
-    return this.request(\`/api/trigger/action/\${actionId}\`, {
+  // Execute schedule locally using embedded cron endpoint (for manual testing)
+  async executeSchedule(scheduleName: string, secret?: string) {
+    const headers: Record<string, string> = {};
+    if (secret) {
+      headers['x-cron-secret'] = secret;
+    }
+    
+    return this.request(\`/api/cron/\${scheduleName}\`, {
       method: 'POST',
-      body: JSON.stringify({ input, member }),
+      headers
     });
   }
 
-  // Direct schedule trigger (executes on main app)
-  async triggerScheduleOnMainApp(scheduleId: string, force: boolean = false, member?: any) {
-    return this.request(\`/api/trigger/schedule/\${scheduleId}\`, {
-      method: 'POST',
-      body: JSON.stringify({ force, member }),
-    });
+  // Get schedule execution status and results
+  async getScheduleResults(scheduleName: string) {
+    try {
+      const response = await this.request(\`/api/cron/\${scheduleName}\`, {
+        method: 'GET'
+      });
+      return response;
+    } catch (error) {
+      console.error('Error getting schedule results:', error);
+      return null;
+    }
   }
 
-  // Call back to main app for agent configuration (using the new API)
+  // Call back to main app for agent configuration (UI elements only)
   async getAgentConfiguration() {
     try {
       const { agentConfig } = await this.getCredentialsAndConfig();
       return agentConfig || null;
     } catch (error) {
       console.error('Error fetching agent configuration:', error);
+      return null;
+    }
+  }
+
+  // Get agent configuration from local endpoint (which calls main app for UI config)
+  async getLocalAgentConfig() {
+    try {
+      const response = await fetch('/api/agent/config');
+      if (!response.ok) {
+        throw new Error(\`Failed to fetch config: \${response.status}\`);
+      }
+      const data = await response.json();
+      return data.success ? data.config : null;
+    } catch (error) {
+      console.error('Error fetching local agent config:', error);
       return null;
     }
   }
@@ -1338,17 +1389,9 @@ export default function ModelsPage() {
           fields: model.fields || []
         }));
         
-        if (data.source === 'fallback') {
-          setError('Using cached models. Main app connection may be unavailable.');
-        }
+        // Data is embedded, no connection issues
       } else {
-        // Fallback to static models
-        currentModels = ${JSON.stringify(this.options.models.map(m => ({
-          name: m.name,
-          emoji: m.emoji || '📋',
-          description: m.description || 'Data model',
-          fields: m.fields || []
-        })), null, 2)};
+        throw new Error('No models data received');
       }
       
       setModels(currentModels);
@@ -1366,18 +1409,10 @@ export default function ModelsPage() {
       const results = await Promise.all(promises);
       setModelsData(results);
     } catch (error) {
-      console.error('Failed to fetch model data:', error);
-      setError('Failed to fetch model data from main app. Please check your connection.');
-      
-      // Fallback to static models
-      const fallbackModels = ${JSON.stringify(this.options.models.map(m => ({
-        name: m.name,
-        emoji: m.emoji || '📋',
-        description: m.description || 'Data model',
-        fields: m.fields || []
-      })), null, 2)};
-      setModels(fallbackModels);
-      setModelsData(fallbackModels.map(model => ({ ...model, recordCount: 0, records: [], error: true })));
+      console.error('Failed to fetch embedded model data:', error);
+      setError('Failed to load models from embedded data.');
+      setModels([]);
+      setModelsData([]);
     } finally {
       setLoading(false);
     }
@@ -1610,28 +1645,14 @@ export default function ActionsPage() {
         }));
         setActions(formattedActions);
         
-        if (data.source === 'fallback') {
-          setError('Using cached actions. Main app connection may be unavailable.');
-        }
+        // Data is embedded, no connection issues
       } else {
         throw new Error('No actions data received');
       }
     } catch (err) {
-      console.error('Failed to fetch actions:', err);
-      setError('Failed to fetch actions. Please check your connection.');
-      
-      // Fallback to static actions
-      const fallbackActions = ${JSON.stringify(this.options.actions.map(a => ({
-        id: a.id,
-        name: a.name,
-        title: a.title || a.name,
-        emoji: a.emoji || '⚡',
-        description: a.description || 'Execute action',
-        role: a.role || 'member',
-        uiComponentsDesign: (a as any).uiComponentsDesign || [],
-        pseudoSteps: (a as any).pseudoSteps || []
-      })), null, 2)};
-      setActions(fallbackActions);
+      console.error('Failed to fetch embedded actions:', err);
+      setError('Failed to load actions from embedded data.');
+      setActions([]); // No fallback needed since data is embedded
     } finally {
       setLoading(false);
     }
@@ -1757,33 +1778,21 @@ export default function SchedulesPage() {
           name: schedule.name,
           emoji: schedule.emoji || '⏰',
           description: schedule.description || 'Scheduled task',
-          pattern: schedule.interval?.pattern || '0 0 * * *',
-          active: schedule.interval?.active !== false,
-          nextRun: schedule.interval?.pattern ? 'Calculated from pattern' : 'Unknown'
+          pattern: schedule.trigger?.pattern || '0 0 * * *',
+          active: schedule.trigger?.active !== false,
+          nextRun: schedule.trigger?.pattern ? 'Calculated from pattern' : 'Unknown',
+          steps: schedule.steps || []
         }));
         setSchedules(formattedSchedules);
         
-        if (data.source === 'fallback') {
-          setError('Using cached schedules. Main app connection may be unavailable.');
-        }
+        // Data is embedded, no connection issues
       } else {
         throw new Error('No schedules data received');
       }
     } catch (err) {
-      console.error('Failed to fetch schedules:', err);
-      setError('Failed to fetch schedules. Please check your connection.');
-      
-      // Fallback to static schedules
-      const fallbackSchedules = ${JSON.stringify(this.options.schedules.map(s => ({
-        id: s.id,
-        name: s.name,
-        emoji: s.emoji || '⏰',
-        description: s.description || 'Scheduled task',
-        pattern: s.interval?.pattern || '0 0 * * *',
-        active: s.interval?.active !== false,
-        nextRun: s.interval?.pattern ? 'Calculated from pattern' : 'Unknown'
-      })), null, 2)};
-      setSchedules(fallbackSchedules);
+      console.error('Failed to fetch embedded schedules:', err);
+      setError('Failed to load schedules from embedded data.');
+      setSchedules([]);
     } finally {
       setLoading(false);
     }
@@ -2345,6 +2354,11 @@ export default function ScheduleCard({ schedule }: ScheduleCardProps) {
       <div className={\`font-mono text-xs \${currentTheme.dim}\`}>
         Pattern: <span className={\`\${currentTheme.light}\`}>{schedule.pattern}</span>
       </div>
+      {schedule.steps && schedule.steps.length > 0 && (
+        <div className={\`font-mono text-xs \${currentTheme.dim} mt-1\`}>
+          Steps: <span className={\`\${currentTheme.light}\`}>{schedule.steps.length} actions</span>
+        </div>
+      )}
       {schedule.nextRun && (
         <div className={\`font-mono text-xs \${currentTheme.dim} mt-1\`}>
           Next: <span className={\`\${currentTheme.light}\`}>{schedule.nextRun}</span>
@@ -2554,7 +2568,6 @@ interface ActionExecutionModalProps {
 
 export default function ActionExecutionModal({ action, isOpen, onClose, onComplete }: ActionExecutionModalProps) {
   const [isExecuting, setIsExecuting] = useState(false);
-  const [executionMode, setExecutionMode] = useState<'local' | 'remote'>('local');
   const [inputParameters, setInputParameters] = useState<Record<string, any>>({});
   const [result, setResult] = useState<any>(null);
   const [step, setStep] = useState<'input' | 'executing' | 'result'>('input');
@@ -2594,15 +2607,8 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
     setResult(null);
 
     try {
-      let actionResult;
-      
-      if (executionMode === 'local') {
-        // Execute action locally (fetches code from main app, runs on sub-agent)
-        actionResult = await api.executeAction(action.name, inputParameters);
-      } else {
-        // Execute action on main app directly
-        actionResult = await api.triggerActionOnMainApp(action.id, inputParameters);
-      }
+      // Execute action locally using embedded action endpoint
+      const actionResult = await api.executeAction(action.name, inputParameters);
 
       setResult(actionResult);
       setStep('result');
@@ -2613,7 +2619,7 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
       const errorResult = {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-        executionMode
+        executedLocally: true
       };
       setResult(errorResult);
       setStep('result');
@@ -2708,14 +2714,14 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
         message: result.message || 'Action executed successfully',
         data: result.data || result,
         executionTime: result.executionTime || 'N/A',
-        mode: result.executedLocally ? 'Local Execution' : 'Remote Execution'
+        mode: 'Local Execution'
       };
     } else {
       return {
         status: 'Error',
         message: result.error || 'Action failed',
         details: result.details || 'No additional details',
-        mode: executionMode === 'local' ? 'Local Execution' : 'Remote Execution'
+        mode: 'Local Execution'
       };
     }
   };
@@ -2751,38 +2757,14 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
         <div className="flex-1 overflow-y-auto p-4">
           {step === 'input' && (
             <div className="space-y-4">
-              {/* Execution Mode Toggle */}
-              <div>
-                <label className="block font-mono text-sm text-green-300 mb-2">
-                  Execution Mode
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setExecutionMode('local')}
-                    className={\`flex-1 p-2 border rounded-lg font-mono text-xs transition-colors \${
-                      executionMode === 'local'
-                        ? 'bg-green-500/25 border-green-400/50 text-green-200'
-                        : 'bg-green-500/10 border-green-400/30 text-green-300/70 hover:bg-green-500/15'
-                    }\`}
-                  >
-                    🏠 Local Execution
-                  </button>
-                  <button
-                    onClick={() => setExecutionMode('remote')}
-                    className={\`flex-1 p-2 border rounded-lg font-mono text-xs transition-colors \${
-                      executionMode === 'remote'
-                        ? 'bg-blue-500/25 border-blue-400/50 text-blue-200'
-                        : 'bg-green-500/10 border-green-400/30 text-green-300/70 hover:bg-green-500/15'
-                    }\`}
-                  >
-                    ☁️ Remote Execution
-                  </button>
+              {/* Execution Info */}
+              <div className="bg-green-500/10 border border-green-400/20 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-green-400">🏠</span>
+                  <span className="font-mono text-sm text-green-200">Local Execution</span>
                 </div>
-                <p className="font-mono text-xs text-green-300/50 mt-1">
-                  {executionMode === 'local' 
-                    ? 'Runs on this sub-agent with local database'
-                    : 'Executes on main app with latest code'
-                  }
+                <p className="font-mono text-xs text-green-300/70">
+                  This action will run locally on this sub-agent with embedded code and your database.
                 </p>
               </div>
 
@@ -2813,7 +2795,7 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
                 Executing {action.title || action.name}...
               </p>
               <p className="font-mono text-xs text-green-300/50 mt-1">
-                Mode: {executionMode === 'local' ? 'Local Execution' : 'Remote Execution'}
+                Running locally with embedded code
               </p>
             </div>
           )}
@@ -3034,21 +3016,80 @@ export default async function handler(req, res) {
   }
 
   private generateStaticActionEndpoint(action: any): string {
-    // Extract action code or generate basic structure
-    const actionCode = action.results?.code || action.code || `
-    // Action: ${action.name}
-    // Description: ${action.description || 'No description provided'}
+    // Extract action code from the standardized location: action.execute.code.script
+    const actionCode = action.execute?.code?.script;
+
+    // Check if we have generated code
+    const hasGeneratedCode = !!actionCode;
     
-    console.log('Executing action: ${action.name}');
+    let wrappedActionCode;
+    if (hasGeneratedCode && (actionCode.includes('async function') || actionCode.includes('function'))) {
+      // If the code is already a function, execute it directly
+      wrappedActionCode = `
+    // Generated action code
+    const actionFunction = ${actionCode};
     
-    // TODO: Implement action logic here
-    return { success: true, message: 'Action executed successfully' };
+           // Execute the action with proper context
+       const context = {
+         db: prisma,
+         ai: { generateObject },
+         input: parameters || {},
+         envVars: process.env
+       };
+    
+    const result = await actionFunction(context);
     `;
+    } else if (hasGeneratedCode) {
+      // If it's raw code, wrap it in a function context
+      wrappedActionCode = `
+    // Generated action code - wrapped in execution context
+    const executeAction = async (db, input, member, ai, envVars) => {
+      ${actionCode}
+    };
+    
+           // Execute with proper context
+       const result = await executeAction(
+         prisma, 
+         parameters || {}, 
+         { id: 'api-user', role: 'admin' }, 
+         { generateObject }, 
+         process.env
+       );
+    `;
+    } else {
+      // No generated code - return error
+      wrappedActionCode = `
+    throw new Error('No generated code available for action: ${action.name}');
+    `;
+    }
 
     return `import { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
 
 const prisma = new PrismaClient();
+
+// Get AI model configuration
+async function getAIModel() {
+  const provider = process.env.AI_MODEL_PROVIDER || 'openai';
+  const modelName = process.env.AI_MODEL_NAME || 'gpt-4o-mini';
+  
+  switch (provider) {
+    case 'anthropic':
+      if (!process.env.ANTHROPIC_API_KEY) {
+        throw new Error('ANTHROPIC_API_KEY environment variable is required');
+      }
+      return anthropic(modelName, { apiKey: process.env.ANTHROPIC_API_KEY });
+    case 'openai':
+    default:
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY environment variable is required');
+      }
+      return openai(modelName, { apiKey: process.env.OPENAI_API_KEY });
+  }
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') {
@@ -3060,20 +3101,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     // Action: ${action.name}
     // Description: ${action.description || 'No description provided'}
-    // Type: ${action.results?.actionType || 'unknown'}
+    // Type: ${action.results?.actionType || 'generated'}
+    // Has Generated Code: ${!!hasGeneratedCode}
     
-    ${actionCode}
+    ${wrappedActionCode}
     
     return res.status(200).json({ 
       success: true, 
       action: '${action.name}',
-      result: result 
+      result: result,
+      executedAt: new Date().toISOString(),
+      hasGeneratedCode: ${!!hasGeneratedCode}
     });
   } catch (error) {
     console.error('Action execution error:', error);
     return res.status(500).json({ 
       error: 'Action execution failed',
-      details: error.message 
+      details: error.message,
+      action: '${action.name}'
     });
   } finally {
     await prisma.$disconnect();
@@ -3081,49 +3126,215 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 }`;
   }
 
-  private generateStaticCronEndpoint(schedule: any): string {
-    // Extract schedule code or generate basic structure
-    const scheduleCode = schedule.results?.code || schedule.code || `
-    // Schedule: ${schedule.name}
-    // Description: ${schedule.description || 'No description provided'}
-    // Interval: ${schedule.interval?.pattern || '*/5 * * * *'}
+    private generateStaticCronEndpoint(schedule: any): string {
+    // Schedules work by executing a sequence of actions, not standalone code
+    const hasSteps = schedule.steps && schedule.steps.length > 0;
     
-    console.log('Executing scheduled task: ${schedule.name}');
+    // Create action ID to name mapping
+    const actionIdToNameMap = this.options.actions.reduce((map: any, action: any) => {
+      map[action.id] = action.name;
+      return map;
+    }, {});
     
-    // TODO: Implement schedule logic here
-    return { success: true, message: 'Scheduled task executed successfully' };
-    `;
+    let scheduleExecutionCode;
+    if (hasSteps) {
+      // Execute actions sequentially based on schedule steps
+      scheduleExecutionCode = `
+    const results = [];
+    const steps = ${JSON.stringify(schedule.steps)};
+    const actionIdToNameMap = ${JSON.stringify(actionIdToNameMap)};
+    
+    console.log(\`📋 Executing \${steps.length} steps for schedule: ${schedule.name}\`);
+    
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      const actionName = actionIdToNameMap[step.actionId];
+      
+      console.log(\`🔄 Step \${i + 1}/\${steps.length}: \${step.description || step.actionId} (action: \${actionName})\`);
+      
+      if (!actionName) {
+        console.error(\`❌ Action ID "\${step.actionId}" not found in action mapping\`);
+        results.push({
+          step: i + 1,
+          actionId: step.actionId,
+          success: false,
+          error: 'Action not found',
+          executedAt: new Date().toISOString()
+        });
+        continue;
+      }
+      
+      try {
+        // Execute the action directly by importing its handler (using action name)
+        let actionResult;
+        
+        try {
+          // Import the action handler dynamically using action name
+          const actionModule = await import(\`../actions/\${actionName}\`);
+          
+          // Create a mock request/response for the action
+          const mockReq = {
+            method: 'POST',
+            body: { parameters: step.inputParams || step.input || {} }
+          };
+          
+          const mockRes = {
+            status: (code: number) => ({
+              json: (data: any) => {
+                actionResult = { statusCode: code, ...data };
+                return data;
+              }
+            })
+          };
+          
+          // Execute the action handler
+          await actionModule.default(mockReq, mockRes);
+          
+        } catch (importError) {
+          // Fallback to HTTP call if direct import fails (using action name)
+          console.log(\`📞 Falling back to HTTP call for action \${actionName}\`);
+          
+          const baseUrl = process.env.VERCEL_URL ? \`https://\${process.env.VERCEL_URL}\` : 
+                         process.env.NEXT_PUBLIC_VERCEL_URL ? \`https://\${process.env.NEXT_PUBLIC_VERCEL_URL}\` :
+                         'http://localhost:3000';
+          
+          const actionResponse = await fetch(\`\${baseUrl}/api/actions/\${actionName}\`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              parameters: step.inputParams || step.input || {}
+            })
+          });
+          
+          if (!actionResponse.ok) {
+            throw new Error(\`Action \${actionName} (ID: \${step.actionId}) failed with status: \${actionResponse.status}\`);
+          }
+          
+          actionResult = await actionResponse.json();
+        }
+        results.push({
+          step: i + 1,
+          actionId: step.actionId,
+          success: actionResult.success,
+          result: actionResult.result || actionResult.data,
+          executedAt: new Date().toISOString()
+        });
+        
+        console.log(\`✅ Step \${i + 1} completed successfully\`);
+        
+        // Add delay if specified in step configuration
+        if (step.delay && step.delay.duration) {
+          console.log(\`⏳ Waiting \${step.delay.duration}ms before next step...\`);
+          await new Promise(resolve => setTimeout(resolve, step.delay.duration));
+        }
+        
+      } catch (stepError) {
+        console.error(\`❌ Step \${i + 1} failed:\`, stepError);
+        results.push({
+          step: i + 1,
+          actionId: step.actionId,
+          success: false,
+          error: stepError instanceof Error ? stepError.message : 'Unknown error',
+          executedAt: new Date().toISOString()
+        });
+        
+        // Stop execution if step is configured to stop on error
+        if (step.onError?.action === 'stop') {
+          console.log(\`🛑 Stopping schedule execution due to step error\`);
+          break;
+        }
+      }
+    }
+    
+    const successfulSteps = results.filter(r => r.success).length;
+    const result = {
+      scheduleName: '${schedule.name}',
+      totalSteps: steps.length,
+      completedSteps: results.length,
+      successfulSteps: successfulSteps,
+      results: results,
+      success: successfulSteps > 0,
+      executedAt: new Date().toISOString()
+    };`;
+    } else {
+      // No steps defined - this shouldn't happen for properly generated schedules
+      scheduleExecutionCode = `
+    console.warn('⚠️ Schedule ${schedule.name} has no steps defined');
+    const result = {
+      scheduleName: '${schedule.name}',
+      success: false,
+      error: 'No steps defined for this schedule',
+      totalSteps: 0,
+      completedSteps: 0,
+      successfulSteps: 0,
+      results: [],
+      executedAt: new Date().toISOString()
+    };`;
+    }
 
     return `import { NextApiRequest, NextApiResponse } from 'next';
 import { PrismaClient } from '@prisma/client';
+import { generateObject } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { anthropic } from '@ai-sdk/anthropic';
 
 const prisma = new PrismaClient();
 
+// Get AI model configuration
+async function getAIModel() {
+  const provider = process.env.AI_MODEL_PROVIDER || 'openai';
+  const modelName = process.env.AI_MODEL_NAME || 'gpt-4o-mini';
+  
+  switch (provider) {
+    case 'anthropic':
+      if (!process.env.ANTHROPIC_API_KEY) {
+        throw new Error('ANTHROPIC_API_KEY environment variable is required');
+      }
+      return anthropic(modelName, { apiKey: process.env.ANTHROPIC_API_KEY });
+    case 'openai':
+    default:
+      if (!process.env.OPENAI_API_KEY) {
+        throw new Error('OPENAI_API_KEY environment variable is required');
+      }
+      return openai(modelName, { apiKey: process.env.OPENAI_API_KEY });
+  }
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Verify cron secret to prevent unauthorized access
+  // Verify cron secret for manual calls, but allow Vercel's automatic cron execution
   const cronSecret = req.headers['x-cron-secret'] || req.query.secret;
-  if (cronSecret !== process.env.CRON_SECRET) {
+  const isVercelCron = req.headers['user-agent']?.includes('vercel-cron') || 
+                      req.headers['x-vercel-cron'] === '1';
+  
+  // Allow Vercel's automatic cron execution or valid cron secret
+  if (!isVercelCron && cronSecret !== process.env.CRON_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
   try {
-    // Schedule: ${schedule.name}
-    // Description: ${schedule.description || 'No description provided'}
-    // Interval: ${schedule.interval?.pattern || '*/5 * * * *'}
+    console.log('🕐 Executing schedule: ${schedule.name}');
+    console.log('📝 Description: ${schedule.description || 'No description provided'}');
+    console.log('⏰ Pattern: ${schedule.trigger?.pattern || '*/5 * * * *'}');
+    console.log('🔢 Steps: ${schedule.steps?.length || 0} action steps');
+    console.log('🔑 Auth method:', isVercelCron ? 'Vercel Cron' : 'Manual with secret');
     
-    ${scheduleCode}
+    ${scheduleExecutionCode}
     
     return res.status(200).json({ 
       success: true, 
       schedule: '${schedule.name}',
       executedAt: new Date().toISOString(),
-      result: result 
+      result: result,
+      hasSteps: ${hasSteps}
     });
   } catch (error) {
     console.error('Schedule execution error:', error);
     return res.status(500).json({ 
       error: 'Schedule execution failed',
-      details: error.message 
+      details: error.message,
+      schedule: '${schedule.name}'
     });
   } finally {
     await prisma.$disconnect();
@@ -3161,8 +3372,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
         schedules: {
           count: ${this.options.schedules.length},
-          active: ${this.options.schedules.filter(s => s.interval?.active !== false).length},
-          patterns: [${this.options.schedules.map(s => `'${s.interval?.pattern || '* * * * *'}'`).join(', ')}]
+          active: ${this.options.schedules.filter(s => s.trigger?.active !== false).length},
+          patterns: [${this.options.schedules.map(s => `'${s.trigger?.pattern || '* * * * *'}'`).join(', ')}]
         },
         models: {
           count: ${this.options.models.length},
@@ -3196,24 +3407,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const stats = {
       totalRecords: 0,
-      activeSchedules: ${this.options.schedules.filter(s => s.interval?.active !== false).length},
+      activeSchedules: ${this.options.schedules.filter(s => s.trigger?.active !== false).length},
       totalModels: ${this.options.models.length},
       totalActions: ${this.options.actions.length},
       totalSchedules: ${this.options.schedules.length},
       lastActivity: new Date().toISOString()
     };
 
-    // Try to get actual record counts from each model
-    ${this.options.models.map(model => {
-      const camelCaseModelName = model.name.charAt(0).toLowerCase() + model.name.slice(1);
-      return `
+    // First ensure database is initialized
     try {
-      const ${camelCaseModelName}Count = await prisma.${camelCaseModelName}.count();
-      stats.totalRecords += ${camelCaseModelName}Count;
-    } catch (error) {
-      console.log('Model ${model.name} not yet available:', error.message);
-    }`;
-    }).join('')}
+      await prisma.$queryRaw\`SELECT 1\`;
+      
+      // Try to get actual record counts from each model
+      ${this.options.models.map(model => {
+        const camelCaseModelName = model.name.charAt(0).toLowerCase() + model.name.slice(1);
+        return `
+      try {
+        const ${camelCaseModelName}Count = await prisma.${camelCaseModelName}.count();
+        stats.totalRecords += ${camelCaseModelName}Count;
+      } catch (error) {
+        console.log('Model ${model.name} not yet available:', error.message);
+      }`;
+      }).join('')}
+    } catch (dbError) {
+      console.log('Database not ready, using default stats:', dbError.message);
+    }
 
     res.status(200).json({ success: true, data: stats });
   } catch (error) {
@@ -3223,7 +3441,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       error: 'Failed to get stats',
       data: {
         totalRecords: 0,
-        activeSchedules: ${this.options.schedules.filter(s => s.interval?.active !== false).length},
+        activeSchedules: ${this.options.schedules.filter(s => s.trigger?.active !== false).length},
         totalModels: ${this.options.models.length},
         totalActions: ${this.options.actions.length},
         totalSchedules: ${this.options.schedules.length},
@@ -3247,17 +3465,26 @@ async function ensureDatabaseInit() {
   try {
     // Test database connection
     await prisma.$queryRaw\`SELECT 1\`;
+    console.log('Database connection successful');
   } catch (error) {
-    console.log('Database connection failed, attempting to initialize...');
+    console.log('Database connection failed:', error.message);
+    console.log('This is expected if the PostgreSQL database hasn\\'t been created yet.');
+    console.log('Please ensure your DATABASE_URL points to a valid PostgreSQL database.');
     
-    try {
-      // Run database initialization
-      await execAsync('npm run db:init');
-      await execAsync('npx prisma db push --accept-data-loss');
-      console.log('Database initialized successfully');
-    } catch (initError) {
-      console.error('Failed to initialize database:', initError);
-      throw new Error('Database initialization failed');
+    // For development, we could try to initialize, but for production
+    // the database should be created externally (e.g., via Neon)
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        console.log('Attempting to push schema to database...');
+        await execAsync('npx prisma db push --accept-data-loss');
+        console.log('Database schema pushed successfully');
+      } catch (initError) {
+        console.error('Failed to push schema:', initError.message);
+        console.log('Please check your DATABASE_URL and ensure the PostgreSQL database exists.');
+        throw new Error('Database initialization failed - please create the PostgreSQL database first');
+      }
+    } else {
+      throw new Error('Database connection failed in production - please ensure the PostgreSQL database exists');
     }
   }
 }
@@ -3751,7 +3978,7 @@ async function getSchedulesToRun() {
       const schedulesToRun = [];
       
       for (const schedule of data.schedules) {
-        if (schedule.interval?.active && schedule.interval?.pattern) {
+        if (schedule.trigger?.active && schedule.trigger?.pattern) {
           // Simple check - in a real app, use a proper cron parser
           // For now, run all active schedules every minute
           schedulesToRun.push(schedule);
@@ -3899,7 +4126,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const result = {
           scheduleName: schedule.name,
           description: schedule.description || 'Scheduled task',
-          pattern: schedule.trigger?.pattern || schedule.interval?.pattern || '* * * * *',
+          pattern: schedule.trigger?.pattern || '* * * * *',
           executedAt: new Date().toISOString(),
           success: true,
           stepResults: stepResults,
@@ -4371,16 +4598,58 @@ pids/
   private generateReadme(): string {
     return `# ${this.options.projectName}
 
-A mobile-first AI agent application with **real AI chat functionality** powered by Vercel's AI SDK and deployed on Vercel.
+A **fully self-contained** mobile-first AI agent application with embedded actions, schedules, and real AI chat functionality powered by Vercel's AI SDK.
 
 ## ✨ Key Features
 
 - **🤖 AI-Powered Chat**: Real conversational AI using OpenAI GPT-4 or Anthropic Claude－ 
 - **📱 Mobile-First Design**: Bottom navigation, touch-friendly interface
 - **🗃️ Data Management**: Interactive data models with CRUD operations
-- **⚡ Smart Actions**: Execute agent actions with real-time feedback
-- **⏰ Task Scheduling**: Automated cron jobs with Vercel Functions
+- **⚡ Smart Actions**: Execute embedded agent actions locally with real-time feedback
+- **⏰ Task Scheduling**: Automated cron jobs with embedded code
+- **🏠 Self-Contained**: Embedded actions, schedules & models + live UI config from main app
 - **🚀 Vercel Deployment**: Optimized for Vercel platform with zero-config deployment
+
+## 🏗️ Hybrid Architecture
+
+This sub-agent uses a **hybrid architecture** for optimal performance and user experience:
+
+### 🏠 **Embedded (Local)**
+- **Actions**: All action code is embedded and executes locally
+- **Schedules**: Execute sequences of actions automatically via Vercel cron  
+- **Models**: Data model definitions are embedded for fast access
+- **Database**: PostgreSQL operations happen locally
+
+### ☁️ **Live from Main App**
+- **Name & Description**: Agent branding updates in real-time
+- **Theme**: UI theme changes reflect immediately
+- **Avatar**: Profile image stays synchronized with main app
+- **Domain**: Custom domain configuration
+
+This ensures fast, reliable execution while keeping the UI synchronized with your main agent configuration.
+
+## ⏰ How Schedules Work
+
+Schedules are **action sequences** that run automatically on a cron schedule:
+
+1. **Action Steps**: Each schedule contains multiple actions that run sequentially
+2. **Embedded Execution**: Actions execute locally using embedded code
+3. **Error Handling**: Configurable error handling (continue or stop on failure)
+4. **Timing Control**: Optional delays between action steps
+5. **Vercel Cron**: Automatic execution via Vercel's cron system
+
+### Schedule Structure:
+\`\`\`json
+{
+  "name": "daily-report",
+  "interval": { "pattern": "0 9 * * *" },
+  "steps": [
+    { "actionId": "fetch-data", "input": {...} },
+    { "actionId": "generate-report", "input": {...} },
+    { "actionId": "send-email", "input": {...} }
+  ]
+}
+\`\`\`
 
 ## 🤖 AI Chat Capabilities
 
@@ -4400,26 +4669,39 @@ The chat feature uses Vercel's AI SDK and provides:
 
 ## 🗄️ Database Configuration
 
-This app uses **SQLite** with **Prisma ORM** and is optimized for both local development and Vercel serverless deployment:
+This app uses **PostgreSQL** with **Prisma ORM** and is optimized for both local development and Vercel serverless deployment [[memory:7330668]]:
 
-### Automatic Environment Detection
-- **Local Development**: Database stored as \`./dev.db\` in project root
-- **Vercel Production**: Database stored as \`/tmp/dev.db\` in serverless functions
-- **Environment Variables**: Automatically configured based on deployment context
+### Database Setup
+- **Local Development**: PostgreSQL database on your local machine
+- **Production**: Neon PostgreSQL (recommended) or other PostgreSQL provider
+- **Schema Management**: Prisma handles table creation and migrations
 
 ### Database Features
-- **Auto-Initialization**: Database file created automatically on startup
-- **Schema Sync**: Prisma schema synchronized on build/deploy
+- **Schema Push**: Tables created automatically from Prisma schema
 - **CRUD Operations**: Full Create, Read, Update, Delete via REST API endpoints
-- **Error Handling**: Robust error handling for serverless environments
+- **Error Handling**: Graceful handling when database is not ready
 - **Connection Pooling**: Optimized for serverless function lifecycle
 
-### Troubleshooting Database Issues
-If you encounter database connection errors:
+### Setup Instructions
 
-1. **Local Development**: Run \`npm run db:setup\` to reinitialize
-2. **Production**: Database automatically initializes on first request
-3. **Check Logs**: Review function logs in Vercel dashboard for detailed error info
+#### For Local Development:
+1. Install PostgreSQL locally
+2. Create a database: \`createdb ${this.options.projectName.toLowerCase().replace(/[^a-z0-9]/g, '_')}\`
+3. Update \`DATABASE_URL\` in \`.env.local\`
+4. Run \`npm run db:setup\` to create tables
+
+#### For Production (Neon):
+1. Create a Neon database at https://neon.tech
+2. Copy the connection string to \`DATABASE_URL\` in Vercel environment variables
+3. Deploy - tables will be created automatically
+
+### Troubleshooting Database Issues
+If you encounter "table does not exist" errors:
+
+1. **Check DATABASE_URL**: Ensure it points to a valid PostgreSQL database
+2. **Run Setup**: Execute \`npm run db:setup\` to create tables
+3. **Verify Connection**: Check that the PostgreSQL database exists and is accessible
+4. **Production**: Ensure Neon database is created and connection string is correct
 
 ## 🚀 Quick Start
 
@@ -4463,7 +4745,7 @@ ${this.options.models.map(m => `- **${m.title || m.name}**: ${m.description || '
 ${this.options.actions.map(a => `- **${a.title || a.name}**: ${a.description || 'Action'}`).join('\n')}
 
 ### Scheduled Tasks (${this.options.schedules.length})
-${this.options.schedules.map(s => `- **${s.title || s.name}**: ${s.description || 'Scheduled task'} (\`${s.interval?.pattern || '* * * * *'}\`)`).join('\n')}
+${this.options.schedules.map(s => `- **${s.title || s.name}**: ${s.description || 'Scheduled task'} (\`${s.trigger?.pattern || '* * * * *'}\`) - ${s.steps?.length || 0} steps`).join('\n')}
 
 ## 🛠️ Configuration
 
@@ -4566,57 +4848,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-
-    console.log('🔗 Actions API calling main app:', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
-
-    // Call main app to get agent configuration
-    const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-        'X-Agent-Token': AGENT_TOKEN,
-        'X-Document-ID': DOCUMENT_ID,
-      },
-    });
-
-    console.log('🔗 Main app response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('🔗 Main app error:', errorText);
-      throw new Error(\`Failed to fetch from main app: \${response.status} - \${errorText}\`);
-    }
-
-    const data = await response.json();
-    console.log('🔗 Main app data received:', { success: data.success, hasActions: !!data.agentConfig?.actions });
+    // Return embedded actions directly (no main app calls)
+    const actions = ${JSON.stringify(this.options.actions)};
     
-    if (data.success && data.agentConfig?.actions) {
-      res.status(200).json({
-        success: true,
-        actions: data.agentConfig.actions
-      });
-    } else {
-      // Fallback to static actions
-      console.log('🔗 Using fallback actions');
-      const fallbackActions = ${JSON.stringify(this.options.actions)};
-      res.status(200).json({
-        success: true,
-        actions: fallbackActions,
-        source: 'fallback'
-      });
-    }
-  } catch (error) {
-    console.error('🔗 Error fetching actions:', error);
-    
-    // Return fallback actions on error
-    const fallbackActions = ${JSON.stringify(this.options.actions)};
     res.status(200).json({
       success: true,
-      actions: fallbackActions,
-      source: 'fallback',
+      actions: actions,
+      source: 'embedded'
+    });
+  } catch (error) {
+    console.error('Error fetching embedded actions:', error);
+    res.status(500).json({
+      success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
@@ -4632,57 +4875,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-
-    console.log('🔗 Schedules API calling main app:', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
-
-    // Call main app to get agent configuration
-    const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-        'X-Agent-Token': AGENT_TOKEN,
-        'X-Document-ID': DOCUMENT_ID,
-      },
-    });
-
-    console.log('🔗 Main app response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('🔗 Main app error:', errorText);
-      throw new Error(\`Failed to fetch from main app: \${response.status} - \${errorText}\`);
-    }
-
-    const data = await response.json();
-    console.log('🔗 Main app data received:', { success: data.success, hasSchedules: !!data.agentConfig?.schedules });
+    // Return embedded schedules directly (no main app calls)
+    const schedules = ${JSON.stringify(this.options.schedules)};
     
-    if (data.success && data.agentConfig?.schedules) {
-      res.status(200).json({
-        success: true,
-        schedules: data.agentConfig.schedules
-      });
-    } else {
-      // Fallback to static schedules
-      console.log('🔗 Using fallback schedules');
-      const fallbackSchedules = ${JSON.stringify(this.options.schedules)};
-      res.status(200).json({
-        success: true,
-        schedules: fallbackSchedules,
-        source: 'fallback'
-      });
-    }
-  } catch (error) {
-    console.error('🔗 Error fetching schedules:', error);
-    
-    // Return fallback schedules on error
-    const fallbackSchedules = ${JSON.stringify(this.options.schedules)};
     res.status(200).json({
       success: true,
-      schedules: fallbackSchedules,
-      source: 'fallback',
+      schedules: schedules,
+      source: 'embedded'
+    });
+  } catch (error) {
+    console.error('Error fetching embedded schedules:', error);
+    res.status(500).json({
+      success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
@@ -4698,57 +4902,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const MAIN_APP_URL = process.env.NEXT_PUBLIC_MAIN_APP_URL || 'https://rewrite-complete.vercel.app';
-    const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
-    const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
-
-    console.log('🔗 Models API calling main app:', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
-
-    // Call main app to get agent configuration
-    const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-        'X-Agent-Token': AGENT_TOKEN,
-        'X-Document-ID': DOCUMENT_ID,
-      },
-    });
-
-    console.log('🔗 Main app response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('🔗 Main app error:', errorText);
-      throw new Error(\`Failed to fetch from main app: \${response.status} - \${errorText}\`);
-    }
-
-    const data = await response.json();
-    console.log('🔗 Main app data received:', { success: data.success, hasModels: !!data.agentConfig?.models });
+    // Return embedded models directly (no main app calls)
+    const models = ${JSON.stringify(this.options.models)};
     
-    if (data.success && data.agentConfig?.models) {
-      res.status(200).json({
-        success: true,
-        models: data.agentConfig.models
-      });
-    } else {
-      // Fallback to static models
-      console.log('🔗 Using fallback models');
-      const fallbackModels = ${JSON.stringify(this.options.models)};
-      res.status(200).json({
-        success: true,
-        models: fallbackModels,
-        source: 'fallback'
-      });
-    }
-  } catch (error) {
-    console.error('Error fetching models:', error);
-    
-    // Return fallback models on error
-    const fallbackModels = ${JSON.stringify(this.options.models)};
     res.status(200).json({
       success: true,
-      models: fallbackModels,
-      source: 'fallback',
+      models: models,
+      source: 'embedded'
+    });
+  } catch (error) {
+    console.error('Error fetching embedded models:', error);
+    res.status(500).json({
+      success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
@@ -4768,94 +4933,77 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const DOCUMENT_ID = process.env.NEXT_PUBLIC_DOCUMENT_ID || '';
     const AGENT_TOKEN = process.env.NEXT_PUBLIC_AGENT_TOKEN || '';
 
-    console.log('🔗 Config API calling main app:', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
+    console.log('🔗 Config API calling main app for UI config:', { MAIN_APP_URL, DOCUMENT_ID: DOCUMENT_ID.substring(0, 8) + '...', hasToken: !!AGENT_TOKEN });
 
-    // Call main app to get full agent configuration
-    const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${AGENT_TOKEN}\`,
-        'X-Agent-Token': AGENT_TOKEN,
-        'X-Document-ID': DOCUMENT_ID,
-      },
-    });
+    let mainAppConfig = null;
+    
+    // Try to get UI configuration from main app (name, description, theme, avatar)
+    try {
+      const response = await fetch(\`\${MAIN_APP_URL}/api/agent-credentials-public?documentId=\${DOCUMENT_ID}\`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': \`Bearer \${AGENT_TOKEN}\`,
+          'X-Agent-Token': AGENT_TOKEN,
+          'X-Document-ID': DOCUMENT_ID,
+        },
+      });
 
-    console.log('🔗 Main app response status:', response.status);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('🔗 Main app error:', errorText);
-      throw new Error(\`Failed to fetch from main app: \${response.status} - \${errorText}\`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.agentConfig) {
+          mainAppConfig = data.agentConfig;
+          console.log('✅ Retrieved UI config from main app:', {
+            name: mainAppConfig.name,
+            theme: mainAppConfig.theme,
+            hasAvatar: !!mainAppConfig.avatar,
+            avatarType: mainAppConfig.avatar?.type
+          });
+        }
+      } else {
+        console.warn('⚠️ Main app responded with status:', response.status);
+      }
+    } catch (fetchError) {
+      console.warn('⚠️ Failed to fetch from main app:', fetchError.message);
     }
 
-    const data = await response.json();
-    console.log('🔗 Main app data received:', { 
-      success: data.success, 
-      hasConfig: !!data.agentConfig,
-      hasAvatar: !!data.agentConfig?.avatar,
-      avatarType: data.agentConfig?.avatar?.type,
-      theme: data.agentConfig?.theme,
-      name: data.agentConfig?.name
+    // Combine main app UI config with embedded functional data
+    const config = {
+      // UI elements from main app (or fallbacks)
+      name: mainAppConfig?.name || '${this.options.projectName}',
+      description: mainAppConfig?.description || 'Self-contained AI agent application',
+      theme: mainAppConfig?.theme || 'green',
+      avatar: mainAppConfig?.avatar || null,
+      domain: mainAppConfig?.domain || null,
+      
+      // Functional data embedded in sub-agent
+      models: ${JSON.stringify(this.options.models)},
+      actions: ${JSON.stringify(this.options.actions)},
+      schedules: ${JSON.stringify(this.options.schedules)}
+    };
+    
+    console.log('✅ Returning hybrid config:', {
+      name: config.name,
+      theme: config.theme,
+      hasAvatar: !!config.avatar,
+      avatarType: config.avatar?.type,
+      source: mainAppConfig ? 'main-app-ui + embedded-data' : 'fallback-ui + embedded-data',
+      modelsCount: config.models.length,
+      actionsCount: config.actions.length,
+      schedulesCount: config.schedules.length
     });
     
-    if (data.success && data.agentConfig) {
-      // Ensure we're returning the complete config with proper structure
-      const config = {
-        name: data.agentConfig.name || '${this.options.projectName}',
-        description: data.agentConfig.description || 'Agent application',
-        theme: data.agentConfig.theme || 'green',
-        avatar: data.agentConfig.avatar || null,
-        domain: data.agentConfig.domain || null,
-        models: data.agentConfig.models || [],
-        actions: data.agentConfig.actions || [],
-        schedules: data.agentConfig.schedules || []
-      };
-      
-      console.log('✅ Returning config to sub-agent:', {
-        name: config.name,
-        theme: config.theme,
-        hasAvatar: !!config.avatar,
-        avatarType: config.avatar?.type
-      });
-      
-      res.status(200).json({
-        success: true,
-        config
-      });
-    } else {
-      // Fallback configuration
-      console.log('⚠️ Using fallback config - main app data not available');
-      const fallbackConfig = {
-        name: '${this.options.projectName}',
-        description: 'Agent application',
-        theme: 'green',
-        avatar: null,
-        domain: null,
-        models: ${JSON.stringify(this.options.models)},
-        actions: ${JSON.stringify(this.options.actions)},
-        schedules: ${JSON.stringify(this.options.schedules)}
-      };
-      
-      console.log('📋 Fallback config:', {
-        name: fallbackConfig.name,
-        theme: fallbackConfig.theme,
-        hasAvatar: !!fallbackConfig.avatar
-      });
-      
-      res.status(200).json({
-        success: true,
-        config: fallbackConfig,
-        source: 'fallback'
-      });
-    }
+    res.status(200).json({
+      success: true,
+      config,
+      source: mainAppConfig ? 'hybrid' : 'embedded-fallback'
+    });
   } catch (error) {
     console.error('❌ Error fetching agent config:', error);
     
-    // Return fallback config on error
-    console.log('🔄 Using error fallback config');
+    // Complete fallback configuration
     const fallbackConfig = {
       name: '${this.options.projectName}',
-      description: 'Agent application',
+      description: 'Self-contained AI agent application',
       theme: 'green',
       avatar: null,
       domain: null,
@@ -4864,17 +5012,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       schedules: ${JSON.stringify(this.options.schedules)}
     };
     
-    console.log('🔄 Error fallback config:', {
-      name: fallbackConfig.name,
-      theme: fallbackConfig.theme,
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-    
     res.status(200).json({
       success: true,
       config: fallbackConfig,
-      source: 'error-fallback',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      source: 'error-fallback'
     });
   }
 }`;
@@ -5026,7 +5167,7 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      console.log('🔧 AgentProvider: Fetching agent config...');
+      console.log('🔧 AgentProvider: Fetching hybrid agent config (UI from main app + embedded data)...');
       const response = await fetch('/api/agent/config');
       
       if (!response.ok) {
@@ -5034,14 +5175,22 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({ children }) => {
       }
       
       const data = await response.json();
-      console.log('🔧 AgentProvider: Config response:', data);
+      console.log('🔧 AgentProvider: Config response:', {
+        success: data.success,
+        source: data.source,
+        hasConfig: !!data.config
+      });
       
       if (data.success && data.config) {
-        console.log('✅ AgentProvider: Setting config:', {
+        console.log('✅ AgentProvider: Setting hybrid config:', {
           name: data.config.name,
           theme: data.config.theme,
           hasAvatar: !!data.config.avatar,
-          avatarType: data.config.avatar?.type
+          avatarType: data.config.avatar?.type,
+          source: data.source,
+          modelsCount: data.config.models?.length || 0,
+          actionsCount: data.config.actions?.length || 0,
+          schedulesCount: data.config.schedules?.length || 0
         });
         setConfig(data.config);
       } else {
@@ -5053,15 +5202,15 @@ export const AgentProvider: React.FC<AgentProviderProps> = ({ children }) => {
       console.error('❌ AgentProvider: Error fetching config:', errorMessage);
       setError(errorMessage);
       
-      // Set fallback config
+      // Set fallback config with embedded data
       const fallbackConfig: AgentConfig = {
         name: '${this.options.projectName}',
-        description: 'Agent application',
+        description: 'Self-contained AI agent application',
         theme: 'green',
         avatar: null,
-        models: [],
-        actions: [],
-        schedules: []
+        models: ${JSON.stringify(this.options.models)},
+        actions: ${JSON.stringify(this.options.actions)},
+        schedules: ${JSON.stringify(this.options.schedules)}
       };
       setConfig(fallbackConfig);
     } finally {

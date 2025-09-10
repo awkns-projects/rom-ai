@@ -222,7 +222,7 @@ export const SchedulesListEditor = memo(({
           inputParameters: inputValues,
           envVars: envVarValues,
           testMode,
-          interval: schedule.interval
+          trigger: schedule.trigger
         }),
       });
 
@@ -239,7 +239,7 @@ export const SchedulesListEditor = memo(({
         if (!testMode) {
           const updatedSchedule = {
             ...schedule,
-            interval: { ...schedule.interval, active: true },
+            trigger: { ...schedule.trigger, active: true },
             // Save the input data for future automatic executions
             savedInputs: {
               inputParameters: inputValues,
@@ -443,11 +443,11 @@ export const SchedulesListEditor = memo(({
                         {readiness.ready ? '✅ Ready' : '⚠️ Needs Setup'}
                       </span>
                       <span className={`px-2 py-1 text-xs font-mono rounded border ${
-                        schedule.interval.active 
+                        schedule.trigger.active 
                           ? 'bg-green-500/20 text-green-300 border-green-500/30'
                           : 'bg-red-500/20 text-red-300 border-red-500/30'
                       }`}>
-                        {schedule.interval.active ? 'Active' : 'Paused'}
+                        {schedule.trigger.active ? 'Active' : 'Paused'}
                       </span>
                       {/* Saved input data indicator */}
                       {(schedule as any).savedInputs && (
@@ -479,13 +479,13 @@ export const SchedulesListEditor = memo(({
                     </Button>
                     
                     {/* Show pause button only if active AND ready */}
-                    {schedule.interval.active && readiness.ready && (
+                    {schedule.trigger.active && readiness.ready && (
                       <Button
                         onClick={() => {
                           // Simple pause - just toggle active flag
                           const updatedSchedule = {
                             ...schedule,
-                            interval: { ...schedule.interval, active: false }
+                            trigger: { ...schedule.trigger, active: false }
                           };
                           updateSchedule(schedule.id, updatedSchedule);
                         }}
@@ -499,7 +499,7 @@ export const SchedulesListEditor = memo(({
                     )}
                     
                     {/* Show activate button when not active */}
-                    {!schedule.interval.active && (
+                    {!schedule.trigger.active && (
                       <Button
                         onClick={() => handleActivateSchedule(schedule)}
                         className={`font-mono px-3 sm:px-4 py-2 flex-1 sm:flex-initial ${

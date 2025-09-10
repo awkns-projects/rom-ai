@@ -359,7 +359,7 @@ const InteractiveTestComponents = ({ steps, components, allModels, onTestResult,
               <SelectTrigger className="bg-black/50 border-blue-500/30 text-blue-200 h-8 text-xs">
                 <SelectValue placeholder={component.placeholder || `Select ${component.label}`} />
               </SelectTrigger>
-              <SelectContent className="bg-black border-blue-500/30">
+              <SelectContent className="bg-black border-blue-500/30 z-[70]">
                 {component.options.map(option => (
                   <SelectItem key={option.value} value={option.value} className="text-blue-200">
                     <div>
@@ -1515,7 +1515,7 @@ Make the action self-contained but also chain-friendly.`
 
       {/* Test Action Modal */}
       <Dialog open={showTestModal} onOpenChange={setShowTestModal}>
-                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-black/95 border border-blue-500/20">
+                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-black/95 border border-blue-500/20 z-[70]">
                      <DialogHeader>
             <DialogTitle className="text-blue-300 font-mono text-lg">
               {actionCreated && !isLiveMode ? "🎉 Action Complete" : 
@@ -1888,7 +1888,7 @@ Make the action self-contained but also chain-friendly.`
 
             {/* Test Details Modal */}
       <Dialog open={showDetailsModal} onOpenChange={setShowDetailsModal}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-black/95 border border-emerald-500/20">
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto bg-black/95 border border-emerald-500/20 z-[70]">
           <DialogHeader className="border-b border-emerald-500/20 pb-4">
             <DialogTitle className="text-emerald-300 font-mono text-2xl mb-3 flex items-center gap-3">
               <span className="animate-pulse">🔍</span> 
@@ -2065,7 +2065,7 @@ Make the action self-contained but also chain-friendly.`
 
       {/* Step Editing Modal */}
       <Dialog open={!!editingStep} onOpenChange={() => setEditingStep(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-black/95 border border-blue-500/20">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-black/95 border border-blue-500/20 z-[70]">
           <DialogHeader>
             <DialogTitle className="text-blue-300 font-mono text-lg">
               ✏️ Edit Step {editingStep ? editingStep.index + 1 : ''}
@@ -2090,7 +2090,7 @@ Make the action self-contained but also chain-friendly.`
                   <SelectTrigger className="bg-black/50 border-blue-500/30 text-blue-200 text-sm font-mono">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-black border-blue-500/30">
+                  <SelectContent className="bg-black border-blue-500/30 z-[70]">
                     <SelectItem value="Database find unique" className="text-blue-200 font-mono">Database find unique</SelectItem>
                     <SelectItem value="Database find many" className="text-blue-200 font-mono">Database find many</SelectItem>
                     <SelectItem value="Database update unique" className="text-blue-200 font-mono">Database update unique</SelectItem>

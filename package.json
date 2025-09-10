@@ -20,10 +20,10 @@
     "db:seed-cards": "npx tsx src/lib/db/seed-card-types.ts",
     "test": "export PLAYWRIGHT=True && pnpm exec playwright test",
     "delete:neon": "npx tsx scripts/delete-neon-projects.ts",
-    "delete:vercel": "npx tsx scripts/delete-vercel-projects.ts",
+    "delete:vercel": "npx tsx scripts/delete-unconnected-vercel-projects.ts",
     "delete:all": "npx tsx scripts/delete-all-projects.ts",
     "delete:neon:force": "npx tsx scripts/delete-neon-projects.ts --force",
-    "delete:vercel:force": "npx tsx scripts/delete-vercel-projects.ts --force",
+    "delete:vercel:force": "npx tsx scripts/delete-unconnected-vercel-projects.ts --force",
     "delete:all:force": "npx tsx scripts/delete-all-projects.ts --force",
     "prisma:format": "prisma format",
     "prisma:validate": "prisma validate"
