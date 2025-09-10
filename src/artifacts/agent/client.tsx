@@ -945,7 +945,7 @@ const AgentBuilderContent = memo(({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          agentData,
+          agentData, // This now includes the saved environment variables
           documentId,
           projectName: agentData.name,
           description: agentData.description,
@@ -1054,7 +1054,7 @@ const AgentBuilderContent = memo(({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          agentData,
+          agentData, // This now includes the saved environment variables
           documentId,
           projectName: agentData.name,
           description: agentData.description,
@@ -2389,7 +2389,16 @@ const AgentBuilderContent = memo(({
               
               {deploymentStep === 'configure' && (
                 <Button
-                  onClick={deploymentInfo?.deploymentUrl ? redeployAgent : deployAgent}
+                  onClick={async () => {
+                    // First save environment variables to actions
+                    await saveEnvVarsToActions();
+                    // Then deploy with the updated agent data
+                    if (deploymentInfo?.deploymentUrl) {
+                      await redeployAgent();
+                    } else {
+                      await deployAgent();
+                    }
+                  }}
                   disabled={!areAllEnvVarsFilled()}
                   className={cn(
                     "flex-1 h-10 font-medium transition-colors flex items-center justify-center gap-2",
