@@ -4202,6 +4202,12 @@ main()
       // Fix common relation issues that cause validation errors
       let sanitizedSchema = schema;
       
+      // 0. Convert SQLite provider to PostgreSQL for self-contained Neon deployment
+      sanitizedSchema = sanitizedSchema.replace(
+        /datasource\s+db\s*\{\s*provider\s*=\s*"sqlite"/g,
+        'datasource db {\n  provider = "postgresql"'
+      );
+      
       // 1. Remove problematic one-to-one relations without @unique
       // Pattern: fieldName ModelName @relation(fields: [fieldId], references: [id])
       // where fieldId is not marked as @unique

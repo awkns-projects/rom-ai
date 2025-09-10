@@ -88,7 +88,7 @@ export interface AgentData {
 }
 
 export interface AgentArtifactMetadata {
-  selectedTab: 'avatar' | 'brain';
+  selectedTab: 'onboard' | 'avatar' | 'brain';
   selectedBrainTab?: 'overview' | 'models' | 'actions' | 'schedules';
   editingModel: string | null;
   editingAction: string | null;

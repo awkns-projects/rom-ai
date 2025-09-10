@@ -16,7 +16,7 @@ import MatrixBox from "./matrix-box"
 import { CompositeUnicorn } from "@/components/composite-unicorn"
 import { AvatarList } from "@/components/avatar-list"
 import { useAvatars, type Avatar } from "@/hooks/use-avatar"
-import { OnboardContent } from "@/artifacts/agent/components/OnboardContent"
+
 import { MobileAppDemoWrapper } from "@/artifacts/agent/components/MobileAppDemo"
 // Avatar and theme data is now stored directly in document content via API
 
@@ -1199,8 +1199,8 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
 
 
 
-  // Updated step titles
-  const stepTitles = ["Avatar", "Personality", "Connection", "App"]
+  // Updated step titles - REMOVED CONNECTION STEP
+  const stepTitles = ["Avatar", "Personality", "App"]
 
   const getSelectedStyle = () => {
     return artStyles.find((style) => style.id === avatarData.selectedStyle)
@@ -1306,9 +1306,9 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
         <div className="w-full">
         {/* Progress Steps */}
         <div className="mb-6 sm:mb-8">
-          <div className="flex items-center">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="flex items-center flex-1">
+          <div className="flex items-center justify-between">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center">
                 <div className="flex items-center">
                   <button
                     onClick={() => setStep(i)}
@@ -1320,15 +1320,15 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
                   </button>
                   <button
                     onClick={() => setStep(i)}
-                    className={`ml-2 sm:ml-3 text-xs sm:text-sm transition-colors duration-200 cursor-pointer hover:underline ${
+                    className={`ml-2 sm:ml-3 text-xs sm:text-sm transition-colors duration-200 cursor-pointer hover:underline whitespace-nowrap ${
                       i <= step ? "text-green-400" : "text-gray-500"
                     } hidden sm:inline`}
                   >
                     {stepTitles[i - 1]}
                   </button>
                 </div>
-                {i < 4 && (
-                  <div className="flex-1 mx-2 sm:mx-4">
+                {i < 3 && (
+                  <div className="flex-1 min-w-[40px] sm:min-w-[80px] mx-3 sm:mx-6">
                     <div className={`h-px transition-all duration-300 ${i < step ? "bg-green-500" : "bg-gray-800"}`} />
                   </div>
                 )}
@@ -1348,8 +1348,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
                 <span className="text-green-400 text-xs sm:text-sm">
                   {step === 1 && "🎲"}
                   {step === 2 && "⚙️"}
-                  {step === 3 && "🔐"}
-                  {step === 4 && "🚀"}
+                  {step === 3 && "🚀"}
                 </span>
               </div>
               Create New Avatar - {stepTitles[step - 1]}
@@ -1499,10 +1498,10 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
                               How to Use
                             </h5>
                             <div className="text-xs sm:text-sm text-blue-300 space-y-1">
-                              <p>• Hold down on the Matrix Box to charge it up</p>
-                              <p>• Release when charged to generate a random unicorn</p>
+                              <p>• Click the "Generate Random Unicorn" button</p>
                               <p>• Each generation creates a unique combination of parts</p>
                               <p>• Keep generating until you find one you like!</p>
+                              <p>• Your generation streak tracks how many you've created</p>
                             </div>
                           </div>
                         </div>
@@ -1693,263 +1692,8 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
               </div>
             )}
 
-                {/* Step 3: Connect Store */}
+            {/* Step 3: Preview Demo (previously Step 4) */}
             {step === 3 && (
-              <div className="space-y-4 sm:space-y-6">
-                <div className="text-center mb-4 sm:mb-6">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
-                    <span className="text-blue-400 text-lg sm:text-xl">🔐</span>
-                  </div>
-                  <h3 className="text-lg sm:text-xl font-medium text-blue-400 mb-2">Connect Your Accounts</h3>
-                  <p className="text-sm sm:text-base text-gray-400">
-                    Connect to your social media and business accounts to enhance your avatar's capabilities
-                  </p>
-                  <div className="mt-2 p-2 bg-blue-900/10 rounded border border-blue-800/30">
-                    <p className="text-xs text-blue-300">💡 Your progress is automatically saved as you work</p>
-                  </div>
-                </div>
-
-                {!avatarData.isAuthenticated ? (
-                  <div className="space-y-4 sm:space-y-6">
-                    {/* OAuth Login Options */}
-                    <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
-                      <div className="text-center mb-6">
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 bg-blue-500/10 rounded-lg flex items-center justify-center mx-auto mb-4">
-                          <span className="text-blue-400 text-2xl sm:text-3xl">🔗</span>
-                        </div>
-                        <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-2">OAuth Connections</h4>
-                        <p className="text-sm text-gray-400 mb-4">
-                          {relevantOAuthProviders.length > 0 
-                            ? `Connect the required ${relevantOAuthProviders[0].name} account for your agent`
-                            : "No external API connections required for this agent"
-                          }
-                        </p>
-                        {relevantOAuthProviders.length > 0 ? (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {relevantOAuthProviders.map((provider) => (
-                            <Button
-                              key={provider.id}
-                              onClick={() => handleOAuthLogin(provider.id)}
-                              disabled={isProviderConnected(provider.id)}
-                              className={`bg-gradient-to-r ${provider.color} hover:opacity-90 text-white transition-all duration-150 h-12 sm:h-auto relative overflow-hidden ${
-                                isProviderConnected(provider.id) ? 'opacity-50 cursor-not-allowed' : ''
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="text-lg">{provider.icon}</span>
-                                <div className="text-left">
-                                  <div className="font-medium text-sm">
-                                    {isProviderConnected(provider.id) ? '✓ Connected' : `Connect ${provider.name}`}
-                                  </div>
-                                  <div className="text-xs opacity-90">{provider.description}</div>
-                                </div>
-                              </div>
-                            </Button>
-                          ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-4">
-                            <div className="text-gray-400 text-sm">
-                                                          This agent doesn't require external API connections.
-                            {externalApisMetadata?.some(api => api.connectionType === 'api_key') && (
-                              <div className="mt-2 text-xs">
-                                Note: This agent uses API key authentication which will be configured during deployment.
-                              </div>
-                            )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Divider */}
-                    <div className="relative">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-gray-700"></div>
-                      </div>
-                      <div className="relative flex justify-center text-xs sm:text-sm">
-                        <span className="bg-[#0a0a0a] px-3 text-gray-400">or</span>
-                      </div>
-                    </div>
-
-                    {/* Manual Token Entry */}
-                    <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
-                      <div className="text-center mb-4">
-                        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-orange-500/10 rounded-lg flex items-center justify-center mx-auto mb-3">
-                          <span className="text-orange-400 text-lg sm:text-xl">🔑</span>
-                        </div>
-                        <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-2">Access Token</h4>
-                        <p className="text-sm text-gray-400 mb-4">Enter your Shopify private app access token</p>
-                      </div>
-
-                      <div className="space-y-3 sm:space-y-4">
-                        <div>
-                          <Label htmlFor="access-token" className="text-sm font-medium text-gray-300 mb-2 block">
-                            Private App Access Token
-                          </Label>
-                          <Input
-                            id="access-token"
-                            type="password"
-                            placeholder="shpat_..."
-                            value={avatarData.accessToken || ""}
-                            onChange={(e) => handleAccessTokenChange(e.target.value)}
-                            className="bg-gray-800 border-gray-700 text-gray-100 placeholder-gray-500 focus:border-green-500 focus:ring-green-500/20 transition-all duration-150 h-10 sm:h-auto font-mono text-sm"
-                          />
-                          <p className="text-xs text-gray-500 mt-2">
-                            Find this in your Shopify admin under Apps → Private apps
-                          </p>
-                        </div>
-
-                        <Button
-                          onClick={handleTokenSubmit}
-                          disabled={!avatarData.accessToken || avatarData.accessToken.length < 10}
-                          className="bg-blue-500 hover:bg-blue-600 text-white transition-all duration-150 disabled:opacity-50 h-10 sm:h-auto w-full"
-                        >
-                          <span className="mr-2">✓</span>
-                          Authenticate
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Help Section with Modal */}
-                    <div className="p-3 sm:p-4 bg-blue-900/10 rounded-lg border border-blue-800/50">
-                      <div className="flex items-start gap-2 sm:gap-3">
-                        <div className="w-5 h-5 sm:w-6 sm:h-6 bg-blue-500/20 rounded flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-blue-400 text-xs sm:text-sm">ℹ️</span>
-                        </div>
-                        <div className="flex-1">
-                          <h5 className="text-sm sm:text-base font-medium text-blue-400 mb-1">Need help?</h5>
-                          <p className="text-xs sm:text-sm text-gray-400 mb-3">
-                            To create a private app: Go to your Shopify admin → Settings → Apps and sales channels →
-                            Develop apps → Create an app → Configure Admin API scopes → Install app
-                          </p>
-
-                          <Dialog open={showTokenModal} onOpenChange={setShowTokenModal}>
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/50 transition-all duration-150 h-8 text-xs"
-                              >
-                                <span className="mr-1">📖</span>
-                                Step-by-Step Guide
-                              </Button>
-                            </DialogTrigger>
-                          </Dialog>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* Authenticated State */
-                  <div className="space-y-4 sm:space-y-6">
-                    <div className="p-4 sm:p-6 bg-green-900/20 rounded-lg border border-green-700">
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-500 rounded-lg flex items-center justify-center">
-                            <span className="text-white text-lg sm:text-xl">✓</span>
-                          </div>
-                          <div>
-                            <h4 className="text-base sm:text-lg font-medium text-green-400">Accounts Connected</h4>
-                            <p className="text-sm text-green-200">
-                              {avatarData.oauthConnections?.length || 0} account(s) connected
-                            </p>
-                          </div>
-                        </div>
-                        <Button
-                          onClick={handleLogout}
-                          variant="outline"
-                          size="sm"
-                          className="bg-gray-800 border-gray-600 text-gray-300 hover:bg-gray-700 transition-all duration-150 h-8 sm:h-auto"
-                        >
-                          Disconnect All
-                        </Button>
-                      </div>
-                      
-                      {/* Connected Providers List */}
-                      <div className="space-y-3">
-                        {avatarData.oauthConnections?.map((connection) => {
-                          const provider = oauthProviders.find(p => p.id === connection.provider)
-                          if (!provider) return null
-                          
-                          return (
-                            <div key={connection.provider} className="flex items-center justify-between p-3 bg-black/20 rounded-lg border border-green-500/30">
-                              <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 bg-gradient-to-r ${provider.color} rounded-lg flex items-center justify-center`}>
-                                  <span className="text-white text-sm">{provider.icon}</span>
-                                </div>
-                                <div>
-                                  <div className="text-sm font-medium text-green-300">{provider.name}</div>
-                                  <div className="text-xs text-green-200 flex items-center gap-2">
-                                    <span>@{connection.username}</span>
-                                    {connection.storeUrl && <span>• {connection.storeUrl}</span>}
-                                  </div>
-                                  <div className="text-xs text-green-400 font-mono">
-                                    Connected: {new Date(connection.connectedAt).toLocaleDateString()}
-                                  </div>
-                                </div>
-                              </div>
-                              <Button
-                                onClick={() => handleOAuthDisconnect(connection.provider)}
-                                variant="outline"
-                                size="sm"
-                                className="bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all duration-150 h-7 text-xs"
-                              >
-                                Disconnect
-                              </Button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                      
-                      {/* Add More Connections */}
-                      {avatarData.oauthConnections && avatarData.oauthConnections.length < relevantOAuthProviders.length && (
-                        <div className="mt-4 p-3 bg-blue-900/10 rounded-lg border border-blue-500/30">
-                          <h5 className="text-sm font-medium text-blue-400 mb-2">Add More Connections</h5>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {relevantOAuthProviders
-                              .filter(provider => !isProviderConnected(provider.id))
-                              .map((provider) => (
-                                <Button
-                                  key={provider.id}
-                                  onClick={() => handleOAuthLogin(provider.id)}
-                                  variant="outline"
-                                  size="sm"
-                                  className="bg-blue-500/10 border-blue-500/30 text-blue-400 hover:bg-blue-500/20 transition-all duration-150 h-8 text-xs justify-start"
-                                >
-                                  <span className="mr-2">{provider.icon}</span>
-                                  Connect {provider.name}
-                                </Button>
-                              ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="p-4 sm:p-6 bg-gray-800/30 rounded-lg border border-gray-700">
-                      <h4 className="text-base sm:text-lg font-medium text-gray-100 mb-3">Ready to Continue</h4>
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-sm text-gray-300">Shopify connection established</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-sm text-gray-300">API access verified</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-sm text-gray-300">Ready for avatar creation</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Step 4: Preview Demo */}
-            {step === 4 && (
               <div className="space-y-4 sm:space-y-6">
                 <div className="text-center mb-4 sm:mb-6">
                   <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-500/20 rounded-lg flex items-center justify-center mx-auto mb-3">
@@ -2125,15 +1869,10 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
                 Previous
               </Button>
            
-              {step < 4 && (
+              {step < 3 && (
                 <Button
                   onClick={nextStep}
-                  disabled={
-                    (step === 1 && !avatarData.unicornParts) ||
-                    (step === 2 && !avatarData.name) ||
-                    (step === 3 && !(avatarData.isAuthenticated && avatarData.oauthConnections && avatarData.oauthConnections.length > 0))
-                  }
-                  className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 disabled:opacity-50 h-10 sm:h-auto"
+                  className="bg-green-500 hover:bg-green-600 text-white transition-all duration-150 h-10 sm:h-auto"
                 >
                   Next
                 </Button>

@@ -151,33 +151,33 @@ function MainFeaturesSection() {
               <div className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-6 hover:border-slate-600/70 hover:bg-slate-900/70 transition-all duration-300 h-full">
                 
                 {/* Mobile Layout */}
-                <div className="block md:hidden">
+                <div className="flex md:hidden items-center gap-4">
                   {/* Image */}
-                  <div className="flex justify-center mb-4">
+                  <div className="flex-shrink-0">
                     <Image 
                       src={feature.image} 
                       alt={feature.title}
-                      width={160}
-                      height={160}
-                      className="w-32 h-32 rounded-xl object-cover"
+                      width={120}
+                      height={120}
+                      className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl object-cover"
                     />
                   </div>
                   
                   {/* Content */}
-                  <div className="text-center mb-6">
-                    <h3 className="text-2xl font-bold text-white mb-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-lg sm:text-xl font-bold text-white mb-2">
                       {feature.title}
                     </h3>
                     
-                    <p className="text-base text-gray-400 leading-relaxed mb-6">
+                    <p className="text-sm text-gray-400 leading-relaxed mb-3">
                       {feature.description}
                     </p>
                     
                     {/* Button */}
                     <Link href={feature.href}>
-                      <Button className={`bg-gradient-to-r ${feature.gradient} text-white px-6 py-3 rounded-lg font-medium text-base transition-all duration-200 hover:opacity-90 inline-flex items-center`}>
+                      <Button className={`bg-gradient-to-r ${feature.gradient} text-white px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200 hover:opacity-90 inline-flex items-center`}>
                         {feature.cta}
-                        <ArrowRight className="w-5 h-5 ml-2" />
+                        <ArrowRight className="w-4 h-4 ml-1" />
                       </Button>
                     </Link>
                   </div>
@@ -229,25 +229,25 @@ function MainFeaturesSection() {
 export function HomePageClient() {
   return (
     <div className="min-h-screen bg-black text-white py-8">
-     <div className="text-center mb-12">
+     <div className="text-center mb-8">
           <motion.div 
-            className="flex justify-center mb-6"
+            className="flex justify-center mb-4"
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
           >
             <div className="relative">
-              <div className="w-24 h-24 bg-gradient-to-br from-purple-400 via-blue-500 to-green-500 rounded-3xl flex items-center justify-center shadow-xl">
-                <img src="/images/logo.png" alt="ROM" className="w-14 h-14" />
+              <div className="w-16 h-16 bg-gradient-to-br from-purple-400 via-blue-500 to-green-500 rounded-2xl flex items-center justify-center shadow-xl">
+                <img src="/images/logo.png" alt="ROM" className="w-10 h-10" />
               </div>
-               <div className="absolute -top-2 -right-2 w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center text-xl animate-pulse">
+               <div className="absolute -top-1 -right-1 w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center text-sm animate-pulse">
                 ✨
               </div> 
             </div>
           </motion.div>
           
           <motion.h1 
-            className="text-4xl font-bold text-gray-800 dark:text-gray-200 mb-4"
+            className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-2"
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3, duration: 0.6 }}
@@ -256,7 +256,7 @@ export function HomePageClient() {
           </motion.h1>
           
           <motion.p 
-            className="text-xl text-gray-600 dark:text-gray-400"
+            className="text-lg text-gray-600 dark:text-gray-400"
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.6 }}

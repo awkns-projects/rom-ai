@@ -9,12 +9,14 @@ interface MobileAppDemoProps {
   currentTheme?: keyof typeof themes;
   viewMode?: 'mobile' | 'desktop'; // Add view mode prop
   onDataChange?: (agentData: AgentData) => void; // Add callback to save data changes
+  initialTab?: number | null; // Add initial tab prop (-1 for home, null for home, 0-4 for specific tabs)
 }
 
 interface MobileAppDemoWrapperProps {
   agentData?: AgentData;
   onThemeChange?: (theme: string) => void; // Callback to save theme changes
   onDataChange?: (agentData: AgentData) => void; // Callback to save data changes
+  initialTab?: number | null; // Add initial tab prop
 }
 
 // Theme color definitions
@@ -178,7 +180,7 @@ const themes = {
 };
 
 // Wrapper component with theme selector
-export const MobileAppDemoWrapper = memo(({ agentData, onThemeChange, onDataChange }: MobileAppDemoWrapperProps) => {
+export const MobileAppDemoWrapper = memo(({ agentData, onThemeChange, onDataChange, initialTab }: MobileAppDemoWrapperProps) => {
   // Initialize theme from agent data or default to 'green'
   const [currentTheme, setCurrentTheme] = useState<keyof typeof themes>(
     (agentData?.theme as keyof typeof themes) || 'green'
@@ -294,14 +296,14 @@ export const MobileAppDemoWrapper = memo(({ agentData, onThemeChange, onDataChan
       </div>
 
       {/* Mobile App Demo */}
-      <MobileAppDemo agentData={agentData} currentTheme={currentTheme} viewMode={viewMode} onDataChange={onDataChange} />
+      <MobileAppDemo agentData={agentData} currentTheme={currentTheme} viewMode={viewMode} onDataChange={onDataChange} initialTab={initialTab} />
     </div>
   );
 });
 
 // Main mobile app demo component
-const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mobile', onDataChange }: MobileAppDemoProps) => {
-  const [activeTab, setActiveTab] = useState<number | null>(null); // null means home page
+const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mobile', onDataChange, initialTab = null }: MobileAppDemoProps) => {
+  const [activeTab, setActiveTab] = useState<number | null>(initialTab === -1 ? null : initialTab); // null means home page
   const [isMenuOpen, setIsMenuOpen] = useState(false); // State for hamburger menu
   const [selectedModel, setSelectedModel] = useState<any>(null); // State for selected model
   const [modelViewMode, setModelViewMode] = useState<'view' | 'edit'>('view'); // State for model view/edit mode
@@ -319,15 +321,15 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
   
   const tabs = [
     { 
-      id: 'dashboard', 
-      label: 'Dashboard', 
-      icon: '📊',
-      color: theme.accent
-    },
-    { 
       id: 'models', 
       label: 'Models', 
       icon: '🗃️',
+      color: theme.accent
+    },
+    { 
+      id: 'actions', 
+      label: 'Actions', 
+      icon: '⚡',
       color: theme.accent
     },
     { 
@@ -940,53 +942,53 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
          <div className={`${theme.bg} border ${theme.border} rounded-xl p-4`}>
            <h3 className={`font-mono font-semibold text-sm ${theme.light} mb-3`}>Quick Actions</h3>
            <div className="space-y-2">
-             <button
-               onClick={() => setActiveTab(3)} // Go to AI Chat
-               className={`w-full flex items-center gap-3 p-3 ${theme.bgActive} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}
-             >
-               <span className="text-lg">💬</span>
-               <div className="flex-1 text-left">
-                 <div className={`font-mono text-sm ${theme.light}`}>Chat with AI</div>
-                 <div className={`font-mono text-xs ${theme.dim}`}>Ask questions or give commands</div>
-               </div>
-               <span className={`text-xs ${theme.dim}`}>→</span>
-             </button>
-             
-             <button
-               onClick={() => setActiveTab(1)} // Go to Models
-               className={`w-full flex items-center gap-3 p-3 ${theme.bgActive} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}
-             >
-               <span className="text-lg">🗃️</span>
-               <div className="flex-1 text-left">
-                 <div className={`font-mono text-sm ${theme.light}`}>View Data</div>
-                 <div className={`font-mono text-xs ${theme.dim}`}>Manage your business information</div>
-               </div>
-               <span className={`text-xs ${theme.dim}`}>→</span>
-             </button>
-             
-             <button
-               onClick={() => setActiveTab(2)} // Go to Schedules
-               className={`w-full flex items-center gap-3 p-3 ${theme.bgActive} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}
-             >
-               <span className="text-lg">⏰</span>
-               <div className="flex-1 text-left">
-                 <div className={`font-mono text-sm ${theme.light}`}>Schedules</div>
-                 <div className={`font-mono text-xs ${theme.dim}`}>Manage automated tasks</div>
-               </div>
-               <span className={`text-xs ${theme.dim}`}>→</span>
-             </button>
-             
-             <button
-               onClick={() => setActiveTab(0)} // Go to Dashboard
-               className={`w-full flex items-center gap-3 p-3 ${theme.bgActive} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}
-             >
-               <span className="text-lg">📊</span>
-               <div className="flex-1 text-left">
-                 <div className={`font-mono text-sm ${theme.light}`}>Dashboard</div>
-                 <div className={`font-mono text-xs ${theme.dim}`}>View analytics and insights</div>
-               </div>
-               <span className={`text-xs ${theme.dim}`}>→</span>
-             </button>
+                         <button
+              onClick={() => setActiveTab(3)} // Go to AI Chat
+              className={`w-full flex items-center gap-3 p-3 ${theme.bgActive} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}
+            >
+              <span className="text-lg">💬</span>
+              <div className="flex-1 text-left">
+                <div className={`font-mono text-sm ${theme.light}`}>Chat with AI</div>
+                <div className={`font-mono text-xs ${theme.dim}`}>Ask questions or give commands</div>
+              </div>
+              <span className={`text-xs ${theme.dim}`}>→</span>
+            </button>
+            
+            <button
+              onClick={() => setActiveTab(0)} // Go to Models
+              className={`w-full flex items-center gap-3 p-3 ${theme.bgActive} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}
+            >
+              <span className="text-lg">🗃️</span>
+              <div className="flex-1 text-left">
+                <div className={`font-mono text-sm ${theme.light}`}>View Data</div>
+                <div className={`font-mono text-xs ${theme.dim}`}>Manage your business information</div>
+              </div>
+              <span className={`text-xs ${theme.dim}`}>→</span>
+            </button>
+            
+            <button
+              onClick={() => setActiveTab(1)} // Go to Actions
+              className={`w-full flex items-center gap-3 p-3 ${theme.bgActive} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}
+            >
+              <span className="text-lg">⚡</span>
+              <div className="flex-1 text-left">
+                <div className={`font-mono text-sm ${theme.light}`}>Actions</div>
+                <div className={`font-mono text-xs ${theme.dim}`}>Run automated workflows</div>
+              </div>
+              <span className={`text-xs ${theme.dim}`}>→</span>
+            </button>
+            
+            <button
+              onClick={() => setActiveTab(2)} // Go to Schedules
+              className={`w-full flex items-center gap-3 p-3 ${theme.bgActive} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}
+            >
+              <span className="text-lg">⏰</span>
+              <div className="flex-1 text-left">
+                <div className={`font-mono text-sm ${theme.light}`}>Schedules</div>
+                <div className={`font-mono text-xs ${theme.dim}`}>Manage automated tasks</div>
+              </div>
+              <span className={`text-xs ${theme.dim}`}>→</span>
+            </button>
            </div>
          </div>
 
@@ -1016,59 +1018,7 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
     }
     
     switch (activeTab) {
-      case 0: // Dashboard
-        return (
-          <div className="p-4 space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className={`font-mono font-bold text-lg ${theme.light}`}>Dashboard</h3>
-              <div className={`w-2 h-2 bg-${theme.primary}-400 rounded-full animate-pulse`}></div>
-            </div>
-            
-            {/* Stats Grid - Shows total items for each model */}
-            <div className="grid grid-cols-2 gap-3">
-              {models.length > 0 ? (
-                models.slice(0, 4).map((model, index) => (
-                  <div key={model.id} className={`bg-black/30 border ${theme.border} rounded-lg p-3 text-center`}>
-                    <div className={`text-xl font-bold font-mono ${theme.accent}`}>
-                      {model.records?.length || 0}
-                    </div>
-                    <div className={`font-mono text-xs ${theme.dim}`}>{model.name}</div>
-                  </div>
-                ))
-              ) : (
-                <div className="col-span-2 text-center py-4">
-                  <div className={`font-mono text-sm ${theme.dim}`}>No models created yet</div>
-                </div>
-              )}
-            </div>
-
-            {/* Quick Actions - Shows actual actions */}
-            <div className="space-y-2">
-              <h4 className={`font-mono text-sm font-semibold ${theme.light}`}>Quick Actions</h4>
-              {actions.length > 0 ? (
-                actions.slice(0, 3).map((action, index) => (
-                  <div key={action.id} className={`flex items-center justify-between p-3 ${theme.bg} border ${theme.border} rounded-lg`}>
-                    <div>
-                      <div className={`font-mono text-sm ${theme.light}`}>{action.name}</div>
-                      <div className={`font-mono text-xs ${theme.accent}`}>
-                        {action.results?.actionType || 'Ready'}
-                      </div>
-                    </div>
-                    <button className={`w-8 h-8 ${theme.bg} border ${theme.border} rounded-md flex items-center justify-center ${theme.bgHover}`}>
-                      <span className={`text-xs ${theme.accent}`}>→</span>
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-4">
-                  <div className={`font-mono text-sm ${theme.dim}`}>No actions created yet</div>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-
-      case 1: // Models
+      case 0: // Models
         return (
           <div className="p-4 space-y-4">
             <div className="flex items-center justify-between mb-4">
@@ -1132,6 +1082,88 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
                   <div className={`font-mono text-sm ${theme.dim}`}>No models created yet</div>
                   <div className={`font-mono text-xs mt-1 ${theme.dim}`}>
                     Create your first data model to get started
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      case 1: // Actions
+        return (
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`font-mono font-bold text-lg ${theme.light}`}>Actions</h3>
+              <span className={`font-mono text-xs ${theme.dim}`}>{actions.length} actions</span>
+            </div>
+            
+            <div className="space-y-3">
+              {actions.length > 0 ? (
+                actions.map((action, index) => (
+                  <div key={action.id} className={`${theme.bg} border ${theme.border} rounded-lg p-3`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 ${theme.bgActive} border ${theme.borderActive} rounded-lg flex items-center justify-center`}>
+                          <span className="text-lg">⚡</span>
+                        </div>
+                        <div className="flex-1">
+                          <div className={`font-mono text-sm font-bold ${theme.light}`}>{action.name}</div>
+                          <div className={`font-mono text-xs ${theme.dim}`}>
+                            {action.description || 'No description'}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`font-mono text-xs px-2 py-1 rounded ${
+                          (action.results as any)?.status === 'Active' 
+                            ? `${theme.bgActive} ${theme.accent}` 
+                            : `${theme.bg} ${theme.dim}`
+                        }`}>
+                          {(action.results as any)?.status || 'Ready'}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {action.results && (
+                      <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-opacity-30" style={{ borderColor: 'currentColor' }}>
+                        <div>
+                          <div className={`font-mono text-xs ${theme.dim}`}>Type</div>
+                          <div className={`font-mono text-xs font-semibold ${theme.light}`}>
+                            {action.results.actionType || 'Unknown'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className={`font-mono text-xs ${theme.dim}`}>Success Rate</div>
+                          <div className={`font-mono text-xs font-semibold ${theme.accent}`}>
+                            {(action.results as any)?.successRate || 'N/A'}
+                          </div>
+                        </div>
+                        {(action.results as any)?.lastRun && (
+                          <div className="col-span-2">
+                            <div className={`font-mono text-xs ${theme.dim}`}>Last Run</div>
+                            <div className={`font-mono text-xs ${theme.light}`}>
+                              {new Date((action.results as any).lastRun).toLocaleString()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-2 mt-3">
+                      <button className={`flex-1 px-3 py-2 ${theme.bg} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}>
+                        <span className={`font-mono text-xs ${theme.light}`}>▶️ Run</span>
+                      </button>
+                      <button className={`flex-1 px-3 py-2 ${theme.bg} border ${theme.border} rounded-lg ${theme.bgHover} transition-colors`}>
+                        <span className={`font-mono text-xs ${theme.light}`}>⚙️ Edit</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8">
+                  <div className={`font-mono text-sm ${theme.dim}`}>No actions created yet</div>
+                  <div className={`font-mono text-xs mt-1 ${theme.dim}`}>
+                    Create automated actions to help your business
                   </div>
                 </div>
               )}
@@ -1207,47 +1239,100 @@ const MobileAppDemo = memo(({ agentData, currentTheme = 'green', viewMode = 'mob
 
       case 3: // AI Chat
         return (
-          <div className="p-4 space-y-4">
-            <div className="flex items-center gap-3 mb-6">
-              {renderAvatar(32)}
-              <h3 className={`font-mono font-bold text-lg ${theme.light}`}>AI Assistant</h3>
+          <div className="flex flex-col h-full">
+            {/* Chat Header */}
+            <div className={`p-4 border-b ${theme.border} bg-black/20 backdrop-blur-sm`}>
+              <div className="flex items-center gap-3">
+                {renderAvatar(40)}
+                <div>
+                  <h3 className={`font-mono font-bold text-base ${theme.light}`}>AI Assistant</h3>
+                  <div className="flex items-center gap-1">
+                    <div className={`w-2 h-2 bg-${theme.primary}-400 rounded-full animate-pulse`}></div>
+                    <span className={`font-mono text-xs ${theme.dim}`}>Online</span>
+                  </div>
+                </div>
+              </div>
             </div>
             
-            <div className="space-y-4 max-h-64 overflow-y-auto">
+            {/* Chat Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
               {[
-                { type: 'ai', message: `Welcome to ${agentName}! I can help you manage your data and workflows.` },
-                { type: 'ai', message: `You currently have ${models.length} models, ${actions.length} actions, and ${schedules.length} schedules configured.` },
-                { type: 'user', message: 'Show me the current status' },
+                { type: 'ai', message: `Welcome to ${agentName}! I can help you manage your data and workflows.`, time: '10:30 AM' },
+                { type: 'ai', message: `You currently have ${models.length} models, ${actions.length} actions, and ${schedules.length} schedules configured.`, time: '10:30 AM' },
+                { type: 'user', message: 'Show me the current status', time: '10:31 AM' },
                 { type: 'ai', message: models.length > 0 
                   ? `Your models: ${models.slice(0, 3).map(m => m.name).join(', ')}${models.length > 3 ? '...' : ''}` 
-                  : 'No models have been created yet. Would you like me to help you create one?'
+                  : 'No models have been created yet. Would you like me to help you create one?',
+                  time: '10:31 AM'
                 },
                 ...(actions.length > 0 ? [
-                  { type: 'user', message: 'What actions are available?' },
-                  { type: 'ai', message: `Available actions: ${actions.slice(0, 2).map(a => a.name).join(', ')}${actions.length > 2 ? '...' : ''}` }
+                  { type: 'user', message: 'What actions are available?', time: '10:32 AM' },
+                  { type: 'ai', message: `Available actions: ${actions.slice(0, 2).map(a => a.name).join(', ')}${actions.length > 2 ? '...' : ''}`, time: '10:32 AM' }
                 ] : [])
               ].map((chat, index) => (
-                <div key={index} className={`flex ${chat.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-xs p-4 rounded-2xl font-mono text-sm leading-relaxed ${
-                    chat.type === 'user' 
-                      ? `${theme.bgActive} border ${theme.borderActive} ${theme.light}` 
-                      : `${theme.bg} border ${theme.border} ${theme.light}`
-                  }`}>
-                    {chat.message}
+                <div key={index} className={`flex ${chat.type === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
+                  <div className={`flex ${chat.type === 'user' ? 'flex-row-reverse' : 'flex-row'} items-end gap-2 max-w-[85%]`}>
+                    {chat.type === 'ai' && (
+                      <div className="flex-shrink-0">
+                        {renderAvatar(24)}
+                      </div>
+                    )}
+                    <div className={`px-4 py-3 rounded-2xl font-mono text-sm leading-relaxed shadow-sm ${
+                      chat.type === 'user' 
+                        ? `${theme.bgActive} border ${theme.borderActive} ${theme.light} rounded-br-md` 
+                        : `${theme.bg} border ${theme.border} ${theme.light} rounded-bl-md`
+                    }`}>
+                      <div className="mb-1">{chat.message}</div>
+                      <div className={`text-xs ${theme.dim} text-right mt-1`}>
+                        {chat.time}
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
+              
+              {/* Typing Indicator */}
+              <div className="flex justify-start">
+                <div className="flex items-end gap-2">
+                  {renderAvatar(24)}
+                  <div className={`px-4 py-3 rounded-2xl rounded-bl-md ${theme.bg} border ${theme.border}`}>
+                    <div className="flex space-x-1">
+                      <div className={`w-2 h-2 bg-${theme.primary}-400 rounded-full animate-bounce`}></div>
+                      <div className={`w-2 h-2 bg-${theme.primary}-400 rounded-full animate-bounce`} style={{ animationDelay: '0.1s' }}></div>
+                      <div className={`w-2 h-2 bg-${theme.primary}-400 rounded-full animate-bounce`} style={{ animationDelay: '0.2s' }}></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
             
-            <div className={`flex gap-3 mt-6 pt-4 border-t ${theme.border}`}>
-              <input 
-                type="text" 
-                placeholder="Ask AI anything..." 
-                className={`flex-1 ${theme.bg} border ${theme.border} rounded-xl px-4 py-3 ${theme.light} font-mono text-sm focus:outline-none focus:${theme.borderActive} placeholder:${theme.dim}`}
-              />
-              <button className={`w-12 h-12 ${theme.bg} ${theme.bgHover} border ${theme.border} rounded-xl flex items-center justify-center transition-colors duration-200`}>
-                <span className={`text-lg ${theme.accent}`}>→</span>
-              </button>
+            {/* Chat Input */}
+            <div className={`p-4 border-t ${theme.border} bg-black/20 backdrop-blur-sm`}>
+              <div className="flex gap-3 items-end">
+                <div className="flex-1">
+                  <input 
+                    type="text" 
+                    placeholder="Ask AI anything..."
+                    className={`w-full ${theme.bg} border ${theme.border} rounded-2xl px-4 py-3 ${theme.light} font-mono text-sm focus:outline-none focus:${theme.borderActive} placeholder:${theme.dim} resize-none`}
+                  />
+                </div>
+                <button className={`w-12 h-12 ${theme.bgActive} ${theme.bgHover} border ${theme.borderActive} rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm`}>
+                  <span className={`text-lg ${theme.accent}`}>→</span>
+                </button>
+              </div>
+              
+              {/* Quick Actions */}
+              <div className="flex gap-2 mt-3 overflow-x-auto">
+                <button className={`px-3 py-1.5 ${theme.bg} border ${theme.border} rounded-full font-mono text-xs ${theme.dim} hover:${theme.light} transition-colors whitespace-nowrap`}>
+                  📊 Show stats
+                </button>
+                <button className={`px-3 py-1.5 ${theme.bg} border ${theme.border} rounded-full font-mono text-xs ${theme.dim} hover:${theme.light} transition-colors whitespace-nowrap`}>
+                  ⚡ Run action
+                </button>
+                <button className={`px-3 py-1.5 ${theme.bg} border ${theme.border} rounded-full font-mono text-xs ${theme.dim} hover:${theme.light} transition-colors whitespace-nowrap`}>
+                  🗃️ View data
+                </button>
+              </div>
             </div>
           </div>
         );

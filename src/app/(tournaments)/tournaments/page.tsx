@@ -507,7 +507,7 @@ export default function TournamentPageConnected() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0e1a] text-white">
+    <div className="min-h-screen bg-black text-white">
       {/* Modern Header */}
       {/* <header className="border-b border-slate-800 bg-[#0a0e1a]/95 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-3 sm:px-4 md:px-6 py-3 sm:py-4">

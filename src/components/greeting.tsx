@@ -311,40 +311,42 @@ Please create a personalized AI agent that can help me with these specific needs
     return (
       <div className="w-full max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="text-center mb-12">
+      
+
+        <div className="text-center mb-8">
           <motion.div 
-            className="flex justify-center mb-6"
+            className="flex justify-center mb-4"
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
           >
             <div className="relative">
-              <div className="w-24 h-24 bg-gradient-to-br from-purple-400 via-blue-500 to-green-500 rounded-3xl flex items-center justify-center shadow-xl">
-                <img src="/images/logo.png" alt="ROM" className="w-14 h-14" />
+              <div className="w-16 h-16 bg-gradient-to-br from-purple-400 via-blue-500 to-green-500 rounded-2xl flex items-center justify-center shadow-xl">
+                <img src="/images/logo.png" alt="ROM" className="w-10 h-10" />
               </div>
-               <div className="absolute -top-2 -right-2 w-10 h-10 bg-yellow-400 rounded-full flex items-center justify-center text-xl animate-pulse">
+               <div className="absolute -top-1 -right-1 w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center text-sm animate-pulse">
                 ✨
               </div> 
             </div>
           </motion.div>
           
           <motion.h1 
-            className="text-4xl font-bold text-gray-800 dark:text-gray-200 mb-4"
+            className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-2"
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3, duration: 0.6 }}
           >
             Build Your AI Agent
-          </motion.h1>
+            </motion.h1>
           
           <motion.p 
-            className="text-xl text-gray-600 dark:text-gray-400"
+            className="text-lg text-gray-600 dark:text-gray-400"
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.6 }}
           >
             Your AI Digital Companion Builder
-          </motion.p>
+            </motion.p>
         </div>
 
         {/* Main Selection Area */}
@@ -518,25 +520,25 @@ Please create a personalized AI agent that can help me with these specific needs
     return (
       <div className="w-full max-w-4xl mx-auto px-4 py-8">
         {/* Header */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <motion.div 
-            className="flex justify-center mb-6"
+            className="flex justify-center mb-4"
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.6, ease: "easeOut" }}
           >
             <div className="relative">
-              <div className="w-20 h-20 bg-gradient-to-br from-purple-400 via-blue-500 to-green-500 rounded-3xl flex items-center justify-center shadow-xl">
-                <img src="/images/logo.png" alt="ROM" className="w-12 h-12" />
+              <div className="w-14 h-14 bg-gradient-to-br from-purple-400 via-blue-500 to-green-500 rounded-2xl flex items-center justify-center shadow-xl">
+                <img src="/images/logo.png" alt="ROM" className="w-8 h-8" />
               </div>
-              <div className="absolute -top-2 -right-2 w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center text-lg animate-pulse">
+              <div className="absolute -top-1 -right-1 w-6 h-6 bg-yellow-400 rounded-full flex items-center justify-center text-sm animate-pulse">
                 ✨
               </div>
             </div>
           </motion.div>
           
           <motion.h1 
-            className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-3"
+            className="text-2xl font-bold text-gray-800 dark:text-gray-200 mb-2"
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3, duration: 0.6 }}
@@ -545,7 +547,7 @@ Please create a personalized AI agent that can help me with these specific needs
           </motion.h1>
           
           <motion.p 
-            className="text-lg text-gray-600 dark:text-gray-400"
+            className="text-base text-gray-600 dark:text-gray-400"
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.6 }}

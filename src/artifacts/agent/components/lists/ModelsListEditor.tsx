@@ -7,7 +7,7 @@ import type { AgentModel, } from '../../types';
 import { generateNewId } from '../../utils';
 
 interface AgentArtifactMetadata {
-  selectedTab: 'avatar' | 'brain';
+  selectedTab: 'onboard' | 'avatar' | 'brain';
   selectedBrainTab?: 'overview' | 'models' | 'actions' | 'schedules';
   editingModel: string | null;
   editingAction: string | null;

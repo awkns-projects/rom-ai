@@ -8,7 +8,7 @@ import {
 import { executeStep1DatabaseGeneration, validateStep1Output, extractModelInsights, type Step1Output } from './step1-database-generation';
 import { executeStep2ActionGeneration, validateStep2Output, extractActionInsights, type Step2Output } from './step2-action-generation';
 import { executeStep3ScheduleGeneration, validateStep3Output, extractScheduleInsights, type Step3Output } from './step3-schedule-generation';
-import { executeStep4VercelDeployment, validateStep4Output, extractStep4Insights, testVercelConnection, updateExistingDeployment, checkDeploymentUpdateNeeded, type Step4Output, type Step4Input } from './step4-vercel-deployment';
+import { executeStep4VercelDeployment, validateStep4Output, extractStep4Insights, testVercelNeonConnection, updateExistingDeployment, checkDeploymentUpdateNeeded, type Step4Output, type Step4Input } from './step4-vercel-deployment';
 import { performDeepMerge } from '../merging';
 
 /**
@@ -865,7 +865,7 @@ export async function testVercelDeploymentReadiness(): Promise<{ success: boolea
   console.log('🔍 Testing Vercel deployment readiness...');
   
   try {
-    const connectionTest = await testVercelConnection();
+    const connectionTest = await testVercelNeonConnection();
     
     if (connectionTest.success) {
       console.log('✅ Vercel deployment is ready!');

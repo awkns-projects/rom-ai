@@ -41,6 +41,7 @@ import { ModelsListEditor } from './components/lists/ModelsListEditor';
 import { ActionsListEditor } from './components/lists/ActionsListEditor';
 import { SchedulesListEditor } from './components/lists/SchedulesListEditor';
 import { OnboardContent } from './components/OnboardContent';
+import { TutorialContent } from './components/TutorialContent';
 import { ModelDataViewer } from './components/editors/ModelDataViewer';
 import { useRouter } from 'next/navigation';
 import { useParams } from 'next/navigation';
@@ -686,7 +687,7 @@ const AgentBuilderContent = memo(({
   
   // Safe metadata with defaults to prevent crashes
   const safeMetadata: AgentArtifactMetadata = useMemo(() => ({
-    selectedTab: metadata?.selectedTab || 'avatar',
+    selectedTab: metadata?.selectedTab || 'onboard',
     selectedBrainTab: metadata?.selectedBrainTab || 'overview',
     editingModel: metadata?.editingModel || null,
     editingAction: metadata?.editingAction || null,
@@ -994,6 +995,11 @@ const AgentBuilderContent = memo(({
   // Tab configuration
   const tabs = useMemo(() => [
     {
+      id: 'onboard' as const,
+      label: 'Onboard',
+      count: 0
+    },
+    {
       id: 'avatar' as const,
       label: 'Avatar',
       count: 0
@@ -1214,92 +1220,87 @@ const AgentBuilderContent = memo(({
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-green-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-green-400/10 rounded-full blur-3xl pointer-events-none" />
         
-        {/* Header */}
+        {/* Header - More Compact */}
         <div className="relative border-b border-green-500/20 backdrop-blur-xl bg-black/50">
-          <div className="px-3 sm:px-6 lg:px-8 py-3 sm:py-6">
-            <div className="flex flex-col gap-3 sm:gap-4">
-              {/* Top row - Logo and title */}
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl bg-gradient-to-r from-green-600 to-green-700 flex items-center justify-center shadow-lg shadow-green-500/20">
-                  <div className="text-black text-sm sm:text-lg">🤖</div>
+          <div className="px-3 sm:px-4 lg:px-6 py-2 sm:py-3">
+            <div className="flex items-center justify-between gap-3">
+              {/* Left side - Logo and title */}
+              <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl bg-gradient-to-r from-green-600 to-green-700 flex items-center justify-center shadow-lg shadow-green-500/20">
+                  <div className="text-black text-sm">🤖</div>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-matrix-gradient bg-clip-text font-mono truncate">
+                  <h1 className="text-base sm:text-lg lg:text-xl font-bold text-matrix-gradient bg-clip-text font-mono truncate">
                     Agent Builder
                   </h1>
-                  <p className="text-green-400 text-xs sm:text-sm font-medium font-mono hidden sm:block">
+                  <p className="text-green-400 text-xs font-medium font-mono hidden lg:block">
                     Design and configure your AI agent system
                   </p>
                 </div>
               </div>
               
-              {/* Bottom row - Status and action buttons */}
-              <div className="flex items-center justify-between gap-2">
-                {/* Status Indicator - smaller on mobile */}
-                <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl bg-black/50 border border-green-500/20 backdrop-blur-sm">
-                  <div className="status-indicator status-online">
-                    <div className={cn(
-                      "w-2 h-2 sm:w-3 sm:h-3 rounded-full transition-all duration-300",
-                      status === 'streaming'
-                        ? "bg-blue-400 animate-pulse shadow-lg shadow-blue-400/50"
-                        : "bg-green-400 animate-matrix-pulse shadow-lg shadow-green-400/50"
-                    )} />
-                  </div>
-                  <span className="text-xs sm:text-sm font-medium text-green-400 font-mono">
-                    {status === 'streaming' ? 'Building...' : 'Ready'}
-                  </span>
+              {/* Center - Status Indicator */}
+              <div className="flex items-center gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-black/50 border border-green-500/20 backdrop-blur-sm">
+                <div className="status-indicator status-online">
+                  <div className={cn(
+                    "w-2 h-2 rounded-full transition-all duration-300",
+                    status === 'streaming'
+                      ? "bg-blue-400 animate-pulse shadow-lg shadow-blue-400/50"
+                      : "bg-green-400 animate-matrix-pulse shadow-lg shadow-green-400/50"
+                  )} />
                 </div>
-                
-                {/* Action buttons - stacked on very small screens */}
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {/* Deployment Button */}
-                  {deploymentInfo && deploymentInfo.deploymentUrl && (
-                    <Button
-                      onClick={() => window.open(deploymentInfo.deploymentUrl, '_blank')}
-                      className="px-3 sm:px-4 lg:px-6 py-2 sm:py-2.5 text-xs sm:text-sm font-medium font-mono transition-all duration-200 btn-matrix bg-blue-600 hover:bg-blue-700 text-white border-blue-500/50 min-h-[36px] sm:min-h-[40px]"
-                    >
-                      <div className="flex items-center gap-1.5 sm:gap-2 justify-center">
-                        <div className="w-3 h-3 sm:w-4 sm:h-4">🌐</div>
-                        <span className="hidden xs:inline">View Live App</span>
-                        <span className="xs:hidden">Live</span>
-                      </div>
-                    </Button>
-                  )}
+                <span className="text-xs font-medium text-green-400 font-mono">
+                  {status === 'streaming' ? 'Building...' : 'Ready'}
+                </span>
+              </div>
+              
+              {/* Right side - Action buttons */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Deployment Button */}
+                {deploymentInfo && deploymentInfo.deploymentUrl && (
+                  <Button
+                    onClick={() => window.open(deploymentInfo.deploymentUrl, '_blank')}
+                    className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs font-medium font-mono transition-all duration-200 btn-matrix bg-blue-600 hover:bg-blue-700 text-white border-blue-500/50 min-h-[32px] sm:min-h-[36px]"
+                  >
+                    <div className="flex items-center gap-1 sm:gap-1.5 justify-center">
+                      <div className="w-3 h-3">🌐</div>
+                      <span className="hidden sm:inline">View Live</span>
+                      <span className="sm:hidden">Live</span>
+                    </div>
+                  </Button>
+                )}
 
-                  {/* Save Button - Hide during building */}
-                  {status !== 'streaming' && (
-                    <Button
-                      onClick={saveAgentToConversation}
-                      disabled={isSaving}
-                      className={cn(
-                        "px-3 sm:px-4 lg:px-6 py-2 sm:py-2.5 text-xs sm:text-sm font-medium font-mono transition-all duration-200 min-h-[36px] sm:min-h-[40px]",
-                        hasUnsavedChanges 
-                          ? "btn-matrix border-yellow-500/50 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300" 
-                          : "btn-matrix"
-                      )}
-                    >
-                      <div className="flex items-center gap-1.5 sm:gap-2 justify-center">
-                        <div className="w-3 h-3 sm:w-4 sm:h-4">
-                          {isSaving ? '⏳' : hasUnsavedChanges ? '📝' : '💾'}
-                        </div>
-                        <span className="hidden xs:inline">
-                          {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save Changes' : 'Save Agent'}
-                        </span>
-                        <span className="xs:hidden">
-                          {isSaving ? 'Save...' : 'Save'}
-                        </span>
+                {/* Save Button - Hide during building */}
+                {status !== 'streaming' && (
+                  <Button
+                    onClick={saveAgentToConversation}
+                    disabled={isSaving}
+                    className={cn(
+                      "px-2 sm:px-3 py-1.5 sm:py-2 text-xs font-medium font-mono transition-all duration-200 min-h-[32px] sm:min-h-[36px]",
+                      hasUnsavedChanges 
+                        ? "btn-matrix border-yellow-500/50 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300" 
+                        : "btn-matrix"
+                    )}
+                  >
+                    <div className="flex items-center gap-1 sm:gap-1.5 justify-center">
+                      <div className="w-3 h-3">
+                        {isSaving ? '⏳' : hasUnsavedChanges ? '📝' : '💾'}
                       </div>
-                    </Button>
-                  )}
-                </div>
+                      <span className="hidden sm:inline">
+                        {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save' : 'Save'}
+                      </span>
+                      <span className="sm:hidden">Save</span>
+                    </div>
+                  </Button>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-      {/* Navigation */}
+      {/* Navigation - More Compact */}
       <div className="relative border-b border-green-500/20 backdrop-blur-xl bg-black/50 sticky top-0 z-50 md:static md:z-auto">
-        <div className="px-3 sm:px-6 lg:px-8">
+        <div className="px-3 sm:px-4 lg:px-6">
           {/* Main tabs */}
           <div className="flex gap-0 -mb-px overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
             {tabs.map((tab) => (
@@ -1310,7 +1311,7 @@ const AgentBuilderContent = memo(({
                   dataManagement: null // Clear dataManagement when switching tabs
                 })}
                 className={cn(
-                  "relative px-4 sm:px-6 py-3 sm:py-4 text-sm sm:text-base font-medium font-mono transition-all duration-300 border-b-2 group whitespace-nowrap flex-shrink-0 min-h-[48px] flex items-center justify-center",
+                  "relative px-3 sm:px-4 py-2 sm:py-3 text-sm font-medium font-mono transition-all duration-300 border-b-2 group whitespace-nowrap flex-shrink-0 min-h-[40px] flex items-center justify-center",
                   safeMetadata.selectedTab === tab.id
                     ? "text-green-300 border-green-400 bg-green-500/10"
                     : "text-green-500 border-transparent hover:text-green-300 hover:bg-green-500/5 active:bg-green-500/10"
@@ -1328,43 +1329,43 @@ const AgentBuilderContent = memo(({
 
           {/* Brain navigation - horizontal scroll on mobile */}
           {safeMetadata.selectedTab === 'brain' && (
-            <div className="border-t border-green-500/10 mt-0 pt-2 sm:pt-3 pb-1 sm:pb-2">
+            <div className="border-t border-green-500/10 mt-0 pt-1.5 sm:pt-2 pb-1 sm:pb-1.5">
               <div className="flex items-center justify-start sm:justify-center overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
                 <div className="inline-flex bg-green-500/10 border border-green-500/20 rounded-lg p-0.5 shadow-sm min-w-max">
-                                      <button
+                  <button
+                    onClick={() => updateMetadata({ 
+                      selectedBrainTab: 'overview',
+                      dataManagement: null 
+                    })}
+                    className={`px-2 py-1 text-xs font-mono rounded-lg transition-all duration-200 flex items-center gap-1 whitespace-nowrap min-h-[28px] flex-shrink-0 ${
+                      safeMetadata.selectedBrainTab === 'overview' || !safeMetadata.selectedBrainTab
+                        ? "bg-green-500/20 text-green-200 shadow-sm"
+                        : "text-green-400 hover:text-green-200 active:bg-green-500/15"
+                    }`}
+                  >
+                    <span className="text-xs">🧠</span>
+                    <span className="text-xs">Overview</span>
+                  </button>
+                  {brainTabs.map((brainTab) => (
+                    <button
+                      key={brainTab.id}
                       onClick={() => updateMetadata({ 
-                        selectedBrainTab: 'overview',
+                        selectedBrainTab: brainTab.id,
                         dataManagement: null 
                       })}
-                      className={`px-2 sm:px-3 py-1.5 text-xs font-mono rounded-lg transition-all duration-200 flex items-center gap-1 sm:gap-1.5 whitespace-nowrap min-h-[32px] flex-shrink-0 ${
-                        safeMetadata.selectedBrainTab === 'overview' || !safeMetadata.selectedBrainTab
+                      className={`px-2 py-1 text-xs font-mono rounded-lg transition-all duration-200 flex items-center gap-1 whitespace-nowrap min-h-[28px] flex-shrink-0 ${
+                        safeMetadata.selectedBrainTab === brainTab.id
                           ? "bg-green-500/20 text-green-200 shadow-sm"
                           : "text-green-400 hover:text-green-200 active:bg-green-500/15"
                       }`}
                     >
-                      <span className="text-xs">🧠</span>
-                      <span className="text-xs">Overview</span>
+                      <span className="text-xs">{brainTab.icon}</span>
+                      <span className="text-xs">{brainTab.label}</span>
+                      <span className="px-1 py-0.5 rounded-full text-xs bg-green-500/20 text-green-300 border border-green-500/30 ml-0.5">
+                        {brainTab.count}
+                      </span>
                     </button>
-                    {brainTabs.map((brainTab) => (
-                      <button
-                        key={brainTab.id}
-                        onClick={() => updateMetadata({ 
-                          selectedBrainTab: brainTab.id,
-                          dataManagement: null 
-                        })}
-                        className={`px-2 sm:px-3 py-1.5 text-xs font-mono rounded-lg transition-all duration-200 flex items-center gap-1 sm:gap-1.5 whitespace-nowrap min-h-[32px] flex-shrink-0 ${
-                          safeMetadata.selectedBrainTab === brainTab.id
-                            ? "bg-green-500/20 text-green-200 shadow-sm"
-                            : "text-green-400 hover:text-green-200 active:bg-green-500/15"
-                        }`}
-                      >
-                        <span className="text-xs">{brainTab.icon}</span>
-                        <span className="text-xs">{brainTab.label}</span>
-                        <span className="px-1 py-0.5 rounded-full text-xs bg-green-500/20 text-green-300 border border-green-500/30 ml-0.5">
-                          {brainTab.count}
-                        </span>
-                      </button>
-                    ))}
+                  ))}
                 </div>
               </div>
             </div>
@@ -1374,8 +1375,8 @@ const AgentBuilderContent = memo(({
 
       {/* Content */}
       <div className="flex-1 overflow-auto relative">
-        <div className="p-4 sm:p-6 lg:p-8">
-          <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8">
+        <div className="p-3 sm:p-4 lg:p-6">
+          <div className="max-w-6xl mx-auto space-y-3 sm:space-y-4 lg:space-y-6">
             {(() => {
               console.log('🔍 Render - dataManagement:', safeMetadata.dataManagement);
               
@@ -1410,24 +1411,33 @@ const AgentBuilderContent = memo(({
               }
               
               // Show appropriate tab content
-              if (safeMetadata.selectedTab === 'avatar') {
+              if (safeMetadata.selectedTab === 'onboard') {
                 return (
-                  <OnboardContent 
+                  <TutorialContent 
                     onTabChange={(tab) => {
                       if (tab === 'models' || tab === 'actions' || tab === 'schedules') {
                         setMetadata({ 
-                      ...safeMetadata, 
+                          ...safeMetadata, 
                           selectedTab: 'brain',
                           selectedBrainTab: tab
                         });
+                      } else if (tab === 'avatar') {
+                        setMetadata({ 
+                          ...safeMetadata, 
+                          selectedTab: 'avatar'
+                        });
                       }
                     }} 
-                    models={agentData.models || []}
                     agentData={agentData}
-                    onThemeChange={(theme) => {
-                      console.log('🎨 Main client received theme change:', theme);
-                      updateAgentData({ ...agentData, theme });
-                    }}
+                    onDataChange={updateAgentData}
+                  />
+                );
+              }
+              
+              if (safeMetadata.selectedTab === 'avatar') {
+                return (
+                  <OnboardContent 
+                    agentData={agentData}
                     onDataChange={updateAgentData}
                     documentId={documentId}
                   />
@@ -1438,15 +1448,17 @@ const AgentBuilderContent = memo(({
               if (safeMetadata.selectedTab === 'brain' && (safeMetadata.selectedBrainTab === 'overview' || !safeMetadata.selectedBrainTab)) {
                 return (
                   <div className="space-y-8">
-                    {/* Simplified Hero Section */}
-                    <div className="text-center space-y-3 sm:space-y-4">
-                      <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto rounded-xl sm:rounded-2xl bg-gradient-to-r from-green-600 to-green-700 flex items-center justify-center shadow-lg shadow-green-500/20">
+                    {/* Unified Header */}
+                    <div className="text-center space-y-4">
+                      {/* <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto rounded-xl sm:rounded-2xl bg-gradient-to-r from-green-600 to-green-700 flex items-center justify-center shadow-lg shadow-green-500/20">
                         <span className="text-2xl sm:text-3xl">🧠</span>
+                      </div> */}
+                      <div>
+                        <h2 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Your Agent's Brain</h2>
+                        <p className="text-green-400 font-mono text-sm max-w-2xl mx-auto leading-relaxed mt-2">
+                          Your AI agent's intelligence comes from three simple components that work together.
+                        </p>
                       </div>
-                      <h2 className="text-xl sm:text-2xl font-bold text-green-200 font-mono">Your Agent's Brain</h2>
-                      <p className="text-green-400 font-mono max-w-2xl mx-auto leading-relaxed text-sm sm:text-base">
-                        Your AI agent's intelligence comes from three simple components that work together.
-                      </p>
                     </div>
 
                     {/* Simplified Three Components - No buttons, just clickable cards */}
@@ -2276,7 +2288,7 @@ export const agentArtifact = new Artifact<'agent', AgentArtifactMetadata>({
   
   initialize: ({ setMetadata }) => {
     setMetadata({
-      selectedTab: 'avatar',
+      selectedTab: 'onboard',
       selectedBrainTab: 'overview',
       editingModel: null,
       editingAction: null,
