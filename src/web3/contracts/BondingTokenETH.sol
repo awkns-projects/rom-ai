@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity =0.8.20;
 
-import {ERC20Initializable} from "../old_contracts/lib/ERC20Initializable.sol";
+import {ERC20Initializable} from "./libraries/ERC20Initializable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -110,9 +110,8 @@ contract BondingTokenETH is ERC20Initializable, ReentrancyGuard {
 
         _initialized = true;
 
-        // Set ERC20 metadata
-        _name = name_;
-        _symbol = symbol_;
+        // Initialize ERC20 metadata
+        initialize(name_, symbol_);
 
         // Set bonding curve parameters
         creator = creator_;
@@ -478,14 +477,7 @@ contract BondingTokenETH is ERC20Initializable, ReentrancyGuard {
         );
     }
 
-    // Override name and symbol functions
-    function name() public view override returns (string memory) {
-        return _name;
-    }
-
-    function symbol() public view override returns (string memory) {
-        return _symbol;
-    }
+    // Name and symbol functions are inherited from ERC20Initializable
 
     // Allow contract to receive ETH when used as reserve token
     receive() external payable {

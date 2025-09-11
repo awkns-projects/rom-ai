@@ -21,7 +21,7 @@ export default function AgentPage({ params }: AgentPageProps) {
   const { agents, isLoading, loadMore, hasMore } = useAgents({ limit: 50 }); // Load more agents initially
   const [agent, setAgent] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [processingType, setProcessingType] = useState<'license' | 'token' | null>(null);
+  const [processingType, setProcessingType] = useState<'license' | 'token' | 'stake' | null>(null);
   const [isSearching, setIsSearching] = useState(false);
 
   // Mock pricing and verification data - in real app this would come from the database
@@ -142,6 +142,28 @@ export default function AgentPage({ params }: AgentPageProps) {
     } catch (error) {
       console.error('Failed to buy tokens:', error);
       alert('Failed to buy tokens. Please try again.');
+    } finally {
+      setIsProcessing(false);
+      setProcessingType(null);
+    }
+  };
+
+  const handleStakeTokens = async () => {
+    setIsProcessing(true);
+    setProcessingType('stake');
+    
+    try {
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // In real app, this would call the staking API
+      console.log('Staking tokens for agent:', resolvedParams.id);
+      
+      // Show success message or redirect
+      alert('Tokens staked successfully!');
+    } catch (error) {
+      console.error('Failed to stake tokens:', error);
+      alert('Failed to stake tokens. Please try again.');
     } finally {
       setIsProcessing(false);
       setProcessingType(null);
@@ -695,6 +717,136 @@ export default function AgentPage({ params }: AgentPageProps) {
                     <div className="text-xs text-gray-400 font-mono">
                       Ready for distribution
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Token Staking Section */}
+          {analytics && (
+            <div className="bg-gradient-to-br from-purple-900/20 to-purple-800/10 rounded-2xl p-8 backdrop-blur-sm shadow-xl shadow-purple-500/5 ring-1 ring-purple-500/10">
+              <div className="flex items-center gap-3 mb-8">
+                <Target className="w-6 h-6 text-purple-400" />
+                <h2 className="text-2xl font-bold text-gray-100 font-mono">Stake Tokens</h2>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Staking Benefits */}
+                <div className="space-y-6">
+                  <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-sm rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-gray-100 font-mono mb-4">Earn License Fees</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 p-3 bg-green-500/10 rounded-lg border border-green-500/20">
+                        <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center">
+                          <Coins className="w-4 h-4 text-green-400" />
+                        </div>
+                        <div>
+                          <p className="text-green-400 font-mono font-medium">Revenue Sharing in {pricing.licenseCrypto}</p>
+                          <p className="text-sm text-gray-400 font-mono">Earn {pricing.licenseCrypto} from all license fees paid by users</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-3 p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
+                        <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
+                          <TrendingUp className="w-4 h-4 text-purple-400" />
+                        </div>
+                        <div>
+                          <p className="text-purple-400 font-mono font-medium">Passive Income</p>
+                          <p className="text-sm text-gray-400 font-mono">Earn rewards automatically while tokens are staked</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                        <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center">
+                          <DollarSign className="w-4 h-4 text-blue-400" />
+                        </div>
+                        <div>
+                          <p className="text-blue-400 font-mono font-medium">High APY</p>
+                          <p className="text-sm text-gray-400 font-mono">Currently earning {analytics.stakingAPY.toFixed(1)}% annually</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Key Stats */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 text-center">
+                      <div className="text-2xl font-bold text-purple-400 font-mono">
+                        {analytics.stakingAPY.toFixed(1)}%
+                      </div>
+                      <div className="text-sm text-gray-400 font-mono">Current APY</div>
+                    </div>
+                    <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 text-center">
+                      <div className="text-2xl font-bold text-green-400 font-mono">
+                        ${(analytics.revenueToDistribute / analytics.stakers).toFixed(2)}
+                      </div>
+                      <div className="text-sm text-gray-400 font-mono">Avg. per Staker ({pricing.licenseCrypto})</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Staking Action */}
+                <div className="flex flex-col justify-center">
+                  <div className="bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-sm rounded-xl p-8 text-center">
+                    <div className="mb-6">
+                      <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center mx-auto mb-4">
+                        <Target className="w-8 h-8 text-purple-400" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-gray-100 font-mono mb-2">Start Staking</h3>
+                      <p className="text-gray-400 font-mono">
+                        Stake your {agentName} tokens and earn {pricing.licenseCrypto} from license fees
+                      </p>
+                    </div>
+
+                    <div className="space-y-4 mb-8">
+                      <div className="flex justify-between items-center p-3 bg-black/20 rounded-lg">
+                        <span className="text-gray-400 font-mono">License Fee:</span>
+                        <span className="text-green-400 font-mono font-bold">${pricing.licenseFee.toFixed(2)} ({pricing.licenseCrypto})</span>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-black/20 rounded-lg">
+                        <span className="text-gray-400 font-mono">Your Share:</span>
+                        <span className="text-purple-400 font-mono font-bold">
+                          ~{((1 / analytics.stakers) * 100).toFixed(3)}% per license
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-black/20 rounded-lg">
+                        <span className="text-gray-400 font-mono">Est. Monthly in {pricing.licenseCrypto}:</span>
+                        <span className="text-blue-400 font-mono font-bold">
+                          ${((analytics.revenueToDistribute / analytics.stakers) * 0.3).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <Button
+                      onClick={handleStakeTokens}
+                      disabled={isProcessing}
+                      className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white font-mono font-medium hover:opacity-90 transition-opacity py-4 text-lg"
+                    >
+                      {isProcessing && processingType === 'stake' ? (
+                        <div className="flex items-center gap-2">
+                          <div className="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></div>
+                          Staking Tokens...
+                        </div>
+                      ) : (
+                        <>
+                          <Target className="w-5 h-5 mr-2" />
+                          Stake Tokens
+                        </>
+                      )}
+                    </Button>
+
+                    <div className="mt-4 p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                      <p className="text-sm text-blue-400 font-mono font-medium mb-1">
+                        💡 Reward Currency: {pricing.licenseCrypto}
+                      </p>
+                      <p className="text-xs text-gray-400 font-mono">
+                        Staking rewards are paid in {pricing.licenseCrypto} (the currency used to mint licenses), not in {agentName} tokens.
+                      </p>
+                    </div>
+                    <p className="text-xs text-gray-500 font-mono mt-4">
+                      * Staked tokens can be unstaked at any time with a 7-day cooldown period
+                    </p>
                   </div>
                 </div>
               </div>
