@@ -143,9 +143,6 @@ function AgentCard({ agent, licenseFee, licenseCrypto, tokenPrice, tokenCrypto, 
               <span className="text-sm font-bold text-green-400 font-mono">
                 ${licenseFee.toFixed(2)}
               </span>
-              <div className="text-xs text-gray-500 font-mono">
-                {licenseCrypto}
-              </div>
             </div>
           </div>
           
@@ -156,9 +153,6 @@ function AgentCard({ agent, licenseFee, licenseCrypto, tokenPrice, tokenCrypto, 
                 <span className="text-sm font-bold text-blue-400 font-mono">
                   ${tokenPrice.toFixed(2)}
                 </span>
-                <div className="text-xs text-gray-500 font-mono">
-                  {tokenCrypto}
-                </div>
               </div>
             </div>
           )}
@@ -253,9 +247,9 @@ export default function ExplorePage() {
 
           {/* Search and Filters */}
           <div className="bg-gradient-to-br from-gray-900/60 to-gray-800/40 rounded-2xl p-6 backdrop-blur-sm shadow-xl shadow-black/20 ring-1 ring-gray-500/10">
-            <div className="flex flex-col md:flex-row gap-4">
+            <div className="space-y-4">
               {/* Search */}
-              <div className="flex-1">
+              <div>
                 <input
                   type="text"
                   placeholder="Search agents..."
@@ -265,20 +259,34 @@ export default function ExplorePage() {
                 />
               </div>
 
-              {/* Domain Filter */}
-              <div>
-                <select
-                  value={selectedDomain}
-                  onChange={(e) => setSelectedDomain(e.target.value)}
-                  className="px-4 py-2 bg-gray-800 border border-gray-600 rounded-lg text-gray-100 font-mono text-sm focus:outline-none focus:border-green-500/50"
-                >
-                  <option value="all">All Domains</option>
+              {/* Domain Filter Tags */}
+              <div className="space-y-2">
+                <label className="text-sm text-gray-400 font-mono">Filter by Domain:</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setSelectedDomain('all')}
+                    className={`px-3 py-1 rounded-full text-xs font-mono transition-all duration-200 ${
+                      selectedDomain === 'all'
+                        ? 'bg-green-500 text-black font-bold'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-gray-100'
+                    }`}
+                  >
+                    All Domains
+                  </button>
                   {availableDomains.map(domain => (
-                    <option key={domain} value={domain.toLowerCase()}>
+                    <button
+                      key={domain}
+                      onClick={() => setSelectedDomain(domain.toLowerCase())}
+                      className={`px-3 py-1 rounded-full text-xs font-mono transition-all duration-200 ${
+                        selectedDomain === domain.toLowerCase()
+                          ? 'bg-green-500 text-black font-bold'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-gray-100'
+                      }`}
+                    >
                       {domain}
-                    </option>
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
             </div>
           </div>
