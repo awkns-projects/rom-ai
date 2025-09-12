@@ -19,6 +19,7 @@ interface WelcomeMessage {
 }
 
 interface UserProfile {
+  assistantType?: string;
   job?: string;
   workChallenges?: string;
   contentNeeds?: string;
@@ -40,6 +41,8 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [userProfile, setUserProfile] = useState<UserProfile>({});
   const [userInput, setUserInput] = useState('');
+  const [variablesList, setVariablesList] = useState<string[]>(['']);
+  const [newVariable, setNewVariable] = useState('');
   const router = useRouter();
 
   // Fetch chat history for the selection phase
@@ -55,68 +58,57 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
   );
 
   const welcomeMessages: WelcomeMessage[] = [
-    // {
-    //   id: 'msg-1',
-    //   text: "🌟 Welcome! I'm ROM, your Digital Companion Creator at ROM Cards.",
-    //   delay: 1000,
-    // },
-    // {
-    //   id: 'msg-2', 
-    //   text: "I'm here to create a special digital companion - think of it as your personal Digimon - that will help with your daily life!",
-    //   delay: 3000,
-    // },
-    // {
-    //   id: 'msg-3',
-    //   text: "✨ Just like how each Digimon has unique abilities, your digital companion will have powers tailored specifically to YOUR needs.",
-    //   delay: 4500,
-    // },
-    // {
-    //   id: 'msg-4',
-    //   text: "To create the perfect companion for you, I need to learn about your world. Ready to begin the creation process? 🎮",
-    //   delay: 6000,
-    // }
     {
       id: 'msg-1',
       text:  "I'm here to create a special digital companion - think of it as your personal Digimon - that will help with your daily life!",
-      delay: 1000,
+      delay: 500,
     },
     {
       id: 'msg-2', 
       text: "✨ Just like how each Digimon has unique abilities, your digital companion will have powers tailored specifically to YOUR needs.",
-      delay: 2000,
+      delay: 500,
     },
   ];
 
-  const questions = [
+  interface Question {
+    id: string;
+    question: string;
+    placeholder: string;
+    key: keyof UserProfile;
+    isVariablesList?: boolean;
+  }
+
+  const questions: Question[] = [
     {
-      id: 'job',
-      question: "First, what's your job or role? (e.g., Marketing Manager, Doctor, Student, Business Owner)",
-      placeholder: "I'm a marketing manager at a tech company...",
+      id: 'category',
+      question: "What type of assistant do you want to create?",
+      placeholder: "Content Creator, Price Monitor, Research Assistant, Social Media Manager, Document Tracker...",
+      key: 'assistantType' as keyof UserProfile
+    },
+    {
+      id: 'purpose',
+      question: "What ongoing job should this assistant handle for you?",
+      placeholder: "Monitor products for changes, make daily posts, generate content, track documents...",
       key: 'job' as keyof UserProfile
     },
     {
-      id: 'challenges',
-      question: "What are your biggest daily work challenges or time-wasters?",
-      placeholder: "I spend hours scheduling social media posts and responding to emails...",
+      id: 'instruction',
+      question: "Tell me the instruction you'd give me — and list the items if there are more than one.",
+      placeholder: "Write 3 posts about travel and food, or watch prices for ETH, SOL, and BTC...",
       key: 'workChallenges' as keyof UserProfile
     },
     {
-      id: 'content',
-      question: "Do you need help with content creation, writing, or creative work?",
-      placeholder: "I struggle with creating engaging social media content and blog posts...",
-      key: 'contentNeeds' as keyof UserProfile
+      id: 'variables',
+      question: "Which parts of that instruction should stay flexible?",
+      placeholder: "Add variables like: number of posts, topic, coin, threshold, date/time...",
+      key: 'contentNeeds' as keyof UserProfile,
+      isVariablesList: true
     },
     {
-      id: 'automation',
-      question: "What repetitive tasks would you love to automate?",
-      placeholder: "Syncing data between apps, sending follow-up emails, managing my calendar...",
+      id: 'frequency',
+      question: "Do you want me to: run once, keep watching continuously, or send updates on a schedule? And for how long?",
+      placeholder: "Check every hour for 30 days, run once now, send daily updates for a week...",
       key: 'automationDesires' as keyof UserProfile
-    },
-    {
-      id: 'tools',
-      question: "What tools do you currently use for work? (Notion, Slack, Gmail, etc.)",
-      placeholder: "I use Notion for notes, Slack for team communication, and Google Calendar...",
-      key: 'currentTools' as keyof UserProfile
     }
   ];
 
@@ -151,18 +143,33 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
 
   const handleAnswerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userInput.trim()) return;
-
     const currentQuestion = questions[currentQuestionIndex];
-    setUserProfile(prev => ({
-      ...prev,
-      [currentQuestion.key]: userInput.trim()
-    }));
+    
+    // Handle variables list differently
+    if (currentQuestion.isVariablesList) {
+      const validVariables = variablesList.filter(v => v.trim() !== '');
+      if (validVariables.length === 0) return;
+      
+      setUserProfile(prev => ({
+        ...prev,
+        [currentQuestion.key]: validVariables.join(', ')
+      }));
+    } else {
+      if (!userInput.trim()) return;
+      setUserProfile(prev => ({
+        ...prev,
+        [currentQuestion.key]: userInput.trim()
+      }));
+    }
 
     setUserInput('');
 
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
+      // Reset variables list for next question
+      if (questions[currentQuestionIndex + 1]?.isVariablesList) {
+        setVariablesList(['']);
+      }
     } else {
       // All questions answered, create the companion
       createDigitalCompanion();
@@ -172,9 +179,28 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
   const skipQuestion = () => {
     if (currentQuestionIndex < questions.length - 1) {
       setCurrentQuestionIndex(prev => prev + 1);
+      // Reset variables list for next question
+      if (questions[currentQuestionIndex + 1]?.isVariablesList) {
+        setVariablesList(['']);
+      }
     } else {
       createDigitalCompanion();
     }
+  };
+
+  const addVariable = () => {
+    if (newVariable.trim()) {
+      setVariablesList(prev => [...prev.filter(v => v.trim() !== ''), newVariable.trim(), '']);
+      setNewVariable('');
+    }
+  };
+
+  const removeVariable = (index: number) => {
+    setVariablesList(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateVariable = (index: number, value: string) => {
+    setVariablesList(prev => prev.map((v, i) => i === index ? value : v));
   };
 
   const goBackQuestion = () => {
@@ -197,15 +223,15 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
     if (answers.length > 0) {
       const companionPrompt = `I want to create a digital assistant/companion for my work and life. Here's information about me:
 
-${userProfile.job ? `🏢 My job/role: ${userProfile.job}` : ''}
+${userProfile.assistantType ? `🤖 Assistant type I want: ${userProfile.assistantType}` : ''}
 
-${userProfile.workChallenges ? `⚡ My biggest work challenges: ${userProfile.workChallenges}` : ''}
+${userProfile.job ? `📋 Ongoing job for the assistant: ${userProfile.job}` : ''}
 
-${userProfile.contentNeeds ? `✍️ Content creation needs: ${userProfile.contentNeeds}` : ''}
+${userProfile.workChallenges ? `📝 My specific instructions: ${userProfile.workChallenges}` : ''}
 
-${userProfile.automationDesires ? `🤖 Tasks I want to automate: ${userProfile.automationDesires}` : ''}
+${userProfile.contentNeeds ? `⚙️ Variables to keep flexible: ${userProfile.contentNeeds}` : ''}
 
-${userProfile.currentTools ? `🛠️ Tools I currently use: ${userProfile.currentTools}` : ''}
+${userProfile.automationDesires ? `⏰ Frequency and duration: ${userProfile.automationDesires}` : ''}
 
 Please create a personalized AI agent that can help me with these specific needs and integrate with my workflow. Make it like a digital companion that understands my unique situation and can assist me in practical ways.`;
 
@@ -648,7 +674,58 @@ Please create a personalized AI agent that can help me with these specific needs
 
         {/* Conversation Style Question */}
         <div className="space-y-6 mb-8">
-          {/* ROM's Question Message */}
+          {/* Previous Q&A Pairs (in chronological order) */}
+          {Object.entries(userProfile)
+            .filter(([key, value]) => {
+              if (!value || !value.trim()) return false;
+              const questionIndex = questions.findIndex(q => q.key === key);
+              return questionIndex !== -1 && questionIndex < currentQuestionIndex;
+            })
+            .sort(([keyA], [keyB]) => {
+              const indexA = questions.findIndex(q => q.key === keyA);
+              const indexB = questions.findIndex(q => q.key === keyB);
+              return indexA - indexB;
+            })
+            .map(([key, value], index) => {
+              const questionIndex = questions.findIndex(q => q.key === key);
+              const question = questions[questionIndex];
+              
+              return (
+                <div key={`qa-${key}`} className="space-y-3">
+                  {/* Previous Question */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                    className="flex justify-start"
+                  >
+                    <div className="bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-2xl px-4 py-3 shadow-sm max-w-md border border-purple-200 dark:border-purple-700">
+                      <div className="flex items-center mb-2">
+                        <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center mr-2">
+                          <span className="text-white text-xs">🤖</span>
+                        </div>
+                        <span className="text-xs font-medium text-purple-600 dark:text-purple-400">ROM</span>
+                      </div>
+                      <p className="text-sm leading-relaxed">{question.question}</p>
+                    </div>
+                  </motion.div>
+                  
+                  {/* Previous Answer */}
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 + 0.1 }}
+                    className="flex justify-end"
+                  >
+                    <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-2xl px-4 py-3 shadow-sm max-w-md">
+                      <p className="text-sm leading-relaxed">{value}</p>
+                    </div>
+                  </motion.div>
+                </div>
+              );
+            })}
+
+          {/* Current ROM's Question Message */}
           <motion.div
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -665,46 +742,77 @@ Please create a personalized AI agent that can help me with these specific needs
               <p className="text-sm leading-relaxed">{currentQuestion.question}</p>
             </div>
           </motion.div>
-
-          {/* Previous Answers */}
-          {Object.entries(userProfile).map(([key, value], index) => {
-            if (!value || !value.trim()) return null;
-            const questionIndex = questions.findIndex(q => q.key === key);
-            if (questionIndex === -1 || questionIndex >= currentQuestionIndex) return null;
-            
-            return (
-              <motion.div
-                key={`answer-${key}`}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                className="flex justify-end"
-              >
-                <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-2xl px-4 py-3 shadow-sm max-w-md">
-                  <p className="text-sm leading-relaxed">{value}</p>
-                </div>
-              </motion.div>
-            );
-          })}
         </div>
 
         {/* Input Form */}
         <form onSubmit={handleAnswerSubmit} className="space-y-6">
           <div className="flex justify-end">
             <div className="w-full max-w-md">
-              <textarea
-                value={userInput}
-                onChange={(e) => setUserInput(e.target.value)}
-                placeholder={currentQuestion.placeholder}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white resize-none"
-                rows={3}
-                autoFocus
-              />
+              {currentQuestion.isVariablesList ? (
+                /* Variables List Input */
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    Add the flexible parts of your instruction (one at a time):
+                  </p>
+                  
+                  {/* Existing Variables */}
+                  {variablesList.filter(v => v.trim() !== '').map((variable, index) => (
+                    <div key={index} className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        value={variable}
+                        onChange={(e) => updateVariable(index, e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white text-sm"
+                        placeholder="e.g., number of posts"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeVariable(index)}
+                        className="px-2 py-2 text-red-500 hover:text-red-700 text-sm"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                  
+                  {/* Add New Variable */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newVariable}
+                      onChange={(e) => setNewVariable(e.target.value)}
+                      placeholder="Add another variable..."
+                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white text-sm"
+                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addVariable())}
+                    />
+                    <button
+                      type="button"
+                      onClick={addVariable}
+                      disabled={!newVariable.trim()}
+                      className="px-3 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 text-sm"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Regular Text Input */
+                <textarea
+                  value={userInput}
+                  onChange={(e) => setUserInput(e.target.value)}
+                  placeholder={currentQuestion.placeholder}
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white resize-none"
+                  rows={3}
+                  autoFocus
+                />
+              )}
               
               <div className="flex gap-3 mt-3">
                 <button
                   type="submit"
-                  disabled={!userInput.trim()}
+                  disabled={currentQuestion.isVariablesList ? 
+                    variablesList.filter(v => v.trim() !== '').length === 0 : 
+                    !userInput.trim()}
                   className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:from-green-600 hover:to-emerald-600 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
                   {currentQuestionIndex === questions.length - 1 ? 'Create My Companion! 🎉' : 'Send →'}

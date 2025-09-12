@@ -219,13 +219,14 @@ ANALYSIS FOCUS:
    - How urgent and clear is the request?
 
 2. IDENTIFY EXTERNAL API REQUIREMENTS:
-   - Does this request mention any external services or APIs?
-   - Common APIs include: gmail, shopify, slack, stripe, salesforce, hubspot, google-calendar, microsoft-teams, etc.
-   - MULTIPLE APIs are supported - identify ALL relevant APIs mentioned
-   - For each API, determine its purpose and priority level (critical/high/medium/low)
-   - What specific functionality is needed from each external API?
-   - What scopes/permissions would be required for each API?
-   - IMPORTANT: Agents can connect to MULTIPLE external APIs simultaneously
+   - Does this request EXPLICITLY mention any external services or APIs?
+   - ONLY include APIs that are DIRECTLY MENTIONED in the user's request
+   - Do NOT infer or suggest APIs that aren't explicitly mentioned
+   - Do NOT add APIs just because they might be useful for the use case
+   - For each EXPLICITLY MENTIONED API, determine its purpose and priority level (critical/high/medium/low)
+   - What specific functionality is needed from each MENTIONED external API?
+   - What scopes/permissions would be required for each MENTIONED API?
+   - IMPORTANT: Only process APIs that the user specifically requested
 
 3. IDENTIFY BUSINESS FEATURES:
    - What are the 3-5 core features needed?
@@ -335,11 +336,12 @@ Be focused on business value and user needs. Don't worry about technical impleme
 Analyze this request and extract the business features and semantic requirements. Focus on WHAT needs to be done and WHY, not HOW to implement it.
 
 EXTERNAL API DETECTION:
-- Carefully analyze the request for any mention of external services or APIs
-- Look for keywords like: email, gmail, shopify, slack, stripe, salesforce, hubspot, calendar, teams, etc.
-- MULTIPLE APIs are supported - identify ALL relevant APIs mentioned
-- Prioritize APIs based on their importance to the core functionality
-- If no external API is mentioned, set requiresExternalApi to false and primaryApi to null
+- Carefully analyze the request for EXPLICIT mentions of external services or APIs
+- ONLY include APIs that are DIRECTLY MENTIONED by name in the user's request
+- Do NOT infer APIs from general terms (e.g., don't assume "email" means "gmail")
+- Do NOT add APIs that might be helpful but weren't specifically requested
+- If multiple APIs are explicitly mentioned, prioritize based on their importance to the core functionality
+- If no external API is explicitly mentioned, set requiresExternalApi to false and primaryApi to null
 
 ${existingAgent ? 'Focus on what NEW functionality is needed beyond what already exists.' : 'This is a new system - identify all requirements from scratch.'}`
         }
@@ -387,7 +389,7 @@ ${existingAgent ? `
 EXISTING SYSTEM:
 Models: ${existingAgent.models?.map(m => `${m.name} (${m.fields?.map(f => f.name).join(', ') || 'no fields'})`).join(', ') || 'none'}
 Actions: ${existingAgent.actions?.map(a => a.name).join(', ') || 'none'}
-Schedules: ${existingAgent.schedules?.map(s => `${s.name} (${s.interval?.pattern || 'no pattern'})`).join(', ') || 'none'}
+Schedules: ${existingAgent.schedules?.map(s => `${s.name} (${s.trigger?.pattern || 'no pattern'})`).join(', ') || 'none'}
 
 IMPORTANT: For each model, field, enum, action, and schedule, determine if it should be:
 - operation: "create" - This is a completely new entity that doesn't exist
@@ -399,25 +401,14 @@ For "update" operations, provide updateDescription explaining what changes are n
 TECHNICAL SPECIFICATION REQUIREMENTS:
 
 0. EXTERNAL API INTEGRATION:
-   - Based on the Phase A analysis, determine if external API integration is needed
-   - MULTIPLE APIs are supported - design the agent to work with ALL identified APIs
-   - Connection types (prefer OAuth when available, fallback to API key):
-     * shopify: oauth (preferred), scopes like 'read_products', 'write_orders'
-     * gmail: oauth (only option), scopes like 'gmail.readonly', 'gmail.send'
-     * slack: oauth (preferred), scopes like 'channels:read', 'chat:write'
-     * stripe: api_key (only option), no scopes needed (uses API key)
-     * salesforce: oauth (preferred), scopes like 'api', 'refresh_token'
-     * instagram: oauth (only option), scopes like 'user_profile', 'user_media'
-     * facebook: oauth (only option), scopes like 'pages_read_engagement', 'publish_to_groups'
-     * linkedin: oauth (only option), scopes like 'r_liteprofile', 'w_member_social'
-     * notion: oauth (preferred), scopes like 'read', 'insert', 'update'
-     * google-calendar: oauth (only option), scopes like 'calendar.readonly', 'calendar.events'
-     * microsoft-teams: oauth (only option), scopes like 'Group.Read.All', 'Chat.Read'
-     * hubspot: oauth (preferred), api_key (fallback), scopes like 'contacts', 'timeline'
-   - RULE: Use 'oauth' if the API supports it, only use 'api_key' if OAuth is not available
-   - For each API, determine priority: 'primary' (core functionality) or 'secondary' (additional features)
-   - primaryUseCase should explain the main functionality each API enables
-   - IMPORTANT: Design models, actions, and schedules to work with ALL specified APIs
+   - Based on the Phase A analysis, only integrate APIs that were explicitly mentioned
+   - Do NOT add or suggest additional APIs beyond what was identified in Phase A
+   - For each API identified in Phase A:
+     * Determine appropriate connection type (oauth or api_key based on API capabilities)
+     * Set priority: 'primary' (core functionality) or 'secondary' (additional features)
+     * Define primaryUseCase explaining the main functionality this API enables
+     * Specify required scopes/permissions for the intended functionality
+   - Design models, actions, and schedules to work ONLY with the APIs from Phase A analysis
 
 1. DATABASE MODELS:
    ${existingAgent ? `

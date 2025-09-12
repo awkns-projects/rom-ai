@@ -191,7 +191,7 @@ ${step.model ? `- Database Model: ${step.model} (use db.${step.model.charAt(0).t
 - Input Fields: ${step.inputFields?.map((f: any) => `${f.name} (${f.type}${f.required ? ', required' : ', optional'})`).join(', ') || 'None'}
 - Output Fields: ${step.outputFields?.map((f: any) => `${f.name} (${f.type}${f.required ? ', required' : ', optional'})`).join(', ') || 'None'}
 - Step Implementation: Based on type "${step.type}", implement the appropriate operation
-${index === 0 ? `- Access inputs as: ${extractedInputParams.map((p: any) => `input.${p.name}`).join(', ')} (action's main input parameters)` : step.inputFields?.length > 0 ? `- Access inputs from previous steps: ${step.inputFields.map((f: any) => `${f.name}`).join(', ')}` : ''}
+${index === 0 ? `- Access inputs as: ${extractedInputParams.map((p: any) => `parameters.${p.name}`).join(', ')} (action's main input parameters)` : step.inputFields?.length > 0 ? `- Access inputs from previous steps: ${step.inputFields.map((f: any) => `${f.name}`).join(', ')}` : ''}
 ${step.outputFields?.length > 0 ? `- Must produce: ${step.outputFields.map((f: any) => `${f.name}`).join(', ')}` : ''}
 `).join('\n')}
 
@@ -211,31 +211,33 @@ Review the Prisma schema above and list the exact fields available for each mode
 CODE GENERATION REQUIREMENTS:
 
 1. EXECUTION CONTEXT:
-   The code will be executed using: new Function('context', code)
-   Where context = { db, ai, input, envVars }
+   The code will be executed directly as an async function with access to global variables:
    
-   - db: Database operations (db.ModelName.find(), db.ModelName.create(), etc.)
-   - ai: AI operations using generateObject function
-   - input: User-provided input parameters (MUST include all parameters from the first step)
-   - envVars: Environment variables for external APIs ONLY (do not include NODE_ENV, PORT, or other system variables)
+   - prisma: Database operations (prisma.modelName.find(), prisma.modelName.create(), etc.)
+   - generateObject: AI operations function (available globally)
+   - aiModel: AI model instance (available globally)  
+   - parameters: User-provided input parameters (MUST include all parameters from the first step)
+   - process.env: Environment variables for external APIs ONLY (do not include NODE_ENV, PORT, or other system variables)
 
 2. INPUT PARAMETER STRUCTURE:
    CRITICAL: Step 1 uses the action's main input parameters, NOT separate step input fields.
-   Access the action's input parameters directly as: input.parameterName
+   Access the action's input parameters directly as: parameters.parameterName
    
    Example: If the action has input parameters { scheduledDate, userId, reportType }
-   Then Step 1 accesses them as: input.scheduledDate, input.userId, input.reportType
+   Then Step 1 accesses them as: parameters.scheduledDate, parameters.userId, parameters.reportType
    Step 1's inputFields in the pseudo steps are for reference only - use the actual action inputs!
 
 3. INPUT PARAMETER HANDLING:
    ${extractedInputParams.length > 0 ? `
    The code should expect these input parameters from step 1:
    ${extractedInputParams.map((param: any) => `
-   - input.${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}
+   - parameters.${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}
      ${param.kind === 'object' ? `This is a database relation ID for ${param.relationModel} model` : ''}
+     ${param.list ? `⚠️ This is an ARRAY parameter - use { in: parameters.${param.name} } for Prisma queries` : `⚠️ This is a SINGLE VALUE parameter - use direct comparison parameters.${param.name} for Prisma queries`}
    `).join('')}
    
-   Always validate required input parameters before processing.
+   🚨 CRITICAL: Always validate required input parameters before processing.
+   🚨 CRITICAL: Check if parameters are arrays vs single values before using in Prisma queries.
    ` : 'Parameters will be provided as defined in the first pseudo step.'}
 
 4. CODE STRUCTURE - STEP-BY-STEP IMPLEMENTATION:
@@ -259,11 +261,11 @@ CODE GENERATION REQUIREMENTS:
    - Each step's outputs become available for subsequent steps
    
    DATA FLOW IMPLEMENTATION:
-   - Step 1 inputs MUST BE the action's main input parameters (input.parameterName)
+   - Step 1 inputs MUST BE the action's main input parameters (parameters.parameterName)
    - Step 1 should not define separate input fields - it uses the action's input directly
    - Step 2+ inputs come from previous step outputs
    - Store each step's outputs in variables for use by subsequent steps
-   - Example: Step 1 uses input.userId, Step 1 outputs "customerData", Step 2 uses customerData
+   - Example: Step 1 uses parameters.userId, Step 1 outputs "customerData", Step 2 uses customerData
    
    STEP VARIABLE NAMING PATTERN:
    - Step 1 outputs: step1_outputFieldName (e.g., step1_customerData)
@@ -273,26 +275,26 @@ CODE GENERATION REQUIREMENTS:
 5. DATABASE OPERATIONS:
    🚨 CRITICAL: Each database step includes a "model" field that specifies which model to use!
    
-   For database operations, use Prisma client directly (the 'db' parameter is the PrismaClient instance):
-   - db.modelName.findMany({ where: filter, take: limit }) - find multiple records
-   - db.modelName.findUnique({ where: uniqueFilter }) - find single record  
-   - db.modelName.create({ data: recordData }) - create new record
-   - db.modelName.createMany({ data: recordsArray }) - create multiple records
-   - db.modelName.update({ where: uniqueFilter, data: updateData }) - update existing record
-   - db.modelName.updateMany({ where: filter, data: updateData }) - update multiple records
-   - db.modelName.delete({ where: uniqueFilter }) - delete record
-   - db.modelName.deleteMany({ where: filter }) - delete multiple records
+   For database operations, use prisma directly (available as global):
+   - prisma.modelName.findMany({ where: filter, take: limit }) - find multiple records
+   - prisma.modelName.findUnique({ where: uniqueFilter }) - find single record  
+   - prisma.modelName.create({ data: recordData }) - create new record
+   - prisma.modelName.createMany({ data: recordsArray }) - create multiple records
+   - prisma.modelName.update({ where: uniqueFilter, data: updateData }) - update existing record
+   - prisma.modelName.updateMany({ where: filter, data: updateData }) - update multiple records
+   - prisma.modelName.delete({ where: uniqueFilter }) - delete record
+   - prisma.modelName.deleteMany({ where: filter }) - delete multiple records
    
    STEP TYPE TO DATABASE OPERATION MAPPING:
    For each database step, use the model field to determine the correct Prisma client method:
-   - "Database find unique" with model "User" → db.user.findUnique({ where: { id: recordId } })
-   - "Database find many" with model "Order" → db.order.findMany({ where: filter, include: relations })
-   - "Database create" with model "Product" → db.product.create({ data: newData })
-   - "Database create many" with model "Item" → db.item.createMany({ data: recordsArray })
-   - "Database update unique" with model "User" → db.user.update({ where: { id: recordId }, data: updateData })
-   - "Database update many" with model "Order" → db.order.updateMany({ where: filter, data: updateData })
-   - "Database delete unique" with model "Product" → db.product.delete({ where: { id: recordId } })
-   - "Database delete many" with model "Item" → db.item.deleteMany({ where: filter })
+   - "Database find unique" with model "User" → prisma.user.findUnique({ where: { id: recordId } })
+   - "Database find many" with model "Order" → prisma.order.findMany({ where: filter, include: relations })
+   - "Database create" with model "Product" → prisma.product.create({ data: newData })
+   - "Database create many" with model "Item" → prisma.item.createMany({ data: recordsArray })
+   - "Database update unique" with model "User" → prisma.user.update({ where: { id: recordId }, data: updateData })
+   - "Database update many" with model "Order" → prisma.order.updateMany({ where: filter, data: updateData })
+   - "Database delete unique" with model "Product" → prisma.product.delete({ where: { id: recordId } })
+   - "Database delete many" with model "Item" → prisma.item.deleteMany({ where: filter })
 
    IMPORTANT: 
    - Use the model field from each step to determine the correct Prisma client method
@@ -309,33 +311,100 @@ CODE GENERATION REQUIREMENTS:
    - ALWAYS verify field existence in the Prisma schema before using them
    - If you need to filter records, use fields that actually exist in the model
    
+   🚨 CRITICAL ARRAY VS SINGLE VALUE HANDLING:
+   
+   When using Prisma queries, ALWAYS check if input parameters are arrays or single values:
+   
+   **FOR ARRAY PARAMETERS (when input is an array):**
+   ✅ Use the 'in' operator for arrays:
+   const topics = await prisma.topic.findMany({
+     where: {
+       name: { in: parameters.topicNames }  // ✅ parameters.topicNames is an array like ["AI", "Blockchain"]
+     }
+   });
+   
+   **FOR SINGLE VALUE PARAMETERS (when input is a string/number):**
+   ✅ Use direct comparison for single values:
+   const topic = await prisma.topic.findMany({
+     where: {
+       name: parameters.topicName  // ✅ parameters.topicName is a single string like "AI"
+     }
+   });
+   
+   **WRONG EXAMPLES - THESE WILL CAUSE RUNTIME ERRORS:**
+   ❌ Using 'in' with single values:
+   // const topics = await prisma.topic.findMany({
+   //   where: { name: { in: "AI" } }  // ❌ ERROR: 'in' expects array, got string
+   // });
+   
+   ❌ Using direct comparison with arrays:
+   // const topics = await prisma.topic.findMany({
+   //   where: { name: ["AI", "Blockchain"] }  // ❌ ERROR: Direct comparison expects single value
+   // });
+   
+   **HOW TO HANDLE MIXED CASES:**
+   // When input might be string or array, handle both cases:
+   const whereCondition = Array.isArray(parameters.names) 
+     ? { name: { in: parameters.names } }      // Array case - use 'in'
+     : { name: parameters.names };             // Single value case - direct comparison
+     
+   const records = await prisma.model.findMany({ where: whereCondition });
+   
+   **REAL WORLD EXAMPLE - TOPIC FILTERING:**
+   // ✅ CORRECT: Handle single topic name
+   if (typeof parameters.name === 'string') {
+     const topics = await prisma.topic.findMany({
+       where: {
+         isActive: parameters.isActive,
+         name: parameters.name  // Single string comparison
+       }
+     });
+   }
+   
+   // ✅ CORRECT: Handle multiple topic names
+   if (Array.isArray(parameters.names)) {
+     const topics = await prisma.topic.findMany({
+       where: {
+         isActive: parameters.isActive,
+         name: { in: parameters.names }  // Array comparison with 'in'
+       }
+     });
+   }
+   
+   // ❌ WRONG: This causes the exact error the user reported
+   // const topics = await prisma.topic.findMany({
+   //   where: {
+   //     name: { in: "superman" }  // ERROR: 'in' expects array, got string
+   //   }
+   // });
+   
    EXAMPLES OF CORRECT PRISMA USAGE:
    // Find multiple water intake records - ONLY use fields that exist in the schema
-   const waterIntakeRecords = await db.waterIntake.findMany({
+   const waterIntakeRecords = await prisma.waterIntake.findMany({
      where: {
-       userId: input.userId,  // ✅ userId exists in WaterIntake model
-       date: { gte: input.startDate, lte: input.endDate }  // ✅ date exists in WaterIntake model
+       userId: parameters.userId,  // ✅ userId exists in WaterIntake model
+       date: { gte: parameters.startDate, lte: parameters.endDate }  // ✅ date exists in WaterIntake model
      },
      orderBy: { date: 'desc' }
    });
    
    // ❌ WRONG - using non-existent fields:
-   // const records = await db.sleepPattern.findMany({
+   // const records = await prisma.sleepPattern.findMany({
    //   where: { deleted: false }  // ❌ 'deleted' field doesn't exist in SleepPattern model
    // });
    
    // ✅ CORRECT - using only existing fields:
-   const sleepPatterns = await db.sleepPattern.findMany({
+   const sleepPatterns = await prisma.sleepPattern.findMany({
      where: { 
-       userId: input.userId,  // ✅ userId exists in SleepPattern model
-       sleepStartTime: { gte: input.startDate }  // ✅ sleepStartTime exists in SleepPattern model
+       userId: parameters.userId,  // ✅ userId exists in SleepPattern model
+       sleepStartTime: { gte: parameters.startDate }  // ✅ sleepStartTime exists in SleepPattern model
      }
    });
    
    // Create a new health report
-   const healthReport = await db.healthReport.create({
+   const healthReport = await prisma.healthReport.create({
      data: {
-       userId: input.userId,
+       userId: parameters.userId,
        reportDate: new Date(),
        waterIntakeSummary: analysisResult.waterIntakeSummary,
        workoutSummary: analysisResult.workoutSummary,
@@ -343,15 +412,24 @@ CODE GENERATION REQUIREMENTS:
      }
    });
    
+   // 🚨 ID GENERATION WARNING:
+   // DO NOT use cuid() - it's not available in the runtime environment
+   // For auto-generated IDs, let Prisma handle it (omit the ID field) or use:
+   // - crypto.randomUUID() for UUID v4
+   // - Date.now().toString() + Math.random().toString(36).substr(2, 9) for simple unique strings
+   
    // Update multiple workout logs
-   const updatedLogs = await db.workoutLog.updateMany({
-     where: { userId: input.userId, status: 'pending' },
+   const updatedLogs = await prisma.workoutLog.updateMany({
+     where: { userId: parameters.userId, status: 'pending' },
      data: { status: 'completed', processedAt: new Date() }
    });
 
 6. AI OPERATIONS:
-   For AI analysis/decisions, use:
-   const result = await ai.generateObject({
+   For AI analysis/decisions, use generateObject directly (available as global):
+   
+   // For single object results:
+   const { object } = await generateObject({
+     model: aiModel, // aiModel is available globally
      messages: [
        { role: 'system', content: 'You are an expert analyst...' },
        { role: 'user', content: 'Analyze this data: ' + JSON.stringify(dataToAnalyze) }
@@ -362,24 +440,69 @@ CODE GENERATION REQUIREMENTS:
        recommendations: z.array(z.string()).describe('Recommendations')
      })
    });
+   
+   // For array results - CRITICAL: Use output: 'array' and schema defines INDIVIDUAL ITEMS:
+   const { object: arrayResult } = await generateObject({
+     model: aiModel,
+     output: 'array', // 🚨 REQUIRED for arrays
+     messages: [
+       { role: 'system', content: 'You are an expert analyst...' },
+       { role: 'user', content: 'Generate multiple items: ' + JSON.stringify(dataToAnalyze) }
+     ],
+     schema: z.object({
+       name: z.string().describe('Item name'),
+       value: z.string().describe('Item value')
+     }) // 🚨 Schema describes INDIVIDUAL items, NOT the array
+   });
+   
+   // 🚨 COMMON MISTAKE - DO NOT DO THIS:
+   // ❌ WRONG: schema: z.array(z.object({...})) - This will cause "Invalid schema" error
+   // ✅ CORRECT: output: 'array', schema: z.object({...}) - Schema describes individual items
+   
+   // REAL WORLD EXAMPLE - Content Generation:
+   // ✅ CORRECT way to generate multiple content ideas:
+   const { object: contentIdeas } = await generateObject({
+     model: aiModel,
+     output: 'array', // This tells AI SDK we want an array
+     messages: [
+       { role: 'system', content: 'You are a content generator...' },
+       { role: 'user', content: 'Generate content ideas for: ' + JSON.stringify(userPreferences) }
+     ],
+     schema: z.object({
+       title: z.string().describe('Content title'),
+       body: z.string().describe('Content body'),
+       tags: z.string().optional().describe('Content tags')
+     }) // Schema describes ONE content idea - AI SDK will generate an array of these
+   });
+   
+   // ❌ WRONG way that causes "Invalid schema" error:
+   // const { object: contentIdeas } = await generateObject({
+   //   model: aiModel,
+   //   schema: z.array(z.object({ title: z.string(), body: z.string() })) // DON'T DO THIS!
+   // });
 
 7. EXTERNAL API CALLS:
-   For "call external api" step type, use fetch() with proper authentication and environment handling:
+   🚨 AVOID GENERIC EXTERNAL API CALLS! 
    
-   // API Key authentication example with test/live environment support:
-   const baseUrl = envVars.API_BASE_URL || envVars.API_BASE_URL_PROD;
-   const apiKey = envVars.API_KEY;
+   Most business logic can be handled with:
+   - Database operations (prisma)
+   - AI analysis (generateObject)
+   - Internal calculations and transformations
    
-   const apiResponse = await fetch(\`\${baseUrl}/endpoint\`, {
+   ONLY use external APIs if the user explicitly mentioned a specific service by name.
+   
+   If you must call an external API (because user specifically mentioned it):
+   // Example for a SPECIFIC service like Stripe:
+   const apiResponse = await fetch('https://api.stripe.com/v1/customers', {
      method: 'POST',
      headers: { 
-       'Authorization': \`Bearer \${apiKey}\`,
+       'Authorization': \`Bearer \${process.env.STRIPE_API_KEY}\`,
        'Content-Type': 'application/json'
      },
      body: JSON.stringify(requestData)
    });
    
-   // For OAuth APIs, tokens are provided through user authentication flow, not envVars
+   // For OAuth APIs, tokens are provided through user authentication flow, not process.env
    // Use the oauth context provided by the system instead of environment variables
 
 8. RETURN FORMAT:
@@ -387,15 +510,29 @@ CODE GENERATION REQUIREMENTS:
    Where data contains the result of the action execution.
 
 9. ENVIRONMENT VARIABLES:
-   ONLY generate environment variables for external APIs that use API KEY authentication:
-   - API keys (e.g., STRIPE_API_KEY, OPENAI_API_KEY)
-   - API base URLs for API key services (e.g., OPENAI_BASE_URL)
-   - API-specific configuration for API key services (e.g., STRIPE_WEBHOOK_SECRET)
+   🚨 CRITICAL: ONLY generate environment variables if the user explicitly mentioned a specific external service!
+   
+   DO NOT generate generic environment variables like:
+   - EMAIL_API_KEY, EMAIL_API_BASE_URL (too generic)
+   - NOTIFICATION_API_KEY, NOTIFICATION_API_URL (too generic)  
+   - SMS_API_KEY, PAYMENT_API_KEY (too generic)
+   
+   ONLY generate environment variables for SPECIFIC, NAMED services:
+   - STRIPE_API_KEY (only if user mentioned Stripe specifically)
+   - SENDGRID_API_KEY (only if user mentioned SendGrid specifically)
+   - TWILIO_API_KEY (only if user mentioned Twilio specifically)
+   - INSTAGRAM_API_KEY (only if user mentioned Instagram API specifically)
+   
+   🚨 DO NOT GENERATE SYSTEM-PROVIDED ENVIRONMENT VARIABLES:
+   - OPENAI_API_KEY, ANTHROPIC_API_KEY, GROK_API_KEY (provided by system)
+   - AI_MODEL_PROVIDER, AI_MODEL_NAME (provided by system)
+   - DATABASE_URL, NEXTAUTH_SECRET, CRON_SECRET (provided by system)
+   - Any AI provider configuration - these are handled by the deployment system
    
    CRITICAL ENVIRONMENT VARIABLE NAMING RULES:
    ⚠️ ABSOLUTELY NO ACTION NAMES IN ENVIRONMENT VARIABLES ⚠️
    
-   - Use ONLY the API provider name as the prefix (e.g., "INSTAGRAM", "GOOGLE_SHEETS", "STRIPE", "OPENAI")
+   - Use ONLY the API provider name as the prefix (e.g., "INSTAGRAM", "GOOGLE_SHEETS", "STRIPE")
    - NEVER EVER include the action name in environment variable names
    - NEVER use hyphens, spaces, or special characters - only letters, numbers, and underscores
    - Environment variables must start with a letter or underscore, not a number
@@ -409,6 +546,8 @@ CODE GENERATION REQUIREMENTS:
    - "TRACK-PERFORMANCE-ANALYTICS_INSTAGRAM_API_KEY" ← Contains action name + hyphens
    - "PLAN-CONTENT-CALENDAR_LATER_API_KEY" ← Contains action name + hyphens
    - "MANAGE-BRAND-OUTREACH_INSTAGRAM_API_BASE_URL" ← Contains action name + hyphens
+   - "OPENAI_API_KEY" ← System-provided, don't generate
+   - "ANTHROPIC_API_KEY" ← System-provided, don't generate
    
    DO NOT generate environment variables for OAuth-based APIs:
    - OAuth APIs (Gmail, Slack, Shopify, Facebook, LinkedIn, etc.) use user authentication flow
@@ -417,28 +556,56 @@ CODE GENERATION REQUIREMENTS:
    
    NEVER generate system environment variables like:
    - NODE_ENV, ENVIRONMENT, PORT, DATABASE_URL, NEXTAUTH_SECRET
+   - OPENAI_API_KEY, ANTHROPIC_API_KEY, GROK_API_KEY (handled by system)
+   - AI_MODEL_PROVIDER, AI_MODEL_NAME (handled by system)
    - Any internal application configuration variables
    - Any variables starting with NEXT_, VERCEL_, or other framework prefixes
    
+   🚨 DEFAULT APPROACH: NO ENVIRONMENT VARIABLES
+   Unless the user explicitly mentioned a specific external service by name, generate ZERO environment variables.
+   Most actions can work with just the database and AI - don't assume external APIs are needed.
+   
    AUTHENTICATION METHOD REFERENCE:
    - OAuth APIs (no env vars needed): Gmail, Slack, Shopify, Facebook, LinkedIn, Instagram, Google Calendar, Microsoft Teams, Notion, Salesforce, HubSpot
-   - API Key APIs (env vars needed): Stripe, OpenAI, generic REST APIs
+   - System-provided APIs (no env vars needed): OpenAI, Anthropic, Grok (AI providers)
+   - Third-party API Key APIs (env vars needed ONLY if specifically mentioned): Stripe, SendGrid, Twilio, specific custom APIs
 
-9. FUNCTION SIGNATURE AND CONTEXT:
-   Your generated function should accept a context object with these properties:
-   - db: Prisma client instance (use as db.modelName.method())
-   - ai: AI utilities ({ generateObject })
-   - input: User input parameters
-   - envVars: Environment variables
+9. FUNCTION SIGNATURE AND GLOBALS:
+   Your generated function should NOT accept any parameters. Use these global variables directly:
+   - prisma: Prisma client instance (use as prisma.modelName.method())
+   - generateObject: AI utility function (available globally)
+   - aiModel: AI model instance (available globally)
+   - parameters: User input parameters (available globally)
+   - process.env: Environment variables (available globally)
    
-   CRITICAL: The 'db' parameter is a PrismaClient instance. Use it like:
-   - db.waterIntake.findMany() NOT db.findMany('WaterIntake')
-   - db.healthReport.create() NOT db.create('HealthReport')
-   - db.workoutLog.updateMany() NOT db.updateMany('WorkoutLog')
+   CRITICAL: Use prisma directly, not through a context parameter:
+   - prisma.waterIntake.findMany() 
+   - prisma.healthReport.create()
+   - prisma.workoutLog.updateMany()
    
+   Function signature: async function actionName() { ... }
    Function return format: { success: boolean, data: any, message: string, executionTime: number }
 
-Generate production-ready, executable JavaScript code that implements the business logic described in the pseudo steps and properly uses the input parameters.`;
+Generate production-ready, executable JavaScript code that implements the business logic described in the pseudo steps and properly uses the input parameters.
+
+🚨 FINAL VALIDATION CHECKLIST - Your code MUST pass these checks:
+
+1. **Parameter Type Validation**: For each input parameter used in Prisma queries:
+   - If parameter is marked as array/list: MUST use { in: paramValue }
+   - If parameter is single value: MUST use direct comparison paramValue
+   - NEVER mix these up or you'll get runtime errors
+
+2. **Prisma Query Structure**: Every database query must:
+   - Use only fields that exist in the model schema
+   - Use correct array vs single value syntax
+   - Handle nullable fields appropriately
+
+3. **Error Prevention**: Your code should:
+   - Validate input parameters before using them
+   - Handle edge cases (empty arrays, null values, etc.)
+   - Use defensive programming practices
+
+REMEMBER: The user provided a real error showing 'in' operator used with string value. This is EXACTLY what you must avoid!`;
 
   const result = await generateObject({
     model,

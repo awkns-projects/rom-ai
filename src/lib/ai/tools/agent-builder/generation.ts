@@ -395,6 +395,11 @@ ${JSON.stringify(changeAnalysis, null, 2)}
 
 ${actionAnalysis}
 
+CRITICAL FIELD REQUIREMENTS RULES:
+1. ONLY "id" fields should have required: true
+2. ALL other fields (including createdAt, updatedAt, status, etc.) MUST have required: false
+3. This prevents Prisma validation errors when creating records with missing fields
+
 CRITICAL ID FIELD NAMING RULES:
 1. Every model MUST have "id" as the primary key field name (NOT productId, userId, etc.)
 2. The idField property MUST always be set to "id"
@@ -436,7 +441,8 @@ EXAMPLE CORRECT MODELS:
       "isId": false,
       "kind": "object",
       "relationField": true,
-      "list": false
+      "list": false,
+      "required": false
     },
     {
       "name": "productIds",
@@ -445,6 +451,7 @@ EXAMPLE CORRECT MODELS:
       "kind": "object",
       "relationField": true,
       "list": true,
+      "required": false,
       "defaultValue": []
     },
     {
@@ -453,7 +460,7 @@ EXAMPLE CORRECT MODELS:
       "isId": false,
       "kind": "scalar",
       "relationField": false,
-      "required": true,
+      "required": false,
       "defaultValue": "pending"
     },
     {
@@ -462,7 +469,7 @@ EXAMPLE CORRECT MODELS:
       "isId": false,
       "kind": "scalar",
       "relationField": false,
-      "required": true
+      "required": false
     },
     {
       "name": "updatedAt",
@@ -470,7 +477,7 @@ EXAMPLE CORRECT MODELS:
       "isId": false,
       "kind": "scalar",
       "relationField": false,
-      "required": true
+      "required": false
     }
   ]
 }
@@ -4210,6 +4217,11 @@ ${actionContext}
 
 ${scheduleContext}
 
+CRITICAL FIELD REQUIREMENTS:
+- ONLY id fields should be required (no ? suffix)
+- ALL other fields should be optional (add ? suffix)
+- This ensures flexibility and prevents validation errors
+
 PRISMA SCHEMA GENERATION GUIDELINES:
 
 1. **Generator and Datasource Configuration:**
@@ -4259,9 +4271,11 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    - One-to-Many: use array on "many" side
    - Many-to-Many: use explicit join table or implicit relations
    
-   **🚨 CRITICAL RELATION RULE:** 
+   **🚨 CRITICAL RELATION RULES:** 
    - ONLY ONE SIDE of a relation should have \`fields\` and \`references\` in the @relation attribute
    - The side WITHOUT the foreign key should NOT have \`fields\` and \`references\`
+   - ALWAYS reference the primary key \`id\` field, NEVER reference other fields like \`userId\`, \`topicId\`
+   - Foreign key fields should be named descriptively (e.g., \`authorId\`, \`categoryId\`) but relations reference \`id\`
    - If both sides have \`fields\` and \`references\`, Prisma will throw a validation error
    
    **CORRECT Example:**
@@ -4280,8 +4294,9 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    }
    \`\`\`
    
-   **WRONG Example (causes validation error):**
+   **WRONG Examples (cause validation errors):**
    \`\`\`
+   // ❌ WRONG: Both sides have @relation with fields/references
    model User {
      posts    Post[]   @relation(fields: [id], references: [authorId])  // ❌ WRONG
    }
@@ -4289,17 +4304,29 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    model Post {
      author   User?    @relation(fields: [authorId], references: [id])  // ❌ WRONG - both have fields/references
    }
+   
+   // ❌ WRONG: Referencing non-unique field instead of id
+   model UserPreferences {
+     userId   String   // ❌ This field is NOT unique
+   }
+   
+   model ContentSuggestions {
+     userPreferences UserPreferences @relation(fields: [userId], references: [userId])  // ❌ WRONG - userId is not unique
+   }
    \`\`\`
    
    **One-to-One Relations:**
    - Must use \`@unique\` on the foreign key field
    - Example: \`userId String? @unique\` and \`user User? @relation(fields: [userId], references: [id])\`
 
-7. **CRITICAL FIELD REQUIREMENTS:**
+7. **🚨 CRITICAL FIELD REQUIREMENTS - MUST FOLLOW:**
    - ONLY id fields should be required (no ? suffix)
-   - ALL other fields should be optional (add ? suffix)
-   - This provides flexibility in data entry and prevents validation errors
-   - Example: String? (optional), Int? (optional), Boolean? (optional)
+   - ALL other fields MUST be optional (add ? suffix): String?, Int?, DateTime?, Boolean?
+   - This prevents Prisma validation errors when creating records with missing fields
+   - WRONG: name String (required) ❌
+   - CORRECT: name String? (optional) ✅
+   - WRONG: createdAt DateTime ❌
+   - CORRECT: createdAt DateTime? ✅
    - Only the primary key id field should NOT have the ? suffix
 
 8. **Common Patterns:**
@@ -4368,15 +4395,20 @@ CRITICAL SYNTAX RULES - PREVENT COMMON ERRORS:
    - FIX: Add fields: [foreignKeyField], references: [id] to @relation attribute
    - Example: \`lead Lead? @relation(fields: [leadId], references: [id])\`
 
-2. **Optional field relation error**: "The relation field \`product\` uses the scalar fields \`productId\`. At least one of those fields is optional. Hence the relation field must be optional as well."
+2. **Non-unique reference error**: "The argument \`references\` must refer to a unique criterion in the related model"
+   - FIX: ALWAYS reference the primary key \`id\` field, NEVER reference non-unique fields like \`userId\`, \`topicId\`
+   - WRONG: \`@relation(fields: [userId], references: [userId])\` ❌
+   - CORRECT: \`@relation(fields: [userId], references: [id])\` ✅
+
+3. **Optional field relation error**: "The relation field \`product\` uses the scalar fields \`productId\`. At least one of those fields is optional. Hence the relation field must be optional as well."
    - FIX: If foreign key field is optional (productId String?), relation field must also be optional (product Product?)
    - Example: \`productId String?\` requires \`product Product? @relation(...)\`
 
-3. **Bidirectional relation error**: "A relation must specify the \`fields\` and \`references\` arguments on only one side"
+4. **Bidirectional relation error**: "A relation must specify the \`fields\` and \`references\` arguments on only one side"
    - FIX: ONLY ONE side of a relation should have fields/references in @relation
    - Correct: User has \`posts Post[]\` (no @relation), Post has \`author User? @relation(fields: [authorId], references: [id])\`
 
-4. **One-to-one relation error**: "The relation field must be backed by a unique constraint"
+5. **One-to-one relation error**: "The relation field must be backed by a unique constraint"
    - FIX: Foreign key field must have @unique for one-to-one relations
    - Example: \`userId String? @unique\` for one-to-one relation
 
@@ -4577,15 +4609,20 @@ CRITICAL RELATION SYNTAX RULES - PREVENT COMMON ERRORS:
    - FIX: Add fields: [foreignKeyField], references: [id] to @relation attribute
    - Example: \`lead Lead? @relation(fields: [leadId], references: [id])\`
 
-2. **Optional field relation error**: "The relation field \`product\` uses the scalar fields \`productId\`. At least one of those fields is optional. Hence the relation field must be optional as well."
+2. **Non-unique reference error**: "The argument \`references\` must refer to a unique criterion in the related model"
+   - FIX: ALWAYS reference the primary key \`id\` field, NEVER reference non-unique fields like \`userId\`, \`topicId\`
+   - WRONG: \`@relation(fields: [userId], references: [userId])\` ❌
+   - CORRECT: \`@relation(fields: [userId], references: [id])\` ✅
+
+3. **Optional field relation error**: "The relation field \`product\` uses the scalar fields \`productId\`. At least one of those fields is optional. Hence the relation field must be optional as well."
    - FIX: If foreign key field is optional (productId String?), relation field must also be optional (product Product?)
    - Example: \`productId String?\` requires \`product Product? @relation(...)\`
 
-3. **Bidirectional relation error**: "A relation must specify the \`fields\` and \`references\` arguments on only one side"
+4. **Bidirectional relation error**: "A relation must specify the \`fields\` and \`references\` arguments on only one side"
    - FIX: ONLY ONE side of a relation should have fields/references in @relation
    - Correct: User has \`posts Post[]\` (no @relation), Post has \`author User? @relation(fields: [authorId], references: [id])\`
 
-4. **One-to-one relation error**: "The relation field must be backed by a unique constraint"
+5. **One-to-one relation error**: "The relation field must be backed by a unique constraint"
    - FIX: Foreign key field must have @unique for one-to-one relations
    - Example: \`userId String? @unique\` for one-to-one relation
 

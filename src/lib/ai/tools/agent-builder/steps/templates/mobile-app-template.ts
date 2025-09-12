@@ -2776,35 +2776,23 @@ export default async function handler(req, res) {
     if (hasGeneratedCode && (actionCode.includes('async function') || actionCode.includes('function'))) {
       // If the code is already a function, execute it directly
       wrappedActionCode = `
+    // Get AI model for the action
+    const aiModel = await getAIModel();
+    
     // Generated action code
     const actionFunction = ${actionCode};
     
-           // Execute the action with proper context
-       const context = {
-         db: prisma,  // Prisma client instance
-         ai: { generateObject },
-         input: parameters || {},
-         envVars: process.env
-       };
-    
-    const result = await actionFunction(context);
+    // Execute the action function directly with access to all libraries
+    const result = await actionFunction();
     `;
     } else if (hasGeneratedCode) {
       // If it's raw code, wrap it in a function context
       wrappedActionCode = `
-    // Generated action code - wrapped in execution context
-    const executeAction = async (db, input, member, ai, envVars) => {
-      ${actionCode}
-    };
+    // Get AI model for the action
+    const aiModel = await getAIModel();
     
-           // Execute with proper context
-       const result = await executeAction(
-         prisma, 
-         parameters || {}, 
-         { id: 'api-user', role: 'admin' }, 
-         { generateObject }, 
-         process.env
-       );
+    // Execute the generated action code directly
+    ${actionCode}
     `;
     } else {
       // No generated code - return error

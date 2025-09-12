@@ -2185,12 +2185,31 @@ const AgentBuilderContent = memo(({
               {/* Show deployment info if already deployed */}
               {deploymentInfo?.deploymentUrl && (
                 <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-green-500/10 border border-emerald-500/20">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-                    <span className="text-emerald-200 font-medium">Currently Deployed</span>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+                      <span className="text-emerald-200 font-medium">Currently Deployed</span>
+                    </div>
+                    <Button
+                      onClick={() => setDeploymentStep('configure')}
+                      className="px-3 py-1.5 text-xs bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-200 rounded-md transition-colors"
+                    >
+                      Edit Variables
+                    </Button>
                   </div>
-                  <div className="text-sm text-emerald-400/80 ml-5">
-                    Live at: <span className="text-emerald-200 font-mono break-all">{deploymentInfo.deploymentUrl}</span>
+                  <div className="space-y-2">
+                    <div className="text-sm text-emerald-400/80 break-all">
+                      Live at: <span className="text-emerald-200 font-mono">{deploymentInfo.deploymentUrl}</span>
+                    </div>
+                    <Button
+                      onClick={() => window.open(deploymentInfo.deploymentUrl, '_blank')}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 rounded-lg transition-colors flex items-center justify-center gap-2 text-sm"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                      <span>Open Live Agent</span>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -2224,7 +2243,7 @@ const AgentBuilderContent = memo(({
                     <span className="text-green-200 font-medium font-mono">Your Agent is Live!</span>
                   </div>
                   <div className="space-y-3">
-                    <div className="text-sm text-green-400 font-mono">
+                    <div className="text-sm text-green-400 font-mono break-all">
                       <span className="text-green-300">URL:</span> {agentData.deployment?.deploymentUrl}
                     </div>
                     <Button
@@ -2367,33 +2386,7 @@ const AgentBuilderContent = memo(({
                       })}
                     </div>
 
-                    {/* Save Button */}
-                    {actionsWithEnvVars.length > 0 && (
-                      <div className="pt-2">
-                        <Button
-                          onClick={async () => {
-                            await saveEnvVarsToActions();
-                            // Don't go back automatically - let user decide
-                          }}
-                          disabled={isSavingEnvVars}
-                          className="w-full h-10 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors"
-                        >
-                          {isSavingEnvVars ? (
-                            <div className="flex items-center gap-2">
-                              <div className="w-4 h-4 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-                              <span>Saving...</span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              <span>Save Without Deploying</span>
-                            </div>
-                          )}
-                        </Button>
-                      </div>
-                    )}
+
                   </div>
                 );
               })()}
@@ -2464,32 +2457,50 @@ const AgentBuilderContent = memo(({
               )}
               
               {deploymentStep === 'configure' && (
-                <Button
-                  onClick={async () => {
-                    // First save environment variables to actions
-                    await saveEnvVarsToActions();
-                    // Then deploy with the updated agent data
-                    if (deploymentInfo?.deploymentUrl) {
-                      await redeployAgent();
-                    } else {
-                      await deployAgent();
-                    }
-                  }}
-                  disabled={!areAllEnvVarsFilled()}
-                  className={cn(
-                    "flex-1 h-10 font-medium transition-colors flex items-center justify-center gap-2",
-                    areAllEnvVarsFilled()
-                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                      : "bg-gray-700 text-gray-500 cursor-not-allowed"
-                  )}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
-                  <span>
-                    {deploymentInfo?.deploymentUrl ? 'Redeploy Agent' : 'Deploy Agent'}
-                  </span>
-                </Button>
+                <div className="flex gap-2">
+                  {/* Save Only Button - always available */}
+                  <Button
+                    onClick={async () => {
+                      await saveEnvVarsToActions();
+                      // Go back to confirm step after saving
+                      setDeploymentStep('confirm');
+                    }}
+                    className="flex-1 h-10 bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Save Only</span>
+                  </Button>
+                  
+                  {/* Deploy Button - only if required vars are filled */}
+                  <Button
+                    onClick={async () => {
+                      // First save environment variables to actions
+                      await saveEnvVarsToActions();
+                      // Then deploy with the updated agent data
+                      if (deploymentInfo?.deploymentUrl) {
+                        await redeployAgent();
+                      } else {
+                        await deployAgent();
+                      }
+                    }}
+                    disabled={!areAllEnvVarsFilled()}
+                    className={cn(
+                      "flex-1 h-10 font-medium transition-colors flex items-center justify-center gap-2",
+                      areAllEnvVarsFilled()
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        : "bg-gray-700 text-gray-500 cursor-not-allowed"
+                    )}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                    <span>
+                      {deploymentInfo?.deploymentUrl ? 'Redeploy' : 'Deploy'}
+                    </span>
+                  </Button>
+                </div>
               )}
             </DialogFooter>
           )}
