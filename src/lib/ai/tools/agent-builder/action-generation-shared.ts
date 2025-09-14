@@ -1332,6 +1332,50 @@ CODE GENERATION REQUIREMENTS:
    - prisma.modelName.delete({ where: uniqueFilter }) - delete record
    - prisma.modelName.deleteMany({ where: filter }) - delete multiple records
 
+   🚨 CRITICAL PRISMA updateMany/deleteMany RETURN VALUES:
+   
+   **EXTREMELY IMPORTANT**: updateMany and deleteMany operations DO NOT return arrays of records!
+   They return objects with a 'count' property indicating how many records were affected.
+   
+   ❌ WRONG - This WILL cause ".map is not a function" errors:
+   const updatedRecords = await prisma.content.updateMany({
+     where: { status: 'Draft' },
+     data: { status: 'Published' }
+   });
+   const recordIds = updatedRecords.map(record => record.id); // ❌ ERROR! updatedRecords is not an array
+   
+   ✅ CORRECT - Handle updateMany/deleteMany results properly:
+   const updateResult = await prisma.content.updateMany({
+     where: { status: 'Draft' },
+     data: { status: 'Published' }
+   });
+   // updateResult = { count: 3 } (number of records updated)
+   
+   console.log(\`📤 Step Output:\`, { 
+     recordsUpdated: updateResult.count,
+     operation: 'updateMany'
+   });
+   
+   // If you need the actual updated records, use findMany BEFORE the update:
+   const recordsToUpdate = await prisma.content.findMany({
+     where: { status: 'Draft' },
+     select: { id: true } // Only get IDs for efficiency
+   });
+   
+   const updateResult = await prisma.content.updateMany({
+     where: { status: 'Draft' },
+     data: { status: 'Published' }
+   });
+   
+   const updatedRecordIds = recordsToUpdate.map(record => record.id);
+   
+   **MANDATORY PATTERN FOR updateMany/deleteMany OPERATIONS:**
+   1. ✅ NEVER call .map(), .filter(), or array methods on updateMany/deleteMany results
+   2. ✅ Access the 'count' property to get number of affected records
+   3. ✅ If you need record data, query BEFORE the update/delete operation
+   4. ✅ Log the count, not the full result object
+   5. ✅ Use descriptive variable names like 'updateResult' or 'deleteResult', not 'updatedRecords'
+
    🚨 CRITICAL FOREIGN KEY CONSTRAINT PREVENTION:
    When creating records with foreign key relationships, you MUST:
    1. ✅ ALWAYS validate that foreign key values reference existing records
@@ -1857,6 +1901,7 @@ CRITICAL: The user has reported these exact errors that your code MUST prevent:
 3. "i.platforms.map is not a function" - caused by calling .map() on non-array variables
 4. "Expected ',', got 's'" - caused by unescaped apostrophes in console.log('campaign's data') statements
 5. "Foreign key constraint violated on the constraint: ContentModel_authorId_fkey" - caused by hardcoded foreign key values that don't exist
+6. "TypeError: (intermediate value).map is not a function" - caused by calling .map() on updateMany/deleteMany results which return { count: number }, not arrays
 
 🚨 MANDATORY ERROR PREVENTION PATTERNS:
 ✅ CORRECT array handling:
@@ -1884,6 +1929,7 @@ Your generated code MUST:
 - Convert string parameters to proper types (integers, dates, booleans) before database operations
 - Use parseInt() for take/skip parameters and parseFloat() for numeric comparisons
 - Check Array.isArray() before calling .map() on any variable
+- NEVER call .map() on updateMany/deleteMany results - they return { count: number }, not arrays
 - Use template literals (\`backticks\`) for ALL console.log statements and error messages to prevent syntax errors
 - Validate foreign key existence before creating records with relationships
 - NEVER hardcode foreign key values - always use parameters or existing record IDs
@@ -1895,7 +1941,8 @@ Your generated code MUST:
 4. ✅ ALL dynamic content uses \${variable} syntax within template literals
 5. ✅ ALL foreign key fields use parameters or validated existing IDs
 6. ✅ NO hardcoded foreign key values like authorId: "user123"
-7. ✅ Foreign key existence is validated before creating related records`;
+7. ✅ Foreign key existence is validated before creating related records
+8. ✅ NO .map() calls on updateMany/deleteMany results - use result.count instead`;
 
   const result = await generateObject({
     model,

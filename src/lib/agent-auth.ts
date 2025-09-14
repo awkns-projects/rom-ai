@@ -297,9 +297,13 @@ export function isValidDeploymentUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     
-    // Allow Vercel deployments and localhost for development
+    // Get the custom domain base from environment variable
+    const customDomainBase = process.env.AGENT_CUSTOM_DOMAIN_BASE || 'rom.cards';
+    
+    // Allow Vercel deployments, custom agent domains, and localhost for development
     const allowedHosts = [
       'vercel.app',
+      customDomainBase, // Allow *.{customDomainBase} domains for agent deployments
       'localhost',
       '127.0.0.1',
       '.ngrok-free.app',

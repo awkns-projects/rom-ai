@@ -313,13 +313,15 @@ async function triggerAutoDeployment(
               deployment: {
                 deploymentId: deploymentResult.deploymentId,
                 projectId: deploymentResult.projectId,
-                deploymentUrl: deploymentResult.deploymentUrl,
+                deploymentUrl: deploymentResult.deploymentUrl, // This is now the custom domain URL
                 status: deploymentResult.status,
                 apiEndpoints: deploymentResult.apiEndpoints || [],
                 vercelProjectId: deploymentResult.vercelProjectId,
                 deployedAt: new Date().toISOString(),
                 warnings: deploymentResult.warnings || [],
-                deploymentNotes: deploymentResult.deploymentNotes || []
+                deploymentNotes: deploymentResult.deploymentNotes || [],
+                // Add custom domain information
+                customDomain: deploymentResult.customDomain
               },
               metadata: {
                 ...currentAgentData.metadata,

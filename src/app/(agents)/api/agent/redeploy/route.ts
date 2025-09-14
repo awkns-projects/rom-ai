@@ -98,14 +98,16 @@ export async function POST(request: NextRequest) {
       deployment: {
         deploymentId: deploymentResult.deploymentId,
         projectId: deploymentResult.projectId,
-        deploymentUrl: deploymentResult.deploymentUrl,
+        deploymentUrl: deploymentResult.deploymentUrl, // This is now the custom domain URL
         status: deploymentResult.status,
         apiEndpoints: deploymentResult.apiEndpoints,
         vercelProjectId: deploymentResult.vercelProjectId,
         deployedAt: new Date().toISOString(),
         warnings: deploymentResult.warnings || [],
         deploymentNotes: deploymentResult.deploymentNotes || [],
-        isRedeployment: true // Mark as redeployment
+        isRedeployment: true, // Mark as redeployment
+        // Add custom domain information
+        customDomain: deploymentResult.customDomain
       },
       metadata: {
         ...agentData.metadata,

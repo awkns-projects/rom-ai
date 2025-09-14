@@ -45,6 +45,14 @@ export interface AgentData {
     deployedAt: string;
     warnings: string[];
     deploymentNotes: string[];
+    // Custom domain information
+    customDomain?: {
+      domain: string;
+      assigned: boolean;
+      verified: boolean;
+      existing: boolean;
+      customUrl?: string;
+    };
   };
   metadata?: {
     createdAt: string;

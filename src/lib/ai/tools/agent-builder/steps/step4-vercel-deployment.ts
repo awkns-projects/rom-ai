@@ -10,12 +10,41 @@ import { MobileAppTemplate } from './templates/mobile-app-template';
 
 
 /**
- * STEP 4: Vercel + Neon PostgreSQL Deployment
+ * STEP 4: Vercel + Neon PostgreSQL Deployment with Custom Domain Support
  * 
  * Deploy a complete Next.js project with the generated Prisma schema using Neon PostgreSQL,
  * self-contained API endpoints for actions, and cron jobs for schedules to Vercel.
  * 
- * ✅ BENEFITS: Persistent database, scalable, no resets on deployment, self-contained operation
+ * ✅ BENEFITS: 
+ * - Persistent database, scalable, no resets on deployment, self-contained operation
+ * - Custom domain support with configurable base domain via environment variables
+ * - Domain verification and SSL certificate management
+ * - Seamless integration with existing deployment flow
+ * 
+ * 🌐 CUSTOM DOMAIN FEATURES (AUTOMATIC):
+ * - Configurable base domain via AGENT_CUSTOM_DOMAIN_BASE environment variable
+ * - Automatic subdomain generation for ALL deployments (e.g., agent-name-123456.your-domain.com)
+ * - Custom domain assignment and verification enabled by default
+ * - SSL certificate provisioning
+ * - Domain conflict handling
+ * 
+ * 🔧 ENVIRONMENT CONFIGURATION:
+ * Set AGENT_CUSTOM_DOMAIN_BASE=your-domain.com to use your own domain
+ * Defaults to 'rom.cards' if not specified
+ * 
+ * Example usage (custom domains are automatic):
+ * ```typescript
+ * // With environment variable AGENT_CUSTOM_DOMAIN_BASE=my-platform.com
+ * const result = await executeStep4VercelDeployment({
+ *   // ... other parameters
+ *   // Custom domain will be automatically generated: agent-name-123456.my-platform.com
+ *   customDomain: {
+ *     domain: "specific-name.my-platform.com", // Optional: override auto-generation
+ *     verify: true, // Optional: default true
+ *     waitForVerification: false // Optional: default false
+ *   }
+ * });
+ * ```
  */
 
 export interface Step4Input {
@@ -40,6 +69,12 @@ export interface Step4Input {
     avatar?: any;
     domain?: string;
   };
+  // Custom domain configuration (automatic by default)
+  customDomain?: {
+    domain?: string; // If not provided, will auto-generate subdomain using AGENT_CUSTOM_DOMAIN_BASE
+    verify?: boolean; // Whether to attempt domain verification (default: true)
+    waitForVerification?: boolean; // Whether to wait for verification to complete (default: false)
+  };
 }
 
 export interface Step4Output {
@@ -57,6 +92,14 @@ export interface Step4Output {
   neonProjectId: string;
   vercelProjectId: string;
   warnings: string[];
+  // Custom domain information
+  customDomain?: {
+    domain: string;
+    assigned: boolean;
+    verified: boolean;
+    existing: boolean;
+    customUrl?: string; // The full URL with custom domain
+  };
 }
 
 /**
@@ -421,6 +464,152 @@ export class VercelClient {
       method: 'DELETE',
     });
   }
+
+  /**
+   * Add a custom domain to a Vercel project
+   */
+  async addDomainToProject(projectId: string, domain: string) {
+    console.log(`🌐 Adding domain ${domain} to project: ${projectId}`);
+    
+    try {
+      const response = await this.request(`/v10/projects/${projectId}/domains`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: domain,
+          gitBranch: null // Assign to all branches
+        }),
+      });
+
+      console.log(`✅ Domain ${domain} added to project successfully`);
+      return response;
+    } catch (error: any) {
+      // Handle domain conflicts or existing domain assignments
+      const errorMessage = error.message || '';
+      
+      if (errorMessage.includes('domain_already_in_use') || 
+          errorMessage.includes('already exists') ||
+          errorMessage.includes('conflict')) {
+        console.log(`⚠️ Domain ${domain} is already in use. This may be expected if updating an existing deployment.`);
+        // Return a success-like response for existing domains
+        return { name: domain, verified: false, existing: true };
+      }
+      
+      console.error(`❌ Failed to add domain ${domain}:`, errorMessage);
+      throw error;
+    }
+  }
+
+  /**
+   * Verify a domain for a Vercel project
+   */
+  async verifyDomain(projectId: string, domain: string) {
+    console.log(`🔍 Verifying domain ${domain} for project: ${projectId}`);
+    
+    try {
+      const response = await this.request(`/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}/verify`, {
+        method: 'POST',
+      });
+
+      console.log(`✅ Domain ${domain} verification initiated`);
+      return response;
+    } catch (error: any) {
+      console.warn(`⚠️ Domain verification failed for ${domain}:`, error.message);
+      // Don't throw here as verification can be done later
+      return { verified: false, error: error.message };
+    }
+  }
+
+  /**
+   * Get domain status for a project
+   */
+  async getDomainStatus(projectId: string, domain: string) {
+    try {
+      const response = await this.request(`/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}`);
+      return response;
+    } catch (error: any) {
+      console.warn(`⚠️ Could not get domain status for ${domain}:`, error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Generate a subdomain for the configured custom domain pattern
+   */
+  generateCustomDomain(agentName: string, projectName: string): string {
+    // Get the base domain from environment variable, fallback to rom.cards
+    const baseDomain = process.env.AGENT_CUSTOM_DOMAIN_BASE || 'rom.cards';
+    
+    // Sanitize the agent/project name for subdomain use
+    const sanitized = (agentName || projectName)
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-') // Replace invalid chars with hyphens
+      .replace(/--+/g, '-') // Replace multiple hyphens with single hyphen
+      .replace(/^-+|-+$/g, '') // Remove leading/trailing hyphens
+      .substring(0, 50); // Limit length for subdomain constraints
+
+    // Add timestamp suffix to ensure uniqueness
+    const timestamp = Date.now().toString().slice(-6); // Last 6 digits
+    const subdomain = `${sanitized}-${timestamp}`;
+    
+    return `${subdomain}.${baseDomain}`;
+  }
+
+  /**
+   * Assign a custom domain to a project with verification
+   */
+  async assignCustomDomain(projectId: string, domain: string, options: { 
+    verify?: boolean; 
+    waitForVerification?: boolean;
+  } = {}) {
+    const { verify = true, waitForVerification = false } = options;
+    
+    console.log(`🌐 Assigning custom domain ${domain} to project ${projectId}`);
+    
+    try {
+      // Step 1: Add domain to project
+      const addResult = await this.addDomainToProject(projectId, domain);
+      
+      // Step 2: Verify domain if requested
+      if (verify && !addResult.existing) {
+        const verifyResult = await this.verifyDomain(projectId, domain);
+        
+        // Step 3: Wait for verification if requested
+        if (waitForVerification && verifyResult && !verifyResult.error) {
+          console.log(`⏳ Waiting for domain verification...`);
+          let attempts = 0;
+          const maxAttempts = 10;
+          
+          while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
+            const status = await this.getDomainStatus(projectId, domain);
+            
+            if (status && status.verified) {
+              console.log(`✅ Domain ${domain} verified successfully`);
+              break;
+            }
+            
+            attempts++;
+            console.log(`⏳ Domain verification pending... (${attempts}/${maxAttempts})`);
+          }
+          
+          if (attempts >= maxAttempts) {
+            console.warn(`⚠️ Domain verification timed out for ${domain}. Manual verification may be required.`);
+          }
+        }
+      }
+      
+      return {
+        domain,
+        added: true,
+        verified: verify,
+        existing: addResult.existing || false
+      };
+      
+    } catch (error) {
+      console.error(`❌ Failed to assign custom domain ${domain}:`, error);
+      throw error;
+    }
+  }
 }
 
 /**
@@ -741,6 +930,49 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     sendProgress('📦 Build process will generate Prisma schema and handle migrations automatically');
     const deployment = await vercelClient.deployFromFiles(vercelProjectId, projectFiles, allEnvVars);
     const deploymentId = deployment.id;
+
+    // Step 5.5: Automatically assign custom domain (always enabled)
+    let customDomainInfo: Step4Output['customDomain'] = undefined;
+    sendProgress('🌐 Configuring custom domain...');
+    
+    try {
+      // Use provided domain or auto-generate one
+      let domainToAssign = input.customDomain?.domain;
+      
+      // Auto-generate custom domain if not explicitly provided
+      if (!domainToAssign) {
+        domainToAssign = vercelClient.generateCustomDomain(
+          input.agentConfig?.name || projectName, 
+          projectName
+        );
+        const baseDomain = process.env.AGENT_CUSTOM_DOMAIN_BASE || 'rom.cards';
+        sendProgress(`🎯 Auto-generated ${baseDomain} domain: ${domainToAssign}`);
+      }
+      
+      const domainResult = await vercelClient.assignCustomDomain(
+        vercelProjectId, 
+        domainToAssign,
+        {
+          verify: input.customDomain?.verify !== false,
+          waitForVerification: input.customDomain?.waitForVerification === true
+        }
+      );
+      
+      customDomainInfo = {
+        domain: domainResult.domain,
+        assigned: domainResult.added,
+        verified: domainResult.verified,
+        existing: domainResult.existing,
+        customUrl: `https://${domainResult.domain}`
+      };
+      
+      sendProgress(`✅ Custom domain configured: ${domainResult.domain}`);
+      
+    } catch (domainError) {
+      console.error('❌ Custom domain assignment failed:', domainError);
+      sendProgress(`⚠️ Custom domain assignment failed, continuing with default deployment`);
+      // Don't fail the entire deployment for domain issues
+    }
     
     // Step 6: Wait for deployment to complete with progress updates
     let deploymentStatus = 'pending';
@@ -772,21 +1004,22 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     
     const deploymentUrl = deployment.url.startsWith('https://') ? deployment.url : `https://${deployment.url}`;
     
-    // Generate API endpoints and cron job lists
+    // Generate API endpoints and cron job lists using custom domain if available
     const actions = validateAndNormalizeActions(step2Output.actions);
     const schedules = validateAndNormalizeSchedules(step3Output.schedules);
     
-    const apiEndpoints = actions.map(action => `${deploymentUrl}/api/${action.name}`);
+    const finalUrl = customDomainInfo?.customUrl || deploymentUrl;
+    const apiEndpoints = actions.map(action => `${finalUrl}/api/${action.name}`);
     const cronJobs = schedules.map(schedule => `${schedule.trigger.pattern} - /api/cron/${schedule.name}`);
     
-         const result: Step4Output = {
-       deploymentId,
-       projectId: vercelProjectId,
-       deploymentUrl,
-       status: deploymentStatus === 'READY' ? 'ready' : deploymentStatus === 'ERROR' ? 'error' : 'pending',
-       environmentVariables: allEnvVars,
-       prismaSchema: step1Output.prismaSchema,
-             deploymentNotes: [
+                  const result: Step4Output = {
+      deploymentId,
+      projectId: vercelProjectId,
+      deploymentUrl: finalUrl, // Use custom domain URL if available, otherwise Vercel URL
+      status: deploymentStatus === 'READY' ? 'ready' : deploymentStatus === 'ERROR' ? 'error' : 'pending',
+      environmentVariables: allEnvVars,
+      prismaSchema: step1Output.prismaSchema,
+            deploymentNotes: [
         'Deployed to Vercel with Next.js',
         'Neon PostgreSQL database created and configured',
         'Fully self-contained with local agent configuration',
@@ -796,27 +1029,45 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
         'Environment variables configured',
         'Cron jobs set up for scheduled tasks',
         'API endpoints generated for all actions',
+        ...(customDomainInfo ? [
+          `✅ Custom domain assigned: ${customDomainInfo.domain}`,
+          `🌐 Primary URL: ${customDomainInfo.customUrl}`,
+          `📋 Fallback URL: ${deploymentUrl}`
+        ] : [`🌐 Deployment URL: ${deploymentUrl}`]),
         ...(backupPath ? [`Development backup saved to: ${backupPath}`] : [])
       ],
-       apiEndpoints,
-       cronJobs,
-       databaseUrl,
-       neonProjectId,
-       vercelProjectId,
-       warnings: [
-         '✅ BENEFITS: Fully self-contained with all configuration embedded locally',
-         '✅ Persistent PostgreSQL database with no resets on deployment',
-         '✅ Scalable and production-ready database solution',
-         '✅ Complete independence - no external dependencies',
-         '✅ All agent config (name, theme, avatar, etc.) embedded at build time',
-         '📝 Note: Database migrations are handled automatically during Vercel build'
-       ]
-     };
+      apiEndpoints,
+      cronJobs,
+      databaseUrl,
+      neonProjectId,
+      vercelProjectId,
+      customDomain: customDomainInfo,
+      warnings: [
+        '✅ BENEFITS: Fully self-contained with all configuration embedded locally',
+        '✅ Persistent PostgreSQL database with no resets on deployment',
+        '✅ Scalable and production-ready database solution',
+        '✅ Complete independence - no external dependencies',
+        '✅ All agent config (name, theme, avatar, etc.) embedded at build time',
+        ...(customDomainInfo ? [`✅ Custom domain: ${customDomainInfo.domain} (${customDomainInfo.verified ? 'verified' : 'pending verification'})`] : []),
+        '📝 Note: Database migrations are handled automatically during Vercel build'
+      ]
+    };
     
     // Send final completion status
-    sendProgress(`🎉 Deployment completed! Live at: ${deploymentUrl}`);
-    console.log('🎉 Deployment completed successfully!');
-    console.log(`🌐 Your app is live at: ${deploymentUrl}`);
+    const primaryUrl = customDomainInfo?.customUrl || deploymentUrl;
+    
+    if (customDomainInfo?.customUrl) {
+      sendProgress(`🎉 Deployment completed! Live at: ${customDomainInfo.customUrl}`);
+      sendProgress(`🌐 Custom Domain: ${customDomainInfo.domain}`);
+      sendProgress(`📋 Vercel URL: ${deploymentUrl}`);
+      console.log('🎉 Deployment completed successfully!');
+      console.log(`🎯 Primary URL (Custom Domain): ${customDomainInfo.customUrl}`);
+      console.log(`📋 Fallback URL (Vercel): ${deploymentUrl}`);
+    } else {
+      sendProgress(`🎉 Deployment completed! Live at: ${deploymentUrl}`);
+      console.log('🎉 Deployment completed successfully!');
+      console.log(`🌐 Your app is live at: ${deploymentUrl}`);
+    }
     
     return result;
     
@@ -839,6 +1090,11 @@ export async function updateExistingDeployment(input: {
   environmentVariables?: Record<string, string>;
   executeMigrations?: boolean;
   agentConfig?: { name?: string; description?: string; theme?: string; avatar?: any; domain?: string; };
+  customDomain?: {
+    domain?: string; // If not provided, will auto-generate subdomain using AGENT_CUSTOM_DOMAIN_BASE
+    verify?: boolean; // Whether to attempt domain verification (default: true)
+    waitForVerification?: boolean; // Whether to wait for verification to complete (default: false)
+  };
 }): Promise<Step4Output> {
   console.log('🔄 Updating existing Vercel deployment...');
   
@@ -881,11 +1137,55 @@ export async function updateExistingDeployment(input: {
     
     const deploymentUrl = deployment.url.startsWith('https://') ? deployment.url : `https://${deployment.url}`;
     
+        // Automatically assign custom domain for updates
+    let customDomainInfo: Step4Output['customDomain'] = undefined;
+    console.log('🌐 Updating custom domain configuration...');
+    
+    try {
+      // Use provided domain or auto-generate one
+      let domainToAssign = input.customDomain?.domain;
+      
+      // Auto-generate custom domain if not explicitly provided
+      if (!domainToAssign) {
+        domainToAssign = vercelClient.generateCustomDomain(
+          input.agentConfig?.name || projectName, 
+          projectName
+        );
+        const baseDomain = process.env.AGENT_CUSTOM_DOMAIN_BASE || 'rom.cards';
+        console.log(`🎯 Auto-generated ${baseDomain} domain: ${domainToAssign}`);
+      }
+      
+      const domainResult = await vercelClient.assignCustomDomain(
+        vercelProjectId, 
+        domainToAssign,
+        {
+          verify: input.customDomain?.verify !== false,
+          waitForVerification: input.customDomain?.waitForVerification === true
+        }
+      );
+      
+      customDomainInfo = {
+        domain: domainResult.domain,
+        assigned: domainResult.added,
+        verified: domainResult.verified,
+        existing: domainResult.existing,
+        customUrl: `https://${domainResult.domain}`
+      };
+      
+      console.log(`✅ Custom domain updated: ${domainResult.domain}`);
+      
+    } catch (domainError) {
+      console.error('❌ Custom domain update failed:', domainError);
+      console.log(`⚠️ Custom domain update failed, continuing with deployment update`);
+      // Don't fail the entire update for domain issues
+    }
+    
     // Generate updated lists
     const actions = validateAndNormalizeActions(step2Output.actions);
     const schedules = validateAndNormalizeSchedules(step3Output.schedules);
     
-    const apiEndpoints = actions.map(action => `${deploymentUrl}/api/${action.name}`);
+    const primaryUrl = customDomainInfo?.customUrl || deploymentUrl;
+    const apiEndpoints = actions.map(action => `${primaryUrl}/api/${action.name}`);
     const cronJobs = schedules.map(schedule => `${schedule.trigger.pattern} - /api/cron/${schedule.name}`);
     
     const result: Step4Output = {
@@ -902,6 +1202,7 @@ export async function updateExistingDeployment(input: {
         'Prisma migrations auto-generated during Vercel build',
         'Environment variables updated',
         'Cron jobs reconfigured',
+        ...(customDomainInfo ? [`Custom domain updated: ${customDomainInfo.domain}`] : []),
         ...(backupPath ? [`Development backup saved to: ${backupPath}`] : [])
       ],
       apiEndpoints,
@@ -909,7 +1210,10 @@ export async function updateExistingDeployment(input: {
       databaseUrl: '', // Will be updated with actual Neon URL if needed
       neonProjectId: '', // Will be updated with actual Neon project ID if needed
       vercelProjectId,
-      warnings: []
+      customDomain: customDomainInfo,
+      warnings: [
+        ...(customDomainInfo ? [`✅ Custom domain: ${customDomainInfo.domain} (${customDomainInfo.verified ? 'verified' : 'pending verification'})`] : [])
+      ]
     };
     
     console.log('✅ Deployment update completed!');

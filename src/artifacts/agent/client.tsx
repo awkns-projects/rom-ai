@@ -1620,9 +1620,9 @@ const AgentBuilderContent = memo(({
                         {isSaving ? '⏳' : hasUnsavedChanges ? '📝' : '💾'}
                       </div>
                       <span className="hidden sm:inline">
-                        {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save' : 'Save'}
+                        {isSaving ? 'Saving...' : hasUnsavedChanges ? 'Save & Deploy' : 'Save & Deploy'}
                       </span>
-                      <span className="sm:hidden">Save</span>
+                      <span className="sm:hidden">Save & Deploy</span>
                     </div>
                   </Button>
                 )}

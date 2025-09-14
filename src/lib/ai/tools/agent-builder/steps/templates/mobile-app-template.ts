@@ -626,89 +626,93 @@ export default function Layout({
   };
 
   return (
-    <div className={\`min-h-screen bg-black relative\`}>
-      {/* Subtle dark gradient overlay */}
-      <div className="fixed inset-0 pointer-events-none">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
+      {/* Subtle theme gradient overlay */}
+      <div className="fixed inset-0 pointer-events-none opacity-30">
         <div className={\`absolute inset-0 bg-gradient-to-br \${currentTheme.gradient}\`}></div>
       </div>
 
-      {/* Main Content */}
-      <div className={\`relative z-10 \${isMobile ? 'pb-16' : ''}\`}>
-        {/* Mobile Header */}
-        {isMobile && (
-          <div className={\`bg-black/40 border-b \${currentTheme.border} p-4 flex-shrink-0\`}>
-            <div className="flex items-center justify-between">
+      {/* Mobile Header */}
+      {isMobile && (
+        <header className={\`relative z-40 \${currentTheme.bg} border-b \${currentTheme.border} backdrop-blur-sm bg-opacity-80\`}>
+          <div className="px-4">
+            <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-3">
-                {pathname !== '/' && (
-                  <button
-                    onClick={() => router.push('/')}
-                    className={\`w-8 h-8 \${currentTheme.bg} border \${currentTheme.border} rounded-lg flex items-center justify-center \${currentTheme.bgHover} transition-colors duration-200\`}
-                  >
-                    <span className={\`text-sm \${currentTheme.accent}\`}>🏠</span>
-                  </button>
-                )}
                 {renderAvatar(32)}
                 <div>
-                  <h3 className={\`font-mono font-bold text-sm \${currentTheme.light}\`}>{displayName}</h3>
-                  <div className="flex items-center gap-1">
+                  <h1 className={\`font-mono font-bold text-lg \${currentTheme.light}\`}>{displayName}</h1>
+                  <div className="flex items-center gap-2">
                     <div className={\`w-2 h-2 bg-\${currentTheme.primary}-400 rounded-full animate-pulse\`}></div>
-                    <span className={\`font-mono text-xs \${currentTheme.dim}\`}>Live</span>
+                    <span className={\`font-mono text-xs \${currentTheme.accent}\`}>Live</span>
                   </div>
                 </div>
               </div>
-              <div className="flex gap-1">
-                <div className={\`w-1 h-1 bg-\${currentTheme.primary}-400 rounded-full\`}></div>
-                <div className={\`w-1 h-1 bg-\${currentTheme.primary}-400 rounded-full\`}></div>
-                <div className={\`w-1 h-1 bg-\${currentTheme.primary}-400 rounded-full\`}></div>
-              </div>
+              {pathname !== '/' && (
+                <button
+                  onClick={() => router.push('/')}
+                  className={\`w-10 h-10 \${currentTheme.bg} border \${currentTheme.border} rounded-xl flex items-center justify-center \${currentTheme.bgHover} transition-colors duration-200\`}
+                >
+                  <span className={\`text-lg \${currentTheme.accent}\`}>🏠</span>
+                </button>
+              )}
             </div>
           </div>
-        )}
+        </header>
+      )}
 
-        {/* Desktop Header */}
-        {!isMobile && (
-          <header className={\`\${currentTheme.bg} border-b \${currentTheme.border} sticky top-0 z-40\`}>
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="flex justify-between items-center h-16">
-                <div className="flex items-center gap-3">
-                  {renderAvatar(32)}
+      {/* Desktop Header */}
+      {!isMobile && (
+        <header className={\`relative z-40 \${currentTheme.bg} border-b \${currentTheme.border} backdrop-blur-sm bg-opacity-80\`}>
+          <div className="max-w-6xl mx-auto px-4">
+            <div className="flex justify-between items-center h-16">
+              {/* Left side - Agent info */}
+              <div className="flex items-center gap-4">
+                {renderAvatar(40)}
+                <div>
                   <h1 className={\`font-mono font-bold text-lg \${currentTheme.light}\`}>{displayName}</h1>
+                  <div className="flex items-center gap-2">
+                    <div className={\`w-2 h-2 bg-\${currentTheme.primary}-400 rounded-full animate-pulse\`}></div>
+                    <span className={\`font-mono text-xs \${currentTheme.accent}\`}>Live</span>
+                  </div>
                 </div>
-                
-                <nav className="flex items-center gap-6">
-                  {[
-                    { path: '/', icon: '🏠', label: 'Home' },
-                    { path: '/models', icon: '🗃️', label: 'Data' },
-                    { path: '/actions', icon: '⚡', label: 'Actions' },
-                    { path: '/schedules', icon: '⏰', label: 'Tasks' },
-                    { path: '/chat', icon: '💬', label: 'Chat' }
-                  ].map((item) => (
-                    <button
-                      key={item.path}
-                      onClick={() => router.push(item.path)}
-                      className={\`flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-sm transition-all duration-200 \${
-                        pathname === item.path
-                          ? \`\${currentTheme.bgActive} \${currentTheme.accent} border \${currentTheme.borderActive}\`
-                          : \`\${currentTheme.dim} hover:\${currentTheme.light} hover:\${currentTheme.bgHover}\`
-                      }\`}
-                    >
-                      <span>{item.icon}</span>
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                </nav>
               </div>
+              
+              {/* Right side - Navigation */}
+              <nav className="flex items-center gap-2">
+                {[
+                  { path: '/', icon: '🏠', label: 'Home' },
+                  { path: '/models', icon: '🗃️', label: 'Data' },
+                  { path: '/actions', icon: '⚡', label: 'Actions' },
+                  { path: '/schedules', icon: '⏰', label: 'Tasks' },
+                  { path: '/chat', icon: '💬', label: 'Chat' }
+                ].map((item) => (
+                  <button
+                    key={item.path}
+                    onClick={() => router.push(item.path)}
+                    className={\`flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-sm transition-all duration-200 \${
+                      pathname === item.path
+                        ? \`\${currentTheme.bgActive} \${currentTheme.accent} border \${currentTheme.borderActive} scale-105\`
+                        : \`\${currentTheme.dim} hover:\${currentTheme.light} hover:\${currentTheme.bgHover} hover:scale-105\`
+                    }\`}
+                  >
+                    <span className="text-base">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </nav>
             </div>
-          </header>
-        )}
+          </div>
+        </header>
+      )}
 
-        {/* Page Content */}
-        <main className={\`\${isMobile ? 'max-w-sm mx-auto' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}\`}>
+      {/* Main Content Area */}
+      <main className="relative z-10">
+        <div className={\`max-w-6xl mx-auto px-4 \${isMobile ? 'py-4 pb-24' : 'py-6'}\`}>
           {children}
-        </main>
-      </div>
+        </div>
+      </main>
 
-      {/* Mobile Navigation */}
+      {/* Mobile Bottom Navigation */}
       {isMobile && <MobileNav currentTheme={currentTheme} />}
     </div>
   );
@@ -728,30 +732,32 @@ export default function MobileNav({ currentTheme }: MobileNavProps) {
   const pathname = usePathname();
 
   const navItems = [
-    { path: '/models', icon: '🗃️', label: 'Models' },
+    { path: '/models', icon: '🗃️', label: 'Data' },
     { path: '/actions', icon: '⚡', label: 'Actions' },
-    { path: '/schedules', icon: '⏰', label: 'Schedules' },
+    { path: '/schedules', icon: '⏰', label: 'Tasks' },
     { path: '/chat', icon: '🤖', label: 'AI Chat' }
   ];
 
   return (
-    <div className={\`bg-black/60 border-t \${currentTheme.border} p-2 flex-shrink-0\`}>
-      <div className={\`grid gap-1\`} style={{ gridTemplateColumns: \`repeat(\${navItems.length}, 1fr)\` }}>
-        {navItems.map((item, index) => (
+    <div className={\`fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-lg border-t \${currentTheme?.border || 'border-gray-700'} p-3 z-40 safe-area-pb\`}>
+      <div className="grid grid-cols-4 gap-2 max-w-sm mx-auto">
+        {navItems.map((item) => (
           <button
             key={item.path}
             onClick={() => router.push(item.path)}
-            className={\`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all duration-200 \${
+            className={\`flex flex-col items-center justify-center py-3 px-2 rounded-xl transition-all duration-200 \${
               pathname === item.path
-                ? \`\${currentTheme.bgActive} border \${currentTheme.borderActive}\`
-                : currentTheme.bgHover
+                ? \`\${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} scale-105\`
+                : \`hover:\${currentTheme?.bgHover || 'hover:bg-gray-800'} active:scale-95\`
             }\`}
           >
-            <span className="text-lg mb-1">{item.icon}</span>
+            <span className={\`text-xl mb-1 \${
+              pathname === item.path ? (currentTheme?.accent || 'text-green-400') : (currentTheme?.dim || 'text-gray-400')
+            }\`}>{item.icon}</span>
             <span className={\`text-xs font-mono font-medium \${
               pathname === item.path 
-                ? currentTheme.light
-                : currentTheme.dim
+                ? (currentTheme?.light || 'text-gray-200')
+                : (currentTheme?.dim || 'text-gray-400')
             }\`}>
               {item.label}
             </span>
@@ -814,70 +820,76 @@ export default function HomePage() {
 
   return (
     <Layout title="${agentName}">
-      <div className="p-4 space-y-6">
+      <div className="space-y-6">
         {/* Hero Section with Avatar */}
-        <div className="text-center space-y-4">
-          <div className="flex justify-center">
-            <div className={\`p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-2xl\`}>
-              <div className={\`w-20 h-20 rounded-full bg-gradient-to-br \${currentTheme.gradient} border-2 \${currentTheme.borderActive} flex items-center justify-center overflow-hidden\`}>
-                {avatarUrl ? (
-                  <img 
-                    src={avatarUrl} 
-                    alt="Agent Avatar" 
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      // Fallback to theme emoji if image fails to load
-                      const target = e.target as HTMLImageElement;
-                      target.style.display = 'none';
-                      target.nextElementSibling?.classList.remove('hidden');
-                    }}
-                  />
-                ) : null}
-                <span className={\`text-2xl \${currentTheme.accent} \${avatarUrl ? 'hidden' : ''}\`}>🤖</span>
-              </div>
+        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-8 text-center\`}>
+          <div className="flex justify-center mb-6">
+            <div className={\`w-24 h-24 rounded-2xl bg-gradient-to-br \${currentTheme.gradient} border-2 \${currentTheme.borderActive} flex items-center justify-center overflow-hidden\`}>
+              {avatarUrl ? (
+                <img 
+                  src={avatarUrl} 
+                  alt="Agent Avatar" 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    // Fallback to theme emoji if image fails to load
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    target.nextElementSibling?.classList.remove('hidden');
+                  }}
+                />
+              ) : null}
+              <span className={\`text-3xl \${currentTheme.accent} \${avatarUrl ? 'hidden' : ''}\`}>🤖</span>
             </div>
           </div>
-          <div className="space-y-2">
-            <h2 className={\`font-mono font-bold text-xl \${currentTheme.light}\`}>{displayName}</h2>
-            <p className={\`font-mono text-sm \${currentTheme.dim} max-w-xs mx-auto leading-relaxed\`}>
+          <div className="space-y-3">
+            <h2 className={\`font-mono font-bold text-2xl \${currentTheme.light}\`}>{displayName}</h2>
+            <p className={\`font-mono text-base \${currentTheme.dim} max-w-md mx-auto leading-relaxed\`}>
               ${agentDescription}
             </p>
+            <div className="flex items-center justify-center gap-2 mt-4">
+              <div className={\`w-3 h-3 bg-\${currentTheme.primary}-400 rounded-full animate-pulse\`}></div>
+              <span className={\`font-mono text-sm \${currentTheme.accent}\`}>Live & Ready</span>
+            </div>
           </div>
         </div>
 
         {/* Quick Actions */}
-        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
-          <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light} mb-3\`}>Quick Actions</h3>
-          <div className="space-y-2">
+        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-6\`}>
+          <h3 className={\`font-mono font-bold text-xl \${currentTheme.light} mb-4\`}>Quick Actions</h3>
+          <div className="grid gap-3">
             {quickActions.map((action, i) => (
               <button
                 key={i}
                 onClick={() => router.push(action.path)}
-                className={\`w-full flex items-center gap-3 p-3 \${currentTheme.bgActive} border \${currentTheme.border} rounded-lg \${currentTheme.bgHover} transition-colors\`}
+                className={\`w-full flex items-center gap-4 p-4 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl hover:\${currentTheme.bgHover} transition-all duration-200 hover:scale-[1.02]\`}
               >
-                <span className="text-lg">{action.icon}</span>
-                <div className="flex-1 text-left">
-                  <div className={\`font-mono text-sm \${currentTheme.light}\`}>{action.title}</div>
-                  <div className={\`font-mono text-xs \${currentTheme.dim}\`}>{action.desc}</div>
+                <div className={\`w-12 h-12 \${currentTheme.bg} border \${currentTheme.border} rounded-xl flex items-center justify-center\`}>
+                  <span className="text-xl">{action.icon}</span>
                 </div>
-                <span className={\`text-xs \${currentTheme.dim}\`}>→</span>
+                <div className="flex-1 text-left">
+                  <div className={\`font-mono text-base font-bold \${currentTheme.light}\`}>{action.title}</div>
+                  <div className={\`font-mono text-sm \${currentTheme.dim}\`}>{action.desc}</div>
+                </div>
+                <span className={\`text-lg \${currentTheme.accent}\`}>→</span>
               </button>
             ))}
           </div>
         </div>
 
-        {/* Status */}
-        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
+        {/* System Status */}
+        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-6\`}>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={\`w-3 h-3 bg-\${currentTheme.primary}-400 rounded-full animate-pulse\`}></div>
+            <div className="flex items-center gap-4">
+              <div className={\`w-12 h-12 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl flex items-center justify-center\`}>
+                <div className={\`w-4 h-4 bg-\${currentTheme.primary}-400 rounded-full animate-pulse\`}></div>
+              </div>
               <div>
-                <div className={\`font-mono font-semibold text-sm \${currentTheme.light}\`}>System Status</div>
-                <div className={\`font-mono text-xs \${currentTheme.dim}\`}>All systems operational</div>
+                <div className={\`font-mono font-bold text-lg \${currentTheme.light}\`}>System Status</div>
+                <div className={\`font-mono text-sm \${currentTheme.dim}\`}>All systems operational</div>
               </div>
             </div>
-            <div className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.border} rounded-lg\`}>
-              <span className={\`font-mono text-xs \${currentTheme.accent}\`}>LIVE</span>
+            <div className={\`px-4 py-2 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl\`}>
+              <span className={\`font-mono text-sm font-bold \${currentTheme.accent}\`}>LIVE</span>
             </div>
           </div>
         </div>
@@ -895,12 +907,11 @@ export default function HomePage() {
   private generateApiClient(): string {
     return `// API client for mobile app - Fully Local Architecture
 // All configuration (UI elements and functional data) is embedded locally
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 class ApiClient {
 
   async request(endpoint: string, options: RequestInit = {}) {
-    const url = endpoint.startsWith('http') ? endpoint : \`\${API_BASE_URL}\${endpoint}\`;
+    const url = endpoint.startsWith('http') ? endpoint : endpoint;
     
     const response = await fetch(url, {
       headers: {
@@ -1221,7 +1232,6 @@ export type Theme = typeof themes.green;`;
     
     return `'use client'
 import Layout from '@/components/Layout';
-import ModelCard from '@/components/ModelCard';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
@@ -1231,12 +1241,11 @@ export default function ModelsPage() {
   const router = useRouter();
   const [modelsData, setModelsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [models, setModels] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Use embedded local configuration
-  const selectedTheme = '${agentTheme}';
+  // Use embedded local configuration with fallback safety
+  const selectedTheme = '${agentTheme}' || 'green';
   const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
   useEffect(() => {
@@ -1252,40 +1261,54 @@ export default function ModelsPage() {
       const response = await fetch('/api/agent/models');
       
       if (!response.ok) {
-        throw new Error(\`Failed to fetch models: \${response.status}\`);
+        throw new Error(\`Failed to fetch models: \${response.status} \${response.statusText}\`);
       }
       
       const data = await response.json();
       
-      if (data.success && data.models) {
+      if (data.success && data.models && Array.isArray(data.models)) {
         // Use embedded models from sub-agent API
         const currentModels = data.models.map((model: any) => ({
-          name: model.name,
+          name: model.name || 'Unknown',
+          title: model.title || model.name || 'Unknown',
           emoji: model.emoji || '📋',
           description: model.description || 'Data model',
-          fields: model.fields || []
+          fields: Array.isArray(model.fields) ? model.fields : []
         }));
         
         setModels(currentModels);
         
-        // Fetch data for each model
+        // Fetch data for each model with better error handling
         const promises = currentModels.map(async (model) => {
           try {
             const records = await api.getModelRecords(model.name);
-            return { ...model, recordCount: records.length, records: records.slice(0, 3) };
+            const recordArray = Array.isArray(records) ? records : [];
+            return { 
+              ...model, 
+              recordCount: recordArray.length, 
+              records: recordArray.slice(0, 3),
+              error: false 
+            };
           } catch (error) {
-            return { ...model, recordCount: 0, records: [], error: true };
+            console.warn(\`Failed to fetch records for model \${model.name}:\`, error);
+            return { 
+              ...model, 
+              recordCount: 0, 
+              records: [], 
+              error: true 
+            };
           }
         });
         
         const results = await Promise.all(promises);
         setModelsData(results);
       } else {
-        throw new Error('No models data received');
+        console.warn('Invalid models response:', data);
+        throw new Error('No valid models data received');
       }
     } catch (error) {
       console.error('Failed to fetch embedded model data:', error);
-      setError('Failed to load models. Please refresh the page.');
+      setError(\`Failed to load models: \${error instanceof Error ? error.message : 'Unknown error'}\`);
       setModels([]);
       setModelsData([]);
     } finally {
@@ -1295,12 +1318,19 @@ export default function ModelsPage() {
 
   return (
     <Layout title="Data Models">
-      <div className="p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Data Models</h1>
-          <span className={\`text-sm font-mono \${currentTheme.dim}\`}>
-            {models.length} model{models.length !== 1 ? 's' : ''}
-          </span>
+      <div className="space-y-6">
+        <div className={\`\${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl p-6\`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className={\`text-3xl font-mono font-bold \${currentTheme?.light || 'text-gray-200'} mb-2\`}>Data Models</h1>
+              <p className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'}\`}>
+                Manage and view your data structures
+              </p>
+            </div>
+            <span className={\`text-lg font-mono px-4 py-2 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-xl \${currentTheme?.accent || 'text-green-400'}\`}>
+              {models.length} model{models.length !== 1 ? 's' : ''}
+            </span>
+          </div>
         </div>
 
         {error && (
@@ -1308,56 +1338,89 @@ export default function ModelsPage() {
             <p className="font-mono text-sm text-red-300">
               ⚠️ {error}
             </p>
+            <button
+              onClick={fetchModelData}
+              className="mt-3 px-4 py-2 bg-red-500/25 border border-red-400/50 rounded-lg text-red-200 font-mono text-xs hover:bg-red-500/35 transition-colors"
+            >
+              Retry Loading
+            </button>
           </div>
         )}
 
         {loading ? (
           <div className="space-y-4">
             {[...Array(3)].map((_, i) => (
-              <div key={i} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4 animate-pulse\`}>
-                <div className={\`h-6 \${currentTheme.bg} rounded w-1/3 mb-2\`}></div>
-                <div className={\`h-4 \${currentTheme.bg} rounded w-2/3\`}></div>
+              <div key={i} className={\`\${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl p-5 animate-pulse\`}>
+                <div className="flex items-start gap-4">
+                  <div className={\`w-12 h-12 \${currentTheme?.bgActive || 'bg-gray-700'} rounded-xl\`}></div>
+                  <div className="flex-1">
+                    <div className={\`h-5 \${currentTheme?.bgActive || 'bg-gray-700'} rounded w-1/2 mb-2\`}></div>
+                    <div className={\`h-4 \${currentTheme?.bgActive || 'bg-gray-700'} rounded w-3/4 mb-2\`}></div>
+                    <div className={\`h-3 \${currentTheme?.bgActive || 'bg-gray-700'} rounded w-1/3\`}></div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
         ) : modelsData.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {modelsData.map((model, i) => (
               <div 
                 key={i} 
-                className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-3 cursor-pointer hover:\${currentTheme.bgHover} transition-colors\`}
+                className={\`\${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl p-5 cursor-pointer hover:\${currentTheme?.bgHover || 'hover:bg-gray-700'} transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]\`}
                 onClick={() => router.push(\`/models/\${model.name}\`)}
               >
-                <div className="flex items-center gap-3 mb-2">
-                  <span className="text-2xl">{model.emoji || '🗃️'}</span>
-                  <div className="flex-1">
-                    <div className={\`font-mono text-sm font-medium \${currentTheme.light}\`}>{model.title || model.name}</div>
-                    <div className={\`font-mono text-xs \${currentTheme.dim}\`}>
-                      {model.fields?.length || 0} fields
-                    </div>
+                <div className="flex items-start gap-4 mb-4">
+                  <div className={\`w-12 h-12 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-xl flex items-center justify-center flex-shrink-0\`}>
+                    <span className="text-2xl">{model.emoji || '🗃️'}</span>
                   </div>
-                  <div className="text-right">
-                    <div className={\`font-mono text-sm font-bold \${currentTheme.accent}\`}>
-                      {model.recordCount || 0} items
+                  <div className="flex-1 min-w-0">
+                    <div className={\`font-mono text-lg font-bold \${currentTheme?.light || 'text-gray-200'} mb-1\`}>
+                      {model.title || model.name}
+                    </div>
+                    <div className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'} mb-2\`}>
+                      {model.description || 'Data model for managing records'}
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1">
+                        <span className={\`font-mono text-xs \${currentTheme?.dim || 'text-gray-400'}\`}>Fields:</span>
+                        <span className={\`font-mono text-xs font-bold \${currentTheme?.accent || 'text-green-400'}\`}>
+                          {model.fields?.length || 0}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className={\`font-mono text-xs \${currentTheme?.dim || 'text-gray-400'}\`}>Records:</span>
+                        <span className={\`font-mono text-xs font-bold \${currentTheme?.accent || 'text-green-400'}\`}>
+                          {model.recordCount || 0}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className={\`font-mono text-xs px-2 py-1 rounded \${currentTheme.bgActive} \${currentTheme.accent}\`}>
-                    {model.error ? 'Error' : 'Ready'}
+                <div className="flex items-center justify-between pt-3 border-t border-gray-700/50">
+                  <span className={\`font-mono text-xs px-3 py-1.5 rounded-full \${
+                    model.error 
+                      ? 'bg-red-500/20 border border-red-400/30 text-red-300' 
+                      : \`\${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} \${currentTheme?.accent || 'text-green-400'}\`
+                  }\`}>
+                    {model.error ? '⚠️ Error' : '✅ Ready'}
                   </span>
-                  <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
-                    Click to view →
+                  <span className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'} flex items-center gap-1\`}>
+                    <span>Tap to explore</span>
+                    <span className={\`\${currentTheme?.accent || 'text-green-400'}\`}>→</span>
                   </span>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-8">
-            <div className={\`font-mono text-sm \${currentTheme.dim}\`}>No models created yet</div>
-            <div className={\`font-mono text-xs mt-1 \${currentTheme.dim}\`}>
-              Create your first data model to get started
+          <div className="text-center py-12">
+            <div className={\`w-20 h-20 \${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-2xl flex items-center justify-center mx-auto mb-4\`}>
+              <span className={\`text-3xl \${currentTheme?.dim || 'text-gray-400'}\`}>🗃️</span>
+            </div>
+            <div className={\`font-mono text-lg font-bold \${currentTheme?.light || 'text-gray-200'} mb-2\`}>No Models Yet</div>
+            <div className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'} max-w-xs mx-auto\`}>
+              Your data models will appear here once you create them
             </div>
           </div>
         )}
@@ -1375,7 +1438,7 @@ import Layout from '@/components/Layout';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
-import LoadingSpinner from '@/components/LoadingSpinner';
+import { themes } from '@/lib/theme';
 
 export default function ModelDetailPage({ params }: { params: { modelName: string } }) {
   const router = useRouter();
@@ -1400,10 +1463,18 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
     try {
       setLoading(true);
       setError(null);
-      const data = await api.getModelRecords(modelName as string);
-      setRecords(data);
+      
+      if (!modelName || typeof modelName !== 'string') {
+        throw new Error('Invalid model name');
+      }
+      
+      const data = await api.getModelRecords(modelName);
+      const recordArray = Array.isArray(data) ? data : [];
+      setRecords(recordArray);
     } catch (err) {
+      console.error('Error fetching records:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch records');
+      setRecords([]);
     } finally {
       setLoading(false);
     }
@@ -1466,6 +1537,10 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
       .filter(([, value]) => value !== undefined && value !== null);
   };
 
+  // Use embedded local configuration with fallback safety
+  const selectedTheme = '${agentTheme}' || 'green';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+
   if (!modelName) {
     return (
       <Layout title="Model Details">
@@ -1483,16 +1558,16 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
         <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => router.back()}
-            className={\`p-2 \${currentTheme.bg} border \${currentTheme.border} rounded-lg \${currentTheme.accent} hover:\${currentTheme.bgHover} transition-colors\`}
+            className={\`p-3 \${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl \${currentTheme?.accent || 'text-green-400'} hover:\${currentTheme?.bgHover || 'hover:bg-gray-700'} transition-colors\`}
           >
             ←
           </button>
           <div>
-            <h1 className={\`text-xl font-mono font-bold \${currentTheme.light} capitalize\`}>
+            <h1 className={\`text-2xl font-mono font-bold \${currentTheme?.light || 'text-gray-200'} capitalize\`}>
               {modelName} Records
             </h1>
             {!loading && !error && (
-              <p className={\`text-sm font-mono \${currentTheme.dim}\`}>
+              <p className={\`text-sm font-mono \${currentTheme?.dim || 'text-gray-400'}\`}>
                 {records.length} record{records.length !== 1 ? 's' : ''} found
               </p>
             )}
@@ -1502,16 +1577,16 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
         {/* Content */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <LoadingSpinner theme="${agentTheme}" />
+            <div className={\`w-8 h-8 border-2 border-\${currentTheme?.primary || 'green'}-400 border-t-transparent rounded-full animate-spin\`}></div>
           </div>
         ) : error ? (
-          <div className="bg-red-500/15 border border-red-400/30 rounded-xl p-4 text-center">
-            <div className="text-red-400 font-mono text-sm">⚠️ {error}</div>
+          <div className="bg-red-500/15 border border-red-400/30 rounded-xl p-5 text-center">
+            <div className="text-red-400 font-mono text-base mb-3">⚠️ {error}</div>
             <button
               onClick={fetchRecords}
-              className="mt-3 px-4 py-2 bg-red-500/25 border border-red-400/50 rounded-lg text-red-200 font-mono text-xs hover:bg-red-500/35 transition-colors"
+              className="px-6 py-3 bg-red-500/25 border border-red-400/50 rounded-xl text-red-200 font-mono text-sm hover:bg-red-500/35 transition-colors"
             >
-              Retry
+              Retry Loading
             </button>
           </div>
         ) : records.length > 0 ? (
@@ -1519,23 +1594,23 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
             {records.map((record, i) => (
               <div
                 key={getRecordId(record) || i}
-                className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-4\`}
+                className={\`\${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl p-5\`}
               >
-                <div className="flex justify-between items-start mb-3">
-                  <span className={\`font-mono text-sm font-semibold \${currentTheme.light}\`}>
+                <div className="flex justify-between items-start mb-4">
+                  <span className={\`font-mono text-lg font-semibold \${currentTheme?.light || 'text-gray-200'}\`}>
                     Record #{getRecordId(record)}
                   </span>
-                  <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
+                  <span className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'}\`}>
                     {getRecordDate(record)}
                   </span>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {getDisplayFields(record).map(([key, value]) => (
                     <div key={key} className="flex justify-between items-start gap-3">
-                      <span className={\`font-mono text-xs \${currentTheme.dim} capitalize\`}>
+                      <span className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'} capitalize\`}>
                         {key.replace(/([A-Z])/g, ' $1').trim()}:
                       </span>
-                      <span className={\`font-mono text-xs \${currentTheme.light} text-right flex-1 max-w-48 truncate\`}>
+                      <span className={\`font-mono text-sm \${currentTheme?.light || 'text-gray-200'} text-right flex-1 max-w-48 truncate\`}>
                         {typeof value === 'object' ? JSON.stringify(value) : String(value)}
                       </span>
                     </div>
@@ -1546,10 +1621,12 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
           </div>
         ) : (
           <div className="text-center py-12">
-            <div className="text-4xl mb-4">📋</div>
-            <h3 className={\`font-mono text-lg \${currentTheme.light} mb-2\`}>No Records</h3>
-            <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
-              This model doesn't have any records yet.
+            <div className={\`w-20 h-20 \${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-2xl flex items-center justify-center mx-auto mb-4\`}>
+              <span className={\`text-3xl \${currentTheme?.dim || 'text-gray-400'}\`}>📋</span>
+            </div>
+            <h3 className={\`font-mono text-lg font-bold \${currentTheme?.light || 'text-gray-200'} mb-2\`}>No Records</h3>
+            <p className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'} max-w-xs mx-auto\`}>
+              This model doesn't have any records yet. Records will appear here once you add them.
             </p>
           </div>
         )}
@@ -1644,12 +1721,19 @@ export default function ActionsPage() {
 
   return (
     <Layout title="Actions">
-      <div className="p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Smart Actions</h1>
-          <span className={\`text-sm font-mono \${currentTheme.dim}\`}>
-            {actions.length} action{actions.length !== 1 ? 's' : ''}
-          </span>
+      <div className="space-y-6">
+        <div className={\`\${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl p-6\`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className={\`text-3xl font-mono font-bold \${currentTheme?.light || 'text-gray-200'} mb-2\`}>Smart Actions</h1>
+              <p className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'}\`}>
+                Execute automated workflows and tasks
+              </p>
+            </div>
+            <span className={\`text-lg font-mono px-4 py-2 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-xl \${currentTheme?.accent || 'text-green-400'}\`}>
+              {actions.length} action{actions.length !== 1 ? 's' : ''}
+            </span>
+          </div>
         </div>
 
         {error && (
@@ -1677,10 +1761,13 @@ export default function ActionsPage() {
             ))}
           </div>
         ) : (
-          <div className="text-center py-8">
-            <div className={\`font-mono text-sm \${currentTheme.dim}\`}>No actions created yet</div>
-            <div className={\`font-mono text-xs mt-1 \${currentTheme.dim}\`}>
-              Create automated actions to help your business
+          <div className="text-center py-12">
+            <div className={\`w-20 h-20 \${currentTheme.bg} border \${currentTheme.border} rounded-2xl flex items-center justify-center mx-auto mb-4\`}>
+              <span className={\`text-3xl \${currentTheme.dim}\`}>⚡</span>
+            </div>
+            <div className={\`font-mono text-lg font-bold \${currentTheme.light} mb-2\`}>No Actions Yet</div>
+            <div className={\`font-mono text-sm \${currentTheme.dim} max-w-xs mx-auto\`}>
+              Smart actions and workflows will appear here
             </div>
           </div>
         )}
@@ -1781,12 +1868,19 @@ export default function SchedulesPage() {
 
   return (
     <Layout title="Schedules">
-      <div className="p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Scheduled Tasks</h1>
-          <span className={\`text-sm font-mono \${currentTheme.dim}\`}>
-            {schedules.filter(s => s.active).length}/{schedules.length} active
-          </span>
+      <div className="space-y-6">
+        <div className={\`\${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl p-6\`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className={\`text-3xl font-mono font-bold \${currentTheme?.light || 'text-gray-200'} mb-2\`}>Scheduled Tasks</h1>
+              <p className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'}\`}>
+                Monitor and manage automated workflows
+              </p>
+            </div>
+            <span className={\`text-lg font-mono px-4 py-2 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-xl \${currentTheme?.accent || 'text-green-400'}\`}>
+              {schedules.filter(s => s.active).length}/{schedules.length} active
+            </span>
+          </div>
         </div>
 
         {error && (
@@ -1798,50 +1892,76 @@ export default function SchedulesPage() {
         )}
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3 text-center\`}>
-            <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>
+        <div className="grid grid-cols-2 gap-4">
+          <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-5 text-center\`}>
+            <div className={\`font-mono font-bold text-2xl \${currentTheme.accent} mb-1\`}>
               {schedules.length}
             </div>
-            <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Total Tasks</div>
+            <div className={\`font-mono text-sm \${currentTheme.dim}\`}>Total Tasks</div>
           </div>
-          <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3 text-center\`}>
-            <div className={\`font-mono font-bold text-lg \${currentTheme.accent}\`}>
+          <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-5 text-center\`}>
+            <div className={\`font-mono font-bold text-2xl \${currentTheme.accent} mb-1\`}>
               {schedules.filter(s => s.active).length}
             </div>
-            <div className={\`font-mono text-xs \${currentTheme.dim}\`}>Active Tasks</div>
+            <div className={\`font-mono text-sm \${currentTheme.dim}\`}>Active Tasks</div>
           </div>
         </div>
 
         {schedules.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {schedules.map((schedule) => (
-              <div key={schedule.id} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-3\`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <div className={\`w-2 h-2 rounded-full \${
-                      schedule.trigger?.active ? \`bg-\${currentTheme.primary}-400 animate-pulse\` : \`bg-\${currentTheme.primary}-400/30\`
-                    }\`}></div>
-                    <span className={\`font-mono text-sm font-bold \${currentTheme.accent}\`}>
-                      {schedule.trigger?.pattern || 'Manual'}
-                    </span>
+              <div key={schedule.id} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-5 transition-all duration-200 hover:scale-[1.02]\`}>
+                <div className="flex items-start gap-4 mb-4">
+                  <div className={\`w-12 h-12 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl flex items-center justify-center flex-shrink-0\`}>
+                    <span className="text-2xl">{schedule.emoji || '⏰'}</span>
                   </div>
-                  <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
-                    {schedule.trigger?.active ? 'Active' : 'Inactive'}
-                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className={\`font-mono text-lg font-bold \${currentTheme.light} mb-1\`}>
+                      {schedule.title || schedule.name}
+                    </div>
+                    <div className={\`font-mono text-sm \${currentTheme.dim} mb-3\`}>
+                      {schedule.description || 'Automated task execution'}
+                    </div>
+                    <div className="flex items-center gap-4 mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className={\`w-3 h-3 rounded-full \${
+                          schedule.trigger?.active ? \`bg-\${currentTheme.primary}-400 animate-pulse\` : \`bg-gray-500\`
+                        }\`}></div>
+                        <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
+                          {schedule.trigger?.active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      <div className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-md\`}>
+                        <span className={\`font-mono text-xs \${currentTheme.accent}\`}>
+                          {schedule.trigger?.pattern || 'Manual'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className={\`font-mono text-sm \${currentTheme.light}\`}>{schedule.title || schedule.name}</div>
-                <div className={\`font-mono text-xs mt-1 \${currentTheme.dim}\`}>
-                  {schedule.description || 'No description'}
+                <div className="flex items-center justify-between pt-3 border-t border-gray-700/50">
+                  <span className={\`font-mono text-xs px-3 py-1.5 rounded-full \${
+                    schedule.trigger?.active 
+                      ? \`\${currentTheme.bgActive} border \${currentTheme.borderActive} \${currentTheme.accent}\`
+                      : 'bg-gray-500/20 border border-gray-400/30 text-gray-400'
+                  }\`}>
+                    {schedule.steps?.length || 0} steps
+                  </span>
+                  <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
+                    Next run: {schedule.trigger?.active ? 'Scheduled' : 'Disabled'}
+                  </span>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-8">
-            <div className={\`font-mono text-sm \${currentTheme.dim}\`}>No schedules created yet</div>
-            <div className={\`font-mono text-xs mt-1 \${currentTheme.dim}\`}>
-              Set up automated tasks and workflows
+          <div className="text-center py-12">
+            <div className={\`w-20 h-20 \${currentTheme.bg} border \${currentTheme.border} rounded-2xl flex items-center justify-center mx-auto mb-4\`}>
+              <span className={\`text-3xl \${currentTheme.dim}\`}>⏰</span>
+            </div>
+            <div className={\`font-mono text-lg font-bold \${currentTheme.light} mb-2\`}>No Schedules Yet</div>
+            <div className={\`font-mono text-sm \${currentTheme.dim} max-w-xs mx-auto\`}>
+              Automated tasks and workflows will appear here
             </div>
           </div>
         )}
@@ -1891,10 +2011,18 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [showQuickActions, setShowQuickActions] = useState(false);
+  const [isMobile, setIsMobile] = useState(true);
   
   // Use embedded local configuration
   const selectedTheme = '${agentTheme}';
   const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
   
   const agentConfig = {
     name: '${agentName}',
@@ -2016,46 +2144,12 @@ What would you like to explore first?\`,
 
   return (
     <Layout title="AI Chat">
-      <div className="flex flex-col h-screen">
-        {/* Chat Header */}
-        <div className={\`p-4 border-b \${currentTheme.border} bg-black/20 backdrop-blur-sm\`}>
-          <div className="flex items-center gap-3">
-            <div className={\`w-10 h-10 \${currentTheme.bg} border \${currentTheme.border} rounded-lg flex items-center justify-center\`}>
-              <span className={\`text-lg \${currentTheme.accent}\`}>🤖</span>
-            </div>
-            <div>
-              <h3 className={\`font-mono font-bold text-base \${currentTheme.light}\`}>AI Assistant</h3>
-              <div className="flex items-center gap-1">
-                <div className={\`w-2 h-2 bg-\${currentTheme.primary}-400 rounded-full animate-pulse\`}></div>
-                <span className={\`font-mono text-xs \${currentTheme.dim}\`}>Online</span>
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className={\`flex flex-col \${isMobile ? 'h-[calc(100vh-8rem)]' : 'h-[calc(100vh-5rem)]'}\`}>
 
-        {/* Quick Actions Panel */}
-        {showQuickActions && (
-          <div className={\`p-4 \${currentTheme.bg} border-b \${currentTheme.border}\`}>
-            <div className="grid grid-cols-2 gap-2">
-              {quickActions.map((action, index) => (
-                <button
-                  key={index}
-                  onClick={action.action}
-                  className={\`p-3 \${currentTheme.bgActive} border \${currentTheme.border} rounded-lg text-left hover:\${currentTheme.bgHover} transition-colors\`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-lg">{action.icon}</span>
-                    <span className={\`font-mono text-sm \${currentTheme.light}\`}>{action.label}</span>
-                  </div>
-                  <p className={\`text-xs font-mono \${currentTheme.dim}\`}>{action.description}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0 mb-4">
           {messages.map((message) => (
             <ChatMessage 
               key={message.id} 
@@ -2070,16 +2164,16 @@ What would you like to explore first?\`,
           ))}
           
           {isLoading && (
-            <ChatMessage
-              message={{
-                id: 'loading',
-                type: 'bot',
-                content: '',
-                timestamp: new Date()
-              }}
-              isTyping={true}
-              theme={selectedTheme}
-            />
+            <div className={\`flex justify-start\`}>
+              <div className={\`max-w-xs p-4 rounded-xl \${currentTheme.bg} border \${currentTheme.border}\`}>
+                <div className="flex items-center gap-2">
+                  <div className={\`w-2 h-2 bg-\${currentTheme.primary}-400 rounded-full animate-bounce\`}></div>
+                  <div className={\`w-2 h-2 bg-\${currentTheme.primary}-400 rounded-full animate-bounce\`} style={{animationDelay: '0.1s'}}></div>
+                  <div className={\`w-2 h-2 bg-\${currentTheme.primary}-400 rounded-full animate-bounce\`} style={{animationDelay: '0.2s'}}></div>
+                  <span className={\`text-xs font-mono \${currentTheme.dim} ml-2\`}>AI is thinking...</span>
+                </div>
+              </div>
+            </div>
           )}
 
           {error && (
@@ -2096,26 +2190,10 @@ What would you like to explore first?\`,
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Smart Suggestions */}
-        {suggestions.length > 0 && input.length > 10 && (
-          <div className={\`px-4 py-2 border-t \${currentTheme.border}\`}>
-            <div className="flex gap-2 flex-wrap">
-              <span className={\`text-xs font-mono \${currentTheme.dim} self-center\`}>Suggestions:</span>
-              {suggestions.map((suggestion, index) => (
-                <button
-                  key={index}
-                  onClick={suggestion.action}
-                  className={\`px-3 py-1 rounded-lg text-xs font-mono transition-colors \${suggestion.color}\`}
-                >
-                  {suggestion.text}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+
 
         {/* Chat Input */}
-        <div className={\`p-4 border-t \${currentTheme.border} bg-black/20 backdrop-blur-sm\`}>
+        <div className={\`p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
           <div className="flex gap-3 items-end">
             <div className="flex-1">
               <textarea
@@ -2123,7 +2201,7 @@ What would you like to explore first?\`,
                 onChange={handleInputChange}
                 onKeyPress={handleKeyPress}
                 placeholder="Ask AI anything..."
-                className={\`w-full \${currentTheme.bg} border \${currentTheme.border} rounded-2xl px-4 py-3 \${currentTheme.light} font-mono text-sm focus:outline-none focus:\${currentTheme.borderActive} placeholder:\${currentTheme.dim} resize-none\`}
+                className={\`w-full \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl px-4 py-3 \${currentTheme.light} font-mono text-sm focus:outline-none focus:\${currentTheme.borderActive} placeholder:\${currentTheme.dim} resize-none\`}
                 rows={1}
                 disabled={isLoading}
               />
@@ -2131,7 +2209,7 @@ What would you like to explore first?\`,
             <button
               type="submit"
               disabled={!input.trim() || isLoading}
-              className={\`w-12 h-12 \${currentTheme.bgActive} \${currentTheme.bgHover} border \${currentTheme.borderActive} rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm disabled:opacity-50\`}
+              className={\`w-12 h-12 \${currentTheme.bgActive} hover:\${currentTheme.bgHover} border \${currentTheme.borderActive} rounded-xl flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed\`}
               onClick={handleSubmit}
             >
               {isLoading ? (
@@ -2144,14 +2222,23 @@ What would you like to explore first?\`,
           
           {/* Quick Actions */}
           <div className="flex gap-2 mt-3 overflow-x-auto">
-            <button className={\`px-3 py-1.5 \${currentTheme.bg} border \${currentTheme.border} rounded-full font-mono text-xs \${currentTheme.dim} hover:\${currentTheme.light} transition-colors whitespace-nowrap\`}>
-              📊 Show stats
+            <button 
+              onClick={() => router.push('/models')}
+              className={\`px-4 py-2 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl font-mono text-xs \${currentTheme.accent} hover:\${currentTheme.bgHover} transition-colors whitespace-nowrap\`}
+            >
+              🗃️ View Data
             </button>
-            <button className={\`px-3 py-1.5 \${currentTheme.bg} border \${currentTheme.border} rounded-full font-mono text-xs \${currentTheme.dim} hover:\${currentTheme.light} transition-colors whitespace-nowrap\`}>
-              ⚡ Run action
+            <button 
+              onClick={() => router.push('/actions')}
+              className={\`px-4 py-2 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl font-mono text-xs \${currentTheme.accent} hover:\${currentTheme.bgHover} transition-colors whitespace-nowrap\`}
+            >
+              ⚡ Run Action
             </button>
-            <button className={\`px-3 py-1.5 \${currentTheme.bg} border \${currentTheme.border} rounded-full font-mono text-xs \${currentTheme.dim} hover:\${currentTheme.light} transition-colors whitespace-nowrap\`}>
-              🗃️ View data
+            <button 
+              onClick={() => router.push('/schedules')}
+              className={\`px-4 py-2 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl font-mono text-xs \${currentTheme.accent} hover:\${currentTheme.bgHover} transition-colors whitespace-nowrap\`}
+            >
+              ⏰ View Tasks
             </button>
           </div>
         </div>
@@ -2263,50 +2350,56 @@ export default function ActionCard({ action }: ActionCardProps) {
   return (
     <>
       <div 
-        className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4 cursor-pointer \${currentTheme.bgHover} transition-colors\`}
+        className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-5 cursor-pointer hover:\${currentTheme.bgHover} transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]\`}
         onClick={() => setShowModal(true)}
       >
-        <div className="flex items-center gap-3 mb-3">
-          <div className={\`w-10 h-10 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg flex items-center justify-center\`}>
-            <span className="text-lg">{action.emoji || '⚡'}</span>
+        <div className="flex items-start gap-4 mb-4">
+          <div className={\`w-12 h-12 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl flex items-center justify-center flex-shrink-0\`}>
+            <span className="text-2xl">{action.emoji || '⚡'}</span>
           </div>
-          <div className="flex-1">
-            <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light}\`}>
+          <div className="flex-1 min-w-0">
+            <h3 className={\`font-mono text-lg font-bold \${currentTheme.light} mb-1\`}>
               {action.title || action.name}
             </h3>
-            <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
+            <p className={\`font-mono text-sm \${currentTheme.dim} mb-2\`}>
               {action.description || \`Execute \${action.title || action.name}\`}
             </p>
-          </div>
-          <div className="flex flex-col items-end gap-1">
-            <span className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg font-mono text-xs \${currentTheme.accent}\`}>
-              Ready
-            </span>
-            {lastExecutionTime && (
-              <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
-                Last: {lastExecutionTime.split(' ')[1]?.substring(0, 5)}
+            <div className="flex items-center gap-4">
+              <span className={\`font-mono text-xs px-3 py-1.5 rounded-full \${currentTheme.bgActive} border \${currentTheme.borderActive} \${currentTheme.accent}\`}>
+                ✅ Ready
               </span>
-            )}
+              {lastExecutionTime && (
+                <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
+                  Last: {lastExecutionTime.split(' ')[1]?.substring(0, 5)}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Quick status indicator */}
         {lastResult && (
-          <div className="flex items-center gap-2 text-xs font-mono mb-3">
+          <div className={\`flex items-center gap-2 text-xs font-mono mb-3 p-2 rounded-lg \${
+            lastResult.success ? \`\${currentTheme.bgActive} border \${currentTheme.borderActive}\` : 'bg-red-500/20 border border-red-400/30'
+          }\`}>
             <div className={\`w-2 h-2 rounded-full \${
               lastResult.success ? currentTheme.accent.replace('text-', 'bg-') : 'bg-red-400'
             }\`} />
-            <span className={\`\${currentTheme.dim}\`}>
+            <span className={\`\${lastResult.success ? currentTheme.accent : 'text-red-300'}\`}>
               {lastResult.success ? 'Last execution successful' : 'Last execution failed'}
             </span>
           </div>
         )}
 
         {/* Click indicator */}
-        <div className={\`mt-3 pt-3 border-t \${currentTheme.border}\`}>
-          <p className={\`font-mono text-xs \${currentTheme.dim} text-center\`}>
-            Click to execute → 
-          </p>
+        <div className="flex items-center justify-between pt-3 border-t border-gray-700/50">
+          <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
+            Type: {action.type || 'Action'}
+          </span>
+          <span className={\`font-mono text-sm \${currentTheme.dim} flex items-center gap-1\`}>
+            <span>Tap to execute</span>
+            <span className={\`\${currentTheme.accent}\`}>⚡</span>
+          </span>
         </div>
       </div>
 
@@ -2805,8 +2898,8 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className={\`bg-gray-900 border \${currentTheme.border} rounded-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col\`}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div className={\`bg-gray-900 border \${currentTheme.border} rounded-xl w-full max-w-lg max-h-[80vh] mb-16 overflow-hidden flex flex-col shadow-2xl\`}>
         {/* Header */}
         <div className={\`p-4 border-b \${currentTheme.border}\`}>
           <div className="flex items-center justify-between">
@@ -2822,9 +2915,9 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
             <button
               onClick={onClose}
               disabled={isExecuting}
-              className="p-2 hover:bg-green-500/20 rounded-lg transition-colors disabled:opacity-50"
+              className={\`w-10 h-10 \${currentTheme.bg} border \${currentTheme.border} rounded-xl flex items-center justify-center hover:\${currentTheme.bgHover} transition-colors disabled:opacity-50\`}
             >
-              <span className="text-green-400 font-mono text-lg">×</span>
+              <span className={\`\${currentTheme.accent} font-mono text-xl\`}>×</span>
             </button>
           </div>
         </div>
@@ -3418,7 +3511,9 @@ export async function POST(request: NextRequest) {
 
   private generateHealthEndpoint(): string {
     return `import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   try {
@@ -3461,13 +3556,17 @@ export async function GET(request: NextRequest) {
       error: 'Database connection failed',
       timestamp: new Date().toISOString()
     }, { status: 503 });
+  } finally {
+    await prisma.$disconnect();
   }
 }`;
   }
 
   private generateStatsEndpoint(): string {
     return `import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export async function GET(request: NextRequest) {
   try {
@@ -3514,17 +3613,17 @@ export async function GET(request: NextRequest) {
         lastActivity: new Date().toISOString()
       }
     }, { status: 500 });
+  } finally {
+    await prisma.$disconnect();
   }
 }`;
   }
 
   private generateModelEndpoint(): string {
     return `import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { PrismaClient } from '@prisma/client';
 
-const execAsync = promisify(exec);
+const prisma = new PrismaClient();
 
 // Function to ensure database is initialized
 async function ensureDatabaseInit() {
@@ -3532,25 +3631,24 @@ async function ensureDatabaseInit() {
     // Test database connection
     await prisma.$queryRaw\`SELECT 1\`;
     console.log('Database connection successful');
-  } catch (error) {
+  } catch (error: any) {
     console.log('Database connection failed:', error.message);
     console.log('This is expected if the PostgreSQL database hasn\\'t been created yet.');
-    console.log('Please ensure your DATABASE_URL points to a valid PostgreSQL database.');
     
-    // For development, we could try to initialize, but for production
-    // the database should be created externally (e.g., via Neon)
-    if (process.env.NODE_ENV !== 'production') {
+    // In production (Vercel), the database should already be set up by the build process
+    if (process.env.NODE_ENV === 'production') {
+      console.log('Production environment - database should be initialized by Vercel build process');
+      // Try one more time after a brief delay for database warm-up
+      await new Promise(resolve => setTimeout(resolve, 1000));
       try {
-        console.log('Attempting to push schema to database...');
-        await execAsync('npx prisma db push --accept-data-loss');
-        console.log('Database schema pushed successfully');
-      } catch (initError) {
-        console.error('Failed to push schema:', initError.message);
-        console.log('Please check your DATABASE_URL and ensure the PostgreSQL database exists.');
-        throw new Error('Database initialization failed - please create the PostgreSQL database first');
+        await prisma.$queryRaw\`SELECT 1\`;
+        console.log('Database connection successful on retry');
+      } catch (retryError: any) {
+        console.error('Database still not available:', retryError.message);
+        throw new Error('Database connection failed in production - please ensure the PostgreSQL database exists and is accessible');
       }
     } else {
-      throw new Error('Database connection failed in production - please ensure the PostgreSQL database exists');
+      throw new Error('Database connection failed - please ensure the PostgreSQL database exists and DATABASE_URL is correct');
     }
   }
 }
@@ -3706,6 +3804,8 @@ export async function GET(request: NextRequest, { params }: { params: { modelNam
       error: \`Failed to access model \${modelName}\`,
       details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     }, { status: 500 });
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -3767,13 +3867,45 @@ export async function POST(request: NextRequest, { params }: { params: { modelNa
       error: \`Failed to create model \${modelName} record\`,
       details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     }, { status: 500 });
+  } finally {
+    await prisma.$disconnect();
   }
 }`;
   }
 
   private generateModelRecordEndpoint(): string {
     return `import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
+
+// Function to ensure database is initialized
+async function ensureDatabaseInit() {
+  try {
+    // Test database connection
+    await prisma.$queryRaw\`SELECT 1\`;
+    console.log('Database connection successful');
+  } catch (error: any) {
+    console.log('Database connection failed:', error.message);
+    console.log('This is expected if the PostgreSQL database hasn\\'t been created yet.');
+    
+    // In production (Vercel), the database should already be set up by the build process
+    if (process.env.NODE_ENV === 'production') {
+      console.log('Production environment - database should be initialized by Vercel build process');
+      // Try one more time after a brief delay for database warm-up
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      try {
+        await prisma.$queryRaw\`SELECT 1\`;
+        console.log('Database connection successful on retry');
+      } catch (retryError: any) {
+        console.error('Database still not available:', retryError.message);
+        throw new Error('Database connection failed in production - please ensure the PostgreSQL database exists and is accessible');
+      }
+    } else {
+      throw new Error('Database connection failed - please ensure the PostgreSQL database exists and DATABASE_URL is correct');
+    }
+  }
+}
 
 export async function GET(request: NextRequest, { params }: { params: { modelName: string; id: string } }) {
   const { modelName, id } = params;
@@ -3784,6 +3916,18 @@ export async function GET(request: NextRequest, { params }: { params: { modelNam
 
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'Record ID is required' }, { status: 400 });
+  }
+
+  // Ensure database is initialized before proceeding
+  try {
+    await ensureDatabaseInit();
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Database initialization failed',
+      details: 'Unable to initialize PostgreSQL database'
+    }, { status: 500 });
   }
 
   // Convert PascalCase model name to camelCase for Prisma client access
@@ -3828,6 +3972,8 @@ export async function GET(request: NextRequest, { params }: { params: { modelNam
       error: \`Failed to access model \${modelName} record\`,
       details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     }, { status: 500 });
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -3840,6 +3986,18 @@ export async function PUT(request: NextRequest, { params }: { params: { modelNam
 
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'Record ID is required' }, { status: 400 });
+  }
+
+  // Ensure database is initialized before proceeding
+  try {
+    await ensureDatabaseInit();
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Database initialization failed',
+      details: 'Unable to initialize PostgreSQL database'
+    }, { status: 500 });
   }
 
   // Convert PascalCase model name to camelCase for Prisma client access
@@ -3898,6 +4056,8 @@ export async function PUT(request: NextRequest, { params }: { params: { modelNam
       error: \`Failed to update model \${modelName} record\`,
       details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     }, { status: 500 });
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -3910,6 +4070,18 @@ export async function DELETE(request: NextRequest, { params }: { params: { model
 
   if (!id || typeof id !== 'string') {
     return NextResponse.json({ error: 'Record ID is required' }, { status: 400 });
+  }
+
+  // Ensure database is initialized before proceeding
+  try {
+    await ensureDatabaseInit();
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Database initialization failed',
+      details: 'Unable to initialize PostgreSQL database'
+    }, { status: 500 });
   }
 
   // Convert PascalCase model name to camelCase for Prisma client access
@@ -3956,6 +4128,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { model
       error: \`Failed to delete model \${modelName} record\`,
       details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     }, { status: 500 });
+  } finally {
+    await prisma.$disconnect();
   }
 }`;
   }
