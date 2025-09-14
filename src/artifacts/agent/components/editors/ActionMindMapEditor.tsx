@@ -450,6 +450,8 @@ interface ActionMindMapEditorProps {
   onDelete: () => void;
   onGoBack?: () => void; // Navigate back to action list
   allModels?: AgentModel[];
+  allEnums?: any[];
+  prismaSchema?: string;
   documentId?: string;
 }
 
@@ -480,6 +482,8 @@ export const ActionMindMapEditor = memo(({
   onDelete,
   onGoBack,
   allModels = [],
+  allEnums = [],
+  prismaSchema = '',
   documentId
 }: ActionMindMapEditorProps) => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -711,6 +715,8 @@ Make the action self-contained but also chain-friendly.`
           description: action.description || `Action to ${action.name}`,
           pseudoSteps: action.pseudoSteps,
           availableModels: allModels,
+          availableEnums: allEnums,
+          prismaSchema: prismaSchema,
           businessContext: `Generate user-friendly UI components for ${action.name}. Focus on making inputs intuitive (e.g., dropdowns instead of text fields for IDs). ${regenerationContext}
 
 🔗 PARAMETER CHAINING CONTEXT: This action may receive inputs from previous actions in a schedule chain. Design UI components that can handle both user-provided inputs AND programmatic inputs from parameter references. Consider that some fields might be auto-populated from previous actions, so focus on the essential user inputs needed.`
@@ -757,6 +763,8 @@ Make the action self-contained but also chain-friendly.`
           pseudoSteps: action.pseudoSteps,
           uiComponents: action.uiComponentsDesign,
           availableModels: allModels,
+          availableEnums: allEnums,
+          prismaSchema: prismaSchema,
           entityType: 'action',
           businessContext: `Generate comprehensive, executable code for ${action.name} based on steps and UI components. 
 

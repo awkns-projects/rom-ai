@@ -31,6 +31,7 @@ interface MobileAppTemplateOptions {
   actions: AgentAction[];
   schedules: AgentSchedule[];
   prismaSchema: string; // Required - Complete Prisma schema from database generation step
+  enums: any[]; // Required - Enums array from database generation step
   neonOptions?: { region?: string; pgVersion?: number; autoSuspend?: boolean; };
   
   // Local client app configuration

@@ -18,6 +18,8 @@ interface ActionEditorProps {
   onDelete: () => void;
   onGoBack?: () => void; // Navigate back to action list
   allModels?: AgentModel[];
+  allEnums?: any[];
+  prismaSchema?: string;
   documentId?: string;
 }
 
@@ -54,6 +56,8 @@ export const ActionEditor = memo(({
   onDelete,
   onGoBack,
   allModels = [],
+  allEnums = [],
+  prismaSchema = '',
   documentId
 }: ActionEditorProps) => {
   const [viewMode, setViewMode] = useState<'traditional' | 'mindmap'>('mindmap');
@@ -446,6 +450,8 @@ export const ActionEditor = memo(({
           description: action.description || `Action to ${action.name}`,
           pseudoSteps: action.pseudoSteps,
           availableModels: allModels,
+          availableEnums: allEnums,
+          prismaSchema: prismaSchema,
           entityType: 'action',
           businessContext: `This is a business action for ${action.name}. Generate comprehensive, executable code that goes beyond simple CRUD operations.`,
           inputParameters: actionInputParameters
@@ -879,6 +885,8 @@ export const ActionEditor = memo(({
             onDelete={onDelete}
             onGoBack={onGoBack}
             allModels={allModels}
+            allEnums={allEnums}
+            prismaSchema={prismaSchema}
             documentId={documentId}
           />
         </div>

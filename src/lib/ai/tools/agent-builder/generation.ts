@@ -3970,7 +3970,8 @@ export async function generateUIComponents(
   description: string,
   pseudoSteps: PseudoCodeStep[],
   availableModels: AgentModel[],
-  businessContext?: string
+  businessContext?: string,
+  availableEnums?: any[]
 ): Promise<any[]> {
   console.log(`🎨 Generating UI components for: ${name}`);
   
@@ -4058,9 +4059,29 @@ Create user-friendly interactive components for testing this action. **CRITICAL 
    - Amount filters → "number" type with min/max ranges
 
 4. **REALISTIC FILTER OPTIONS**:
+   ${availableEnums && availableEnums.length > 0 ? `
+   🎯 ACTUAL ENUM VALUES FROM DATABASE (USE THESE EXACT VALUES):
+   ${availableEnums.map(enumDef => {
+     // Handle both raw format (strings) and AgentEnum format (objects)
+     let enumValues: string[] = [];
+     if (enumDef.fields && Array.isArray(enumDef.fields) && enumDef.fields.length > 0) {
+       const firstField = enumDef.fields[0];
+       if (typeof firstField === 'string') {
+         enumValues = enumDef.fields;
+       } else if (firstField && typeof firstField === 'object' && firstField.name) {
+         enumValues = enumDef.fields.map((f: any) => f.name);
+       }
+     }
+     return `- ${enumDef.name}: [${enumValues.join(', ') || 'No values'}]`;
+   }).join('\n')}
+   
+   🚨 CRITICAL: Use ONLY the enum values listed above for select components
+   🚨 NEVER use hardcoded values like ["active", "inactive"] - use the actual database enums
+   ` : `
    - Status filters: ["active", "inactive", "pending", "completed", "draft"]
    - Category filters: ["premium", "standard", "trial", "enterprise"]
    - Priority filters: ["high", "medium", "low", "urgent"]
+   `}
    - Date ranges: "last 7 days", "last 30 days", "custom range"
    - Use business-appropriate filter values that match the domain context
 

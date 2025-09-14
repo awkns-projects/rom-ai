@@ -3,7 +3,8 @@
 import { runTestingAgent, type TestingAgentConfig } from '../src/lib/ai/tools/agent-builder/testing-agent';
 import { config } from 'dotenv';
 
-// Load environment variables
+// Load environment variables from .env.local first, then fallback to .env
+config({ path: '.env.local' });
 config();
 
 /**

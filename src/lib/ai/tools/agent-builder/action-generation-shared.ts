@@ -19,7 +19,7 @@ export const SequentialStepSchema = z.object({
 });
 
 /**
- * Technical Specification Schema - code-focused specification document with sequential steps
+ * Technical Specification Schema - architecture document that explains how pseudo steps connect and work together
  */
 export const TechnicalSpecificationSchema = z.object({
   name: z.string().describe('Action name in camelCase'),
@@ -29,36 +29,32 @@ export const TechnicalSpecificationSchema = z.object({
   // Available Prisma Schema
   availablePrismaSchema: z.string().describe('Complete Prisma schema with all available models, fields, and relationships that this action can use'),
   
-  // Sequential implementation steps with actual code
-  sequentialSteps: z.array(SequentialStepSchema).describe('Step-by-step implementation flow with actual code patterns'),
+  // Architecture and integration guidance (NOT step-by-step details)
+  architectureOverview: z.string().describe('High-level architecture explaining how the pseudo steps work together as a cohesive system'),
+  dataFlowStrategy: z.string().describe('How data flows between pseudo steps and what each step contributes to the overall workflow'),
+  integrationPatterns: z.array(z.string()).describe('Technical patterns for connecting steps (e.g., "Step 1 output feeds into Step 2 filter", "Steps 2-3 run in parallel")'),
   
-  // Input/Output schemas with TypeScript interfaces
-  inputParameters: z.array(z.object({
-    name: z.string(),
-    type: z.string(),
-    required: z.boolean(),
-    description: z.string(),
-    defaultValue: z.any().optional()
-  })).describe('Exact input parameters with TypeScript types'),
+  // Technical constraints and requirements
+  databaseIntegration: z.string().describe('How the action integrates with the Prisma database schema and what models/relationships it uses'),
+  typeSystemGuidance: z.string().describe('TypeScript type considerations and how data types flow between steps'),
+  errorHandlingStrategy: z.string().describe('Overall error handling approach and how errors are managed across steps'),
   
-  outputParameters: z.array(z.object({
-    name: z.string(),
-    type: z.string(),
-    description: z.string()
-  })).describe('Exact output parameters with TypeScript types'),
+  // Performance and scalability architecture
+  performanceArchitecture: z.string().describe('Performance considerations for the step sequence and how to optimize the workflow'),
+  scalabilityConsiderations: z.string().describe('How the step sequence scales and handles large datasets'),
   
-  // Environment variables needed
-  environmentVariables: z.array(z.string()).describe('List of environment variable names needed for implementation'),
+  // Input/Output contracts
+  inputContract: z.string().describe('Overall input contract and how input parameters are distributed to steps'),
+  outputContract: z.string().describe('Overall output contract and how step outputs are aggregated into final result'),
+  variableContracts: z.string().describe('Detailed variable flow between steps including validation patterns to prevent missing variables'),
   
-  // Code dependencies and imports
-  codeDependencies: z.array(z.string()).describe('Required imports, libraries, and dependencies needed for implementation'),
+  // Environment and dependencies
+  environmentVariables: z.array(z.string()).describe('List of environment variable names needed for the entire workflow'),
+  codeDependencies: z.array(z.string()).describe('Required imports, libraries, and dependencies needed for the entire action'),
   
-  // Overall implementation approach
-  implementationApproach: z.string().describe('High-level technical approach and architecture decisions'),
-  
-  // Performance and error handling
-  performanceConsiderations: z.string().describe('Technical performance requirements, optimization strategies, and scalability considerations'),
-  globalErrorHandling: z.string().describe('Overall error handling strategy and patterns used across all steps')
+  // Implementation guidance (not step details)
+  implementationNotes: z.array(z.string()).describe('Technical notes about implementing the pseudo step sequence correctly'),
+  commonPitfalls: z.array(z.string()).describe('Common mistakes to avoid when implementing this step sequence')
 });
 
 export type TechnicalSpecification = z.infer<typeof TechnicalSpecificationSchema>;
@@ -72,7 +68,8 @@ export async function generateTechnicalSpecification(
   businessContext: string,
   availableModels: any[],
   prismaSchema?: string,
-  externalApis?: any[]
+  externalApis?: any[],
+  availableEnums?: any[]
 ): Promise<TechnicalSpecification> {
   console.log(`📋 Generating technical specification for: ${name}`);
   
@@ -84,7 +81,7 @@ export async function generateTechnicalSpecification(
   // Extract external API information
   const externalApiInfo = externalApis?.map(api => `${api.provider} (${api.connectionType}): ${api.description}`).join('\n') || 'None';
   
-  const systemPrompt = `You are a senior software architect writing a detailed technical specification for implementing a business action. This spec will be used directly by AI to generate executable code, so it must be technically precise and implementable.
+  const systemPrompt = `You are a senior software architect writing a technical specification that explains how pseudo steps connect and work together. This spec provides architectural context for implementing a business action, focusing on integration patterns and data flow rather than step-by-step details.
 
 CONTEXT:
 - Action Name: ${name}
@@ -100,73 +97,64 @@ Use this exact schema for all database operations. Reference the actual model na
 
 CRITICAL REQUIREMENTS:
 
-1. **SEQUENTIAL STEP-BY-STEP IMPLEMENTATION**: Break down the action into specific, sequential steps
-   - Each step should have actual TypeScript/JavaScript code patterns
-   - Show exact data flow between steps (Step 1 output → Step 2 input)
-   - Include specific Prisma queries for each database operation
-   - Show actual API call patterns with request/response handling
+Your technical specification should explain the ARCHITECTURE and INTEGRATION, not duplicate step details:
 
-2. **PRISMA SCHEMA INTEGRATION**: Use the provided Prisma schema exactly
-   - Reference actual model names and field names from the schema
-   - Use correct Prisma query syntax (findMany, create, update, etc.)
-   - Respect field types, relationships, and constraints from the schema
-   - Include proper error handling for database operations
+1. **ARCHITECTURE OVERVIEW**: Explain how the action works as a complete system
+   - Overall workflow and business logic approach
+   - How the action fits into the larger system architecture
+   - Key architectural decisions and patterns used
 
-3. **BATCH-FIRST ARCHITECTURE**: Design for batch processing and automation
-   - Process collections of items, not individual records
-   - Use filtering and scanning approaches instead of manual selection
-   - Design for scalability (handle 1 to 1000+ items)
-   - Include batch size limits and pagination strategies
+2. **DATA FLOW STRATEGY**: Explain how data moves through the action
+   - How input parameters are distributed to different steps
+   - How step outputs connect to subsequent step inputs (prevent missing variables)
+   - Variable naming conventions and data contracts between steps
+   - Data transformation patterns and type conversions
+   - Variable validation patterns to ensure data exists before use
+   - Overall data flow architecture
 
-4. **PARAMETER CHAINING SUPPORT**: Design outputs that can feed into other actions
-   - Specify exact output data structures with descriptive field names
-   - Include IDs, status indicators, and processed data objects
-   - Design for workflow automation and action chaining
+3. **INTEGRATION PATTERNS**: Explain how steps connect together
+   - Which steps run sequentially vs in parallel
+   - Variable dependency mapping (which variables each step needs from previous steps)
+   - How to validate that required variables exist before each step
+   - Error handling flows between steps and variable validation failures
+   - Dependency patterns between steps
+   - Integration points with external systems
 
-5. **REAL-WORLD IMPLEMENTATION PATTERNS**: Include production-ready patterns
-   - Exponential backoff for API retries
-   - Proper error handling and logging
-   - Input validation and sanitization
-   - Transaction management for data consistency
+4. **DATABASE INTEGRATION**: Explain how the action uses the database
+   - Which models and relationships are involved
+   - Overall database access patterns
+   - Transaction and consistency considerations
+   - Performance implications of database usage
+
+5. **TYPE SYSTEM GUIDANCE**: Explain TypeScript considerations
+   - How types flow between steps
+   - Type conversion requirements
+   - Interface contracts between components
+
+6. **ERROR HANDLING STRATEGY**: Explain overall error management
+   - How errors are handled across the step sequence
+   - Recovery patterns and fallback strategies
+   - Error propagation and containment
 
 TECHNICAL SPECIFICATION STRUCTURE:
 
 You must provide:
 
 1. **availablePrismaSchema**: Copy the exact Prisma schema provided above
-2. **sequentialSteps**: Array of implementation steps, each containing:
-   - stepNumber: Sequential number (1, 2, 3...)
-   - stepTitle: Brief title ("Query customers", "Sync to external API", etc.)
-   - description: Detailed explanation of what this step does
-   - codePattern: Actual TypeScript code that implements this step
-   - inputFromPreviousStep: What data comes from the previous step
-   - outputToNextStep: What data this step produces for the next step
-   - databaseOperations: Array of specific Prisma queries used
-   - apiCalls: Array of external API calls made (if any)
-   - errorHandling: Specific error handling for this step
+2. **architectureOverview**: High-level explanation of how the action works as a system
+3. **dataFlowStrategy**: How data flows between steps and transforms
+4. **integrationPatterns**: How steps connect and depend on each other
+5. **databaseIntegration**: How the action integrates with the database schema
+6. **typeSystemGuidance**: TypeScript type flow and conversion requirements
+7. **errorHandlingStrategy**: Overall approach to error handling across steps
+8. **performanceArchitecture**: Performance and scalability considerations
+9. **inputContract**: Overall input requirements and how they're distributed to steps
+10. **outputContract**: Overall output structure and how step outputs are aggregated
+11. **variableContracts**: Detailed variable flow between steps to prevent missing variables
+12. **implementationNotes**: Technical notes for implementing the step sequence
+13. **commonPitfalls**: Common mistakes to avoid when implementing
 
-3. **inputParameters**: Exact TypeScript interface for action inputs
-4. **outputParameters**: Exact TypeScript interface for action outputs
-5. **environmentVariables**: List of required environment variables
-6. **codeDependencies**: Required imports and libraries
-7. **implementationApproach**: High-level technical approach
-8. **performanceConsiderations**: Optimization strategies
-9. **globalErrorHandling**: Overall error handling strategy
-
-EXAMPLE SEQUENTIAL STEP:
-{
-  "stepNumber": 1,
-  "stepTitle": "Query and Filter Customers",
-  "description": "Query customers from database using date range and segment filters, implementing pagination for large datasets",
-  "codePattern": "const customers = await prisma.customer.findMany({ where: { updatedAt: { gte: parameters.dateFrom, lte: parameters.dateTo }, segment: { in: parameters.customerSegments } }, take: parameters.batchSize || 50 });",
-  "inputFromPreviousStep": "None (first step)",
-  "outputToNextStep": "customers: Customer[] - Array of customer objects matching filter criteria",
-  "databaseOperations": ["prisma.customer.findMany with date and segment filters"],
-  "apiCalls": [],
-  "errorHandling": "Catch Prisma errors and validate that at least one customer matches criteria"
-}
-
-Make this specification so detailed that AI can generate production-ready code directly from it without any ambiguity.`;
+Focus on ARCHITECTURE and INTEGRATION, not step-by-step implementation details.`;
 
   const result = await generateObject({
     model,
@@ -256,7 +244,63 @@ export const InputValidationSchema = z.object({
 });
 
 /**
- * Extract enum information from Prisma schema
+ * Extract enum information from structured model data instead of parsing Prisma schema
+ */
+export function extractEnumInformationFromModels(availableModels: any[]): Record<string, string[]> {
+  const enumInfo: Record<string, string[]> = {};
+  
+  // Extract enum information from all models
+  availableModels.forEach(model => {
+    if (model.enums && Array.isArray(model.enums)) {
+      model.enums.forEach((enumDef: any) => {
+        if (enumDef.name && enumDef.fields && Array.isArray(enumDef.fields)) {
+          const enumValues = enumDef.fields.map((field: any) => field.name).filter(Boolean);
+          if (enumValues.length > 0) {
+            enumInfo[enumDef.name] = enumValues;
+            console.log(`🎯 Extracted enum ${enumDef.name}:`, enumValues);
+          }
+        }
+      });
+    }
+  });
+  
+  console.log('🔍 Total enums extracted from models:', {
+    enumCount: Object.keys(enumInfo).length,
+    enums: enumInfo
+  });
+  
+  return enumInfo;
+}
+
+/**
+ * Extract field information from structured model data to identify enum fields
+ */
+export function extractFieldInformationFromModels(availableModels: any[]): Record<string, Record<string, { type: string; isEnum: boolean; enumValues?: string[] }>> {
+  const fieldInfo: Record<string, Record<string, { type: string; isEnum: boolean; enumValues?: string[] }>> = {};
+  const enumInfo = extractEnumInformationFromModels(availableModels);
+  
+  availableModels.forEach(model => {
+    if (model.name && model.fields && Array.isArray(model.fields)) {
+      fieldInfo[model.name] = {};
+      
+      model.fields.forEach((field: any) => {
+        if (field.name && field.type) {
+          const isEnum = enumInfo.hasOwnProperty(field.type);
+          fieldInfo[model.name][field.name] = {
+            type: field.type,
+            isEnum,
+            enumValues: isEnum ? enumInfo[field.type] : undefined
+          };
+        }
+      });
+    }
+  });
+  
+  return fieldInfo;
+}
+
+/**
+ * Extract enum information from Prisma schema (fallback method)
  */
 export function extractEnumInformation(prismaSchema: string): Record<string, string[]> {
   if (!prismaSchema) return {};
@@ -290,7 +334,7 @@ export function extractEnumInformation(prismaSchema: string): Record<string, str
 }
 
 /**
- * Extract field information from Prisma schema for validation
+ * Extract field information from Prisma schema for validation (fallback method)
  */
 export function extractFieldInformation(prismaSchema: string): Record<string, Record<string, { type: string; isEnum: boolean; enumValues?: string[] }>> {
   if (!prismaSchema) return {};
@@ -338,11 +382,129 @@ export function extractFieldInformation(prismaSchema: string): Record<string, Re
 }
 
 /**
- * Generate input parameter validation code
+ * Generate the actual enum validation code with proper error handling
+ */
+function generateEnumValidationCode(paramName: string, enumType: string, enumValues: string[]): string {
+  if (!enumValues || enumValues.length === 0) {
+    console.warn(`⚠️ No enum values provided for ${paramName} (type: ${enumType})`);
+    return '';
+  }
+  
+  return `
+      // Validate enum parameter: ${paramName} (type: ${enumType})
+      // Enum values extracted from structured model data: [${enumValues.join(', ')}]
+      const validEnumValues_${paramName} = [${enumValues.map(v => `'${v}'`).join(', ')}];
+      const paramValue_${paramName} = params.${paramName};
+      
+      if (paramValue_${paramName} && paramValue_${paramName} !== '') {
+        // Try exact match first
+        const exactMatch = validEnumValues_${paramName}.includes(paramValue_${paramName});
+        
+        if (!exactMatch) {
+          // Try case-insensitive match for auto-correction
+          const caseInsensitiveMatch = validEnumValues_${paramName}.find(val => 
+            val.toLowerCase() === paramValue_${paramName}?.toLowerCase()
+          );
+          
+          if (caseInsensitiveMatch) {
+            // Fix case automatically
+            console.log(\`🔄 Auto-correcting enum case for ${paramName}: "\${paramValue_${paramName}}" -> "\${caseInsensitiveMatch}"\`);
+            params.${paramName} = caseInsensitiveMatch;
+          } else {
+            // Invalid enum value - add error
+            errors.push('Parameter "${paramName}" must be one of: ${enumValues.join(', ')} (received: "' + paramValue_${paramName} + '")');
+          }
+        }
+      }`;
+}
+
+/**
+ * Extract enum information from the top-level enums array from database generation
+ * Handles both raw format (strings) and AgentEnum format (objects)
+ */
+export function extractEnumInformationFromDatabase(availableEnums: any[]): Record<string, string[]> {
+  const enumInfo: Record<string, string[]> = {};
+  
+  if (!availableEnums || !Array.isArray(availableEnums)) {
+    console.warn('⚠️ No enums array provided or not an array');
+    return enumInfo;
+  }
+  
+  // Extract enum information from the top-level enums array
+  availableEnums.forEach((enumDef: any) => {
+    if (enumDef.name && enumDef.fields && Array.isArray(enumDef.fields)) {
+      let enumValues: string[] = [];
+      
+      // Handle both raw format (strings) and AgentEnum format (objects)
+      if (enumDef.fields.length > 0) {
+        const firstField = enumDef.fields[0];
+        
+        if (typeof firstField === 'string') {
+          // Raw format from ConvertSchemaToObject - fields are strings
+          enumValues = enumDef.fields.filter(Boolean);
+          console.log(`🎯 Extracted enum ${enumDef.name} (raw format):`, enumValues);
+        } else if (firstField && typeof firstField === 'object' && firstField.name) {
+          // AgentEnum format - fields are objects with name property
+          enumValues = enumDef.fields.map((field: any) => field.name).filter(Boolean);
+          console.log(`🎯 Extracted enum ${enumDef.name} (AgentEnum format):`, enumValues);
+        } else {
+          console.warn(`⚠️ Unknown enum field format for ${enumDef.name}:`, firstField);
+          console.warn('Expected either string[] or object[] with name property');
+          console.warn('Actual structure:', enumDef.fields);
+        }
+      }
+      
+      if (enumValues.length > 0) {
+        enumInfo[enumDef.name] = enumValues;
+      }
+    }
+  });
+  
+  console.log('🔍 Total enums extracted from database:', {
+    enumCount: Object.keys(enumInfo).length,
+    enums: enumInfo
+  });
+  
+  return enumInfo;
+}
+
+/**
+ * Extract field information from structured model data to identify enum fields
+ * Now uses the correct top-level enums array
+ */
+export function extractFieldInformationFromDatabase(availableModels: any[], availableEnums: any[]): Record<string, Record<string, { type: string; isEnum: boolean; enumValues?: string[] }>> {
+  const fieldInfo: Record<string, Record<string, { type: string; isEnum: boolean; enumValues?: string[] }>> = {};
+  const enumInfo = extractEnumInformationFromDatabase(availableEnums);
+  
+  availableModels.forEach(model => {
+    if (model.name && model.fields && Array.isArray(model.fields)) {
+      fieldInfo[model.name] = {};
+      
+      model.fields.forEach((field: any) => {
+        if (field.name && field.type) {
+          const isEnum = enumInfo.hasOwnProperty(field.type);
+          fieldInfo[model.name][field.name] = {
+            type: field.type,
+            isEnum,
+            enumValues: isEnum ? enumInfo[field.type] : undefined
+          };
+        }
+      });
+    }
+  });
+  
+  return fieldInfo;
+}
+
+/**
+ * Generate input parameter validation code using structured model data
+ * Updated to use the correct top-level enums array
  */
 export function generateInputValidationCode(
   inputParameters: any[], 
-  prismaSchema?: string
+  prismaSchema?: string,
+  availableModels?: any[],
+  availableEnums?: any[]
 ): string {
   if (!inputParameters || inputParameters.length === 0) {
     return `
@@ -350,7 +512,39 @@ export function generateInputValidationCode(
     `;
   }
   
-  const fieldInfo = extractFieldInformation(prismaSchema || '');
+  // Use structured model data if available, fallback to Prisma schema parsing
+  let enumInfo: Record<string, string[]> = {};
+  let fieldInfo: Record<string, Record<string, { type: string; isEnum: boolean; enumValues?: string[] }>> = {};
+  
+  if (availableEnums && availableEnums.length > 0) {
+    // Preferred: Use top-level enums array from database generation
+    enumInfo = extractEnumInformationFromDatabase(availableEnums);
+    fieldInfo = extractFieldInformationFromDatabase(availableModels || [], availableEnums);
+    console.log('🎯 Using structured database enum data for validation');
+  } else if (availableModels && availableModels.length > 0) {
+    // Fallback: Use model-nested enums (legacy support)
+    enumInfo = extractEnumInformationFromModels(availableModels);
+    fieldInfo = extractFieldInformationFromModels(availableModels);
+    console.log('⚠️ Falling back to model-nested enum data for validation');
+  } else if (prismaSchema) {
+    // Final fallback: Parse Prisma schema
+    enumInfo = extractEnumInformation(prismaSchema);
+    fieldInfo = extractFieldInformation(prismaSchema);
+    console.log('⚠️ Falling back to Prisma schema parsing for enum validation');
+  } else {
+    console.warn('⚠️ No enum data or Prisma schema available for validation');
+  }
+  
+  // Debug logging for enum extraction
+  console.log('🔍 DEBUG: Enum extraction in validation code generation:', {
+    enumInfoKeys: Object.keys(enumInfo),
+    enumInfoValues: enumInfo,
+    hasEnums: !!(availableEnums && availableEnums.length > 0),
+    hasModels: !!(availableModels && availableModels.length > 0),
+    hasSchema: !!prismaSchema,
+    enumCount: availableEnums?.length || 0,
+    modelCount: availableModels?.length || 0
+  });
   
   const validationCode = `
     // 🚨 CRITICAL: Input Parameter Validation
@@ -385,16 +579,10 @@ export function generateInputValidationCode(
       }`;
         }
         
-        // Add enum validation if we can detect enum fields
-        const enumValidation = generateEnumValidation(paramName, param, fieldInfo);
+        // Add enum validation using structured data
+        const enumValidation = generateEnumValidationFromStructuredData(paramName, param, fieldInfo, enumInfo);
         if (enumValidation) {
           validationLogic += enumValidation;
-        } else if (param.kind === 'enum' || param.type?.endsWith('Status') || param.type?.endsWith('Enum')) {
-          // This is an enum field but we couldn't find validation - add a warning
-          validationLogic += `
-      // WARNING: ${paramName} appears to be an enum field but no validation rules found
-      // This suggests the enum information wasn't properly extracted from the schema
-      console.warn('⚠️ Enum field ${paramName} (type: ${param.type}) detected but no validation rules available');`;
         }
         
         return validationLogic;
@@ -418,44 +606,55 @@ export function generateInputValidationCode(
 }
 
 /**
- * Generate enum validation for a specific parameter
+ * Generate enum validation for a specific parameter using structured model data
  */
-function generateEnumValidation(
+function generateEnumValidationFromStructuredData(
   paramName: string, 
   param: any, 
-  fieldInfo: Record<string, Record<string, { type: string; isEnum: boolean; enumValues?: string[] }>>
+  fieldInfo: Record<string, Record<string, { type: string; isEnum: boolean; enumValues?: string[] }>>,
+  enumInfo: Record<string, string[]>
 ): string {
-  // Try to find enum information for this parameter
+  // First, check if this parameter type directly matches an enum
+  const paramType = param.type;
+  if (enumInfo[paramType]) {
+    const enumValues = enumInfo[paramType];
+    console.log(`🎯 Direct enum match found for ${paramName} (type: ${paramType}):`, enumValues);
+    return generateEnumValidationCode(paramName, paramType, enumValues);
+  }
+  
+  // Try to find enum information for this parameter in field info
   for (const modelName in fieldInfo) {
     const modelFields = fieldInfo[modelName];
     if (modelFields[paramName] && modelFields[paramName].isEnum) {
       const enumValues = modelFields[paramName].enumValues || [];
-      return `
-      // Validate enum parameter: ${paramName} (type: ${modelFields[paramName].type})
-      const validEnumValues = ['${enumValues.join("', '")}'];
-      const paramValue = params.${paramName};
-      
-      // Try exact match first, then case-insensitive match
-      const exactMatch = validEnumValues.includes(paramValue);
-      const caseInsensitiveMatch = validEnumValues.find(val => val.toLowerCase() === paramValue?.toLowerCase());
-      
-      if (paramValue && !exactMatch) {
-        if (caseInsensitiveMatch) {
-          // Fix case automatically
-          console.log(\`🔄 Auto-correcting enum case: "\${paramValue}" -> "\${caseInsensitiveMatch}"\`);
-          params.${paramName} = caseInsensitiveMatch;
-        } else {
-          errors.push('Parameter "${paramName}" must be one of: ${enumValues.join(', ')} (received: "' + paramValue + '")');
-        }
-      }`;
+      const enumType = modelFields[paramName].type;
+      console.log(`🎯 Field-based enum match found for ${paramName} (type: ${enumType}):`, enumValues);
+      return generateEnumValidationCode(paramName, enumType, enumValues);
     }
   }
   
-      // Also check if the parameter type itself is an enum (for cases where field mapping doesn't work)
-  if (param.type && param.kind === 'enum') {
-    // For fallback validation, we should rely on the main validation above
-    console.warn(`⚠️ Fallback enum validation for ${paramName} - the main enum validation should have handled this`);
-    return '';
+  // Check if the parameter kind indicates it's an enum
+  if (param.kind === 'enum') {
+    // Try to infer enum type from parameter name or type
+    const possibleEnumTypes = Object.keys(enumInfo);
+    const matchingEnum = possibleEnumTypes.find(enumType => 
+      paramType === enumType || 
+      paramName.toLowerCase().includes(enumType.toLowerCase()) ||
+      enumType.toLowerCase().includes(paramName.toLowerCase())
+    );
+    
+    if (matchingEnum) {
+      const enumValues = enumInfo[matchingEnum];
+      console.log(`🎯 Inferred enum match found for ${paramName} (type: ${matchingEnum}):`, enumValues);
+      return generateEnumValidationCode(paramName, matchingEnum, enumValues);
+    }
+  }
+  
+  // If no enum found but the field looks like it should be an enum, log warning
+  if (param.kind === 'enum' || paramName.toLowerCase().includes('status') || paramName.toLowerCase().includes('type')) {
+    console.warn(`⚠️ Parameter ${paramName} appears to be an enum but no validation rules found in structured data`);
+    console.warn(`Available enums:`, Object.keys(enumInfo));
+    console.warn(`Parameter info:`, { name: paramName, type: paramType, kind: param.kind });
   }
   
   return '';
@@ -523,31 +722,25 @@ export async function generateActionPseudoSteps(
   if (technicalSpec) {
     enhancedDescription = `${description}
 
-TECHNICAL SPECIFICATION:
-${technicalSpec.implementationApproach}
+TECHNICAL SPECIFICATION (Architecture Context):
+${technicalSpec.architectureOverview}
 
 AVAILABLE PRISMA SCHEMA:
 ${technicalSpec.availablePrismaSchema}
 
-SEQUENTIAL IMPLEMENTATION STEPS:
-${technicalSpec.sequentialSteps.map(step => `
-Step ${step.stepNumber}: ${step.stepTitle}
-${step.description}
-Code Pattern: ${step.codePattern}
-${step.databaseOperations ? `Database Operations: ${step.databaseOperations.join(', ')}` : ''}
-${step.apiCalls ? `API Calls: ${step.apiCalls.join(', ')}` : ''}
-`).join('\n')}
+DATA FLOW STRATEGY:
+${technicalSpec.dataFlowStrategy}
 
-INPUT PARAMETERS:
-${technicalSpec.inputParameters.map(p => `${p.name}: ${p.type} (${p.required ? 'required' : 'optional'}) - ${p.description}`).join('\n')}
+INTEGRATION PATTERNS:
+${technicalSpec.integrationPatterns.join('\n')}
 
-OUTPUT PARAMETERS:
-${technicalSpec.outputParameters.map(p => `${p.name}: ${p.type} - ${p.description}`).join('\n')}
+DATABASE INTEGRATION:
+${technicalSpec.databaseIntegration}
 
-GLOBAL ERROR HANDLING:
-${technicalSpec.globalErrorHandling}
+ERROR HANDLING STRATEGY:
+${technicalSpec.errorHandlingStrategy}
 
-This technical specification should guide the pseudo step generation to ensure implementable, detailed steps.`;
+This technical specification provides architectural context to guide pseudo step generation.`;
   }
 
   // Generate pseudo steps using AI (removed type parameter since we removed action types)
@@ -570,7 +763,8 @@ export async function generateActionUIComponents(
   description: string,
   pseudoSteps: any[],
   availableModels: any[],
-  businessContext?: string
+  businessContext?: string,
+  availableEnums?: any[]
 ): Promise<any[]> {
   console.log(`🎨 Generating UI components for action: ${name}`);
 
@@ -585,7 +779,8 @@ export async function generateActionUIComponents(
     description,
     pseudoSteps,
     availableModels || [],
-    businessContext
+    businessContext,
+    availableEnums
   );
 
   return uiComponents;
@@ -606,7 +801,8 @@ export async function generateActionExecutableCode(
   enhancedAnalysis?: any,
   testResults?: any,
   prismaSchema?: string,
-  technicalSpec?: TechnicalSpecification
+  technicalSpec?: TechnicalSpecification,
+  availableEnums?: any[]
 ): Promise<{
   code: string;
   envVars: any[];
@@ -616,6 +812,17 @@ export async function generateActionExecutableCode(
   testData: any;
 }> {
   console.log(`🔨 Generating executable code for ${entityType}: ${name}`);
+  
+  // 🚨 CRITICAL DEBUG: Log what data we actually receive
+  console.log('🔍 DEBUG: Data received by generateActionExecutableCode:');
+  console.log('- availableModels count:', availableModels?.length || 0);
+  console.log('- availableModels names:', availableModels?.map((m: any) => m.name) || []);
+  console.log('- availableEnums count:', availableEnums?.length || 0);
+  console.log('- availableEnums names:', availableEnums?.map((e: any) => e.name) || []);
+  console.log('- prismaSchema length:', prismaSchema?.length || 0);
+  console.log('- prismaSchema preview:', prismaSchema?.substring(0, 200) || 'No schema');
+  console.log('- technicalSpec available:', !!technicalSpec);
+  console.log('- pseudoSteps count:', pseudoSteps?.length || 0);
 
   // Validate required fields
   if (!name || !description || !pseudoSteps || !Array.isArray(pseudoSteps)) {
@@ -639,12 +846,33 @@ export async function generateActionExecutableCode(
       })) : []
   );
 
-  // Generate input validation code if we have input parameters and Prisma schema
-  const inputValidationCode = generateInputValidationCode(extractedInputParams, prismaSchema);
+  // Generate input validation code using structured database enum data (preferred) or fallbacks
+  const inputValidationCode = generateInputValidationCode(extractedInputParams, prismaSchema, availableModels, availableEnums);
   
-  // Extract field information for enhanced validation
-  const fieldInfo = extractFieldInformation(prismaSchema || '');
-  const enumInfo = extractEnumInformation(prismaSchema || '');
+  // 🚨 CRITICAL DEBUG: Log the generated validation code
+  console.log('🔍 DEBUG: Generated input validation code preview:');
+  console.log(inputValidationCode.substring(0, 500) + '...');
+  
+  // Extract field information for enhanced validation - prefer structured database enum data
+  let fieldInfo: Record<string, Record<string, { type: string; isEnum: boolean; enumValues?: string[] }>> = {};
+  let enumInfo: Record<string, string[]> = {};
+  
+  if (availableEnums && availableEnums.length > 0) {
+    // Preferred: Use top-level enums array from database generation
+    enumInfo = extractEnumInformationFromDatabase(availableEnums);
+    fieldInfo = extractFieldInformationFromDatabase(availableModels || [], availableEnums);
+    console.log('🎯 Using structured database enum data for system prompt');
+  } else if (availableModels && availableModels.length > 0) {
+    // Fallback: Use model-nested enums (legacy support)
+    enumInfo = extractEnumInformationFromModels(availableModels);
+    fieldInfo = extractFieldInformationFromModels(availableModels);
+    console.log('⚠️ Falling back to model-nested enum data for system prompt');
+  } else if (prismaSchema) {
+    // Final fallback: Parse Prisma schema
+    fieldInfo = extractFieldInformation(prismaSchema);
+    enumInfo = extractEnumInformation(prismaSchema);
+    console.log('⚠️ Falling back to Prisma schema parsing for system prompt enum info');
+  }
   
   console.log('🔍 DEBUG: Enum extraction results:', {
     enumInfoKeys: Object.keys(enumInfo),
@@ -653,6 +881,17 @@ export async function generateActionExecutableCode(
     schemaLength: prismaSchema?.length || 0,
     schemaSnippet: prismaSchema?.substring(0, 200) + '...' || 'No schema'
   });
+  
+  // 🚨 CRITICAL DEBUG: Log what will be included in system prompt
+  console.log('🔍 DEBUG: System prompt enum section will include:');
+  if (Object.keys(enumInfo).length > 0) {
+    console.log('✅ ENUM INFORMATION SECTION:');
+    Object.entries(enumInfo).forEach(([enumName, values]) => {
+      console.log(`  - ${enumName}: [${values.join(', ')}]`);
+    });
+  } else {
+    console.log('❌ NO ENUM INFORMATION - will show warning section');
+  }
   
   // Additional debug: Check if schema contains enum definitions
   if (prismaSchema) {
@@ -670,10 +909,20 @@ export async function generateActionExecutableCode(
 
 TASK: Generate complete, executable JavaScript code based on the technical specification and pseudo steps.
 
-🚨 CRITICAL ERROR PREVENTION: The user has reported that AI keeps generating hardcoded enum values that don't match the actual schema, causing validation errors like "Parameter 'status' must be one of: Planned, Active, Completed" when the actual schema has different enum values.
+🚨 CRITICAL ERROR PREVENTION: The user has reported multiple critical errors:
+1. AI keeps generating hardcoded enum values that don't match the actual schema
+2. AI generates wrong model names like "contentModel" instead of actual model names
+3. AI ignores the provided input validation code and creates its own validation
+4. Generated code has runtime errors like "i.platforms.map is not a function"
+
+🚨 ABSOLUTELY FORBIDDEN - DO NOT DO THESE THINGS:
+❌ NEVER generate your own enum validation - use ONLY the provided INPUT PARAMETER VALIDATION CODE
+❌ NEVER invent model names - use ONLY the models listed in AVAILABLE MODELS section
+❌ NEVER ignore the provided validation code - include it exactly as provided
+❌ NEVER assume data structures - always check if variables are arrays before calling .map()
 
 ${Object.keys(enumInfo).length > 0 ? `
-🎯 ACTUAL ENUM INFORMATION FROM THE PROVIDED PRISMA SCHEMA:
+🎯 ACTUAL ENUM INFORMATION FROM THE DATABASE MODEL DATA:
 ${Object.entries(enumInfo).map(([enumName, values]) => `- ${enumName}: [${values.join(', ')}]`).join('\n')}
 
 🚨 ABSOLUTELY CRITICAL ENUM RULES - NO EXCEPTIONS:
@@ -729,8 +978,16 @@ ${Object.entries(fields).map(([fieldName, info]) => `  - ${fieldName}: ${info.ty
 `).join('')}
 ` : ''}
 
-INPUT PARAMETER VALIDATION CODE (MUST BE INCLUDED):
+🚨 MANDATORY INPUT PARAMETER VALIDATION CODE - INCLUDE EXACTLY AS PROVIDED:
 ${inputValidationCode}
+
+🚨 CRITICAL VALIDATION RULES:
+1. ✅ INCLUDE the validation code above EXACTLY as provided - do not modify it
+2. ✅ CALL validateInputParameters(parameters) at the start of your function
+3. ✅ RETURN early if validation fails - do not continue with database operations
+4. ❌ NEVER create your own enum validation arrays like ['DRAFT', 'APPROVED']
+5. ❌ NEVER ignore the provided validation code and create your own
+6. ❌ NEVER modify the enum values in the provided validation code
 
 🚨 CRITICAL TYPE CONVERSION REQUIREMENTS:
 All form inputs come as strings from the UI. You MUST convert them to proper types before database operations:
@@ -779,57 +1036,45 @@ const convertedParams = {
 
 Then use \`convertedParams\` instead of \`parameters\` in your database operations.
 
-${technicalSpec ? `🎯 TECHNICAL SPECIFICATION (PRIMARY SOURCE):
+${technicalSpec ? `📋 TECHNICAL SPECIFICATION (Architecture Context):
 
-Implementation Approach:
-${technicalSpec.implementationApproach}
+Architecture Overview:
+${technicalSpec.architectureOverview}
 
-Available Prisma Schema:
-${technicalSpec.availablePrismaSchema}
+Data Flow Strategy:
+${technicalSpec.dataFlowStrategy}
 
-Sequential Implementation Steps:
-${technicalSpec.sequentialSteps.map(step => `
-Step ${step.stepNumber}: ${step.stepTitle}
-${step.description}
-Code: ${step.codePattern}
-${step.databaseOperations ? `DB Ops: ${step.databaseOperations.join(', ')}` : ''}
-${step.apiCalls ? `API Calls: ${step.apiCalls.join(', ')}` : ''}
-`).join('\n')}
+Integration Patterns:
+${technicalSpec.integrationPatterns.join('\n- ')}
 
-Input Parameters:
-${technicalSpec.inputParameters.map(p => `${p.name}: ${p.type} - ${p.description}`).join('\n')}
+Database Integration:
+${technicalSpec.databaseIntegration}
 
-Output Parameters:
-${technicalSpec.outputParameters.map(p => `${p.name}: ${p.type} - ${p.description}`).join('\n')}
+Type System Guidance:
+${technicalSpec.typeSystemGuidance}
 
-Global Error Handling:
-${technicalSpec.globalErrorHandling}
+Error Handling Strategy:
+${technicalSpec.errorHandlingStrategy}
 
-Code Dependencies:
-${technicalSpec.codeDependencies}
+Performance Architecture:
+${technicalSpec.performanceArchitecture}
 
-Performance Considerations:
-${technicalSpec.performanceConsiderations}
+Input Contract:
+${technicalSpec.inputContract}
 
-Environment Variables Needed:
-${technicalSpec.environmentVariables.join(', ')}
+Output Contract:
+${technicalSpec.outputContract}
 
-🚨 CRITICAL: Use this technical specification as your PRIMARY implementation guide. The sequential steps contain the exact code patterns to implement. The pseudo steps below are secondary and should align with this specification.
+Variable Contracts:
+${technicalSpec.variableContracts}
 
-SEQUENTIAL IMPLEMENTATION STEPS TO FOLLOW:
-${technicalSpec.sequentialSteps.map(step => `
-=== STEP ${step.stepNumber}: ${step.stepTitle} ===
-Description: ${step.description}
-Input: ${step.inputFromPreviousStep || 'None (first step)'}
-Output: ${step.outputToNextStep || 'Final result'}
+Implementation Notes:
+${technicalSpec.implementationNotes.join('\n- ')}
 
-EXACT CODE PATTERN TO IMPLEMENT:
-${step.codePattern}
+Common Pitfalls to Avoid:
+${technicalSpec.commonPitfalls.join('\n- ')}
 
-${step.databaseOperations && step.databaseOperations.length > 0 ? `Database Operations: ${step.databaseOperations.join(', ')}` : ''}
-${step.apiCalls && step.apiCalls.length > 0 ? `API Calls: ${step.apiCalls.join(', ')}` : ''}
-${step.errorHandling ? `Error Handling: ${step.errorHandling}` : ''}
-`).join('\n')}
+🚨 CRITICAL: Use the PSEUDO STEPS below as your PRIMARY implementation guide since they may have been edited by the user. The technical specification above provides architectural context and explains how the steps connect together.
 ` : ''}
 
 CONTEXT:
@@ -837,7 +1082,16 @@ CONTEXT:
 - Description: ${description}
 - Entity Type: ${entityType}
 - Business Context: ${businessContext || 'General business operations'}
-- Available Models: ${JSON.stringify(availableModels?.map((m: any) => ({ name: m.name, fields: m.fields?.map((f: any) => ({ name: f.name, type: f.type })) })) || [])}
+
+🚨 AVAILABLE MODELS - USE ONLY THESE MODEL NAMES:
+${availableModels?.map((m: any) => `- ${m.name}: ${m.fields?.map((f: any) => `${f.name}(${f.type})`).join(', ') || 'no fields'}`).join('\n') || 'No models available'}
+
+🚨 CRITICAL MODEL USAGE RULES:
+1. ✅ ONLY use model names listed above (e.g., "User", "AdCampaign", "Report")
+2. ✅ Convert to camelCase for Prisma: "AdCampaign" → prisma.adCampaign
+3. ❌ NEVER invent model names like "contentModel", "advertisementModel"
+4. ❌ NEVER use model names not listed in the AVAILABLE MODELS section above
+5. ✅ If a model doesn't exist, skip that operation or use a different approach
 
 ${prismaSchema ? `FULL PRISMA SCHEMA:
 The complete Prisma schema with all relationships, constraints, and field attributes:
@@ -873,16 +1127,18 @@ ${testResults ? `REAL TEST EXECUTION RESULTS:
 ✅ Generate production-ready code based on these validated results
 ` : ''}
 
-PSEUDO STEPS TO IMPLEMENT:
+🎯 PRIMARY SOURCE - PSEUDO STEPS TO IMPLEMENT (USER-EDITED):
 ${pseudoSteps.map((step: any, index: number) => `
 STEP ${index + 1}: ${step.description}
 - Type: ${step.type}
-${step.model ? `- Database Model: ${step.model} (use db.${step.model.charAt(0).toLowerCase() + step.model.slice(1)}.method())` : ''}
+${step.model ? `- Database Model: ${step.model} (use prisma.${step.model.charAt(0).toLowerCase() + step.model.slice(1)}.method())` : ''}
 - Input Fields: ${step.inputFields?.map((f: any) => `${f.name} (${f.type}${f.required ? ', required' : ', optional'})`).join(', ') || 'None'}
 - Output Fields: ${step.outputFields?.map((f: any) => `${f.name} (${f.type}${f.required ? ', required' : ', optional'})`).join(', ') || 'None'}
 - Step Implementation: Based on type "${step.type}", implement the appropriate operation
 ${index === 0 ? `- Access inputs as: ${extractedInputParams.map((p: any) => `parameters.${p.name}`).join(', ')} (action's main input parameters)` : step.inputFields?.length > 0 ? `- Access inputs from previous steps: ${step.inputFields.map((f: any) => `${f.name}`).join(', ')}` : ''}
 ${step.outputFields?.length > 0 ? `- Must produce: ${step.outputFields.map((f: any) => `${f.name}`).join(', ')}` : ''}
+
+🚨 CRITICAL: This step may have been customized by the user - implement EXACTLY as specified above.
 `).join('\n')}
 
 DETAILED STEP BREAKDOWN:
@@ -937,13 +1193,17 @@ CODE GENERATION REQUIREMENTS:
    - Produces the exact outputFields defined in the step
    - Implements the step type (Database find many, AI analysis, etc.)
    - Passes outputFields from step N as inputFields to step N+1
+   - ✅ INCLUDES console.log statements for step input and output data
    
    STEP-BY-STEP CODE PATTERN:
    For each step, implement it as a separate code section with comments:
    // Step 1: [Step Description]
    // Input: [list of input field names]
    // Output: [list of output field names]
+   console.log('🔄 Step 1: [Step Description]');
+   console.log('📥 Step 1 Input:', { inputField1: value1, inputField2: value2 });
    // Implementation based on step type
+   console.log('📤 Step 1 Output:', { outputField1: result1, outputField2: result2 });
    
    CRITICAL: Follow the exact data flow defined in pseudo steps:
    - Only use inputFields that are defined for each step
@@ -958,10 +1218,85 @@ CODE GENERATION REQUIREMENTS:
    - Store each step's outputs in variables for use by subsequent steps
    - Example: Step 1 uses parameters.userId, Step 1 outputs "customerData", Step 2 uses customerData
    
-   STEP VARIABLE NAMING PATTERN:
+   🚨 MANDATORY STEP VARIABLE NAMING PATTERN:
    - Step 1 outputs: step1_outputFieldName (e.g., step1_customerData)
    - Step 2 outputs: step2_outputFieldName (e.g., step2_analysisResult)
    - This ensures clear data flow tracking between steps
+   
+   🚨 CRITICAL VARIABLE FLOW RULES:
+   1. ✅ ALWAYS define variables before using them
+   2. ✅ Use the EXACT output field names from the pseudo step definition
+   3. ✅ Check if variables exist before accessing them
+   4. ✅ Log variable values to verify they're defined correctly
+   5. ❌ NEVER assume a variable exists without defining it first
+   
+   🚨 MANDATORY STEP LOGGING PATTERN:
+   For each step, include these exact console.log statements:
+   
+   // Step N: [Description]
+   console.log('🔄 Step N: [Description]');
+   console.log('📥 Step N Input:', { 
+     inputField1: parameters.inputField1 || 'undefined',
+     inputField2: previousStepOutput || 'undefined'
+   });
+   
+   // ... step implementation ...
+   
+   console.log('📤 Step N Output:', { 
+     outputField1: stepN_outputField1,
+     outputField2: stepN_outputField2,
+     recordCount: results?.length || 0
+   });
+   
+   This logging helps debug data flow and identify where errors occur.
+   
+   🚨 EXAMPLE OF CORRECT STEP IMPLEMENTATION WITH VARIABLE FLOW:
+   
+   // Step 1: Fetch active campaigns
+   console.log('🔄 Step 1: Fetch active campaigns');
+   console.log('📥 Step 1 Input:', { 
+     status: parameters.status || 'undefined',
+     batchSize: convertedParams.batchSize || 'undefined'
+   });
+   
+   // Define step 1 output variables (use exact names from pseudo step outputFields)
+   const step1_activeCampaigns = await prisma.adCampaign.findMany({
+     where: { status: parameters.status },
+     take: convertedParams.batchSize
+   });
+   
+   // Validate step 1 outputs exist
+   if (!step1_activeCampaigns) {
+     throw new Error('Step 1 failed: activeCampaigns is undefined');
+   }
+   
+   console.log('📤 Step 1 Output:', { 
+     activeCampaigns: step1_activeCampaigns.length,
+     campaignIds: step1_activeCampaigns.map(c => c.id)
+   });
+   
+   // Step 2: Generate reports for campaigns  
+   console.log('🔄 Step 2: Generate reports for campaigns');
+   console.log('📥 Step 2 Input:', { 
+     activeCampaigns: step1_activeCampaigns?.length || 0,
+     campaignIds: step1_activeCampaigns?.map(c => c.id) || []
+   });
+   
+   // Validate step 2 inputs exist (from step 1 outputs)
+   if (!step1_activeCampaigns || !Array.isArray(step1_activeCampaigns)) {
+     throw new Error('Step 2 failed: step1_activeCampaigns is not available or not an array');
+   }
+   
+   // Define step 2 output variables (use exact names from pseudo step outputFields)
+   const step2_reports = step1_activeCampaigns.map(campaign => ({
+     campaignId: campaign.id,
+     reportData: generateReportData(campaign)
+   }));
+   
+   console.log('📤 Step 2 Output:', { 
+     reportsGenerated: step2_reports.length,
+     reportIds: step2_reports.map(r => r.campaignId)
+   });
 
 5. DATABASE OPERATIONS:
    🚨 CRITICAL: Each database step includes a "model" field that specifies which model to use!
@@ -1260,6 +1595,28 @@ CODE GENERATION REQUIREMENTS:
    Always return: { success: boolean, data: any, message: string, executionTime: number }
    Where data contains the result of the action execution.
 
+9. ERROR HANDLING AND LOGGING:
+   🚨 MANDATORY ERROR LOGGING PATTERN:
+   
+   try {
+     // Step implementations with logging...
+   } catch (error) {
+     console.error('🚨 Action execution error:', error);
+     console.error('🔍 Error details:', {
+       errorMessage: error.message,
+       errorStack: error.stack,
+       actionName: '${name}',
+       parametersReceived: Object.keys(parameters || {}),
+       stepInProgress: 'Identify which step was executing when error occurred'
+     });
+     return {
+       success: false,
+       data: null,
+       message: 'Action execution failed: ' + (error.message || 'Unknown error'),
+       executionTime: Date.now() - startTime
+     };
+   }
+
 9. ENVIRONMENT VARIABLES:
    🚨 CRITICAL: ONLY generate environment variables if the user explicitly mentioned a specific external service!
    
@@ -1349,41 +1706,81 @@ Generate production-ready, executable JavaScript code that implements the busine
 🚨 FINAL VALIDATION CHECKLIST - Your code MUST pass these checks:
 
 1. **Input Parameter Validation**: MUST include the input validation code provided above:
-   - Include the validateInputParameters function at the start of your code
-   - Call it before any database operations
-   - Return early with error if validation fails
+   - ✅ COPY the validateInputParameters function from above EXACTLY - do not modify it
+   - ✅ PASTE the validation code at the start of your function without changes
+   - ✅ CALL validateInputParameters(parameters) before any database operations
+   - ✅ RETURN early if validation fails - do not continue with database operations
+   - ❌ NEVER create your own validation logic for enum fields
+   - ❌ NEVER generate lines like "const validEnumValues_status = ['DRAFT', 'APPROVED']"
+   - ❌ NEVER ignore the provided validation code
 
-2. **Enum Field Validation**: For any field that uses enum types:
+2. **Step Logging**: MUST include console.log statements for each step:
+   - ✅ Log step start: console.log('🔄 Step N: [Description]')
+   - ✅ Log step input: console.log('📥 Step N Input:', { inputData })
+   - ✅ Log step output: console.log('📤 Step N Output:', { outputData, recordCount })
+   - ✅ Include data counts, IDs, and key results in logs
+   - ✅ This helps debug data flow and identify where errors occur
+
+3. **Enum Field Validation**: For any field that uses enum types:
    - NEVER pass empty strings ("") to enum fields
    - ALWAYS validate enum values before database operations  
    - Use conditional logic to skip enum filters if values are invalid
    - Provide meaningful default values or omit the field entirely
 
-3. **Parameter Type Validation**: For each input parameter used in Prisma queries:
+4. **Parameter Type Validation**: For each input parameter used in Prisma queries:
    - If parameter is marked as array/list: MUST use { in: paramValue }
    - If parameter is single value: MUST use direct comparison paramValue
    - NEVER mix these up or you'll get runtime errors
 
-4. **Prisma Query Structure**: Every database query must:
-   - Use only fields that exist in the model schema
-   - Use correct array vs single value syntax
-   - Handle nullable fields appropriately
-   - Build where clauses conditionally to avoid empty/invalid values
+5. **Prisma Query Structure**: Every database query must:
+   - ✅ ONLY use model names from the AVAILABLE MODELS section above
+   - ✅ Convert model names to camelCase: "AdCampaign" → prisma.adCampaign
+   - ❌ NEVER invent model names like "contentModel", "advertisementModel"
+   - ✅ Use only fields that exist in the model schema
+   - ✅ Use correct array vs single value syntax
+   - ✅ Handle nullable fields appropriately
+   - ✅ Build where clauses conditionally to avoid empty/invalid values
 
-5. **Error Prevention**: Your code should:
+6. **Variable Flow Validation**: Your code must prevent missing variables:
+   - ✅ DEFINE all step output variables using exact outputField names from pseudo steps
+   - ✅ VALIDATE that step outputs exist before using them in next steps
+   - ✅ CHECK if variables are defined: if (!variable) throw new Error('Variable undefined')
+   - ✅ USE optional chaining: variable?.property instead of variable.property
+   - ✅ PROVIDE fallbacks: variable || defaultValue
+   - ❌ NEVER assume a variable from previous step exists without checking
+
+7. **Error Prevention**: Your code should:
    - Validate input parameters before using them
    - Handle edge cases (empty arrays, null values, empty strings, etc.)
    - Use defensive programming practices
    - Build database queries conditionally based on parameter validity
+   - ✅ ALWAYS check if variables are arrays before calling .map()
+   - ✅ Use Array.isArray(variable) before variable.map()
+   - ❌ NEVER assume a variable is an array without checking
 
 CRITICAL: The user has reported these exact errors that your code MUST prevent:
 1. "Invalid value for argument status. Expected StatusEnum" - caused by empty strings in enum fields
 2. "Argument \`take\`: Invalid value provided. Expected Int, provided String" - caused by string values in numeric fields
+3. "i.platforms.map is not a function" - caused by calling .map() on non-array variables
+
+🚨 MANDATORY ERROR PREVENTION PATTERNS:
+✅ CORRECT array handling:
+if (Array.isArray(someVariable)) {
+  const results = someVariable.map(item => processItem(item));
+} else {
+  console.warn('Expected array but got:', typeof someVariable);
+  const results = [];
+}
+
+❌ WRONG array handling:
+const results = someVariable.map(item => processItem(item)); // Will crash if not array
 
 Your generated code MUST:
+- Include the provided validation code exactly as given
 - Validate enum values before using them in Prisma queries
 - Convert string parameters to proper types (integers, dates, booleans) before database operations
-- Use parseInt() for take/skip parameters and parseFloat() for numeric comparisons`;
+- Use parseInt() for take/skip parameters and parseFloat() for numeric comparisons
+- Check Array.isArray() before calling .map() on any variable`;
 
   const result = await generateObject({
     model,
@@ -1412,16 +1809,31 @@ ${extractedInputParams.map((param: any) => `- ${param.name}: ${param.type} (${pa
 
 Generate complete, executable code that implements each pseudo step as a distinct code block:
 
-IMPLEMENTATION REQUIREMENTS:
-1. For each pseudo step, create a clearly commented code section
-2. STEP 1 SPECIAL RULE: Step 1 inputs are the action's main input parameters (input.paramName)
-3. STEP 2+ RULE: Use outputs from previous steps as inputs
-4. Produce all the outputFields defined for each step  
-5. Pass step outputs as inputs to subsequent steps using clear variable names
-6. Follow the exact step type implementation (Database find many, AI analysis, etc.)
-7. Handle the data flow between steps using the defined input/output structure
+🚨 CRITICAL IMPLEMENTATION REQUIREMENTS:
 
-Generate production-ready code that follows this step-by-step pattern and handles all input parameters correctly.`
+1. **Respect User Customizations**: The pseudo steps may have been edited by the user in the UI
+   - ✅ Follow the EXACT step descriptions provided
+   - ✅ Use the EXACT input/output fields specified
+   - ✅ Use the EXACT step types specified
+   - ✅ Use the EXACT model names specified in each step
+   - ❌ NEVER modify or "improve" the user's step definitions
+
+2. **Step Implementation Rules**:
+   - For each pseudo step, create a clearly commented code section with logging
+   - STEP 1 SPECIAL RULE: Step 1 inputs are the action's main input parameters (parameters.paramName)
+   - STEP 2+ RULE: Use outputs from previous steps as inputs
+   - Produce all the outputFields defined for each step  
+   - Pass step outputs as inputs to subsequent steps using clear variable names
+   - Follow the exact step type implementation (Database find many, AI analysis, etc.)
+   - Handle the data flow between steps using the defined input/output structure
+
+3. **User Edit Preservation**:
+   - If user specified a model name, use that exact model name
+   - If user specified field names, use those exact field names
+   - If user customized the step description, implement exactly what they described
+   - The technical specification is just context - the pseudo steps are authoritative
+
+Generate production-ready code that follows the user-edited pseudo steps exactly and handles all input parameters correctly.`
       }
     ],
     temperature: 0.2,
@@ -1463,7 +1875,8 @@ export async function generateCompleteAction(
   entityType: string = 'general',
   existingActions: any[] = [],
   prismaSchema?: string,
-  externalApis?: any[]
+  externalApis?: any[],
+  availableEnums?: any[]
 ): Promise<any> {
   console.log(`🚀 Generating complete action using NEW 3-step flow: ${actionSpec.name}`);
   console.log(`📋 New Pattern: 1) Generate Technical Spec → 2) Generate Pseudo Steps → 3) Generate Code`);
@@ -1481,7 +1894,8 @@ export async function generateCompleteAction(
       businessContext,
       availableModels,
       prismaSchema,
-      externalApis
+      externalApis,
+      availableEnums
     );
     
     console.log(`✅ Step 1/3 complete: Generated technical specification`);
@@ -1506,7 +1920,8 @@ export async function generateCompleteAction(
       actionDescription,
       pseudoSteps,
       availableModels,
-      businessContext
+      businessContext,
+      availableEnums
     );
     
     // Convert UI components to format expected by ActionExecutionModal
@@ -1626,9 +2041,15 @@ export async function generateCompleteAction(
         };
       };
       
-      // Create fallback components using the helper function
-      const currentEnumInfo = extractEnumInformation(prismaSchema || '');
-      console.log('🔍 Current enum info for fallback components:', currentEnumInfo);
+      // Create fallback components using the helper function with correct enum data
+      let currentEnumInfo: Record<string, string[]> = {};
+      if (availableEnums && availableEnums.length > 0) {
+        currentEnumInfo = extractEnumInformationFromDatabase(availableEnums);
+        console.log('🔍 Using database enum info for fallback components:', currentEnumInfo);
+      } else {
+        currentEnumInfo = extractEnumInformation(prismaSchema || '');
+        console.log('🔍 Falling back to schema parsing for fallback components:', currentEnumInfo);
+      }
       
       const fallbackComponents = pseudoSteps[0].inputFields.map((field: any, index: number) => {
         console.log(`🔍 Processing field for UI: ${field.name} (type: ${field.type}, kind: ${field.kind})`);
@@ -1662,7 +2083,8 @@ export async function generateCompleteAction(
       undefined, // enhancedAnalysis
       undefined, // testResults
       prismaSchema,
-      technicalSpec // Pass technical spec as primary implementation guide
+      technicalSpec, // Pass technical spec as primary implementation guide
+      availableEnums // Pass the top-level enums array for proper validation
     );
     
     console.log(`✅ Step 3/3 complete: Generated ${codeResult.code.length} chars of executable code`);
@@ -1804,25 +2226,22 @@ export async function updatePseudoStepsFromSpec(
   // Use the enhanced description approach but with updated spec
   const enhancedDescription = `${updatedSpec.purpose}
 
-UPDATED TECHNICAL SPECIFICATION:
-${updatedSpec.implementationApproach}
+UPDATED TECHNICAL SPECIFICATION (Architecture Context):
+${updatedSpec.architectureOverview}
 
 AVAILABLE PRISMA SCHEMA:
 ${updatedSpec.availablePrismaSchema}
 
-SEQUENTIAL STEPS:
-${updatedSpec.sequentialSteps.map(step => `Step ${step.stepNumber}: ${step.stepTitle} - ${step.description}`).join('\n')}
+DATA FLOW STRATEGY:
+${updatedSpec.dataFlowStrategy}
 
-INPUT PARAMETERS:
-${updatedSpec.inputParameters.map(p => `${p.name}: ${p.type} - ${p.description}`).join('\n')}
+DATABASE INTEGRATION:
+${updatedSpec.databaseIntegration}
 
-OUTPUT PARAMETERS:
-${updatedSpec.outputParameters.map(p => `${p.name}: ${p.type} - ${p.description}`).join('\n')}
+ERROR HANDLING STRATEGY:
+${updatedSpec.errorHandlingStrategy}
 
-GLOBAL ERROR HANDLING:
-${updatedSpec.globalErrorHandling}
-
-This updated technical specification should guide the pseudo step generation to ensure implementable, detailed steps that reflect the specification changes.`;
+This updated technical specification provides architectural context to guide pseudo step generation.`;
 
   const pseudoSteps = await generatePseudoSteps(
     updatedSpec.name,

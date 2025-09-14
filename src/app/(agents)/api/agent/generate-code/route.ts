@@ -4,7 +4,7 @@ import { generateActionExecutableCode } from '@/lib/ai/tools/agent-builder/actio
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, description, pseudoSteps, availableModels, entityType, businessContext, inputParameters, enhancedAnalysis, testResults } = body;
+    const { name, description, pseudoSteps, availableModels, entityType, businessContext, inputParameters, enhancedAnalysis, testResults, prismaSchema, technicalSpec, availableEnums } = body;
 
     // Use the shared function that replicates the exact API route logic
     const result = await generateActionExecutableCode(
@@ -16,7 +16,10 @@ export async function POST(request: NextRequest) {
       businessContext,
       inputParameters,
       enhancedAnalysis,
-      testResults
+      testResults,
+      prismaSchema,
+      technicalSpec,
+      availableEnums
     );
 
     return NextResponse.json({
@@ -43,7 +46,7 @@ export async function GET() {
       endpoint: '/api/agent/generate-code',
       method: 'POST',
       requiredFields: ['name', 'description', 'pseudoSteps'],
-      optionalFields: ['availableModels', 'entityType', 'businessContext'],
+      optionalFields: ['availableModels', 'entityType', 'businessContext', 'prismaSchema', 'technicalSpec', 'availableEnums'],
       responseFormat: 'Generated executable code with environment variables and parameters'
     }
   });

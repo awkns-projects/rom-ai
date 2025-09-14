@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
+import { isDevelopmentEnvironment } from '../../../../constants';
 import type { Step1Output } from './step1-database-generation';
 import type { Step2Output } from './step2-action-generation';
 import type { Step3Output } from './step3-schedule-generation';
@@ -586,6 +589,7 @@ export async function generateNextJsProject(
     actions,
     schedules,
     prismaSchema: step1Output.prismaSchema,
+    enums: step1Output.enums, // CRITICAL FIX: Pass enums for proper action generation
     neonOptions,
     agentConfig,
     vercelConfig: {
@@ -709,6 +713,13 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     
     await vercelClient.setEnvironmentVariables(vercelProjectId, allEnvVars);
     
+    // Step 4.5: Save files locally in development environment (before deployment)
+    let backupPath: string | null = null;
+    if (isDevelopmentEnvironment) {
+      sendProgress('💾 Saving deployment files locally (development mode)...');
+      backupPath = await saveFilesToDisk(projectName, projectFiles, onProgress);
+    }
+    
     // Step 5: Deploy the project
     sendProgress('🚀 Uploading and deploying to Vercel...');
     sendProgress('📦 Build process will generate Prisma schema and handle migrations automatically');
@@ -768,7 +779,8 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
         'Prisma schema and migrations handled by Vercel build process',
         'Environment variables configured',
         'Cron jobs set up for scheduled tasks',
-        'API endpoints generated for all actions'
+        'API endpoints generated for all actions',
+        ...(backupPath ? [`Development backup saved to: ${backupPath}`] : [])
       ],
        apiEndpoints,
        cronJobs,
@@ -839,6 +851,13 @@ export async function updateExistingDeployment(input: {
       await vercelClient.setEnvironmentVariables(vercelProjectId, environmentVariables);
     }
     
+    // Save files locally in development environment (before update deployment)
+    let backupPath: string | null = null;
+    if (isDevelopmentEnvironment) {
+      console.log('💾 Saving updated deployment files locally (development mode)...');
+      backupPath = await saveFilesToDisk(projectName, projectFiles);
+    }
+    
     // Deploy updated files
     console.log('🚀 Deploying updates to Vercel...');
     console.log('📦 Build process will auto-generate new Prisma migrations during deployment');
@@ -866,7 +885,8 @@ export async function updateExistingDeployment(input: {
         'Neon database unchanged',
         'Prisma migrations auto-generated during Vercel build',
         'Environment variables updated',
-        'Cron jobs reconfigured'
+        'Cron jobs reconfigured',
+        ...(backupPath ? [`Development backup saved to: ${backupPath}`] : [])
       ],
       apiEndpoints,
       cronJobs,
@@ -882,6 +902,104 @@ export async function updateExistingDeployment(input: {
   } catch (error) {
     console.error('❌ Deployment update failed:', error);
     throw error;
+  }
+}
+
+/**
+ * Save deployment files to local filesystem in development environment
+ */
+async function saveFilesToDisk(
+  projectName: string,
+  files: Record<string, string>,
+  onProgress?: (message: string) => void
+): Promise<string | null> {
+  if (!isDevelopmentEnvironment) {
+    return null;
+  }
+
+  const sendProgress = (message: string) => {
+    console.log(message);
+    if (onProgress) {
+      onProgress(message);
+    }
+  };
+
+  try {
+    // Create a timestamp for unique directory naming
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0] + '_' + 
+                     new Date().toISOString().replace(/[:.]/g, '-').split('T')[1].substring(0, 8);
+    
+    // Sanitize project name for directory
+    const sanitizedProjectName = projectName
+      .toLowerCase()
+      .replace(/[^a-z0-9.\-_]/g, '-')
+      .replace(/--+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    // Create output directory in workspace root
+    const outputDir = join(process.cwd(), 'deployment-backups', `${sanitizedProjectName}-${timestamp}`);
+    
+    sendProgress(`💾 Saving deployment files to: ${outputDir}`);
+    
+    // Create directory structure
+    await mkdir(outputDir, { recursive: true });
+    
+    // Save each file
+    let savedCount = 0;
+    const totalFiles = Object.keys(files).length;
+    
+    for (const [filePath, content] of Object.entries(files)) {
+      const fullPath = join(outputDir, filePath);
+      const fileDir = join(fullPath, '..');
+      
+      // Create subdirectories if needed
+      await mkdir(fileDir, { recursive: true });
+      
+      // Write file
+      await writeFile(fullPath, content, 'utf8');
+      savedCount++;
+      
+      if (savedCount % 10 === 0 || savedCount === totalFiles) {
+        sendProgress(`💾 Saved ${savedCount}/${totalFiles} files...`);
+      }
+    }
+    
+    // Create a summary file
+    const summaryContent = `# Deployment Backup Summary
+
+## Project Information
+- **Project Name**: ${projectName}
+- **Backup Date**: ${new Date().toISOString()}
+- **Environment**: Development
+- **Total Files**: ${totalFiles}
+
+## Files Included
+${Object.keys(files).map(path => `- ${path}`).join('\n')}
+
+## Usage
+This backup contains all the files that were deployed to Vercel. You can:
+1. Copy these files to a new Next.js project
+2. Run \`npm install\` to install dependencies
+3. Set up your environment variables from \`.env.example\`
+4. Run \`npm run dev\` to start the development server
+
+## Note
+This backup was automatically created during Vercel deployment in development mode.
+`;
+    
+    await writeFile(join(outputDir, 'README.md'), summaryContent, 'utf8');
+    
+    sendProgress(`✅ Successfully saved ${totalFiles} files to deployment backup`);
+    sendProgress(`📁 Backup location: ${outputDir}`);
+    
+    return outputDir;
+    
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    sendProgress(`❌ Failed to save deployment files: ${errorMessage}`);
+    console.error('Error saving deployment files:', error);
+    // Don't throw - this is a nice-to-have feature, deployment should continue
+    return null;
   }
 }
 

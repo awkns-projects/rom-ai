@@ -13,6 +13,8 @@ interface ActionsListEditorProps {
   actions: AgentAction[];
   onUpdate: (actions: AgentAction[]) => void;
   allModels?: AgentModel[];
+  allEnums?: any[];
+  prismaSchema?: string;
   documentId?: string;
 }
 
@@ -31,6 +33,8 @@ export const ActionsListEditor = memo(({
   actions,
   onUpdate,
   allModels = [],
+  allEnums = [],
+  prismaSchema = '',
   documentId
 }: ActionsListEditorProps) => {
   const [editingActionId, setEditingActionId] = useState<string | null>(null);
@@ -411,6 +415,8 @@ export const ActionsListEditor = memo(({
           onDelete={() => deleteAction(editingAction.id)}
           onGoBack={() => setEditingActionId(null)}
           allModels={allModels}
+          allEnums={allEnums}
+          prismaSchema={prismaSchema}
           documentId={documentId}
         />
       </div>

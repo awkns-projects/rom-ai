@@ -60,6 +60,7 @@ async function generateBusinessProcessActions(
 
 BUSINESS CONTEXT:
 - Business Goal: ${businessContext}
+- Available Database Models: ${availableModels.map((m: any) => `${m.name} (${m.fields?.map((f: any) => f.name).join(', ') || 'no fields'})`).join('\n') || 'No models available'}
 - External APIs: ${externalApis && externalApis.length > 0 ? 
   externalApis.map((api: any) => `${api.provider} (${api.connectionType})`).join('\n') :
   '- No external APIs specified'
@@ -265,7 +266,8 @@ async function createCompleteAction(
   entityType: string,
   existingActions: any[] = [],
   prismaSchema?: string,
-  externalApis?: any[]
+  externalApis?: any[],
+  availableEnums?: any[]
 ): Promise<any> {
   // Use the AI-generated values directly - the AI should generate proper name and title
   const actionTitle = actionSpec.title;
@@ -289,7 +291,8 @@ async function createCompleteAction(
       entityType,
       existingActions,
       prismaSchema,
-      externalApis
+      externalApis,
+      availableEnums
     );
   } catch (error) {
     console.error(`❌ Failed to create complete action using shared logic: ${actionName}`, error);
@@ -351,7 +354,8 @@ export async function executeStep2ActionGeneration(
           entityType,
           existingAgent?.actions || [],
           databaseGeneration?.prismaSchema,
-          step0Analysis.externalApis || []
+          step0Analysis.externalApis || [],
+          databaseGeneration?.enums || []
         );
       })
     );

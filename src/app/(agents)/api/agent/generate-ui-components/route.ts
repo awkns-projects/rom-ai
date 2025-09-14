@@ -4,7 +4,7 @@ import { generateActionUIComponents } from '@/lib/ai/tools/agent-builder/action-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, description, pseudoSteps, availableModels, businessContext } = body;
+    const { name, description, pseudoSteps, availableModels, businessContext, availableEnums } = body;
 
     // Validate required fields
     if (!name || !description || !pseudoSteps || !Array.isArray(pseudoSteps)) {
@@ -20,7 +20,8 @@ export async function POST(request: NextRequest) {
       description,
       pseudoSteps,
       availableModels || [],
-      businessContext
+      businessContext,
+      availableEnums
     );
 
     return NextResponse.json({
@@ -47,7 +48,7 @@ export async function GET() {
       endpoint: '/api/agent/generate-ui-components',
       method: 'POST',
       requiredFields: ['name', 'description', 'pseudoSteps'],
-      optionalFields: ['availableModels', 'businessContext'],
+      optionalFields: ['availableModels', 'businessContext', 'availableEnums'],
       responseFormat: 'Generated UI components array'
     }
   });

@@ -2046,6 +2046,8 @@ const AgentBuilderContent = memo(({
                       actions={agentData.actions || []}
                       onUpdate={(actions) => updateAgentData({ ...agentData, actions })}
                       allModels={agentData.models || []}
+                      allEnums={agentData.enums || []}
+                      prismaSchema={agentData.prismaSchema || ''}
                       documentId={documentId}
                     />
                   </div>
