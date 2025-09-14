@@ -126,11 +126,11 @@ export class MobileAppTemplate {
     // Generate Next.js config for Vercel
     files['next.config.js'] = this.generateNextConfig();
 
-    // Generate TypeScript config (same for all targets)
+    // Generate TypeScript config optimized for App Router
     files['tsconfig.json'] = JSON.stringify({
       compilerOptions: {
-        target: "es5",
-        lib: ["dom", "dom.iterable", "es6"],
+        target: "es2017",
+        lib: ["dom", "dom.iterable", "es2017"],
         allowJs: true,
         skipLibCheck: true,
         strict: true,
@@ -143,7 +143,8 @@ export class MobileAppTemplate {
         jsx: "preserve",
         incremental: true,
         plugins: [{ name: "next" }],
-        paths: { "@/*": ["./src/*"] }
+        paths: { "@/*": ["./src/*"] },
+        downlevelIteration: true
       },
       include: ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
       exclude: ["node_modules"]
@@ -261,10 +262,10 @@ pids/
     // Add AI SDK packages for Vercel (enabled by default)
     if (aiSdkEnabled) {
       Object.assign(baseDependencies, {
-        "ai": "^4.3.13",
-        "@ai-sdk/openai": "^1.3.22",
-        "@ai-sdk/react": "^1.2.11", 
-        "@ai-sdk/anthropic": "^0.0.50",
+        "ai": "^4.0.0",
+        "@ai-sdk/openai": "^1.0.0",
+        "@ai-sdk/react": "^1.0.0", 
+        "@ai-sdk/anthropic": "^1.0.0",
         "zod": "^3.23.8",
         "nanoid": "^5.0.8"
       });
@@ -419,9 +420,9 @@ CRON_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(
     return JSON.stringify({
       buildCommand: "npm run vercel-build",
       functions: {
-        "src/pages/api/cron/**": { maxDuration: 300 },
-        "src/pages/api/models/**": { maxDuration: 60 },
-        "src/pages/api/actions/**": { maxDuration: 120 }
+        "src/app/api/cron/**": { maxDuration: 300 },
+        "src/app/api/models/**": { maxDuration: 60 },
+        "src/app/api/actions/**": { maxDuration: 120 }
       },
       crons: cronConfigs,
       installCommand: "npm install",
@@ -440,13 +441,13 @@ CRON_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(
 
   private generatePages(): Record<string, string> {
     return {
-      'src/pages/_app.tsx': this.generateAppPage(),
-      'src/pages/index.tsx': this.generateHomePage(),
-      'src/pages/models/index.tsx': this.generateModelsListPage(),
-      'src/pages/models/[modelName].tsx': this.generateModelDetailPage(),
-      'src/pages/actions/index.tsx': this.generateActionsPage(),
-      'src/pages/schedules/index.tsx': this.generateSchedulesPage(),
-      'src/pages/chat/index.tsx': this.generateChatPage()
+      'src/app/layout.tsx': this.generateAppLayout(),
+      'src/app/page.tsx': this.generateHomePage(),
+      'src/app/models/page.tsx': this.generateModelsListPage(),
+      'src/app/models/[modelName]/page.tsx': this.generateModelDetailPage(),
+      'src/app/actions/page.tsx': this.generateActionsPage(),
+      'src/app/schedules/page.tsx': this.generateSchedulesPage(),
+      'src/app/chat/page.tsx': this.generateChatPage()
     };
   }
 
@@ -459,34 +460,35 @@ CRON_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(
       'src/components/ScheduleCard.tsx': this.generateScheduleCardComponent(),
       'src/components/ChatMessage.tsx': this.generateChatMessageComponent(),
       'src/components/LoadingSpinner.tsx': this.generateLoadingSpinnerComponent(),
-      'src/components/ActionExecutionModal.tsx': this.generateActionExecutionModal()
+      'src/components/ActionExecutionModal.tsx': this.generateActionExecutionModal(),
+      'src/components/ClientProviders.tsx': this.generateClientProviders()
     };
   }
 
   private generateApiRoutes(): Record<string, string> {
     const files: Record<string, string> = {};
 
-    // System endpoints
-    files['src/pages/api/health.ts'] = this.generateHealthEndpoint();
-    files['src/pages/api/stats.ts'] = this.generateStatsEndpoint();
-    files['src/pages/api/models/[modelName].ts'] = this.generateModelEndpoint();
-    files['src/pages/api/models/[modelName]/[id].ts'] = this.generateModelRecordEndpoint();
-    files['src/pages/api/chat.ts'] = this.generateSelfContainedChatEndpoint();
+    // System endpoints (App Router format)
+    files['src/app/api/health/route.ts'] = this.generateHealthEndpoint();
+    files['src/app/api/stats/route.ts'] = this.generateStatsEndpoint();
+    files['src/app/api/models/[modelName]/route.ts'] = this.generateModelEndpoint();
+    files['src/app/api/models/[modelName]/[id]/route.ts'] = this.generateModelRecordEndpoint();
+    files['src/app/api/chat/route.ts'] = this.generateSelfContainedChatEndpoint();
     
     // Agent configuration endpoints (embedded data)
-    files['src/pages/api/agent/actions.ts'] = this.generateActionsEndpoint();
-    files['src/pages/api/agent/schedules.ts'] = this.generateSchedulesEndpoint();
-    files['src/pages/api/agent/models.ts'] = this.generateModelsEndpoint();
-    files['src/pages/api/agent/config.ts'] = this.generateAgentConfigEndpoint();
+    files['src/app/api/agent/actions/route.ts'] = this.generateActionsEndpoint();
+    files['src/app/api/agent/schedules/route.ts'] = this.generateSchedulesEndpoint();
+    files['src/app/api/agent/models/route.ts'] = this.generateModelsEndpoint();
+    files['src/app/api/agent/config/route.ts'] = this.generateAgentConfigEndpoint();
 
     // Static action endpoints (one file per action with embedded code)
     this.options.actions.forEach(action => {
-      files[`src/pages/api/actions/${action.name}.ts`] = this.generateStaticActionEndpoint(action);
+      files[`src/app/api/actions/${action.name}/route.ts`] = this.generateStaticActionEndpoint(action);
     });
 
     // Static cron endpoints (one file per schedule with embedded code)
     this.options.schedules.forEach(schedule => {
-      files[`src/pages/api/cron/${schedule.name}.ts`] = this.generateStaticCronEndpoint(schedule);
+      files[`src/app/api/cron/${schedule.name}/route.ts`] = this.generateStaticCronEndpoint(schedule);
     });
 
     return files;
@@ -511,7 +513,7 @@ CRON_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(
 
   private generateStyles(): Record<string, string> {
     return {
-      'src/styles/globals.css': this.generateGlobalStyles(),
+      'src/app/globals.css': this.generateGlobalStyles(),
       '.gitignore': this.generateGitIgnore()
     };
   }
@@ -522,6 +524,34 @@ CRON_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(
     };
   }
 
+  // App Router layout generator
+  private generateAppLayout(): string {
+    return `import type { Metadata } from 'next'
+import './globals.css'
+import ClientProviders from '@/components/ClientProviders'
+
+export const metadata: Metadata = {
+  title: '${this.options.agentConfig?.name || this.options.projectName}',
+  description: '${this.options.agentConfig?.description || 'Smart agent powered by AI'}',
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <ClientProviders>
+          {children}
+        </ClientProviders>
+      </body>
+    </html>
+  )
+}`;
+  }
+
   // Component generators
   private generateLayoutComponent(): string {
     const agentName = escapeJSString(this.options.agentConfig?.name || this.options.projectName);
@@ -529,9 +559,9 @@ CRON_SECRET="${Math.random().toString(36).substring(2) + Math.random().toString(
     const agentDescription = escapeJSString(this.options.agentConfig?.description || 'Smart agent powered by AI');
     const agentAvatar = this.options.agentConfig?.avatar;
     
-    return `import { useState, useEffect, ReactNode } from 'react';
-import Head from 'next/head';
-import { useRouter } from 'next/router';
+    return `'use client'
+import { useState, useEffect, ReactNode } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import MobileNav from './MobileNav';
 import { themes } from '@/lib/theme';
 
@@ -550,6 +580,7 @@ export default function Layout({
 }: LayoutProps) {
   const [isMobile, setIsMobile] = useState(true);
   const router = useRouter();
+  const pathname = usePathname();
   
   // Use embedded local configuration
   const selectedTheme = theme;
@@ -566,89 +597,127 @@ export default function Layout({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Render avatar function
+  const renderAvatar = (size = 32) => {
+    const containerClass = size === 32 ? 'w-8 h-8' : 'w-10 h-10';
+    const iconSize = size === 32 ? 'text-lg' : 'text-xl';
+    
+    if (avatarUrl) {
+      return (
+        <img 
+          src={avatarUrl} 
+          alt="Agent Avatar" 
+          className={\`\${containerClass} rounded-lg object-cover\`}
+          onError={(e) => {
+            // Fallback to theme gradient if image fails to load
+            const target = e.target as HTMLImageElement;
+            target.style.display = 'none';
+            target.nextElementSibling?.classList.remove('hidden');
+          }}
+        />
+      );
+    }
+    
+    return (
+      <div className={\`\${containerClass} \${currentTheme.bg} border \${currentTheme.border} rounded-lg flex items-center justify-center\`}>
+        <span className={\`\${iconSize} \${currentTheme.accent}\`}>🤖</span>
+      </div>
+    );
+  };
+
   return (
-    <>
-      <Head>
-        <title>{title}</title>
-        <meta name="description" content={\`\${agentName} - AI Agent Application\`} />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" href="/favicon.ico" />
-      </Head>
+    <div className={\`min-h-screen bg-black relative\`}>
+      {/* Subtle dark gradient overlay */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div className={\`absolute inset-0 bg-gradient-to-br \${currentTheme.gradient}\`}></div>
+      </div>
 
-      <div className={\`min-h-screen bg-black relative\`}>
-        {/* Subtle dark gradient overlay */}
-        <div className="fixed inset-0 pointer-events-none">
-          <div className={\`absolute inset-0 bg-gradient-to-br from-\${currentTheme.primary}-950/40 via-black to-\${currentTheme.primary}-950/20\`}></div>
-        </div>
-
-        {/* Main Content */}
-        <div className={\`relative z-10 \${isMobile ? 'pb-16' : ''}\`}>
-          {/* Desktop Header */}
-          {!isMobile && (
-            <header className={\`\${currentTheme.bg} border-b \${currentTheme.border} sticky top-0 z-40\`}>
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between items-center h-16">
-                  <div className="flex items-center gap-3">
-                    {avatarUrl ? (
-                      <img 
-                        src={avatarUrl} 
-                        alt="Agent Avatar" 
-                        className="w-8 h-8 rounded-lg object-cover"
-                        onError={(e) => {
-                          // Fallback to theme gradient if image fails to load
-                          const target = e.target as HTMLImageElement;
-                          target.style.display = 'none';
-                          target.nextElementSibling?.classList.remove('hidden');
-                        }}
-                      />
-                    ) : null}
-                    <div className={\`w-8 h-8 rounded-lg bg-gradient-to-br \${currentTheme.gradient} border \${currentTheme.border} \${avatarUrl ? 'hidden' : ''}\`}></div>
-                    <h1 className={\`font-mono font-bold text-lg \${currentTheme.light}\`}>{displayName}</h1>
+      {/* Main Content */}
+      <div className={\`relative z-10 \${isMobile ? 'pb-16' : ''}\`}>
+        {/* Mobile Header */}
+        {isMobile && (
+          <div className={\`bg-black/40 border-b \${currentTheme.border} p-4 flex-shrink-0\`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {pathname !== '/' && (
+                  <button
+                    onClick={() => router.push('/')}
+                    className={\`w-8 h-8 \${currentTheme.bg} border \${currentTheme.border} rounded-lg flex items-center justify-center \${currentTheme.bgHover} transition-colors duration-200\`}
+                  >
+                    <span className={\`text-sm \${currentTheme.accent}\`}>🏠</span>
+                  </button>
+                )}
+                {renderAvatar(32)}
+                <div>
+                  <h3 className={\`font-mono font-bold text-sm \${currentTheme.light}\`}>{displayName}</h3>
+                  <div className="flex items-center gap-1">
+                    <div className={\`w-2 h-2 bg-\${currentTheme.primary}-400 rounded-full animate-pulse\`}></div>
+                    <span className={\`font-mono text-xs \${currentTheme.dim}\`}>Live</span>
                   </div>
-                  
-                  <nav className="flex items-center gap-6">
-                    {[
-                      { path: '/', icon: '🏠', label: 'Home' },
-                      { path: '/models', icon: '🗃️', label: 'Data' },
-                      { path: '/actions', icon: '⚡', label: 'Actions' },
-                      { path: '/schedules', icon: '⏰', label: 'Tasks' },
-                      { path: '/chat', icon: '💬', label: 'Chat' }
-                    ].map((item) => (
-                      <button
-                        key={item.path}
-                        onClick={() => router.push(item.path)}
-                        className={\`flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-sm transition-all duration-200 \${
-                          router.pathname === item.path
-                            ? \`\${currentTheme.bgActive} \${currentTheme.accent} border \${currentTheme.borderActive}\`
-                            : \`\${currentTheme.dim} hover:\${currentTheme.light} hover:\${currentTheme.bgHover}\`
-                        }\`}
-                      >
-                        <span>{item.icon}</span>
-                        <span>{item.label}</span>
-                      </button>
-                    ))}
-                  </nav>
                 </div>
               </div>
-            </header>
-          )}
+              <div className="flex gap-1">
+                <div className={\`w-1 h-1 bg-\${currentTheme.primary}-400 rounded-full\`}></div>
+                <div className={\`w-1 h-1 bg-\${currentTheme.primary}-400 rounded-full\`}></div>
+                <div className={\`w-1 h-1 bg-\${currentTheme.primary}-400 rounded-full\`}></div>
+              </div>
+            </div>
+          </div>
+        )}
 
-          {/* Page Content */}
-          <main className={\`\${isMobile ? 'max-w-sm mx-auto px-2' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}\`}>
-            {children}
-          </main>
-        </div>
+        {/* Desktop Header */}
+        {!isMobile && (
+          <header className={\`\${currentTheme.bg} border-b \${currentTheme.border} sticky top-0 z-40\`}>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex justify-between items-center h-16">
+                <div className="flex items-center gap-3">
+                  {renderAvatar(32)}
+                  <h1 className={\`font-mono font-bold text-lg \${currentTheme.light}\`}>{displayName}</h1>
+                </div>
+                
+                <nav className="flex items-center gap-6">
+                  {[
+                    { path: '/', icon: '🏠', label: 'Home' },
+                    { path: '/models', icon: '🗃️', label: 'Data' },
+                    { path: '/actions', icon: '⚡', label: 'Actions' },
+                    { path: '/schedules', icon: '⏰', label: 'Tasks' },
+                    { path: '/chat', icon: '💬', label: 'Chat' }
+                  ].map((item) => (
+                    <button
+                      key={item.path}
+                      onClick={() => router.push(item.path)}
+                      className={\`flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-sm transition-all duration-200 \${
+                        pathname === item.path
+                          ? \`\${currentTheme.bgActive} \${currentTheme.accent} border \${currentTheme.borderActive}\`
+                          : \`\${currentTheme.dim} hover:\${currentTheme.light} hover:\${currentTheme.bgHover}\`
+                      }\`}
+                    >
+                      <span>{item.icon}</span>
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </nav>
+              </div>
+            </div>
+          </header>
+        )}
 
-        {/* Mobile Navigation */}
-        {isMobile && <MobileNav currentTheme={currentTheme} />}
+        {/* Page Content */}
+        <main className={\`\${isMobile ? 'max-w-sm mx-auto' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8'}\`}>
+          {children}
+        </main>
       </div>
-    </>
+
+      {/* Mobile Navigation */}
+      {isMobile && <MobileNav currentTheme={currentTheme} />}
+    </div>
   );
 }`;
   }
 
   private generateMobileNavComponent(): string {
-    return `import { useRouter } from 'next/router';
+    return `'use client'
+import { useRouter, usePathname } from 'next/navigation';
 
 interface MobileNavProps {
   currentTheme: any;
@@ -656,32 +725,36 @@ interface MobileNavProps {
 
 export default function MobileNav({ currentTheme }: MobileNavProps) {
   const router = useRouter();
+  const pathname = usePathname();
 
   const navItems = [
-    { path: '/', icon: '🏠', label: 'Home' },
-    { path: '/models', icon: '🗃️', label: 'Data' },
+    { path: '/models', icon: '🗃️', label: 'Models' },
     { path: '/actions', icon: '⚡', label: 'Actions' },
-    { path: '/schedules', icon: '⏰', label: 'Tasks' },
-    { path: '/chat', icon: '💬', label: 'Chat' }
+    { path: '/schedules', icon: '⏰', label: 'Schedules' },
+    { path: '/chat', icon: '🤖', label: 'AI Chat' }
   ];
 
   return (
-    <div className={\`fixed bottom-0 left-0 right-0 bg-black/90 border-t \${currentTheme.border} z-50\`}>
-      <div className="flex justify-around items-center py-1 px-2 max-w-sm mx-auto">
-        {navItems.map((item) => (
+    <div className={\`bg-black/60 border-t \${currentTheme.border} p-2 flex-shrink-0\`}>
+      <div className={\`grid gap-1\`} style={{ gridTemplateColumns: \`repeat(\${navItems.length}, 1fr)\` }}>
+        {navItems.map((item, index) => (
           <button
             key={item.path}
             onClick={() => router.push(item.path)}
-            className={\`flex flex-col items-center gap-1 p-1 rounded-lg transition-all duration-200 min-w-0 flex-1 \${
-              router.pathname === item.path
-                ? \`\${currentTheme.bgActive} \${currentTheme.accent}\`
-                : \`\${currentTheme.dim} hover:\${currentTheme.light} hover:\${currentTheme.bgHover}\`
+            className={\`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all duration-200 \${
+              pathname === item.path
+                ? \`\${currentTheme.bgActive} border \${currentTheme.borderActive}\`
+                : currentTheme.bgHover
             }\`}
           >
-            <span className={\`text-sm \${router.pathname === item.path ? 'scale-110' : ''} transition-transform\`}>
-              {item.icon}
+            <span className="text-lg mb-1">{item.icon}</span>
+            <span className={\`text-xs font-mono font-medium \${
+              pathname === item.path 
+                ? currentTheme.light
+                : currentTheme.dim
+            }\`}>
+              {item.label}
             </span>
-            <span className="font-mono text-xs font-medium truncate">{item.label}</span>
           </button>
         ))}
       </div>
@@ -696,8 +769,9 @@ export default function MobileNav({ currentTheme }: MobileNavProps) {
     const agentTheme = this.options.agentConfig?.theme || 'green';
     const agentAvatar = this.options.agentConfig?.avatar;
     const agentDescription = this.options.agentConfig?.description || 'Smart agent powered by AI';
-    return `import Layout from '@/components/Layout';
-import { useRouter } from 'next/router';
+    return `'use client'
+import Layout from '@/components/Layout';
+import { useRouter } from 'next/navigation';
 import { themes } from '@/lib/theme';
 
 export default function HomePage() {
@@ -722,13 +796,13 @@ export default function HomePage() {
       path: '/models', 
       icon: '🗃️', 
       title: 'View Data', 
-      desc: 'Manage your information'
+      desc: 'Manage your business information'
     },
     { 
       path: '/actions', 
       icon: '⚡', 
-      title: 'Execute Actions', 
-      desc: 'Run smart operations'
+      title: 'Actions', 
+      desc: 'Run automated workflows'
     },
     { 
       path: '/schedules', 
@@ -740,12 +814,12 @@ export default function HomePage() {
 
   return (
     <Layout title="${agentName}">
-      <div className="p-2 space-y-3">
-        {/* Hero Section */}
-        <div className="text-center space-y-2 pt-3">
+      <div className="p-4 space-y-6">
+        {/* Hero Section with Avatar */}
+        <div className="text-center space-y-4">
           <div className="flex justify-center">
-            <div className={\`p-2 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
-              <div className={\`w-16 h-16 rounded-full bg-gradient-to-br \${currentTheme.gradient} border-2 \${currentTheme.borderActive} flex items-center justify-center overflow-hidden\`}>
+            <div className={\`p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-2xl\`}>
+              <div className={\`w-20 h-20 rounded-full bg-gradient-to-br \${currentTheme.gradient} border-2 \${currentTheme.borderActive} flex items-center justify-center overflow-hidden\`}>
                 {avatarUrl ? (
                   <img 
                     src={avatarUrl} 
@@ -759,31 +833,31 @@ export default function HomePage() {
                     }}
                   />
                 ) : null}
-                <span className={\`text-xl \${currentTheme.accent} \${avatarUrl ? 'hidden' : ''}\`}>🤖</span>
+                <span className={\`text-2xl \${currentTheme.accent} \${avatarUrl ? 'hidden' : ''}\`}>🤖</span>
               </div>
             </div>
           </div>
-          <div className="space-y-1">
-            <h1 className={\`font-mono font-bold text-xl \${currentTheme.light}\`}>{displayName}</h1>
-            <p className={\`font-mono text-xs \${currentTheme.dim} max-w-xs mx-auto leading-tight\`}>
+          <div className="space-y-2">
+            <h2 className={\`font-mono font-bold text-xl \${currentTheme.light}\`}>{displayName}</h2>
+            <p className={\`font-mono text-sm \${currentTheme.dim} max-w-xs mx-auto leading-relaxed\`}>
               ${agentDescription}
             </p>
           </div>
         </div>
 
         {/* Quick Actions */}
-        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-3\`}>
-          <h3 className={\`font-mono font-semibold text-xs \${currentTheme.light} mb-2\`}>Quick Actions</h3>
-          <div className="grid grid-cols-1 gap-2">
+        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
+          <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light} mb-3\`}>Quick Actions</h3>
+          <div className="space-y-2">
             {quickActions.map((action, i) => (
               <button
                 key={i}
                 onClick={() => router.push(action.path)}
-                className={\`w-full flex items-center gap-2 p-2 \${currentTheme.bg} border \${currentTheme.border} \${currentTheme.bgHover} rounded-lg transition-all duration-200\`}
+                className={\`w-full flex items-center gap-3 p-3 \${currentTheme.bgActive} border \${currentTheme.border} rounded-lg \${currentTheme.bgHover} transition-colors\`}
               >
-                <span className="text-sm">{action.icon}</span>
+                <span className="text-lg">{action.icon}</span>
                 <div className="flex-1 text-left">
-                  <div className={\`font-mono text-xs \${currentTheme.light}\`}>{action.title}</div>
+                  <div className={\`font-mono text-sm \${currentTheme.light}\`}>{action.title}</div>
                   <div className={\`font-mono text-xs \${currentTheme.dim}\`}>{action.desc}</div>
                 </div>
                 <span className={\`text-xs \${currentTheme.dim}\`}>→</span>
@@ -792,7 +866,21 @@ export default function HomePage() {
           </div>
         </div>
 
-
+        {/* Status */}
+        <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className={\`w-3 h-3 bg-\${currentTheme.primary}-400 rounded-full animate-pulse\`}></div>
+              <div>
+                <div className={\`font-mono font-semibold text-sm \${currentTheme.light}\`}>System Status</div>
+                <div className={\`font-mono text-xs \${currentTheme.dim}\`}>All systems operational</div>
+              </div>
+            </div>
+            <div className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.border} rounded-lg\`}>
+              <span className={\`font-mono text-xs \${currentTheme.accent}\`}>LIVE</span>
+            </div>
+          </div>
+        </div>
       </div>
     </Layout>
   );
@@ -800,19 +888,6 @@ export default function HomePage() {
   }
 
   // Add other component generators here...
-  private generateAppPage(): string {
-    return `import type { AppProps } from 'next/app';
-import '@/styles/globals.css';
-import { AgentProvider } from '@/contexts/AgentContext';
-
-export default function App({ Component, pageProps }: AppProps) {
-  return (
-    <AgentProvider>
-      <Component {...pageProps} />
-    </AgentProvider>
-  );
-}`;
-  }
 
   // More component generators would go here...
   // For brevity, I'll implement the key ones and indicate where others would go
@@ -848,7 +923,7 @@ class ApiClient {
     return this.request('/api/stats');
   }
 
-  // ========== MODEL CRUD OPERATIONS (Direct SQLite/Prisma) ==========
+  // ========== MODEL CRUD OPERATIONS (Direct PostgreSQL/Prisma) ==========
   
   // Get all records for a model with optional pagination and search
   async getModelRecords(modelName: string, options?: {
@@ -982,193 +1057,157 @@ export default api;`;
     name: 'Matrix',
     primary: 'green',
     gradient: 'from-green-400/20 via-green-500/15 to-emerald-400/20',
-    bgGradient: 'bg-gradient-to-br from-black via-green-950/30 to-emerald-950/20',
     border: 'border-green-400/30',
     accent: 'text-green-400',
     light: 'text-green-200',
     dim: 'text-green-300/70',
-    bg: 'bg-green-500/25',
-    bgHover: 'hover:bg-green-500/35',
-    borderActive: 'border-green-400/60',
-    bgActive: 'bg-green-500/35',
-    background: '#0a0f0a',
-    foreground: '#22c55e'
+    bg: 'bg-green-500/15',
+    bgHover: 'hover:bg-green-500/25',
+    borderActive: 'border-green-400/50',
+    bgActive: 'bg-green-500/25'
   },
   blue: {
     name: 'Ocean',
     primary: 'blue',
     gradient: 'from-blue-400/20 via-sky-500/15 to-cyan-400/20',
-    bgGradient: 'bg-gradient-to-br from-black via-blue-950/30 to-cyan-950/20',
     border: 'border-blue-400/30',
     accent: 'text-blue-400',
     light: 'text-blue-200',
     dim: 'text-blue-300/70',
-    bg: 'bg-blue-500/25',
-    bgHover: 'hover:bg-blue-500/35',
-    borderActive: 'border-blue-400/60',
-    bgActive: 'bg-blue-500/35',
-    background: '#0a0f1a',
-    foreground: '#3b82f6'
+    bg: 'bg-blue-500/15',
+    bgHover: 'hover:bg-blue-500/25',
+    borderActive: 'border-blue-400/50',
+    bgActive: 'bg-blue-500/25'
   },
   purple: {
     name: 'Royal',
     primary: 'purple',
     gradient: 'from-purple-400/20 via-violet-500/15 to-indigo-400/20',
-    bgGradient: 'bg-gradient-to-br from-black via-purple-950/30 to-indigo-950/20',
     border: 'border-purple-400/30',
     accent: 'text-purple-400',
     light: 'text-purple-200',
     dim: 'text-purple-300/70',
-    bg: 'bg-purple-500/25',
-    bgHover: 'hover:bg-purple-500/35',
-    borderActive: 'border-purple-400/60',
-    bgActive: 'bg-purple-500/35',
-    background: '#0f0a1a',
-    foreground: '#a855f7'
+    bg: 'bg-purple-500/15',
+    bgHover: 'hover:bg-purple-500/25',
+    borderActive: 'border-purple-400/50',
+    bgActive: 'bg-purple-500/25'
   },
   cyan: {
     name: 'Cyber',
     primary: 'cyan',
     gradient: 'from-cyan-300/20 via-teal-400/15 to-emerald-300/20',
-    bgGradient: 'bg-gradient-to-br from-black via-cyan-950/30 to-teal-950/20',
     border: 'border-cyan-400/30',
     accent: 'text-cyan-300',
     light: 'text-cyan-100',
     dim: 'text-cyan-200/70',
-    bg: 'bg-cyan-500/25',
-    bgHover: 'hover:bg-cyan-500/35',
-    borderActive: 'border-cyan-400/60',
-    bgActive: 'bg-cyan-500/35',
-    background: '#0a1a1a',
-    foreground: '#06b6d4'
+    bg: 'bg-cyan-500/15',
+    bgHover: 'hover:bg-cyan-500/25',
+    borderActive: 'border-cyan-400/50',
+    bgActive: 'bg-cyan-500/25'
   },
   orange: {
     name: 'Sunset',
     primary: 'orange',
     gradient: 'from-orange-400/20 via-amber-500/15 to-yellow-400/20',
-    bgGradient: 'bg-gradient-to-br from-black via-orange-950/30 to-amber-950/20',
     border: 'border-orange-400/30',
     accent: 'text-orange-300',
     light: 'text-orange-100',
     dim: 'text-orange-200/70',
-    bg: 'bg-orange-500/25',
-    bgHover: 'hover:bg-orange-500/35',
-    borderActive: 'border-orange-400/60',
-    bgActive: 'bg-orange-500/35',
-    background: '#1a0f0a',
-    foreground: '#f97316'
+    bg: 'bg-orange-500/15',
+    bgHover: 'hover:bg-orange-500/25',
+    borderActive: 'border-orange-400/50',
+    bgActive: 'bg-orange-500/25'
   },
   pink: {
     name: 'Neon',
     primary: 'pink',
     gradient: 'from-pink-400/20 via-rose-500/15 to-fuchsia-400/20',
-    bgGradient: 'bg-gradient-to-br from-black via-pink-950/30 to-fuchsia-950/20',
     border: 'border-pink-400/30',
     accent: 'text-pink-300',
     light: 'text-pink-100',
     dim: 'text-pink-200/70',
-    bg: 'bg-pink-500/25',
-    bgHover: 'hover:bg-pink-500/35',
-    borderActive: 'border-pink-400/60',
-    bgActive: 'bg-pink-500/35',
-    background: '#1a0a1a',
-    foreground: '#ec4899'
+    bg: 'bg-pink-500/15',
+    bgHover: 'hover:bg-pink-500/25',
+    borderActive: 'border-pink-400/50',
+    bgActive: 'bg-pink-500/25'
   },
   yellow: {
     name: 'Golden',
     primary: 'yellow',
     gradient: 'from-yellow-300/20 via-amber-400/15 to-orange-300/20',
-    bgGradient: 'bg-gradient-to-br from-black via-yellow-950/30 to-amber-950/20',
     border: 'border-yellow-400/30',
     accent: 'text-yellow-300',
     light: 'text-yellow-100',
     dim: 'text-yellow-200/70',
-    bg: 'bg-yellow-500/25',
-    bgHover: 'hover:bg-yellow-500/35',
-    borderActive: 'border-yellow-400/60',
-    bgActive: 'bg-yellow-500/35',
-    background: '#1a1a0a',
-    foreground: '#eab308'
+    bg: 'bg-yellow-500/15',
+    bgHover: 'hover:bg-yellow-500/25',
+    borderActive: 'border-yellow-400/50',
+    bgActive: 'bg-yellow-500/25'
   },
   red: {
     name: 'Fire',
     primary: 'red',
     gradient: 'from-red-400/20 via-rose-500/15 to-pink-400/20',
-    bgGradient: 'bg-gradient-to-br from-black via-red-950/30 to-rose-950/20',
     border: 'border-red-400/30',
     accent: 'text-red-300',
     light: 'text-red-100',
     dim: 'text-red-200/70',
-    bg: 'bg-red-500/25',
-    bgHover: 'hover:bg-red-500/35',
-    borderActive: 'border-red-400/60',
-    bgActive: 'bg-red-500/35',
-    background: '#1a0a0a',
-    foreground: '#ef4444'
+    bg: 'bg-red-500/15',
+    bgHover: 'hover:bg-red-500/25',
+    borderActive: 'border-red-400/50',
+    bgActive: 'bg-red-500/25'
   },
   indigo: {
     name: 'Deep',
     primary: 'indigo',
     gradient: 'from-indigo-400/20 via-blue-600/15 to-slate-400/20',
-    bgGradient: 'bg-gradient-to-br from-black via-indigo-950/30 to-slate-950/20',
     border: 'border-indigo-400/30',
     accent: 'text-indigo-300',
     light: 'text-indigo-100',
     dim: 'text-indigo-200/70',
-    bg: 'bg-indigo-500/25',
-    bgHover: 'hover:bg-indigo-500/35',
-    borderActive: 'border-indigo-400/60',
-    bgActive: 'bg-indigo-500/35',
-    background: '#0a0a1a',
-    foreground: '#6366f1'
+    bg: 'bg-indigo-500/15',
+    bgHover: 'hover:bg-indigo-500/25',
+    borderActive: 'border-indigo-400/50',
+    bgActive: 'bg-indigo-500/25'
   },
   emerald: {
     name: 'Emerald',
     primary: 'emerald',
     gradient: 'from-emerald-400/20 via-green-600/15 to-teal-400/20',
-    bgGradient: 'bg-gradient-to-br from-black via-emerald-950/30 to-green-950/20',
     border: 'border-emerald-400/30',
     accent: 'text-emerald-300',
     light: 'text-emerald-100',
     dim: 'text-emerald-200/70',
-    bg: 'bg-emerald-500/25',
-    bgHover: 'hover:bg-emerald-500/35',
-    borderActive: 'border-emerald-400/60',
-    bgActive: 'bg-emerald-500/35',
-    background: '#0a1a0f',
-    foreground: '#10b981'
+    bg: 'bg-emerald-500/15',
+    bgHover: 'hover:bg-emerald-500/25',
+    borderActive: 'border-emerald-400/50',
+    bgActive: 'bg-emerald-500/25'
   },
   teal: {
     name: 'Teal',
     primary: 'teal',
     gradient: 'from-teal-400/20 via-cyan-600/15 to-blue-400/20',
-    bgGradient: 'bg-gradient-to-br from-black via-teal-950/30 to-cyan-950/20',
     border: 'border-teal-400/30',
     accent: 'text-teal-300',
     light: 'text-teal-100',
     dim: 'text-teal-200/70',
-    bg: 'bg-teal-500/25',
-    bgHover: 'hover:bg-teal-500/35',
-    borderActive: 'border-teal-400/60',
-    bgActive: 'bg-teal-500/35',
-    background: '#0a1a1a',
-    foreground: '#14b8a6'
+    bg: 'bg-teal-500/15',
+    bgHover: 'hover:bg-teal-500/25',
+    borderActive: 'border-teal-400/50',
+    bgActive: 'bg-teal-500/25'
   },
   rose: {
     name: 'Rose',
     primary: 'rose',
     gradient: 'from-rose-400/20 via-pink-600/15 to-red-400/20',
-    bgGradient: 'bg-gradient-to-br from-black via-rose-950/30 to-pink-950/20',
     border: 'border-rose-400/30',
     accent: 'text-rose-300',
     light: 'text-rose-100',
     dim: 'text-rose-200/70',
-    bg: 'bg-rose-500/25',
-    bgHover: 'hover:bg-rose-500/35',
-    borderActive: 'border-rose-400/60',
-    bgActive: 'bg-rose-500/35',
-    background: '#1a0a0f',
-    foreground: '#f43f5e'
+    bg: 'bg-rose-500/15',
+    bgHover: 'hover:bg-rose-500/25',
+    borderActive: 'border-rose-400/50',
+    bgActive: 'bg-rose-500/25'
   }
 };
 
@@ -1180,13 +1219,16 @@ export type Theme = typeof themes.green;`;
   private generateModelsListPage(): string {
     const agentTheme = this.options.agentConfig?.theme || 'green';
     
-    return `import Layout from '@/components/Layout';
+    return `'use client'
+import Layout from '@/components/Layout';
 import ModelCard from '@/components/ModelCard';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { themes } from '@/lib/theme';
 
 export default function ModelsPage() {
+  const router = useRouter();
   const [modelsData, setModelsData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -1281,16 +1323,42 @@ export default function ModelsPage() {
         ) : modelsData.length > 0 ? (
           <div className="space-y-3">
             {modelsData.map((model, i) => (
-              <ModelCard key={i} model={model} />
+              <div 
+                key={i} 
+                className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-3 cursor-pointer hover:\${currentTheme.bgHover} transition-colors\`}
+                onClick={() => router.push(\`/models/\${model.name}\`)}
+              >
+                <div className="flex items-center gap-3 mb-2">
+                  <span className="text-2xl">{model.emoji || '🗃️'}</span>
+                  <div className="flex-1">
+                    <div className={\`font-mono text-sm font-medium \${currentTheme.light}\`}>{model.title || model.name}</div>
+                    <div className={\`font-mono text-xs \${currentTheme.dim}\`}>
+                      {model.fields?.length || 0} fields
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={\`font-mono text-sm font-bold \${currentTheme.accent}\`}>
+                      {model.recordCount || 0} items
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className={\`font-mono text-xs px-2 py-1 rounded \${currentTheme.bgActive} \${currentTheme.accent}\`}>
+                    {model.error ? 'Error' : 'Ready'}
+                  </span>
+                  <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
+                    Click to view →
+                  </span>
+                </div>
+              </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-12">
-            <div className="text-4xl mb-4">🗃️</div>
-            <h3 className={\`font-mono text-lg \${currentTheme.light} mb-2\`}>No Models Found</h3>
-            <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
-              Your data models will appear here once they're created.
-            </p>
+          <div className="text-center py-8">
+            <div className={\`font-mono text-sm \${currentTheme.dim}\`}>No models created yet</div>
+            <div className={\`font-mono text-xs mt-1 \${currentTheme.dim}\`}>
+              Create your first data model to get started
+            </div>
           </div>
         )}
       </div>
@@ -1300,15 +1368,18 @@ export default function ModelsPage() {
   }
 
   private generateModelDetailPage(): string {
-    return `import Layout from '@/components/Layout';
-import { useRouter } from 'next/router';
+    const agentTheme = this.options.agentConfig?.theme || 'green';
+    
+    return `'use client'
+import Layout from '@/components/Layout';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import LoadingSpinner from '@/components/LoadingSpinner';
 
-export default function ModelDetailPage() {
+export default function ModelDetailPage({ params }: { params: { modelName: string } }) {
   const router = useRouter();
-  const { modelName } = router.query;
+  const { modelName } = params;
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1409,19 +1480,19 @@ export default function ModelDetailPage() {
     <Layout title={\`\${modelName} Records\`}>
       <div className="p-4 space-y-4">
         {/* Header */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 mb-4">
           <button
             onClick={() => router.back()}
-            className="p-2 bg-green-500/15 border border-green-400/30 rounded-lg text-green-400 hover:bg-green-500/25 transition-colors"
+            className={\`p-2 \${currentTheme.bg} border \${currentTheme.border} rounded-lg \${currentTheme.accent} hover:\${currentTheme.bgHover} transition-colors\`}
           >
             ←
           </button>
           <div>
-            <h1 className="text-xl font-mono font-bold text-green-200 capitalize">
+            <h1 className={\`text-xl font-mono font-bold \${currentTheme.light} capitalize\`}>
               {modelName} Records
             </h1>
             {!loading && !error && (
-              <p className="text-sm font-mono text-green-300/70">
+              <p className={\`text-sm font-mono \${currentTheme.dim}\`}>
                 {records.length} record{records.length !== 1 ? 's' : ''} found
               </p>
             )}
@@ -1431,7 +1502,7 @@ export default function ModelDetailPage() {
         {/* Content */}
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <LoadingSpinner />
+            <LoadingSpinner theme="${agentTheme}" />
           </div>
         ) : error ? (
           <div className="bg-red-500/15 border border-red-400/30 rounded-xl p-4 text-center">
@@ -1448,23 +1519,23 @@ export default function ModelDetailPage() {
             {records.map((record, i) => (
               <div
                 key={getRecordId(record) || i}
-                className="bg-green-500/15 border border-green-400/30 rounded-xl p-4"
+                className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-4\`}
               >
                 <div className="flex justify-between items-start mb-3">
-                  <span className="font-mono text-sm font-semibold text-green-200">
+                  <span className={\`font-mono text-sm font-semibold \${currentTheme.light}\`}>
                     Record #{getRecordId(record)}
                   </span>
-                  <span className="font-mono text-xs text-green-300/70">
+                  <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
                     {getRecordDate(record)}
                   </span>
                 </div>
                 <div className="space-y-2">
                   {getDisplayFields(record).map(([key, value]) => (
                     <div key={key} className="flex justify-between items-start gap-3">
-                      <span className="font-mono text-xs text-green-300/70 capitalize">
+                      <span className={\`font-mono text-xs \${currentTheme.dim} capitalize\`}>
                         {key.replace(/([A-Z])/g, ' $1').trim()}:
                       </span>
-                      <span className="font-mono text-xs text-green-200 text-right flex-1 max-w-48 truncate">
+                      <span className={\`font-mono text-xs \${currentTheme.light} text-right flex-1 max-w-48 truncate\`}>
                         {typeof value === 'object' ? JSON.stringify(value) : String(value)}
                       </span>
                     </div>
@@ -1476,8 +1547,8 @@ export default function ModelDetailPage() {
         ) : (
           <div className="text-center py-12">
             <div className="text-4xl mb-4">📋</div>
-            <h3 className="font-mono text-lg text-green-200 mb-2">No Records</h3>
-            <p className="font-mono text-sm text-green-300/70">
+            <h3 className={\`font-mono text-lg \${currentTheme.light} mb-2\`}>No Records</h3>
+            <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
               This model doesn't have any records yet.
             </p>
           </div>
@@ -1491,7 +1562,8 @@ export default function ModelDetailPage() {
   private generateActionsPage(): string {
     const agentTheme = this.options.agentConfig?.theme || 'green';
     
-    return `import Layout from '@/components/Layout';
+    return `'use client'
+import Layout from '@/components/Layout';
 import ActionCard from '@/components/ActionCard';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
@@ -1528,6 +1600,7 @@ export default function ActionsPage() {
         const formattedActions = data.actions.map((action: any) => ({
           id: action.name, // Use name as ID for consistency
           name: action.name,
+          title: action.title || action.name,
           emoji: action.emoji || '⚡',
           description: action.description || 'Execute action',
           type: action.type || 'query',
@@ -1597,24 +1670,17 @@ export default function ActionsPage() {
         {actions.length > 0 ? (
           <div className="space-y-3">
             {actions.map((action) => (
-              <ActionCard
-                key={action.id}
+              <ActionCard 
+                key={action.id} 
                 action={action}
               />
             ))}
           </div>
         ) : (
-          <div className="text-center py-12">
-            <div className="text-4xl mb-4">⚡</div>
-            <h3 className={\`font-mono text-lg \${currentTheme.light} mb-2\`}>No Actions Available</h3>
-            <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
-              Smart actions will appear here once they're configured in the main app.
-            </p>
-            <div className={\`mt-6 p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
-              <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
-                🚀 Actions are automatically synced from the main app. Create actions in the main app 
-                and they'll appear here for interactive execution.
-              </p>
+          <div className="text-center py-8">
+            <div className={\`font-mono text-sm \${currentTheme.dim}\`}>No actions created yet</div>
+            <div className={\`font-mono text-xs mt-1 \${currentTheme.dim}\`}>
+              Create automated actions to help your business
             </div>
           </div>
         )}
@@ -1627,7 +1693,8 @@ export default function ActionsPage() {
   private generateSchedulesPage(): string {
     const agentTheme = this.options.agentConfig?.theme || 'green';
     
-    return `import Layout from '@/components/Layout';
+    return `'use client'
+import Layout from '@/components/Layout';
 import ScheduleCard from '@/components/ScheduleCard';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
@@ -1749,22 +1816,56 @@ export default function SchedulesPage() {
         {schedules.length > 0 ? (
           <div className="space-y-3">
             {schedules.map((schedule) => (
-              <ScheduleCard
-                key={schedule.id}
-                schedule={{
-                  ...schedule,
-                  nextRun: getNextRunTime(schedule.pattern)
-                }}
-              />
+              <div key={schedule.id} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-3\`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className={\`w-2 h-2 rounded-full \${
+                      schedule.trigger?.active ? \`bg-\${currentTheme.primary}-400 animate-pulse\` : \`bg-\${currentTheme.primary}-400/30\`
+                    }\`}></div>
+                    <span className={\`font-mono text-sm font-bold \${currentTheme.accent}\`}>
+                      {schedule.trigger?.pattern || 'Manual'}
+                    </span>
+                  </div>
+                  <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
+                    {schedule.trigger?.active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <div className={\`font-mono text-sm \${currentTheme.light}\`}>{schedule.title || schedule.name}</div>
+                <div className={\`font-mono text-xs mt-1 \${currentTheme.dim}\`}>
+                  {schedule.description || 'No description'}
+                </div>
+              </div>
             ))}
           </div>
         ) : (
-          <div className="text-center py-12">
-            <div className="text-4xl mb-4">⏰</div>
-            <h3 className={\`font-mono text-lg \${currentTheme.light} mb-2\`}>No Schedules</h3>
-            <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
-              Automated tasks will appear here once they're configured.
-            </p>
+          <div className="text-center py-8">
+            <div className={\`font-mono text-sm \${currentTheme.dim}\`}>No schedules created yet</div>
+            <div className={\`font-mono text-xs mt-1 \${currentTheme.dim}\`}>
+              Set up automated tasks and workflows
+            </div>
+          </div>
+        )}
+
+        {/* Today's Progress */}
+        {schedules.length > 0 && (
+          <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-3 mt-4\`}>
+            <h4 className={\`font-mono text-sm font-semibold mb-2 \${currentTheme.light}\`}>Today's Progress</h4>
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs font-mono">
+                <span className={currentTheme.dim}>Schedules Active</span>
+                <span className={\`font-bold \${currentTheme.accent}\`}>
+                  {schedules.filter(s => s.trigger?.active).length}/{schedules.length}
+                </span>
+              </div>
+              <div className={\`w-full bg-\${currentTheme.primary}-900/30 rounded-full h-2\`}>
+                <div 
+                  className={\`bg-\${currentTheme.primary}-400 h-2 rounded-full\`}
+                  style={{ 
+                    width: \`\${schedules.length > 0 ? (schedules.filter(s => s.trigger?.active).length / schedules.length) * 100 : 0}%\` 
+                  }}
+                ></div>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -1776,12 +1877,15 @@ export default function SchedulesPage() {
   private generateChatPage(): string {
     const agentName = escapeJSString(this.options.agentConfig?.name || this.options.projectName);
     const agentDescription = escapeJSString(this.options.agentConfig?.description || 'Smart agent powered by AI');
+    const agentTheme = this.options.agentConfig?.theme || 'green';
     
-    return `import Layout from '@/components/Layout';
+    return `'use client'
+import Layout from '@/components/Layout';
 import ChatMessage from '@/components/ChatMessage';
 import { useChat } from '@ai-sdk/react';
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
+import { themes } from '@/lib/theme';
 
 export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1789,6 +1893,9 @@ export default function ChatPage() {
   const [showQuickActions, setShowQuickActions] = useState(false);
   
   // Use embedded local configuration
+  const selectedTheme = '${agentTheme}';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+  
   const agentConfig = {
     name: '${agentName}',
     description: '${agentDescription}',
@@ -1797,21 +1904,11 @@ export default function ChatPage() {
     schedules: ${JSON.stringify(this.options.schedules)}
   };
   
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
-    api: '/api/chat',
-    initialMessages: [],
-    onError: (error) => {
-      console.error('Chat error:', error);
-    }
-  });
-
-  // Set personalized welcome message when agent config is loaded
-  useEffect(() => {
-    if (agentConfig && messages.length === 0) {
-      const personalizedWelcome = {
-        id: 'welcome',
-        role: 'assistant' as const,
-        content: \`Hello! I'm \${agentConfig.name || 'your AI assistant'}, and I'm here to help you with this agent app. \${agentConfig.description ? 'I\\'m ' + agentConfig.description + '.' : ''}
+  // Create initial welcome message
+  const initialWelcomeMessage = {
+    id: 'welcome',
+    role: 'assistant' as const,
+    content: \`Hello! I'm \${agentConfig.name || 'your AI assistant'}, and I'm here to help you with this agent app. \${agentConfig.description ? 'I\\'m ' + agentConfig.description + '.' : ''}
 
 I can help you with:
 • **Data Management**: View and manage your \${agentConfig.models?.length || ${this.options.models.length}} data models
@@ -1820,14 +1917,16 @@ I can help you with:
 • **System Status**: Check health and performance
 
 What would you like to explore first?\`,
-        createdAt: new Date()
-      };
-      
-      // Add the welcome message to the chat
-      const event = new CustomEvent('chat-initial-message', { detail: personalizedWelcome });
-      window.dispatchEvent(event);
+    createdAt: new Date()
+  };
+
+  const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
+    api: '/api/chat',
+    initialMessages: [initialWelcomeMessage],
+    onError: (error) => {
+      console.error('Chat error:', error);
     }
-  }, [agentConfig, messages.length]);
+  });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1918,41 +2017,37 @@ What would you like to explore first?\`,
   return (
     <Layout title="AI Chat">
       <div className="flex flex-col h-screen">
-        {/* Header */}
-        <div className="p-4 border-b border-green-400/30">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-mono font-bold text-green-200">
-                {agentConfig?.name || 'AI Assistant'}
-              </h1>
-              <p className="text-sm font-mono text-green-300/70">
-                {agentConfig?.description || 'Powered by AI SDK • Ask questions about your data, actions, and schedules'}
-              </p>
+        {/* Chat Header */}
+        <div className={\`p-4 border-b \${currentTheme.border} bg-black/20 backdrop-blur-sm\`}>
+          <div className="flex items-center gap-3">
+            <div className={\`w-10 h-10 \${currentTheme.bg} border \${currentTheme.border} rounded-lg flex items-center justify-center\`}>
+              <span className={\`text-lg \${currentTheme.accent}\`}>🤖</span>
             </div>
-            <button
-              onClick={() => setShowQuickActions(!showQuickActions)}
-              className="p-2 bg-green-500/15 border border-green-400/30 rounded-lg text-green-200 hover:bg-green-500/25 transition-colors"
-            >
-              ⚡ Quick Actions
-            </button>
+            <div>
+              <h3 className={\`font-mono font-bold text-base \${currentTheme.light}\`}>AI Assistant</h3>
+              <div className="flex items-center gap-1">
+                <div className={\`w-2 h-2 bg-\${currentTheme.primary}-400 rounded-full animate-pulse\`}></div>
+                <span className={\`font-mono text-xs \${currentTheme.dim}\`}>Online</span>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Quick Actions Panel */}
         {showQuickActions && (
-          <div className="p-4 bg-green-500/10 border-b border-green-400/20">
+          <div className={\`p-4 \${currentTheme.bg} border-b \${currentTheme.border}\`}>
             <div className="grid grid-cols-2 gap-2">
               {quickActions.map((action, index) => (
                 <button
                   key={index}
                   onClick={action.action}
-                  className="p-3 bg-green-500/15 border border-green-400/30 rounded-lg text-left hover:bg-green-500/25 transition-colors"
+                  className={\`p-3 \${currentTheme.bgActive} border \${currentTheme.border} rounded-lg text-left hover:\${currentTheme.bgHover} transition-colors\`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-lg">{action.icon}</span>
-                    <span className="font-mono text-sm text-green-200">{action.label}</span>
+                    <span className={\`font-mono text-sm \${currentTheme.light}\`}>{action.label}</span>
                   </div>
-                  <p className="text-xs font-mono text-green-300/70">{action.description}</p>
+                  <p className={\`text-xs font-mono \${currentTheme.dim}\`}>{action.description}</p>
                 </button>
               ))}
             </div>
@@ -1969,7 +2064,8 @@ What would you like to explore first?\`,
                 type: message.role === 'user' ? 'user' : 'bot',
                 content: message.content,
                 timestamp: message.createdAt || new Date()
-              }} 
+              }}
+              theme={selectedTheme}
             />
           ))}
           
@@ -1982,6 +2078,7 @@ What would you like to explore first?\`,
                 timestamp: new Date()
               }}
               isTyping={true}
+              theme={selectedTheme}
             />
           )}
 
@@ -2001,9 +2098,9 @@ What would you like to explore first?\`,
 
         {/* Smart Suggestions */}
         {suggestions.length > 0 && input.length > 10 && (
-          <div className="px-4 py-2 border-t border-green-400/20">
+          <div className={\`px-4 py-2 border-t \${currentTheme.border}\`}>
             <div className="flex gap-2 flex-wrap">
-              <span className="text-xs font-mono text-green-300/70 self-center">Suggestions:</span>
+              <span className={\`text-xs font-mono \${currentTheme.dim} self-center\`}>Suggestions:</span>
               {suggestions.map((suggestion, index) => (
                 <button
                   key={index}
@@ -2017,36 +2114,45 @@ What would you like to explore first?\`,
           </div>
         )}
 
-        {/* Input */}
-        <div className="p-4 border-t border-green-400/30">
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <textarea
-              value={input}
-              onChange={handleInputChange}
-              onKeyPress={handleKeyPress}
-              placeholder={\`Ask \${agentConfig?.name || 'me'} anything about your agent...\`}
-              className="flex-1 p-3 bg-green-500/15 border border-green-400/30 rounded-lg text-green-200 font-mono text-sm placeholder-green-300/50 focus:outline-none focus:border-green-400/60 resize-none"
-              rows={1}
-              disabled={isLoading}
-            />
+        {/* Chat Input */}
+        <div className={\`p-4 border-t \${currentTheme.border} bg-black/20 backdrop-blur-sm\`}>
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <textarea
+                value={input}
+                onChange={handleInputChange}
+                onKeyPress={handleKeyPress}
+                placeholder="Ask AI anything..."
+                className={\`w-full \${currentTheme.bg} border \${currentTheme.border} rounded-2xl px-4 py-3 \${currentTheme.light} font-mono text-sm focus:outline-none focus:\${currentTheme.borderActive} placeholder:\${currentTheme.dim} resize-none\`}
+                rows={1}
+                disabled={isLoading}
+              />
+            </div>
             <button
               type="submit"
               disabled={!input.trim() || isLoading}
-              className="px-4 py-3 bg-green-500/25 border border-green-400/50 rounded-lg text-green-200 font-mono text-sm hover:bg-green-500/35 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className={\`w-12 h-12 \${currentTheme.bgActive} \${currentTheme.bgHover} border \${currentTheme.borderActive} rounded-2xl flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm disabled:opacity-50\`}
+              onClick={handleSubmit}
             >
               {isLoading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
-                  Sending...
-                </div>
+                <div className={\`w-4 h-4 border-2 border-\${currentTheme.primary}-400 border-t-transparent rounded-full animate-spin\`}></div>
               ) : (
-                'Send'
+                <span className={\`text-lg \${currentTheme.accent}\`}>→</span>
               )}
             </button>
-          </form>
+          </div>
           
-          <div className="mt-2 text-xs font-mono text-green-300/50 text-center">
-            Press Enter to send • Shift+Enter for new line
+          {/* Quick Actions */}
+          <div className="flex gap-2 mt-3 overflow-x-auto">
+            <button className={\`px-3 py-1.5 \${currentTheme.bg} border \${currentTheme.border} rounded-full font-mono text-xs \${currentTheme.dim} hover:\${currentTheme.light} transition-colors whitespace-nowrap\`}>
+              📊 Show stats
+            </button>
+            <button className={\`px-3 py-1.5 \${currentTheme.bg} border \${currentTheme.border} rounded-full font-mono text-xs \${currentTheme.dim} hover:\${currentTheme.light} transition-colors whitespace-nowrap\`}>
+              ⚡ Run action
+            </button>
+            <button className={\`px-3 py-1.5 \${currentTheme.bg} border \${currentTheme.border} rounded-full font-mono text-xs \${currentTheme.dim} hover:\${currentTheme.light} transition-colors whitespace-nowrap\`}>
+              🗃️ View data
+            </button>
           </div>
         </div>
       </div>
@@ -2057,8 +2163,9 @@ What would you like to explore first?\`,
   private generateModelCardComponent(): string {
     const agentTheme = this.options.agentConfig?.theme || 'green';
     
-    return `import { themes } from '@/lib/theme';
-import { useRouter } from 'next/router';
+    return `'use client'
+import { themes } from '@/lib/theme';
+import { useRouter } from 'next/navigation';
 
 interface ModelCardProps {
   model: {
@@ -2120,7 +2227,8 @@ export default function ModelCard({ model }: ModelCardProps) {
   private generateActionCardComponent(): string {
     const agentTheme = this.options.agentConfig?.theme || 'green';
     
-    return `import { useState } from 'react';
+    return `'use client'
+import { useState } from 'react';
 import ActionExecutionModal from './ActionExecutionModal';
 import { themes } from '@/lib/theme';
 
@@ -2128,6 +2236,7 @@ interface ActionCardProps {
   action: {
     id: string;
     name: string;
+    title?: string;
     emoji?: string;
     description?: string;
     type: string;
@@ -2158,7 +2267,9 @@ export default function ActionCard({ action }: ActionCardProps) {
         onClick={() => setShowModal(true)}
       >
         <div className="flex items-center gap-3 mb-3">
-          <span className="text-lg">{action.emoji || '⚡'}</span>
+          <div className={\`w-10 h-10 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg flex items-center justify-center\`}>
+            <span className="text-lg">{action.emoji || '⚡'}</span>
+          </div>
           <div className="flex-1">
             <h3 className={\`font-mono font-semibold text-sm \${currentTheme.light}\`}>
               {action.title || action.name}
@@ -2168,8 +2279,8 @@ export default function ActionCard({ action }: ActionCardProps) {
             </p>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <span className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg font-mono text-xs \${currentTheme.light}\`}>
-              ⚡ Action
+            <span className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg font-mono text-xs \${currentTheme.accent}\`}>
+              Ready
             </span>
             {lastExecutionTime && (
               <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
@@ -2181,7 +2292,7 @@ export default function ActionCard({ action }: ActionCardProps) {
 
         {/* Quick status indicator */}
         {lastResult && (
-          <div className="flex items-center gap-2 text-xs font-mono">
+          <div className="flex items-center gap-2 text-xs font-mono mb-3">
             <div className={\`w-2 h-2 rounded-full \${
               lastResult.success ? currentTheme.accent.replace('text-', 'bg-') : 'bg-red-400'
             }\`} />
@@ -2205,6 +2316,7 @@ export default function ActionCard({ action }: ActionCardProps) {
           isOpen={showModal}
           onClose={() => setShowModal(false)}
           onComplete={handleActionComplete}
+          theme={selectedTheme}
         />
       )}
     </>
@@ -2215,7 +2327,8 @@ export default function ActionCard({ action }: ActionCardProps) {
   private generateScheduleCardComponent(): string {
     const agentTheme = this.options.agentConfig?.theme || 'green';
     
-    return `import { themes } from '@/lib/theme';
+    return `'use client'
+import { themes } from '@/lib/theme';
 
 interface ScheduleCardProps {
   schedule: {
@@ -2276,7 +2389,9 @@ export default function ScheduleCard({ schedule }: ScheduleCardProps) {
 
 
   private generateChatMessageComponent(): string {
-    return `import { memo } from 'react';
+    return `'use client'
+import { memo } from 'react';
+import { themes } from '@/lib/theme';
 
 interface Message {
   id: string;
@@ -2288,10 +2403,12 @@ interface Message {
 interface ChatMessageProps {
   message: Message;
   isTyping?: boolean;
+  theme?: keyof typeof themes;
 }
 
-const ChatMessage = memo(({ message, isTyping = false }: ChatMessageProps) => {
+const ChatMessage = memo(({ message, isTyping = false, theme = 'green' }: ChatMessageProps) => {
   const isUser = message.type === 'user';
+  const currentTheme = themes[theme] || themes.green;
   
   const formatTimestamp = (date: Date) => {
     return new Intl.DateTimeFormat('en-US', {
@@ -2306,21 +2423,21 @@ const ChatMessage = memo(({ message, isTyping = false }: ChatMessageProps) => {
     return content
       .replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>') // Bold
       .replace(/\\*(.*?)\\*/g, '<em>$1</em>') // Italic
-      .replace(/\`(.*?)\`/g, '<code class="bg-green-500/20 px-1 rounded text-green-200">$1</code>') // Inline code
+      .replace(/\`(.*?)\`/g, \`<code class="\${currentTheme.bg} px-1 rounded \${currentTheme.light}">$1</code>\`) // Inline code
       .replace(/\\n/g, '<br>'); // Line breaks
   };
 
   if (isTyping) {
     return (
       <div className="flex justify-start">
-        <div className="max-w-xs p-3 rounded-lg bg-green-500/15 border border-green-400/30">
+        <div className={\`max-w-xs p-3 rounded-lg \${currentTheme.bg} border \${currentTheme.border}\`}>
           <div className="flex items-center gap-1">
             <div className="flex gap-1">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+              <div className={\`w-2 h-2 bg-\${currentTheme.primary}-400 rounded-full animate-bounce\`}></div>
+              <div className={\`w-2 h-2 bg-\${currentTheme.primary}-400 rounded-full animate-bounce\`} style={{animationDelay: '0.1s'}}></div>
+              <div className={\`w-2 h-2 bg-\${currentTheme.primary}-400 rounded-full animate-bounce\`} style={{animationDelay: '0.2s'}}></div>
             </div>
-            <span className="text-xs font-mono text-green-300/70 ml-2">AI is typing...</span>
+            <span className={\`text-xs font-mono \${currentTheme.dim} ml-2\`}>AI is typing...</span>
           </div>
         </div>
       </div>
@@ -2328,25 +2445,29 @@ const ChatMessage = memo(({ message, isTyping = false }: ChatMessageProps) => {
   }
 
   return (
-    <div className={\`flex \${isUser ? 'justify-end' : 'justify-start'}\`}>
-      <div className="max-w-xs lg:max-w-md">
-        <div
-          className={\`p-3 rounded-lg font-mono text-sm \${
-            isUser
-              ? 'bg-green-500/25 text-green-200 border border-green-400/50'
-              : 'bg-green-500/15 text-green-300 border border-green-400/30'
-          }\`}
-        >
-          {/* Message content with basic formatting */}
-          <div 
-            className="whitespace-pre-wrap break-words"
-            dangerouslySetInnerHTML={{ __html: formatContent(message.content) }}
-          />
-        </div>
-        
-        {/* Timestamp */}
-        <div className={\`text-xs font-mono text-green-300/50 mt-1 \${isUser ? 'text-right' : 'text-left'}\`}>
-          {formatTimestamp(message.timestamp)}
+    <div className={\`flex \${isUser ? 'justify-end' : 'justify-start'} mb-3\`}>
+      <div className={\`flex \${isUser ? 'flex-row-reverse' : 'flex-row'} items-end gap-2 max-w-[85%]\`}>
+        {!isUser && (
+          <div className="flex-shrink-0">
+            <div className={\`w-6 h-6 \${currentTheme.bg} border \${currentTheme.border} rounded-lg flex items-center justify-center\`}>
+              <span className="text-xs">🤖</span>
+            </div>
+          </div>
+        )}
+        <div className={\`px-4 py-3 rounded-2xl font-mono text-sm leading-relaxed shadow-sm \${
+          isUser 
+            ? \`\${currentTheme.bgActive} border \${currentTheme.borderActive} \${currentTheme.light} rounded-br-md\` 
+            : \`\${currentTheme.bg} border \${currentTheme.border} \${currentTheme.light} rounded-bl-md\`
+        }\`}>
+          <div className="mb-1">
+            <div 
+              className="whitespace-pre-wrap break-words"
+              dangerouslySetInnerHTML={{ __html: formatContent(message.content) }}
+            />
+          </div>
+          <div className={\`text-xs \${currentTheme.dim} text-right mt-1\`}>
+            {formatTimestamp(message.timestamp)}
+          </div>
         </div>
       </div>
     </div>
@@ -2358,38 +2479,56 @@ ChatMessage.displayName = 'ChatMessage';
 export default ChatMessage;`;
   }
   private generateLoadingSpinnerComponent(): string {
-    return `interface LoadingSpinnerProps {
+    return `'use client'
+import { themes } from '@/lib/theme';
+
+interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg';
-  color?: string;
+  theme?: keyof typeof themes;
 }
 
-export default function LoadingSpinner({ size = 'md', color = 'green' }: LoadingSpinnerProps) {
+export default function LoadingSpinner({ size = 'md', theme = 'green' }: LoadingSpinnerProps) {
+  const currentTheme = themes[theme] || themes.green;
+  
   const sizeClasses = {
     sm: 'w-4 h-4',
     md: 'w-6 h-6', 
     lg: 'w-8 h-8'
   };
 
-  const colorClasses = {
-    green: 'border-green-400 border-t-transparent',
-    blue: 'border-blue-400 border-t-transparent',
-    white: 'border-white border-t-transparent'
-  };
-
   return (
     <div className="flex items-center justify-center">
       <div 
-        className={\`\${sizeClasses[size]} border-2 \${colorClasses[color] || colorClasses.green} rounded-full animate-spin\`}
+        className={\`\${sizeClasses[size]} border-2 border-\${currentTheme.primary}-400 border-t-transparent rounded-full animate-spin\`}
       ></div>
     </div>
   );
 }`;
   }
 
+  private generateClientProviders(): string {
+    return `'use client'
+import { AgentProvider } from '@/contexts/AgentContext'
+
+interface ClientProvidersProps {
+  children: React.ReactNode;
+}
+
+export default function ClientProviders({ children }: ClientProvidersProps) {
+  return (
+    <AgentProvider>
+      {children}
+    </AgentProvider>
+  );
+}`;
+  }
+
   private generateActionExecutionModal(): string {
-    return `import { useState, useEffect } from 'react';
+    return `'use client'
+import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import LoadingSpinner from './LoadingSpinner';
+import { themes } from '@/lib/theme';
 
 interface ActionExecutionModalProps {
   action: {
@@ -2404,13 +2543,16 @@ interface ActionExecutionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onComplete: (result: any) => void;
+  theme?: keyof typeof themes;
 }
 
-export default function ActionExecutionModal({ action, isOpen, onClose, onComplete }: ActionExecutionModalProps) {
+export default function ActionExecutionModal({ action, isOpen, onClose, onComplete, theme = 'green' }: ActionExecutionModalProps) {
   const [isExecuting, setIsExecuting] = useState(false);
   const [inputParameters, setInputParameters] = useState<Record<string, any>>({});
   const [result, setResult] = useState<any>(null);
   const [step, setStep] = useState<'input' | 'executing' | 'result'>('input');
+  
+  const currentTheme = themes[theme] || themes.green;
 
   // Generate mock UI components if none provided
   const uiComponents = action.uiComponentsDesign || [
@@ -2510,8 +2652,8 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
 
     // Determine if field has validation errors
     const hasError = component.required && (!value || value === '');
-    const borderClass = hasError ? 'border-red-400/50' : 'border-green-400/30';
-    const focusBorderClass = hasError ? 'focus:border-red-400/70' : 'focus:border-green-400/50';
+    const borderClass = hasError ? 'border-red-400/50' : currentTheme.border;
+    const focusBorderClass = hasError ? 'focus:border-red-400/70' : \`focus:\${currentTheme.borderActive}\`;
 
     switch (component.type) {
       case 'select':
@@ -2519,7 +2661,7 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
           <select
             value={value}
             onChange={(e) => handleInputChange(component.name, e.target.value)}
-            className={\`w-full p-3 bg-green-500/10 border \${borderClass} rounded-lg text-green-200 font-mono text-sm focus:outline-none \${focusBorderClass}\`}
+            className={\`w-full p-3 \${currentTheme.bg} border \${borderClass} rounded-lg \${currentTheme.light} font-mono text-sm focus:outline-none \${focusBorderClass}\`}
           >
             <option value="" className="bg-gray-800">
               {component.placeholder || \`Select \${component.label}\`}
@@ -2539,9 +2681,9 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
               type="checkbox"
               checked={!!value}
               onChange={(e) => handleInputChange(component.name, e.target.checked)}
-              className="w-4 h-4 rounded border-green-400/30 bg-green-500/10 text-green-400 focus:ring-green-400/50"
+              className={\`w-4 h-4 rounded \${currentTheme.border} \${currentTheme.bg} \${currentTheme.accent} focus:ring-\${currentTheme.primary}-400/50\`}
             />
-            <span className="font-mono text-sm text-green-200">
+            <span className={\`font-mono text-sm \${currentTheme.light}\`}>
               {component.label}
             </span>
           </label>
@@ -2554,7 +2696,7 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
             onChange={(e) => handleInputChange(component.name, e.target.value)}
             placeholder={component.placeholder}
             rows={4}
-            className={\`w-full p-3 bg-green-500/10 border \${borderClass} rounded-lg text-green-200 font-mono text-sm focus:outline-none \${focusBorderClass} resize-none\`}
+            className={\`w-full p-3 \${currentTheme.bg} border \${borderClass} rounded-lg \${currentTheme.light} font-mono text-sm focus:outline-none \${focusBorderClass} resize-none\`}
           />
         );
       
@@ -2664,15 +2806,15 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-      <div className="bg-gray-900 border border-green-400/30 rounded-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+      <div className={\`bg-gray-900 border \${currentTheme.border} rounded-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col\`}>
         {/* Header */}
-        <div className="p-4 border-b border-green-400/20">
+        <div className={\`p-4 border-b \${currentTheme.border}\`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="text-lg">{action.emoji || '⚡'}</span>
               <div>
-                <h2 className="font-mono font-bold text-green-200">{action.title || action.name}</h2>
-                <p className="font-mono text-xs text-green-300/70">
+                <h2 className={\`font-mono font-bold \${currentTheme.light}\`}>{action.title || action.name}</h2>
+                <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
                   {action.description || \`Execute \${action.title || action.name}\`}
                 </p>
               </div>
@@ -2692,12 +2834,12 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
           {step === 'input' && (
             <div className="space-y-4">
               {/* Execution Info */}
-              <div className="bg-green-500/10 border border-green-400/20 rounded-lg p-3">
+              <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-3\`}>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-green-400">🏠</span>
-                  <span className="font-mono text-sm text-green-200">Local Execution</span>
+                  <span className={\`\${currentTheme.accent}\`}>🏠</span>
+                  <span className={\`font-mono text-sm \${currentTheme.light}\`}>Local Execution</span>
                 </div>
-                <p className="font-mono text-xs text-green-300/70">
+                <p className={\`font-mono text-xs \${currentTheme.dim}\`}>
                   This action will run locally on this sub-agent with embedded code and your database.
                 </p>
               </div>
@@ -2737,11 +2879,11 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
 
           {step === 'executing' && (
             <div className="text-center py-8">
-              <LoadingSpinner size="lg" />
-              <p className="font-mono text-sm text-green-300 mt-4">
+              <LoadingSpinner size="lg" theme={theme} />
+              <p className={\`font-mono text-sm \${currentTheme.light} mt-4\`}>
                 Executing {action.title || action.name}...
               </p>
-              <p className="font-mono text-xs text-green-300/50 mt-1">
+              <p className={\`font-mono text-xs \${currentTheme.dim} mt-1\`}>
                 Running locally with embedded code
               </p>
             </div>
@@ -2753,19 +2895,19 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
                 <div className={\`text-4xl mb-2 \${result.success ? '🟢' : '🔴'}\`}>
                   {result.success ? '✅' : '❌'}
                 </div>
-                <h3 className="font-mono text-lg text-green-200 mb-1">
+                <h3 className={\`font-mono text-lg \${currentTheme.light} mb-1\`}>
                   {result.success ? 'Success!' : 'Failed'}
                 </h3>
               </div>
 
-              <div className="bg-green-500/10 border border-green-400/20 rounded-lg p-4">
+              <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-4\`}>
                 <div className="space-y-3 font-mono text-sm">
                   {Object.entries(formatResult(result)).map(([key, value]) => (
                     <div key={key} className="flex justify-between items-start gap-3">
-                      <span className="text-green-300/70 capitalize">
+                      <span className={\`\${currentTheme.dim} capitalize\`}>
                         {key.replace(/([A-Z])/g, ' $1').trim()}:
                       </span>
-                      <span className="text-green-200 text-right flex-1">
+                      <span className={\`\${currentTheme.light} text-right flex-1\`}>
                         {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
                       </span>
                     </div>
@@ -2777,19 +2919,19 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-green-400/20">
+        <div className={\`p-4 border-t \${currentTheme.border}\`}>
           {step === 'input' && (
             <div className="flex gap-3">
               <button
                 onClick={onClose}
-                className="flex-1 p-3 border border-green-400/30 rounded-lg font-mono text-sm text-green-300 hover:bg-green-500/10 transition-colors"
+                className={\`flex-1 p-3 border \${currentTheme.border} rounded-lg font-mono text-sm \${currentTheme.light} hover:\${currentTheme.bgHover} transition-colors\`}
               >
                 Cancel
               </button>
               <button
                 onClick={executeAction}
                 disabled={isExecuting || validateRequiredFields().length > 0}
-                className="flex-1 p-3 bg-green-500/25 border border-green-400/50 rounded-lg font-mono text-sm text-green-200 hover:bg-green-500/35 disabled:opacity-50 transition-colors"
+                className={\`flex-1 p-3 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg font-mono text-sm \${currentTheme.light} hover:\${currentTheme.bgHover} disabled:opacity-50 transition-colors\`}
               >
                 {validateRequiredFields().length > 0 ? 'Fill Required Fields' : 'Execute Action'}
               </button>
@@ -2803,13 +2945,13 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
                   setStep('input');
                   setResult(null);
                 }}
-                className="flex-1 p-3 border border-green-400/30 rounded-lg font-mono text-sm text-green-300 hover:bg-green-500/10 transition-colors"
+                className={\`flex-1 p-3 border \${currentTheme.border} rounded-lg font-mono text-sm \${currentTheme.light} hover:\${currentTheme.bgHover} transition-colors\`}
               >
                 Run Again
               </button>
               <button
                 onClick={onClose}
-                className="flex-1 p-3 bg-green-500/25 border border-green-400/50 rounded-lg font-mono text-sm text-green-200 hover:bg-green-500/35 transition-colors"
+                className={\`flex-1 p-3 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg font-mono text-sm \${currentTheme.light} hover:\${currentTheme.bgHover} transition-colors\`}
               >
                 Close
               </button>
@@ -2827,7 +2969,8 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
     const actionsContext = this.options.actions.map(a => `${a.name} (${a.description || 'action'})`).join(', ');
     const schedulesContext = this.options.schedules.map(s => `${s.name} (${s.description || 'scheduled task'})`).join(', ');
     
-    return `import { openai } from '@ai-sdk/openai';
+    return `import { NextRequest, NextResponse } from 'next/server';
+import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { streamText, convertToCoreMessages } from 'ai';
 import { z } from 'zod';
@@ -2919,16 +3062,14 @@ Detect user intent and respond appropriately:
 Always be ready to help with queries about data, actions, schedules, or general system operations while maintaining your unique personality.\`;
 }
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+// App Router API Route Handler
+export async function POST(request: Request) {
   try {
-    const { messages } = req.body;
+    const body = await request.json();
+    const { messages } = body;
 
     if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: 'Messages array is required' });
+      return NextResponse.json({ error: 'Messages array is required' }, { status: 400 });
     }
 
     // Get AI model with local API keys
@@ -2951,13 +3092,13 @@ export default async function handler(req, res) {
       temperature: 0.7,
     });
 
-    return result.toAIStreamResponse();
+    return result.toDataStreamResponse();
   } catch (error) {
     console.error('Chat API error:', error);
-    return res.status(500).json({ 
+    return NextResponse.json({ 
       error: 'Failed to process chat request',
-      details: error.message 
-    });
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }`;
   }
@@ -2998,7 +3139,7 @@ export default async function handler(req, res) {
     `;
     }
 
-    return `import { NextApiRequest, NextApiResponse } from 'next';
+    return `import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
@@ -3027,13 +3168,9 @@ async function getAIModel() {
   }
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export async function POST(request: NextRequest) {
   try {
-    const { parameters } = req.body;
+    const { parameters } = await request.json();
     
     // Action: ${action.name}
     // Description: ${escapeJSString(action.description || 'No description provided')}
@@ -3042,7 +3179,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     ${wrappedActionCode}
     
-    return res.status(200).json({ 
+    return NextResponse.json({ 
       success: true, 
       action: '${action.name}',
       result: result,
@@ -3051,11 +3188,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   } catch (error) {
     console.error('Action execution error:', error);
-    return res.status(500).json({ 
+    return NextResponse.json({ 
       error: 'Action execution failed',
-      details: error.message,
+      details: error instanceof Error ? error.message : 'Unknown error',
       action: '${action.name}'
-    });
+    }, { status: 500 });
   } finally {
     await prisma.$disconnect();
   }
@@ -3089,7 +3226,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       // Resolve action name: use direct name if available, otherwise map from ID
       const actionName = step.actionName || actionIdToNameMap[step.actionId] || step.actionId;
       
-      console.log(\`🔄 Step \${i + 1}/\${steps.length}: \${escapeJSString(step.description || actionName)} (action: \${actionName})\`);
+      console.log(\`🔄 Step \${i + 1}/\${steps.length}: \${step.description || actionName} (action: \${actionName})\`);
       
       if (!actionName) {
         console.error(\`❌ Action "\${step.actionId || step.actionName}" not found\`);
@@ -3108,26 +3245,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         let actionResult;
         
         try {
-          // Import the action handler dynamically using action name
-          const actionModule = await import(\`../actions/\${actionName}\`);
+          // Import the action handler dynamically using action name (App Router format)
+          const actionModule = await import(\`../../actions/\${actionName}/route\`);
           
-          // Create a mock request/response for the action
-          const mockReq = {
+          // Create a mock NextRequest for the action
+          const mockRequestBody = JSON.stringify({ parameters: step.inputParams || step.input || {} });
+          const mockRequest = new Request('http://localhost:3000/api/actions/' + actionName, {
             method: 'POST',
-            body: { parameters: step.inputParams || step.input || {} }
-          };
+            body: mockRequestBody,
+            headers: { 'Content-Type': 'application/json' }
+          });
           
-          const mockRes = {
-            status: (code: number) => ({
-              json: (data: any) => {
-                actionResult = { statusCode: code, ...data };
-                return data;
-              }
-            })
-          };
-          
-          // Execute the action handler
-          await actionModule.default(mockReq, mockRes);
+          // Execute the action handler (App Router format)
+          const response = await actionModule.POST(mockRequest);
+          actionResult = await response.json();
           
         } catch (importError) {
           // Fallback to HTTP call if direct import fails (using action name)
@@ -3215,7 +3346,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     };`;
     }
 
-    return `import { NextApiRequest, NextApiResponse } from 'next';
+    return `import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
 import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
@@ -3244,15 +3375,16 @@ async function getAIModel() {
   }
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export async function POST(request: NextRequest) {
   // Verify cron secret for manual calls, but allow Vercel's automatic cron execution
-  const cronSecret = req.headers['x-cron-secret'] || req.query.secret;
-  const isVercelCron = req.headers['user-agent']?.includes('vercel-cron') || 
-                      req.headers['x-vercel-cron'] === '1';
+  const cronSecret = request.headers.get('x-cron-secret') || request.nextUrl.searchParams.get('secret');
+  const userAgent = request.headers.get('user-agent') || '';
+  const isVercelCron = userAgent.includes('vercel-cron') || 
+                      request.headers.get('x-vercel-cron') === '1';
   
   // Allow Vercel's automatic cron execution or valid cron secret
   if (!isVercelCron && cronSecret !== process.env.CRON_SECRET) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
@@ -3264,7 +3396,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     
     ${scheduleExecutionCode}
     
-    return res.status(200).json({ 
+    return NextResponse.json({ 
       success: true, 
       schedule: '${schedule.name}',
       executedAt: new Date().toISOString(),
@@ -3273,11 +3405,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   } catch (error) {
     console.error('Schedule execution error:', error);
-    return res.status(500).json({ 
+    return NextResponse.json({ 
       error: 'Schedule execution failed',
-      details: error.message,
+      details: error instanceof Error ? error.message : 'Unknown error',
       schedule: '${schedule.name}'
-    });
+    }, { status: 500 });
   } finally {
     await prisma.$disconnect();
   }
@@ -3285,14 +3417,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   private generateHealthEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
-import { prisma } from '@/lib/prisma'
+    return `import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export async function GET(request: NextRequest) {
   try {
     // Test database connection
     await prisma.$queryRaw\`SELECT 1\`;
@@ -3305,12 +3433,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       timestamp: new Date().toISOString(),
       database: {
         status: 'connected',
-        type: 'SQLite'
+        type: 'PostgreSQL'
       },
       services: {
         actions: {
           count: ${this.options.actions.length},
-          endpoints: [${this.options.actions.map(a => `'/api/${a.name}'`).join(', ')}]
+          endpoints: [${this.options.actions.map(a => `'/api/actions/${a.name}'`).join(', ')}]
         },
         schedules: {
           count: ${this.options.schedules.length},
@@ -3324,28 +3452,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
     };
 
-    res.status(200).json(healthData);
+    return NextResponse.json(healthData);
   } catch (error) {
     console.error('Health check failed:', error);
-    res.status(503).json({
+    return NextResponse.json({
       status: 'unhealthy',
       name: '${this.options.projectName}',
       error: 'Database connection failed',
       timestamp: new Date().toISOString()
-    });
+    }, { status: 503 });
   }
 }`;
   }
 
   private generateStatsEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
-import { prisma } from '@/lib/prisma'
+    return `import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export async function GET(request: NextRequest) {
   try {
     const stats = {
       totalRecords: 0,
@@ -3375,10 +3499,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       console.log('Database not ready, using default stats:', dbError.message);
     }
 
-    res.status(200).json({ success: true, data: stats });
+    return NextResponse.json({ success: true, data: stats });
   } catch (error) {
     console.error('Error getting stats:', error);
-    res.status(500).json({ 
+    return NextResponse.json({ 
       success: false, 
       error: 'Failed to get stats',
       data: {
@@ -3389,16 +3513,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         totalSchedules: ${this.options.schedules.length},
         lastActivity: new Date().toISOString()
       }
-    });
+    }, { status: 500 });
   }
 }`;
   }
 
   private generateModelEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
-import { prisma } from '@/lib/prisma'
-import { exec } from 'child_process'
-import { promisify } from 'util'
+    return `import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
@@ -3431,11 +3555,12 @@ async function ensureDatabaseInit() {
   }
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { modelName, id } = req.query;
+export async function GET(request: NextRequest, { params }: { params: { modelName: string } }) {
+  const { modelName } = params;
+  const { searchParams } = new URL(request.url);
 
   if (!modelName || typeof modelName !== 'string') {
-    return res.status(400).json({ error: 'Model name is required' });
+    return NextResponse.json({ error: 'Model name is required' }, { status: 400 });
   }
 
   // Ensure database is initialized before proceeding
@@ -3443,11 +3568,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await ensureDatabaseInit();
   } catch (error) {
     console.error('Database initialization error:', error);
-    return res.status(500).json({ 
+    return NextResponse.json({ 
       success: false, 
       error: 'Database initialization failed',
-      details: 'Unable to initialize SQLite database'
-    });
+      details: 'Unable to initialize PostgreSQL database'
+    }, { status: 500 });
   }
 
   // Convert PascalCase model name to camelCase for Prisma client access
@@ -3457,37 +3582,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!modelClient) {
     console.error(\`Model '\${modelName}' (camelCase: '\${camelCaseModelName}') not found in Prisma client\`);
     console.error('Available models:', Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_')));
-    return res.status(404).json({ 
+    return NextResponse.json({ 
       error: \`Model '\${modelName}' not found\`,
       details: \`Attempted to access '\${camelCaseModelName}' on Prisma client\`,
       availableModels: Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_'))
-    });
+    }, { status: 404 });
   }
 
   try {
-    switch (req.method) {
-      case 'GET':
-        if (id && typeof id === 'string') {
-          // Get single record by ID
-          const record = await modelClient.findUnique({
-            where: { id }
-          });
-          
-          if (!record) {
-            return res.status(404).json({ error: 'Record not found' });
-          }
-          
-          res.status(200).json({ success: true, data: record });
-        } else {
-          // Get all records with optional filtering and pagination
-          const { page = '1', limit = '100', search, sortBy, sortOrder = 'desc' } = req.query;
-          const pageNum = parseInt(page as string, 10);
-          const limitNum = parseInt(limit as string, 10);
-          const skip = (pageNum - 1) * limitNum;
+    // GET method - Get all records with optional filtering and pagination
+    const page = searchParams.get('page') || '1';
+    const limit = searchParams.get('limit') || '100';
+    const search = searchParams.get('search');
+    const sortBy = searchParams.get('sortBy');
+    const sortOrder = searchParams.get('sortOrder') || 'desc';
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
 
-          // Get model definition from embedded config
-          const embeddedModels = ${JSON.stringify(this.options.models)};
-          const modelDef = embeddedModels.find(m => m.name === modelName);
+    // Get model definition from embedded config
+    const embeddedModels = ${JSON.stringify(this.options.models)};
+    const modelDef = embeddedModels.find(m => m.name === modelName);
           
           let availableFields: string[] = [];
           let defaultSortField = 'id'; // fallback
@@ -3557,127 +3672,118 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             modelClient.count({ where })
           ]);
           
-          res.status(200).json({ 
-            success: true, 
-            data: records,
-            pagination: {
-              page: pageNum,
-              limit: limitNum,
-              total,
-              pages: Math.ceil(total / limitNum)
-            }
-          });
-        }
-        break;
+    return NextResponse.json({ 
+      success: true, 
+      data: records,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum)
+      }
+    });
 
-      case 'POST':
-        // Create a new record
-        const createData = req.body;
-        if (!createData || typeof createData !== 'object') {
-          return res.status(400).json({ error: 'Invalid data provided' });
-        }
-
-        const newRecord = await modelClient.create({
-          data: createData
-        });
-        
-        res.status(201).json({ success: true, data: newRecord });
-        break;
-
-      case 'PUT':
-      case 'PATCH':
-        // Update a record
-        if (!id || typeof id !== 'string') {
-          return res.status(400).json({ error: 'Record ID is required for update' });
-        }
-
-        const updateData = req.body;
-        if (!updateData || typeof updateData !== 'object') {
-          return res.status(400).json({ error: 'Invalid data provided' });
-        }
-
-        // Check if record exists
-        const existingRecord = await modelClient.findUnique({
-          where: { id }
-        });
-
-        if (!existingRecord) {
-          return res.status(404).json({ error: 'Record not found' });
-        }
-
-        const updatedRecord = await modelClient.update({
-          where: { id },
-          data: updateData
-        });
-        
-        res.status(200).json({ success: true, data: updatedRecord });
-        break;
-
-      case 'DELETE':
-        // Delete a record
-        if (!id || typeof id !== 'string') {
-          return res.status(400).json({ error: 'Record ID is required for deletion' });
-        }
-
-        // Check if record exists
-        const recordToDelete = await modelClient.findUnique({
-          where: { id }
-        });
-
-        if (!recordToDelete) {
-          return res.status(404).json({ error: 'Record not found' });
-        }
-
-        await modelClient.delete({
-          where: { id }
-        });
-        
-        res.status(200).json({ success: true, message: 'Record deleted successfully' });
-        break;
-
-      default:
-        res.status(405).json({ error: 'Method not allowed' });
-    }
   } catch (error) {
     console.error(\`Error with model \${modelName}:\`, error);
     
     // Handle Prisma-specific errors
     if (error.code === 'P2002') {
-      return res.status(409).json({ 
+      return NextResponse.json({ 
         success: false, 
         error: 'Unique constraint violation',
         details: 'A record with this data already exists'
-      });
+      }, { status: 409 });
     } else if (error.code === 'P2025') {
-      return res.status(404).json({ 
+      return NextResponse.json({ 
         success: false, 
         error: 'Record not found',
         details: 'The record you are trying to access does not exist'
-      });
+      }, { status: 404 });
     }
     
-    res.status(500).json({ 
+    return NextResponse.json({ 
       success: false, 
       error: \`Failed to access model \${modelName}\`,
       details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest, { params }: { params: { modelName: string } }) {
+  const { modelName } = params;
+
+  if (!modelName || typeof modelName !== 'string') {
+    return NextResponse.json({ error: 'Model name is required' }, { status: 400 });
+  }
+
+  // Ensure database is initialized before proceeding
+  try {
+    await ensureDatabaseInit();
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Database initialization failed',
+      details: 'Unable to initialize PostgreSQL database'
+    }, { status: 500 });
+  }
+
+  // Convert PascalCase model name to camelCase for Prisma client access
+  const camelCaseModelName = modelName.charAt(0).toLowerCase() + modelName.slice(1);
+  const modelClient = (prisma as any)[camelCaseModelName];
+  
+  if (!modelClient) {
+    return NextResponse.json({ 
+      error: \`Model '\${modelName}' not found\`,
+      details: \`Attempted to access '\${camelCaseModelName}' on Prisma client\`,
+      availableModels: Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_'))
+    }, { status: 404 });
+  }
+
+  try {
+    const createData = await request.json();
+    if (!createData || typeof createData !== 'object') {
+      return NextResponse.json({ error: 'Invalid data provided' }, { status: 400 });
+    }
+
+    const newRecord = await modelClient.create({
+      data: createData
     });
+    
+    return NextResponse.json({ success: true, data: newRecord }, { status: 201 });
+  } catch (error) {
+    console.error(\`Error creating model \${modelName}:\`, error);
+    
+    if (error.code === 'P2002') {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Unique constraint violation',
+        details: 'A record with this data already exists'
+      }, { status: 409 });
+    }
+    
+    return NextResponse.json({ 
+      success: false, 
+      error: \`Failed to create model \${modelName} record\`,
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    }, { status: 500 });
   }
 }`;
   }
 
   private generateModelRecordEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
-import { prisma } from '@/lib/prisma'
+    return `import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const { modelName, id } = req.query;
+export async function GET(request: NextRequest, { params }: { params: { modelName: string; id: string } }) {
+  const { modelName, id } = params;
 
   if (!modelName || typeof modelName !== 'string') {
-    return res.status(400).json({ error: 'Model name is required' });
+    return NextResponse.json({ error: 'Model name is required' }, { status: 400 });
   }
 
   if (!id || typeof id !== 'string') {
-    return res.status(400).json({ error: 'Record ID is required' });
+    return NextResponse.json({ error: 'Record ID is required' }, { status: 400 });
   }
 
   // Convert PascalCase model name to camelCase for Prisma client access
@@ -3687,96 +3793,169 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!modelClient) {
     console.error(\`Model '\${modelName}' (camelCase: '\${camelCaseModelName}') not found in Prisma client\`);
     console.error('Available models:', Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_')));
-    return res.status(404).json({ 
+    return NextResponse.json({ 
       error: \`Model '\${modelName}' not found\`,
       details: \`Attempted to access '\${camelCaseModelName}' on Prisma client\`,
       availableModels: Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_'))
-    });
+    }, { status: 404 });
   }
 
   try {
-    switch (req.method) {
-      case 'GET':
-        // Get single record by ID
-        const record = await modelClient.findUnique({
-          where: { id }
-        });
-        
-        if (!record) {
-          return res.status(404).json({ error: 'Record not found' });
-        }
-        
-        res.status(200).json({ success: true, data: record });
-        break;
-
-      case 'PUT':
-      case 'PATCH':
-        // Update a record
-        const updateData = req.body;
-        if (!updateData || typeof updateData !== 'object') {
-          return res.status(400).json({ error: 'Invalid data provided' });
-        }
-
-        // Check if record exists first
-        const existingRecord = await modelClient.findUnique({
-          where: { id }
-        });
-
-        if (!existingRecord) {
-          return res.status(404).json({ error: 'Record not found' });
-        }
-
-        const updatedRecord = await modelClient.update({
-          where: { id },
-          data: updateData
-        });
-        
-        res.status(200).json({ success: true, data: updatedRecord });
-        break;
-
-      case 'DELETE':
-        // Delete a record
-        const recordToDelete = await modelClient.findUnique({
-          where: { id }
-        });
-
-        if (!recordToDelete) {
-          return res.status(404).json({ error: 'Record not found' });
-        }
-
-        await modelClient.delete({
-          where: { id }
-        });
-        
-        res.status(200).json({ success: true, message: 'Record deleted successfully' });
-        break;
-
-      default:
-        res.status(405).json({ error: 'Method not allowed' });
+    // Get single record by ID
+    const record = await modelClient.findUnique({
+      where: { id }
+    });
+    
+    if (!record) {
+      return NextResponse.json({ error: 'Record not found' }, { status: 404 });
     }
+    
+    return NextResponse.json({ success: true, data: record });
   } catch (error) {
     console.error(\`Error with model \${modelName} record \${id}:\`, error);
     
     // Handle Prisma-specific errors
-    if (error.code === 'P2002') {
-      return res.status(409).json({ 
-        success: false, 
-        error: 'Unique constraint violation',
-        details: 'A record with this data already exists'
-      });
-    } else if (error.code === 'P2025') {
-      return res.status(404).json({ 
+    if (error.code === 'P2025') {
+      return NextResponse.json({ 
         success: false, 
         error: 'Record not found',
         details: 'The record you are trying to access does not exist'
-      });
+      }, { status: 404 });
     }
     
-    res.status(500).json({ 
+    return NextResponse.json({ 
       success: false, 
       error: \`Failed to access model \${modelName} record\`,
       details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    }, { status: 500 });
+  }
+}
+
+export async function PUT(request: NextRequest, { params }: { params: { modelName: string; id: string } }) {
+  const { modelName, id } = params;
+
+  if (!modelName || typeof modelName !== 'string') {
+    return NextResponse.json({ error: 'Model name is required' }, { status: 400 });
+  }
+
+  if (!id || typeof id !== 'string') {
+    return NextResponse.json({ error: 'Record ID is required' }, { status: 400 });
+  }
+
+  // Convert PascalCase model name to camelCase for Prisma client access
+  const camelCaseModelName = modelName.charAt(0).toLowerCase() + modelName.slice(1);
+  const modelClient = (prisma as any)[camelCaseModelName];
+  
+  if (!modelClient) {
+    return NextResponse.json({ 
+      error: \`Model '\${modelName}' not found\`,
+      details: \`Attempted to access '\${camelCaseModelName}' on Prisma client\`,
+      availableModels: Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_'))
+    }, { status: 404 });
+  }
+
+  try {
+    const updateData = await request.json();
+    if (!updateData || typeof updateData !== 'object') {
+      return NextResponse.json({ error: 'Invalid data provided' }, { status: 400 });
+    }
+
+    // Check if record exists first
+    const existingRecord = await modelClient.findUnique({
+      where: { id }
     });
+
+    if (!existingRecord) {
+      return NextResponse.json({ error: 'Record not found' }, { status: 404 });
+    }
+
+    const updatedRecord = await modelClient.update({
+      where: { id },
+      data: updateData
+    });
+    
+    return NextResponse.json({ success: true, data: updatedRecord });
+  } catch (error) {
+    console.error(\`Error updating model \${modelName} record \${id}:\`, error);
+    
+    // Handle Prisma-specific errors
+    if (error.code === 'P2002') {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Unique constraint violation',
+        details: 'A record with this data already exists'
+      }, { status: 409 });
+    } else if (error.code === 'P2025') {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Record not found',
+        details: 'The record you are trying to access does not exist'
+      }, { status: 404 });
+    }
+    
+    return NextResponse.json({ 
+      success: false, 
+      error: \`Failed to update model \${modelName} record\`,
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: { modelName: string; id: string } }) {
+  const { modelName, id } = params;
+
+  if (!modelName || typeof modelName !== 'string') {
+    return NextResponse.json({ error: 'Model name is required' }, { status: 400 });
+  }
+
+  if (!id || typeof id !== 'string') {
+    return NextResponse.json({ error: 'Record ID is required' }, { status: 400 });
+  }
+
+  // Convert PascalCase model name to camelCase for Prisma client access
+  const camelCaseModelName = modelName.charAt(0).toLowerCase() + modelName.slice(1);
+  const modelClient = (prisma as any)[camelCaseModelName];
+  
+  if (!modelClient) {
+    return NextResponse.json({ 
+      error: \`Model '\${modelName}' not found\`,
+      details: \`Attempted to access '\${camelCaseModelName}' on Prisma client\`,
+      availableModels: Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_'))
+    }, { status: 404 });
+  }
+
+  try {
+    // Check if record exists
+    const recordToDelete = await modelClient.findUnique({
+      where: { id }
+    });
+
+    if (!recordToDelete) {
+      return NextResponse.json({ error: 'Record not found' }, { status: 404 });
+    }
+
+    await modelClient.delete({
+      where: { id }
+    });
+    
+    return NextResponse.json({ success: true, message: 'Record deleted successfully' });
+  } catch (error) {
+    console.error(\`Error deleting model \${modelName} record \${id}:\`, error);
+    
+    // Handle Prisma-specific errors
+    if (error.code === 'P2025') {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Record not found',
+        details: 'The record you are trying to access does not exist'
+      }, { status: 404 });
+    }
+    
+    return NextResponse.json({ 
+      success: false, 
+      error: \`Failed to delete model \${modelName} record\`,
+      details: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    }, { status: 500 });
   }
 }`;
   }
@@ -3800,7 +3979,8 @@ export default prisma`;
   }
 
   private generateApiHook(): string {
-    return `import { useState, useCallback } from 'react';
+    return `'use client'
+import { useState, useCallback } from 'react';
 
 interface ApiState<T> {
   data: T | null;
@@ -3835,7 +4015,8 @@ export default useApi;`;
   }
 
   private generateMobileHook(): string {
-    return `import { useState, useEffect } from 'react';
+    return `'use client'
+import { useState, useEffect } from 'react';
 
 export function useMobile() {
   const [isMobile, setIsMobile] = useState(true);
@@ -4215,13 +4396,9 @@ The chat will work immediately with your AI provider.
 
   // Sub-agent API endpoints that call main app
   private generateActionsEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
+    return `import { NextRequest, NextResponse } from 'next/server';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export async function GET(request: NextRequest) {
   try {
     // Return embedded actions directly (no main app calls)
     const actions = ${JSON.stringify(this.options.actions)};
@@ -4231,29 +4408,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       names: actions.map(a => a.name)
     });
     
-    res.status(200).json({
+    return NextResponse.json({
       success: true,
       actions: actions,
       source: 'embedded'
     });
   } catch (error) {
     console.error('Error fetching embedded actions:', error);
-    res.status(500).json({
+    return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    }, { status: 500 });
   }
 }`;
   }
 
   private generateSchedulesEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
+    return `import { NextRequest, NextResponse } from 'next/server';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export async function GET(request: NextRequest) {
   try {
     // Return embedded schedules directly (no main app calls)
     const schedules = ${JSON.stringify(this.options.schedules)};
@@ -4263,29 +4436,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       names: schedules.map(s => s.name)
     });
     
-    res.status(200).json({
+    return NextResponse.json({
       success: true,
       schedules: schedules,
       source: 'embedded'
     });
   } catch (error) {
     console.error('Error fetching embedded schedules:', error);
-    res.status(500).json({
+    return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    }, { status: 500 });
   }
 }`;
   }
 
   private generateModelsEndpoint(): string {
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
+    return `import { NextRequest, NextResponse } from 'next/server';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export async function GET(request: NextRequest) {
   try {
     // Return embedded models directly (no main app calls)
     const models = ${JSON.stringify(this.options.models)};
@@ -4295,17 +4464,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       names: models.map(m => m.name)
     });
     
-    res.status(200).json({
+    return NextResponse.json({
       success: true,
       models: models,
       source: 'embedded'
     });
   } catch (error) {
     console.error('Error fetching embedded models:', error);
-    res.status(500).json({
+    return NextResponse.json({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    }, { status: 500 });
   }
 }`;
   }
@@ -4317,13 +4486,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const agentAvatar = this.options.agentConfig?.avatar || null;
     const agentDomain = this.options.agentConfig?.domain || null;
     
-    return `import type { NextApiRequest, NextApiResponse } from 'next'
+    return `import { NextRequest, NextResponse } from 'next/server';
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
+export async function GET(request: NextRequest) {
   try {
     console.log('🔧 Config API returning fully embedded local configuration');
 
@@ -4354,7 +4519,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       schedulesCount: config.schedules.length
     });
     
-    res.status(200).json({
+    return NextResponse.json({
       success: true,
       config,
       source: 'fully-local-embedded'
@@ -4362,18 +4527,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } catch (error) {
     console.error('❌ Error returning local config:', error);
     
-    res.status(500).json({
+    return NextResponse.json({
       success: false,
       error: 'Failed to return local configuration',
-      details: error.message
-    });
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }`;
   }
 
 
   private generateAgentContext(): string {
-    return `import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+    return `'use client'
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 interface AgentConfig {
   name: string;

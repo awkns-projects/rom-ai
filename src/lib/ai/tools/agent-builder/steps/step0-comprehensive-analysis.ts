@@ -250,14 +250,15 @@ ANALYSIS FOCUS:
    - How often should things be checked or updated?
 
 5. IDENTIFY EXTERNAL API REQUIREMENTS:
-   - Does this request EXPLICITLY mention any external services or APIs?
-   - ONLY include APIs that are DIRECTLY MENTIONED in the user's request
-   - Do NOT infer or suggest APIs that aren't explicitly mentioned
+   - Look for the "🔗 External Tools/APIs I Want to Connect:" section in the user's request
+   - ONLY include APIs that are EXPLICITLY LISTED in this dedicated section
+   - If this section is missing or empty, set requiresExternalApi to false
+   - Do NOT infer APIs from tasks, context, or other parts of the request
    - Do NOT add APIs just because they might be useful for the use case
-   - For each EXPLICITLY MENTIONED API, determine its purpose and priority level (critical/high/medium/low)
-   - What specific functionality is needed from each MENTIONED external API?
-   - What scopes/permissions would be required for each MENTIONED API?
-   - IMPORTANT: Only process APIs that the user specifically requested
+   - For each API EXPLICITLY LISTED in the external tools section, determine its purpose and priority level (critical/high/medium/low)
+   - What specific functionality is needed from each LISTED external API?
+   - What scopes/permissions would be required for each LISTED API?
+   - IMPORTANT: The external tools section is the ONLY source for API requirements
 
 6. IDENTIFY BUSINESS FEATURES:
    - What are the 3-5 core features needed?
@@ -389,12 +390,14 @@ BACKGROUND AUTOMATION EXAMPLES:
 - After "Log expenses" → categorize automatically, update budgets, send spending alerts
 
 EXTERNAL API DETECTION:
-- Carefully analyze the request for EXPLICIT mentions of external services or APIs
-- ONLY include APIs that are DIRECTLY MENTIONED by name in the user's request
-- Do NOT infer APIs from general terms (e.g., don't assume "email" means "gmail")
-- Do NOT add APIs that might be helpful but weren't specifically requested
-- If multiple APIs are explicitly mentioned, prioritize based on their importance to the core functionality
-- If no external API is explicitly mentioned, set requiresExternalApi to false and primaryApi to null
+- Look specifically for the "🔗 External Tools/APIs I Want to Connect:" section in the user's request
+- ONLY include APIs that are EXPLICITLY LISTED in this section by name
+- If the section is present but empty, set requiresExternalApi to false and primaryApi to null
+- If the section is not present, set requiresExternalApi to false and primaryApi to null
+- Do NOT infer APIs from tasks or context - only use the explicit list provided
+- Do NOT add APIs that might be helpful but weren't specifically listed in the external tools section
+- If multiple APIs are explicitly listed, prioritize based on their importance to the core functionality
+- The external tools section is the ONLY source of truth for external API requirements
 
 ${existingAgent ? 'Focus on what NEW functionality is needed beyond what already exists.' : 'This is a new system - identify all requirements from scratch.'}
 

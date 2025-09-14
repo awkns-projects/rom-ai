@@ -25,6 +25,7 @@ interface UserProfile {
   contentNeeds?: string;
   automationDesires?: string;
   currentTools?: string;
+  externalApis?: string;
 }
 
 interface GreetingProps {
@@ -89,6 +90,13 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
       question: "What specific tasks or activities do you want this agent to help you with?",
       placeholder: "Monitor product prices, create social media posts, track expenses, research topics, schedule appointments, analyze data...",
       key: 'job' as keyof UserProfile,
+      isVariablesList: true
+    },
+    {
+      id: 'externalApis',
+      question: "Which external tools or APIs do you want to connect to? (Leave blank if none needed)",
+      placeholder: "Facebook, Instagram, Gmail, Shopify, Stripe, Slack, Twitter, LinkedIn, Google Drive, Airtable...",
+      key: 'externalApis' as keyof UserProfile,
       isVariablesList: true
     }
   ];
@@ -232,12 +240,15 @@ ${currentProfile.assistantType ? `🎯 My Context: ${currentProfile.assistantTyp
 
 ${currentProfile.job ? `📋 Tasks I Need Help With: ${currentProfile.job}` : ''}
 
+${currentProfile.externalApis ? `🔗 External Tools/APIs I Want to Connect: ${currentProfile.externalApis}` : ''}
+
 Based on this information, please create a personalized AI agent that can help me with these specific needs. I want you to:
 
 1. **Analyze my context and tasks** to understand what I do and what I need help with
 2. **Design intelligent commands** that I can give to the agent - think about what commands would be most useful for someone in my situation
 3. **Determine flexible variables** for each command so I can customize them for different situations (like quantities, topics, timeframes, etc.)
 4. **Plan background automation** - what should the agent do behind the scenes after I give it a command? Should it monitor things continuously, process data, send notifications, generate reports, etc.?
+${currentProfile.externalApis ? `5. **Integrate with specified external tools** - Design the agent to work specifically with these external APIs: ${currentProfile.externalApis}. Only use these APIs for external integrations and environment variables.` : ''}
 
 Create an agent that truly understands my workflow and can anticipate what I need. Make it like a smart digital companion that knows how to help someone in my specific situation.`;
 
@@ -275,12 +286,15 @@ Create an agent that truly understands my workflow and can anticipate what I nee
 
 📋 Tasks I Need Help With: Create consistent social media content across multiple platforms, manage campaign timelines, track performance metrics, generate content calendars, pull performance reports from different platforms, create weekly marketing summaries
 
+🔗 External Tools/APIs I Want to Connect: Facebook, Instagram, Twitter, LinkedIn, Google Analytics
+
 Based on this information, please create a personalized AI agent that can help me with these specific needs. I want you to:
 
 1. **Analyze my context and tasks** to understand what I do and what I need help with
 2. **Design intelligent commands** that I can give to the agent - think about what commands would be most useful for someone in my situation
 3. **Determine flexible variables** for each command so I can customize them for different situations (like quantities, topics, timeframes, etc.)
 4. **Plan background automation** - what should the agent do behind the scenes after I give it a command? Should it monitor things continuously, process data, send notifications, generate reports, etc.?
+5. **Integrate with specified external tools** - Design the agent to work specifically with these external APIs: Facebook, Instagram, Twitter, LinkedIn, Google Analytics. Only use these APIs for external integrations and environment variables.
 
 Create an agent that truly understands my workflow and can anticipate what I need. Make it like a smart digital companion that knows how to help someone in my specific situation.`,
     },
@@ -294,12 +308,15 @@ Create an agent that truly understands my workflow and can anticipate what I nee
 
 📋 Tasks I Need Help With: Track daily water intake, remind me to take movement breaks, log workouts, monitor sleep patterns, generate weekly health reports, document fitness journey for social media accountability
 
+🔗 External Tools/APIs I Want to Connect: Fitbit, MyFitnessPal, Strava, Apple Health, Google Fit
+
 Based on this information, please create a personalized AI agent that can help me with these specific needs. I want you to:
 
 1. **Analyze my context and tasks** to understand what I do and what I need help with
 2. **Design intelligent commands** that I can give to the agent - think about what commands would be most useful for someone in my situation
 3. **Determine flexible variables** for each command so I can customize them for different situations (like quantities, topics, timeframes, etc.)
 4. **Plan background automation** - what should the agent do behind the scenes after I give it a command? Should it monitor things continuously, process data, send notifications, generate reports, etc.?
+5. **Integrate with specified external tools** - Design the agent to work specifically with these external APIs: Fitbit, MyFitnessPal, Strava, Apple Health, Google Fit. Only use these APIs for external integrations and environment variables.
 
 Create an agent that truly understands my workflow and can anticipate what I need. Make it like a smart digital companion that knows how to help someone in my specific situation.`,
     },
@@ -313,12 +330,15 @@ Create an agent that truly understands my workflow and can anticipate what I nee
 
 📋 Tasks I Need Help With: Maintain consistent posting schedules, manage brand partnership deadlines, engage with audience across multiple platforms, brainstorm fresh content ideas, write captions that drive engagement, repurpose content across different platforms, conduct hashtag research, track performance analytics, handle brand outreach follow-ups, monitor audience engagement
 
+🔗 External Tools/APIs I Want to Connect: Instagram, TikTok, YouTube, Twitter, Pinterest, Canva, Buffer, Hootsuite
+
 Based on this information, please create a personalized AI agent that can help me with these specific needs. I want you to:
 
 1. **Analyze my context and tasks** to understand what I do and what I need help with
 2. **Design intelligent commands** that I can give to the agent - think about what commands would be most useful for someone in my situation
 3. **Determine flexible variables** for each command so I can customize them for different situations (like quantities, topics, timeframes, etc.)
 4. **Plan background automation** - what should the agent do behind the scenes after I give it a command? Should it monitor things continuously, process data, send notifications, generate reports, etc.?
+5. **Integrate with specified external tools** - Design the agent to work specifically with these external APIs: Instagram, TikTok, YouTube, Twitter, Pinterest, Canva, Buffer, Hootsuite. Only use these APIs for external integrations and environment variables.
 
 Create an agent that truly understands my workflow and can anticipate what I need. Make it like a smart digital companion that knows how to help someone in my specific situation.`,
     },
@@ -332,12 +352,15 @@ Create an agent that truly understands my workflow and can anticipate what I nee
 
 📋 Tasks I Need Help With: Juggle client deadlines with family schedules, keep track of kids' activities and appointments, manage household budgets and tasks, plan meals and create grocery lists, schedule maintenance tasks, organize kids' school and activity schedules, track household expenses, document family memories
 
+🔗 External Tools/APIs I Want to Connect: Google Calendar, Gmail, Mint, YNAB, Todoist, Instacart, Amazon
+
 Based on this information, please create a personalized AI agent that can help me with these specific needs. I want you to:
 
 1. **Analyze my context and tasks** to understand what I do and what I need help with
 2. **Design intelligent commands** that I can give to the agent - think about what commands would be most useful for someone in my situation
 3. **Determine flexible variables** for each command so I can customize them for different situations (like quantities, topics, timeframes, etc.)
 4. **Plan background automation** - what should the agent do behind the scenes after I give it a command? Should it monitor things continuously, process data, send notifications, generate reports, etc.?
+5. **Integrate with specified external tools** - Design the agent to work specifically with these external APIs: Google Calendar, Gmail, Mint, YNAB, Todoist, Instacart, Amazon. Only use these APIs for external integrations and environment variables.
 
 Create an agent that truly understands my workflow and can anticipate what I need. Make it like a smart digital companion that knows how to help someone in my specific situation.`,
     },

@@ -207,7 +207,7 @@ export class VercelClient {
         
         // Also try to parse the JSON response body if present
         try {
-          const responseBodyMatch = errorMessage.match(/Response body: ({.*})/s);
+          const responseBodyMatch = errorMessage.match(/Response body: ({[\s\S]*})/g);
           if (responseBodyMatch) {
             const responseBody = JSON.parse(responseBodyMatch[1]);
             if (responseBody.error && 
@@ -574,7 +574,8 @@ export async function generateNextJsProject(
   step3Output: Step3Output, 
   projectName: string,
   neonOptions?: { region?: string; pgVersion?: number; autoSuspend?: boolean; },
-  agentConfig?: { name?: string; description?: string; theme?: string; avatar?: any; domain?: string; }
+  agentConfig?: { name?: string; description?: string; theme?: string; avatar?: any; domain?: string; },
+  environmentVariables?: Record<string, string>
 ) {
   console.log('📁 Generating Vercel-optimized Next.js project files...');
   
@@ -603,6 +604,21 @@ export async function generateNextJsProject(
   });
   
   const files = mobileTemplate.generateAllFiles();
+
+  // In development environment, add actual .env file with real environment variables
+  if (isDevelopmentEnvironment && environmentVariables) {
+    console.log('💾 Adding .env file for development environment...');
+    
+    // Generate .env file content from actual environment variables
+    const envContent = Object.entries(environmentVariables)
+      .map(([key, value]) => `${key}="${value}"`)
+      .join('\n');
+    
+    // Add .env file to the generated files
+    files['.env'] = envContent;
+    
+    console.log(`✅ Added .env file with ${Object.keys(environmentVariables).length} environment variables`);
+  }
 
   console.log(`✅ Generated ${Object.keys(files).length} project files for Vercel deployment`);
   
@@ -665,11 +681,7 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     const vercelProject = await vercelClient.createProject(projectName);
     const vercelProjectId = vercelProject.id;
     
-    // Step 3: Generate Next.js project files
-    sendProgress('📁 Generating project files...');
-    const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName, neonOptions, input.agentConfig);
-    
-    // Step 4: Set up environment variables
+    // Step 3: Set up environment variables
     sendProgress('🔧 Configuring environment variables...');
     
     const agentDeploymentUrl = `https://${vercelProject.name}.vercel.app`;
@@ -710,6 +722,10 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     console.log('  Variable names:', Object.keys(allEnvVars));
     console.log('  Total count:', Object.keys(allEnvVars).length);
     console.log('  Project name used in NEXT_PUBLIC_APP_NAME:', projectName);
+    
+    // Step 4: Generate Next.js project files (after environment variables are defined)
+    sendProgress('📁 Generating project files...');
+    const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName, neonOptions, input.agentConfig, allEnvVars);
     
     await vercelClient.setEnvironmentVariables(vercelProjectId, allEnvVars);
     
@@ -843,7 +859,7 @@ export async function updateExistingDeployment(input: {
     console.log('📝 Note: SQLite database file will not be modified, only Vercel files updated');
     
     // Generate updated project files (without modifying SQLite)
-    const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName, undefined, input.agentConfig);
+    const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName, undefined, input.agentConfig, environmentVariables);
     
     // Update environment variables if provided
     if (Object.keys(environmentVariables).length > 0) {

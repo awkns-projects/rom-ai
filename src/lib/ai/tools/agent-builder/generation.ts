@@ -4362,10 +4362,12 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    \`\`\`
    
    **🚨 CRITICAL One-to-One Relations:**
-   - Must use \`@unique\` on the foreign key field
-   - Example: \`userId String? @unique\` and \`user User? @relation(fields: [userId], references: [id])\`
-   - **FAILURE TO ADD @unique WILL CAUSE DEPLOYMENT ERRORS**
-   - If you see relation field without array ([]) it's one-to-one and needs @unique
+   - ONLY use \`@unique\` on foreign key fields when you EXPLICITLY need a one-to-one relationship
+   - Most relationships should be one-to-many, NOT one-to-one
+   - Example: User can have many Content model records → userId String? (NO @unique)
+   - ONLY use @unique when business logic requires exactly one: userId String? @unique
+   - **DEFAULT TO ONE-TO-MANY**: Unless explicitly required, avoid @unique on foreign keys
+   - If you see relation field without array ([]) consider if it should be one-to-many instead
 
 7. **🚨 CRITICAL FIELD REQUIREMENTS - MUST FOLLOW:**
    - ONLY id fields should be required (no ? suffix)
@@ -4376,6 +4378,15 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    - WRONG: createdAt DateTime ❌
    - CORRECT: createdAt DateTime? ✅
    - Only the primary key id field should NOT have the ? suffix
+
+8. **🚨 CRITICAL UNIQUE CONSTRAINT RULES:**
+   - **DEFAULT**: Do NOT add @unique to foreign key fields unless explicitly required
+   - **MOST COMMON**: User can have many posts → authorId String? (NO @unique)
+   - **RARE CASE**: User profile is one-to-one → profileId String? @unique
+   - **QUESTION TO ASK**: "Can this entity have multiple of these relationships?"
+   - If YES → NO @unique (one-to-many)
+   - If NO → Add @unique (one-to-one)
+   - **EXAMPLE**: User can have many Content model records → authorId String? (NO @unique)
 
 8. **Common Patterns:**
    - Always include @default(cuid()) for String IDs
@@ -4410,18 +4421,30 @@ PRISMA SCHEMA GENERATION GUIDELINES:
        createdAt DateTime? @default(now())
        updatedAt DateTime? @updatedAt
        posts     Post[]
+       contents  Content[] // User can have many content items
      }
      
-     model Post {
+     model Content {
        id       String   @id @default(cuid())
        title    String?
        content  String?
-       userId   String?
-       user     User?    @relation(fields: [userId], references: [id])
+       authorId String?  // NO @unique - User can have many Content records
+       author   User?    @relation(fields: [authorId], references: [id])
        createdAt DateTime? @default(now())
        updatedAt DateTime? @updatedAt
      }
+     
+     // ✅ CORRECT: One-to-many relationship (User has many Content)
+     // ❌ WRONG: authorId String? @unique (would make it one-to-one)
      \`\`\`
+
+12. **COMMON RELATIONSHIP PATTERNS:**
+     - **User → Content**: One-to-many (NO @unique on authorId)
+     - **User → Posts**: One-to-many (NO @unique on userId) 
+     - **User → Orders**: One-to-many (NO @unique on customerId)
+     - **User → Profile**: One-to-one (YES @unique on userId)
+     - **User → Settings**: One-to-one (YES @unique on userId)
+     - **Campaign → Content**: One-to-many (NO @unique on campaignId)
 
 CRITICAL SYNTAX RULES - PREVENT COMMON ERRORS:
 
@@ -6087,11 +6110,23 @@ function fixOneToOneRelations(schema: string): string {
           
           if (foreignKeyLineIndex >= 0) {
             // For one-to-one relations, the relation field should be optional (Type?) not array (Type[])
-            // AND the foreign key should have @unique
+            // BUT only add @unique if it's truly a one-to-one business relationship
             const isOneToOne = optional === '?' && !line.includes('[]');
             
-            if (isOneToOne) {
-              console.log(`🔧 Adding @unique to foreign key ${foreignKeyField} for one-to-one relation`);
+            // Be more conservative about adding @unique - only for specific patterns
+            const isLikelyOneToOne = isOneToOne && (
+              foreignKeyField.includes('profile') ||
+              foreignKeyField.includes('setting') ||
+              foreignKeyField.includes('config') ||
+              foreignKeyField.includes('preference') ||
+              foreignKeyField.includes('detail') ||
+              line.includes('Profile') ||
+              line.includes('Setting') ||
+              line.includes('Config')
+            );
+            
+            if (isLikelyOneToOne) {
+              console.log(`🔧 Adding @unique to foreign key ${foreignKeyField} for confirmed one-to-one relation (profile/setting/config pattern)`);
               
               // More robust replacement that handles various field formats
               const currentLine = lines[foreignKeyLineIndex];
@@ -6105,6 +6140,8 @@ function fixOneToOneRelations(schema: string): string {
                   lines[foreignKeyLineIndex] = `${leadingSpace}${fieldName}${space}${fieldType} @unique${rest}`;
                 }
               }
+            } else if (isOneToOne) {
+              console.log(`⚠️ Skipping @unique for ${foreignKeyField} - appears to be one-to-many relationship (author, user, etc.)`);
             }
           }
         }

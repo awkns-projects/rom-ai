@@ -289,7 +289,7 @@ export function extractFieldInformationFromModels(availableModels: any[]): Recor
           fieldInfo[model.name][field.name] = {
             type: field.type,
             isEnum,
-            enumValues: isEnum ? enumInfo[field.type] : undefined
+            ...(isEnum && enumInfo[field.type] ? { enumValues: enumInfo[field.type] } : {})
           };
         }
       });
@@ -486,7 +486,7 @@ export function extractFieldInformationFromDatabase(availableModels: any[], avai
           fieldInfo[model.name][field.name] = {
             type: field.type,
             isEnum,
-            enumValues: isEnum ? enumInfo[field.type] : undefined
+            ...(isEnum && enumInfo[field.type] ? { enumValues: enumInfo[field.type] } : {})
           };
         }
       });
@@ -907,6 +907,8 @@ export async function generateActionExecutableCode(
   // Generate executable code based on technical specification and pseudo steps
   const systemPrompt = `You are a senior JavaScript developer generating executable code for ${entityType} operations.
 
+🚨 CRITICAL SYNTAX REQUIREMENT: Use template literals (\`backticks\`) for ALL string literals in your code to prevent syntax errors from apostrophes and quotes. NEVER use single quotes in console.log statements or error messages.
+
 TASK: Generate complete, executable JavaScript code based on the technical specification and pseudo steps.
 
 🚨 CRITICAL ERROR PREVENTION: The user has reported multiple critical errors:
@@ -914,12 +916,30 @@ TASK: Generate complete, executable JavaScript code based on the technical speci
 2. AI generates wrong model names like "contentModel" instead of actual model names
 3. AI ignores the provided input validation code and creates its own validation
 4. Generated code has runtime errors like "i.platforms.map is not a function"
+5. Generated code has syntax errors from unescaped quotes in console.log statements
 
 🚨 ABSOLUTELY FORBIDDEN - DO NOT DO THESE THINGS:
 ❌ NEVER generate your own enum validation - use ONLY the provided INPUT PARAMETER VALIDATION CODE
 ❌ NEVER invent model names - use ONLY the models listed in AVAILABLE MODELS section
 ❌ NEVER ignore the provided validation code - include it exactly as provided
 ❌ NEVER assume data structures - always check if variables are arrays before calling .map()
+❌ NEVER use single quotes in console.log statements - ALWAYS use template literals (\`backticks\`)
+❌ NEVER hardcode foreign key values - ALWAYS use parameters or validate existence first
+❌ NEVER create records with foreign keys unless you validate the referenced record exists
+
+🚨 CRITICAL SYNTAX ERROR PREVENTION:
+ALWAYS use template literals (\`backticks\`) for ALL string literals in your generated code, especially:
+- console.log(\`message\`) instead of console.log('message')
+- throw new Error(\`message\`) instead of throw new Error('message')
+- Any string that might contain apostrophes, quotes, or special characters
+
+🚨 CRITICAL FOREIGN KEY ERROR PREVENTION:
+NEVER create records with foreign key relationships unless:
+1. ✅ The foreign key value comes from parameters (user input)
+2. ✅ You validate the referenced record exists first
+3. ✅ You handle the case where foreign key is optional/missing
+
+This prevents errors like: "Foreign key constraint violated" and "authorId_fkey" errors.
 
 ${Object.keys(enumInfo).length > 0 ? `
 🎯 ACTUAL ENUM INFORMATION FROM THE DATABASE MODEL DATA:
@@ -1234,27 +1254,28 @@ CODE GENERATION REQUIREMENTS:
    For each step, include these exact console.log statements:
    
    // Step N: [Description]
-   console.log('🔄 Step N: [Description]');
-   console.log('📥 Step N Input:', { 
+   console.log(\`🔄 Step N: [Description]\`);
+   console.log(\`📥 Step N Input:\`, { 
      inputField1: parameters.inputField1 || 'undefined',
      inputField2: previousStepOutput || 'undefined'
    });
    
    // ... step implementation ...
    
-   console.log('📤 Step N Output:', { 
+   console.log(\`📤 Step N Output:\`, { 
      outputField1: stepN_outputField1,
      outputField2: stepN_outputField2,
      recordCount: results?.length || 0
    });
    
+   🚨 CRITICAL: Use template literals (\`backticks\`) instead of single quotes for console.log to avoid syntax errors with apostrophes.
    This logging helps debug data flow and identify where errors occur.
    
    🚨 EXAMPLE OF CORRECT STEP IMPLEMENTATION WITH VARIABLE FLOW:
    
    // Step 1: Fetch active campaigns
-   console.log('🔄 Step 1: Fetch active campaigns');
-   console.log('📥 Step 1 Input:', { 
+   console.log(\`🔄 Step 1: Fetch active campaigns\`);
+   console.log(\`📥 Step 1 Input:\`, { 
      status: parameters.status || 'undefined',
      batchSize: convertedParams.batchSize || 'undefined'
    });
@@ -1267,24 +1288,24 @@ CODE GENERATION REQUIREMENTS:
    
    // Validate step 1 outputs exist
    if (!step1_activeCampaigns) {
-     throw new Error('Step 1 failed: activeCampaigns is undefined');
+     throw new Error(\`Step 1 failed: activeCampaigns is undefined\`);
    }
    
-   console.log('📤 Step 1 Output:', { 
+   console.log(\`📤 Step 1 Output:\`, { 
      activeCampaigns: step1_activeCampaigns.length,
      campaignIds: step1_activeCampaigns.map(c => c.id)
    });
    
    // Step 2: Generate reports for campaigns  
-   console.log('🔄 Step 2: Generate reports for campaigns');
-   console.log('📥 Step 2 Input:', { 
+   console.log(\`🔄 Step 2: Generate reports for campaigns\`);
+   console.log(\`📥 Step 2 Input:\`, { 
      activeCampaigns: step1_activeCampaigns?.length || 0,
      campaignIds: step1_activeCampaigns?.map(c => c.id) || []
    });
    
    // Validate step 2 inputs exist (from step 1 outputs)
    if (!step1_activeCampaigns || !Array.isArray(step1_activeCampaigns)) {
-     throw new Error('Step 2 failed: step1_activeCampaigns is not available or not an array');
+     throw new Error(\`Step 2 failed: step1_activeCampaigns is not available or not an array\`);
    }
    
    // Define step 2 output variables (use exact names from pseudo step outputFields)
@@ -1293,7 +1314,7 @@ CODE GENERATION REQUIREMENTS:
      reportData: generateReportData(campaign)
    }));
    
-   console.log('📤 Step 2 Output:', { 
+   console.log(\`📤 Step 2 Output:\`, { 
      reportsGenerated: step2_reports.length,
      reportIds: step2_reports.map(r => r.campaignId)
    });
@@ -1310,6 +1331,68 @@ CODE GENERATION REQUIREMENTS:
    - prisma.modelName.updateMany({ where: filter, data: updateData }) - update multiple records
    - prisma.modelName.delete({ where: uniqueFilter }) - delete record
    - prisma.modelName.deleteMany({ where: filter }) - delete multiple records
+
+   🚨 CRITICAL FOREIGN KEY CONSTRAINT PREVENTION:
+   When creating records with foreign key relationships, you MUST:
+   1. ✅ ALWAYS validate that foreign key values reference existing records
+   2. ✅ Use parameters.userId, parameters.authorId, etc. from user input
+   3. ✅ Check if the referenced record exists before creating
+   4. ❌ NEVER hardcode foreign key values like authorId: "user123"
+   5. ❌ NEVER generate random IDs for foreign key fields
+   6. ❌ NEVER create records with foreign keys to non-existent records
+
+   **CORRECT FOREIGN KEY PATTERN:**
+   // Validate the foreign key exists first
+   if (parameters.authorId) {
+     const authorExists = await prisma.user.findUnique({
+       where: { id: parameters.authorId }
+     });
+     if (!authorExists) {
+       throw new Error(\`Author with ID \${parameters.authorId} does not exist\`);
+     }
+   }
+
+   // Create record with validated foreign key (or without if not provided)
+   const contentData = {
+     title: parameters.title,
+     body: parameters.body,
+     status: parameters.status
+   };
+   
+   // Only add foreign key if provided and validated
+   if (parameters.authorId) {
+     contentData.authorId = parameters.authorId;
+   }
+   
+   const content = await prisma.contentModel.create({
+     data: contentData
+   });
+
+   🚨 ALTERNATIVE PATTERN - Create without foreign keys:
+   // If foreign key relationships are complex, create records independently
+   const content = await prisma.contentModel.create({
+     data: {
+       title: parameters.title,
+       body: parameters.body,
+       status: parameters.status
+       // Note: No authorId - relationship can be established later if needed
+     }
+   });
+
+   **WRONG PATTERNS THAT CAUSE FOREIGN KEY ERRORS:**
+   ❌ const content = await prisma.contentModel.create({
+        data: {
+          authorId: "user123", // Hardcoded - will fail if user doesn't exist
+          title: parameters.title
+        }
+      });
+
+   ❌ const content = await prisma.contentModel.create({
+        data: {
+          authorId: generateRandomId(), // Random ID - will fail constraint
+          title: parameters.title  
+        }
+      });
    
    STEP TYPE TO DATABASE OPERATION MAPPING:
    For each database step, use the model field to determine the correct Prisma client method:
@@ -1490,13 +1573,21 @@ CODE GENERATION REQUIREMENTS:
    // Create a new health report
    const healthReport = await prisma.healthReport.create({
      data: {
-       userId: parameters.userId,
+       userId: parameters.userId, // Use the provided userId parameter
        reportDate: new Date(),
        waterIntakeSummary: analysisResult.waterIntakeSummary,
        workoutSummary: analysisResult.workoutSummary,
        sleepSummary: analysisResult.sleepSummary
      }
    });
+
+   🚨 CRITICAL FOREIGN KEY HANDLING:
+   When creating records with foreign key relationships:
+   - ✅ ALWAYS use parameters for foreign key values: userId: parameters.userId
+   - ❌ NEVER hardcode foreign key values: userId: "user123"
+   - ✅ Validate foreign key parameters exist before creating records
+   - ✅ Use existing IDs from previous steps or user input
+   - ❌ NEVER generate random IDs for foreign keys - they must reference existing records
    
    // 🚨 ID GENERATION WARNING:
    // DO NOT use cuid() - it's not available in the runtime environment
@@ -1601,21 +1692,23 @@ CODE GENERATION REQUIREMENTS:
    try {
      // Step implementations with logging...
    } catch (error) {
-     console.error('🚨 Action execution error:', error);
-     console.error('🔍 Error details:', {
+     console.error(\`🚨 Action execution error:\`, error);
+     console.error(\`🔍 Error details:\`, {
        errorMessage: error.message,
        errorStack: error.stack,
        actionName: '${name}',
        parametersReceived: Object.keys(parameters || {}),
-       stepInProgress: 'Identify which step was executing when error occurred'
+       stepInProgress: \`Identify which step was executing when error occurred\`
      });
      return {
        success: false,
        data: null,
-       message: 'Action execution failed: ' + (error.message || 'Unknown error'),
+       message: \`Action execution failed: \${error.message || 'Unknown error'}\`,
        executionTime: Date.now() - startTime
      };
    }
+
+   🚨 CRITICAL SYNTAX RULE: Use template literals (\`backticks\`) for ALL console.log and error messages to prevent syntax errors from apostrophes and quotes.
 
 9. ENVIRONMENT VARIABLES:
    🚨 CRITICAL: ONLY generate environment variables if the user explicitly mentioned a specific external service!
@@ -1762,25 +1855,47 @@ CRITICAL: The user has reported these exact errors that your code MUST prevent:
 1. "Invalid value for argument status. Expected StatusEnum" - caused by empty strings in enum fields
 2. "Argument \`take\`: Invalid value provided. Expected Int, provided String" - caused by string values in numeric fields
 3. "i.platforms.map is not a function" - caused by calling .map() on non-array variables
+4. "Expected ',', got 's'" - caused by unescaped apostrophes in console.log('campaign's data') statements
+5. "Foreign key constraint violated on the constraint: ContentModel_authorId_fkey" - caused by hardcoded foreign key values that don't exist
 
 🚨 MANDATORY ERROR PREVENTION PATTERNS:
 ✅ CORRECT array handling:
 if (Array.isArray(someVariable)) {
   const results = someVariable.map(item => processItem(item));
 } else {
-  console.warn('Expected array but got:', typeof someVariable);
+  console.warn(\`Expected array but got: \${typeof someVariable}\`);
   const results = [];
 }
 
 ❌ WRONG array handling:
 const results = someVariable.map(item => processItem(item)); // Will crash if not array
 
+✅ CORRECT string literals (prevents syntax errors):
+console.log(\`🔄 Step 1: Find campaign's target audience\`);
+throw new Error(\`Step failed: user's data is invalid\`);
+
+❌ WRONG string literals (causes syntax errors):
+console.log('🔄 Step 1: Find campaign's target audience'); // Breaks on apostrophe
+throw new Error('Step failed: user's data is invalid'); // Breaks on apostrophe
+
 Your generated code MUST:
 - Include the provided validation code exactly as given
 - Validate enum values before using them in Prisma queries
 - Convert string parameters to proper types (integers, dates, booleans) before database operations
 - Use parseInt() for take/skip parameters and parseFloat() for numeric comparisons
-- Check Array.isArray() before calling .map() on any variable`;
+- Check Array.isArray() before calling .map() on any variable
+- Use template literals (\`backticks\`) for ALL console.log statements and error messages to prevent syntax errors
+- Validate foreign key existence before creating records with relationships
+- NEVER hardcode foreign key values - always use parameters or existing record IDs
+
+🚨 FINAL VALIDATION CHECKLIST: Before submitting your code, verify that:
+1. ✅ ALL console.log statements use template literals: console.log(\`message\`)
+2. ✅ ALL error messages use template literals: throw new Error(\`message\`)
+3. ✅ NO single quotes around strings that might contain apostrophes
+4. ✅ ALL dynamic content uses \${variable} syntax within template literals
+5. ✅ ALL foreign key fields use parameters or validated existing IDs
+6. ✅ NO hardcoded foreign key values like authorId: "user123"
+7. ✅ Foreign key existence is validated before creating related records`;
 
   const result = await generateObject({
     model,
@@ -1839,8 +1954,15 @@ Generate production-ready code that follows the user-edited pseudo steps exactly
     temperature: 0.2,
   });
 
-  // Sanitize environment variable names
-  const envVarSanitization = sanitizeEnvironmentVariables(result.object.envVars || []);
+  // Sanitize environment variable names - ensure all required properties are present
+  const validatedEnvVars = (result.object.envVars || []).map(envVar => ({
+    name: envVar.name || '',
+    description: envVar.description || '',
+    required: envVar.required ?? false,
+    sensitive: envVar.sensitive ?? false
+  })).filter(envVar => envVar.name.trim() !== ''); // Remove any with empty names
+  
+  const envVarSanitization = sanitizeEnvironmentVariables(validatedEnvVars);
   
   if (envVarSanitization.invalid.length > 0) {
     console.warn(`⚠️ Action "${name}": ${envVarSanitization.invalid.length} environment variables could not be sanitized:`, envVarSanitization.invalid);

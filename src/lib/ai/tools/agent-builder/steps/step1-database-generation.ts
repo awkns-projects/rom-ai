@@ -483,7 +483,7 @@ COMPREHENSIVE VALIDATION CHECKLIST:
 🔍 **2. MODEL NAMING CONSISTENCY:**
 - Are model names consistent throughout the schema?
 - Do relation references use the exact model names that exist?
-- Example: If model is named "TaskModel", relations should use "TaskModel[]" not "Task[]"
+- Example: If model is named "Task", relations should use "Task[]" not "TaskModel[]"
 - Check for "Type 'X' is neither a built-in type" potential errors
 
 🔍 **3. ENUM VALIDATION:**
@@ -765,7 +765,7 @@ The previous schema generation failed prisma validate validation. Please fix the
 4. Ensure all relations use correct syntax with @relation decorators
 5. Check for duplicate field names or model names
 6. Ensure all required Prisma schema elements are present
-7. CRITICAL: Use exact model names in relations (if model is "TaskModel", use "TaskModel[]" not "Task[]")
+7. CRITICAL: Use exact model names in relations (if model is "Task", use "Task[]" not "TaskModel[]")
 8. **CRITICAL ONE-TO-ONE RELATIONS**: If you see "A one-to-one relation must use unique fields" error:
    - Add @unique to the foreign key field
    - Example: adCampaignId String? @unique (not just adCampaignId String?)
@@ -774,10 +774,10 @@ The previous schema generation failed prisma validate validation. Please fix the
 9. **CRITICAL BIDIRECTIONAL RELATIONS**: If you see "both provide the fields/references argument" error:
    - Remove @relation(fields: [...], references: [...]) from ONE side of the relationship
    - Keep @relation(fields: [...], references: [...]) on only ONE side
-   - Example fix for TaskModel ↔ ScheduleModel:
+   - Example fix for Task ↔ Schedule:
      WRONG: Both have @relation(fields: [...], references: [...])
-     CORRECT: Only ScheduleModel has @relation(fields: [taskId], references: [id])
-     CORRECT: TaskModel just has: schedules ScheduleModel[] (no @relation decorator)
+     CORRECT: Only Schedule has @relation(fields: [taskId], references: [id])
+     CORRECT: Task just has: schedules Schedule[] (no @relation decorator)
 
 SPECIFIC ERROR TO FIX:
 ${validationError}
