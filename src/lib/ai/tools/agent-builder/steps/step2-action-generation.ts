@@ -1,5 +1,5 @@
 import { generateActions, generatePrismaActions, getAgentBuilderModel } from '../generation';
-import { generateCompleteAction } from '../action-generation-shared';
+import { generateCompleteAction, updateSpecFromPseudoSteps, updatePseudoStepsFromSpec, type TechnicalSpecification } from '../action-generation-shared';
 import type { AgentAction, AgentData } from '../types';
 import type { Step0Output } from './step0-comprehensive-analysis';
 import type { Step1Output } from './step1-database-generation';
@@ -264,7 +264,8 @@ async function createCompleteAction(
   businessContext: string,
   entityType: string,
   existingActions: any[] = [],
-  prismaSchema?: string
+  prismaSchema?: string,
+  externalApis?: any[]
 ): Promise<any> {
   // Use the AI-generated values directly - the AI should generate proper name and title
   const actionTitle = actionSpec.title;
@@ -287,7 +288,8 @@ async function createCompleteAction(
       businessContext,
       entityType,
       existingActions,
-      prismaSchema
+      prismaSchema,
+      externalApis
     );
   } catch (error) {
     console.error(`❌ Failed to create complete action using shared logic: ${actionName}`, error);
@@ -348,7 +350,8 @@ export async function executeStep2ActionGeneration(
           businessContext,
           entityType,
           existingAgent?.actions || [],
-          databaseGeneration?.prismaSchema
+          databaseGeneration?.prismaSchema,
+          step0Analysis.externalApis || []
         );
       })
     );
@@ -381,20 +384,20 @@ export async function executeStep2ActionGeneration(
     const result: Step2Output = {
       actions: finalActions,
       implementationComplexity,
-      implementationNotes: `Generated ${finalActions.length} actions following API route pattern (pseudo steps → UI components → executable code). ` +
+      implementationNotes: `Generated ${finalActions.length} actions following NEW 3-step pattern (technical spec → pseudo steps → executable code). ` +
         `${codeGeneratedCount} actions have executable code. ` +
         `Step 0 identified ${actionRequirements.length} required actions. ` +
         `Implementation complexity: ${implementationComplexity} (${hasExternalAPIs ? 'external APIs, ' : ''}${hasComplexDatabase ? 'complex database, ' : ''}${finalActions.length} total actions).`
     };
 
-    console.log('✅ STEP 2: Action generation with API route pattern completed successfully');
+    console.log('✅ STEP 2: Action generation with NEW 3-step pattern completed successfully');
     console.log(`🎯 Final Summary:
 - Total Actions: ${result.actions.length}
 - Actions with Executable Code: ${codeGeneratedCount}
+- Actions with Technical Specifications: ${result.actions.filter((a: any) => a.technicalSpecification).length}
 - Actions with Pseudo Steps: ${result.actions.filter((a: any) => a.pseudoSteps?.length > 0).length}
-- Actions with UI Components: ${result.actions.filter((a: any) => a.uiComponentsDesign?.length > 0).length}
 - Implementation Complexity: ${implementationComplexity}
-- Pattern: ✅ Pseudo Steps → ✅ UI Components → ✅ Executable Code`);
+- NEW Pattern: ✅ Technical Spec → ✅ Pseudo Steps → ✅ Executable Code`);
 
     return result;
     
@@ -424,9 +427,9 @@ export function validateStep2Output(output: Step2Output): boolean {
       return false;
     }
 
-    // Check that actions follow the API route pattern
+    // Check that actions follow the NEW 3-step pattern
+    const actionsWithTechnicalSpecs = output.actions.filter((a: any) => a.technicalSpecification);
     const actionsWithPseudoSteps = output.actions.filter((a: any) => a.pseudoSteps && a.pseudoSteps.length > 0);
-    const actionsWithUIComponents = output.actions.filter((a: any) => a.uiComponentsDesign && a.uiComponentsDesign.length > 0);
     const actionsWithCode = output.actions.filter(a => 
       a.execute && a.execute.type === 'code' && a.execute.code?.script
     );
@@ -437,7 +440,7 @@ export function validateStep2Output(output: Step2Output): boolean {
     }
     
     console.log(`✅ Step 2 output validation passed: ${output.actions.length} actions`);
-    console.log(`📊 API Route Pattern Compliance: ${actionsWithPseudoSteps.length} with pseudo steps, ${actionsWithUIComponents.length} with UI components, ${actionsWithCode.length} with code`);
+    console.log(`📊 NEW 3-Step Pattern Compliance: ${actionsWithTechnicalSpecs.length} with technical specs, ${actionsWithPseudoSteps.length} with pseudo steps, ${actionsWithCode.length} with code`);
     return true;
     
   } catch (error) {
@@ -452,8 +455,8 @@ export function validateStep2Output(output: Step2Output): boolean {
 export function extractActionInsights(output: Step2Output) {
   const actionsWithCode = output.actions.filter((a: any) => a._internal?.hasRealCode);
   const actionsWithPrompts = output.actions.filter((a: any) => a.execute && a.execute.type === 'prompt');
+  const actionsWithTechnicalSpecs = output.actions.filter((a: any) => a.technicalSpecification);
   const actionsWithPseudoSteps = output.actions.filter((a: any) => a.pseudoSteps && a.pseudoSteps.length > 0);
-  const actionsWithUIComponents = output.actions.filter((a: any) => a.uiComponentsDesign && a.uiComponentsDesign.length > 0);
   
   return {
     actionCount: output.actions.length,
@@ -463,13 +466,13 @@ export function extractActionInsights(output: Step2Output) {
     codeGenerationSuccess: actionsWithCode.length / output.actions.length,
     implementationComplexity: output.implementationComplexity,
     executableActionsCount: actionsWithCode.length,
-    // API Route Pattern metrics
-    apiRoutePatternCompliance: {
+    // NEW 3-Step Pattern metrics
+    technicalSpecPatternCompliance: {
+      technicalSpecsGenerated: actionsWithTechnicalSpecs.length / output.actions.length,
       pseudoStepsGenerated: actionsWithPseudoSteps.length / output.actions.length,
-      uiComponentsGenerated: actionsWithUIComponents.length / output.actions.length,
       executableCodeGenerated: actionsWithCode.length / output.actions.length,
-      fullPatternCompliance: actionsWithPseudoSteps.filter((a: any) => 
-        actionsWithUIComponents.some((b: any) => b.id === a.id) && 
+      fullPatternCompliance: actionsWithTechnicalSpecs.filter((a: any) => 
+        actionsWithPseudoSteps.some((b: any) => b.id === a.id) && 
         actionsWithCode.some((c: any) => c.id === a.id)
       ).length / output.actions.length
     }

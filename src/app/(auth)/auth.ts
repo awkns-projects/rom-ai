@@ -47,7 +47,7 @@ if (process.env.NODE_ENV === 'production') {
   // Validate NEXTAUTH_URL for production
   if (!process.env.NEXTAUTH_URL) {
     console.error('❌ NEXTAUTH_URL is REQUIRED in production!');
-    console.error('   Set NEXTAUTH_URL to: https://rom.cards');
+    console.error('   Set NEXTAUTH_URL to: https://app.rom.cards');
     throw new Error('NEXTAUTH_URL must be set in production environment');
   }
 

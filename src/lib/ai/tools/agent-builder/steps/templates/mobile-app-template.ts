@@ -867,7 +867,18 @@ class ApiClient {
     const queryString = params.toString();
     const endpoint = \`/api/models/\${modelName}\${queryString ? \`?\${queryString}\` : ''}\`;
     
-    return this.request(endpoint);
+    const response = await this.request(endpoint);
+    
+    // Handle both direct array response and wrapped response
+    if (response.success && response.data) {
+      return Array.isArray(response.data) ? response.data : [response.data];
+    } else if (Array.isArray(response)) {
+      return response;
+    } else if (response.data) {
+      return Array.isArray(response.data) ? response.data : [response.data];
+    }
+    
+    return [];
   }
 
   // Get a single record by ID  
@@ -1300,9 +1311,15 @@ export default function ModelDetailPage() {
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [modelDef, setModelDef] = useState<any>(null);
+
+  // Get model definition from embedded config
+  const embeddedModels = ${JSON.stringify(this.options.models)};
 
   useEffect(() => {
     if (modelName && typeof modelName === 'string') {
+      const foundModel = embeddedModels.find(m => m.name === modelName);
+      setModelDef(foundModel);
       fetchRecords();
     }
   }, [modelName]);
@@ -1318,6 +1335,63 @@ export default function ModelDetailPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper functions for dynamic field handling
+  const getRecordId = (record: any) => {
+    if (!modelDef || !modelDef.fields) return record.id || 'Unknown';
+    
+    // Find ID field from model definition
+    const idField = modelDef.fields.find((field: any) => 
+      field.name === 'id' || field.name.toLowerCase().includes('id')
+    );
+    
+    if (idField && record[idField.name]) {
+      return record[idField.name];
+    }
+    
+    return record.id || 'Unknown';
+  };
+
+  const getRecordDate = (record: any) => {
+    if (!modelDef || !modelDef.fields) return null;
+    
+    // Find date/timestamp fields from model definition
+    const dateFields = modelDef.fields.filter((field: any) => 
+      field.type === 'DateTime' || 
+      field.name.toLowerCase().includes('date') ||
+      field.name.toLowerCase().includes('time') ||
+      field.name === 'createdAt' ||
+      field.name === 'updatedAt'
+    );
+    
+    for (const field of dateFields) {
+      if (record[field.name]) {
+        return new Date(record[field.name]).toLocaleDateString();
+      }
+    }
+    
+    return 'No date';
+  };
+
+  const getDisplayFields = (record: any) => {
+    if (!modelDef || !modelDef.fields) {
+      // Fallback: show all fields except common system fields
+      return Object.entries(record).filter(([key]) => 
+        !key.toLowerCase().includes('id') && 
+        !['createdAt', 'updatedAt'].includes(key)
+      );
+    }
+    
+    // Use model definition to determine display fields
+    const displayFields = modelDef.fields.filter((field: any) => 
+      !field.name.toLowerCase().includes('id') &&
+      !['createdAt', 'updatedAt'].includes(field.name)
+    );
+    
+    return displayFields
+      .map((field: any) => [field.name, record[field.name]])
+      .filter(([, value]) => value !== undefined && value !== null);
   };
 
   if (!modelName) {
@@ -1372,30 +1446,28 @@ export default function ModelDetailPage() {
           <div className="space-y-3">
             {records.map((record, i) => (
               <div
-                key={record.id || i}
+                key={getRecordId(record) || i}
                 className="bg-green-500/15 border border-green-400/30 rounded-xl p-4"
               >
                 <div className="flex justify-between items-start mb-3">
                   <span className="font-mono text-sm font-semibold text-green-200">
-                    Record #{record.id || i + 1}
+                    Record #{getRecordId(record)}
                   </span>
                   <span className="font-mono text-xs text-green-300/70">
-                    {record.createdAt ? new Date(record.createdAt).toLocaleDateString() : 'No date'}
+                    {getRecordDate(record)}
                   </span>
                 </div>
                 <div className="space-y-2">
-                  {Object.entries(record)
-                    .filter(([key]) => !['id', 'createdAt', 'updatedAt'].includes(key))
-                    .map(([key, value]) => (
-                      <div key={key} className="flex justify-between items-start gap-3">
-                        <span className="font-mono text-xs text-green-300/70 capitalize">
-                          {key.replace(/([A-Z])/g, ' $1').trim()}:
-                        </span>
-                        <span className="font-mono text-xs text-green-200 text-right flex-1 max-w-48 truncate">
-                          {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                        </span>
-                      </div>
-                    ))}
+                  {getDisplayFields(record).map(([key, value]) => (
+                    <div key={key} className="flex justify-between items-start gap-3">
+                      <span className="font-mono text-xs text-green-300/70 capitalize">
+                        {key.replace(/([A-Z])/g, ' $1').trim()}:
+                      </span>
+                      <span className="font-mono text-xs text-green-200 text-right flex-1 max-w-48 truncate">
+                        {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
@@ -1985,6 +2057,7 @@ What would you like to explore first?\`,
     const agentTheme = this.options.agentConfig?.theme || 'green';
     
     return `import { themes } from '@/lib/theme';
+import { useRouter } from 'next/router';
 
 interface ModelCardProps {
   model: {
@@ -1997,12 +2070,21 @@ interface ModelCardProps {
 }
 
 export default function ModelCard({ model }: ModelCardProps) {
+  const router = useRouter();
+  
   // Use embedded local configuration
   const selectedTheme = '${agentTheme}';
   const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
 
+  const handleClick = () => {
+    router.push(\`/models/\${model.name}\`);
+  };
+
   return (
-    <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
+    <div 
+      className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4 cursor-pointer \${currentTheme.bgHover} transition-colors\`}
+      onClick={handleClick}
+    >
       <div className="flex items-center gap-3 mb-3">
         <span className="text-lg">{model.emoji || '📋'}</span>
         <div className="flex-1">
@@ -2021,6 +2103,13 @@ export default function ModelCard({ model }: ModelCardProps) {
             {model.error ? 'Error' : 'records'}
           </div>
         </div>
+      </div>
+      
+      {/* Click indicator */}
+      <div className={\`mt-3 pt-3 border-t \${currentTheme.border}\`}>
+        <p className={\`font-mono text-xs \${currentTheme.dim} text-center\`}>
+          Click to view records →
+        </p>
       </div>
     </div>
   );
@@ -2351,7 +2440,36 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
     setInputParameters(defaultInputs);
   }, [action.name]);
 
+  const validateRequiredFields = () => {
+    const errors: string[] = [];
+    
+    uiComponents.forEach(component => {
+      if (component.required) {
+        const value = inputParameters[component.name];
+        if (!value || value === '' || (Array.isArray(value) && value.length === 0)) {
+          errors.push(\`\${component.label || component.name} is required\`);
+        }
+      }
+    });
+    
+    return errors;
+  };
+
   const executeAction = async () => {
+    // Validate required fields before execution
+    const validationErrors = validateRequiredFields();
+    if (validationErrors.length > 0) {
+      const errorResult = {
+        success: false,
+        error: 'Please fill in all required fields: ' + validationErrors.join(', '),
+        validationErrors
+      };
+      setResult(errorResult);
+      setStep('result');
+      onComplete(errorResult);
+      return;
+    }
+
     setIsExecuting(true);
     setStep('executing');
     setResult(null);
@@ -2389,14 +2507,22 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
   const renderInputComponent = (component: any) => {
     const value = inputParameters[component.name] || '';
 
+    // Determine if field has validation errors
+    const hasError = component.required && (!value || value === '');
+    const borderClass = hasError ? 'border-red-400/50' : 'border-green-400/30';
+    const focusBorderClass = hasError ? 'focus:border-red-400/70' : 'focus:border-green-400/50';
+
     switch (component.type) {
       case 'select':
         return (
           <select
             value={value}
             onChange={(e) => handleInputChange(component.name, e.target.value)}
-            className="w-full p-3 bg-green-500/10 border border-green-400/30 rounded-lg text-green-200 font-mono text-sm focus:outline-none focus:border-green-400/50"
+            className={\`w-full p-3 bg-green-500/10 border \${borderClass} rounded-lg text-green-200 font-mono text-sm focus:outline-none \${focusBorderClass}\`}
           >
+            <option value="" className="bg-gray-800">
+              {component.placeholder || \`Select \${component.label}\`}
+            </option>
             {(component.options || []).map((option: any, idx: number) => (
               <option key={idx} value={option.value} className="bg-gray-800">
                 {option.label || option.value}
@@ -2427,7 +2553,7 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
             onChange={(e) => handleInputChange(component.name, e.target.value)}
             placeholder={component.placeholder}
             rows={4}
-            className="w-full p-3 bg-green-500/10 border border-green-400/30 rounded-lg text-green-200 font-mono text-sm focus:outline-none focus:border-green-400/50 resize-none"
+            className={\`w-full p-3 bg-green-500/10 border \${borderClass} rounded-lg text-green-200 font-mono text-sm focus:outline-none \${focusBorderClass} resize-none\`}
           />
         );
       
@@ -2436,9 +2562,66 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
           <input
             type="number"
             value={value}
-            onChange={(e) => handleInputChange(component.name, parseFloat(e.target.value) || 0)}
+            onChange={(e) => {
+              const numValue = e.target.value;
+              // Keep as string to preserve user input, but validate it's a valid number
+              handleInputChange(component.name, numValue);
+            }}
             placeholder={component.placeholder}
-            className="w-full p-3 bg-green-500/10 border border-green-400/30 rounded-lg text-green-200 font-mono text-sm focus:outline-none focus:border-green-400/50"
+            className={\`w-full p-3 bg-green-500/10 border \${borderClass} rounded-lg text-green-200 font-mono text-sm focus:outline-none \${focusBorderClass}\`}
+          />
+        );
+      
+      case 'date':
+        return (
+          <input
+            type="date"
+            value={value}
+            onChange={(e) => handleInputChange(component.name, e.target.value)}
+            className={\`w-full p-3 bg-green-500/10 border \${borderClass} rounded-lg text-green-200 font-mono text-sm focus:outline-none \${focusBorderClass}\`}
+          />
+        );
+      
+      case 'datetime':
+      case 'datetime-local':
+        return (
+          <input
+            type="datetime-local"
+            value={value}
+            onChange={(e) => handleInputChange(component.name, e.target.value)}
+            className={\`w-full p-3 bg-green-500/10 border \${borderClass} rounded-lg text-green-200 font-mono text-sm focus:outline-none \${focusBorderClass}\`}
+          />
+        );
+      
+      case 'time':
+        return (
+          <input
+            type="time"
+            value={value}
+            onChange={(e) => handleInputChange(component.name, e.target.value)}
+            className={\`w-full p-3 bg-green-500/10 border \${borderClass} rounded-lg text-green-200 font-mono text-sm focus:outline-none \${focusBorderClass}\`}
+          />
+        );
+      
+      case 'email':
+        return (
+          <input
+            type="email"
+            value={value}
+            onChange={(e) => handleInputChange(component.name, e.target.value)}
+            placeholder={component.placeholder}
+            className={\`w-full p-3 bg-green-500/10 border \${borderClass} rounded-lg text-green-200 font-mono text-sm focus:outline-none \${focusBorderClass}\`}
+          />
+        );
+      
+      case 'url':
+        return (
+          <input
+            type="url"
+            value={value}
+            onChange={(e) => handleInputChange(component.name, e.target.value)}
+            placeholder={component.placeholder}
+            className={\`w-full p-3 bg-green-500/10 border \${borderClass} rounded-lg text-green-200 font-mono text-sm focus:outline-none \${focusBorderClass}\`}
           />
         );
       
@@ -2449,7 +2632,7 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
             value={value}
             onChange={(e) => handleInputChange(component.name, e.target.value)}
             placeholder={component.placeholder}
-            className="w-full p-3 bg-green-500/10 border border-green-400/30 rounded-lg text-green-200 font-mono text-sm focus:outline-none focus:border-green-400/50"
+            className={\`w-full p-3 bg-green-500/10 border \${borderClass} rounded-lg text-green-200 font-mono text-sm focus:outline-none \${focusBorderClass}\`}
           />
         );
     }
@@ -2524,15 +2707,28 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
                   Input Parameters
                 </label>
                 <div className="space-y-3">
-                  {uiComponents.map((component, idx) => (
-                    <div key={idx}>
-                      <label className="block font-mono text-xs text-green-300/70 mb-1">
-                        {component.label || component.name}
-                        {component.required && <span className="text-red-400 ml-1">*</span>}
-                      </label>
-                      {renderInputComponent(component)}
-                    </div>
-                  ))}
+                  {uiComponents.map((component, idx) => {
+                    const hasError = component.required && (!inputParameters[component.name] || inputParameters[component.name] === '');
+                    return (
+                      <div key={idx}>
+                        <label className="block font-mono text-xs text-green-300/70 mb-1">
+                          {component.label || component.name}
+                          {component.required && <span className="text-red-400 ml-1">*</span>}
+                        </label>
+                        {renderInputComponent(component)}
+                        {hasError && (
+                          <p className="mt-1 text-xs font-mono text-red-400">
+                            This field is required
+                          </p>
+                        )}
+                        {component.description && (
+                          <p className="mt-1 text-xs font-mono text-green-300/50">
+                            {component.description}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -2591,10 +2787,10 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
               </button>
               <button
                 onClick={executeAction}
-                disabled={isExecuting}
+                disabled={isExecuting || validateRequiredFields().length > 0}
                 className="flex-1 p-3 bg-green-500/25 border border-green-400/50 rounded-lg font-mono text-sm text-green-200 hover:bg-green-500/35 disabled:opacity-50 transition-colors"
               >
-                Execute Action
+                {validateRequiredFields().length > 0 ? 'Fill Required Fields' : 'Execute Action'}
               </button>
             </div>
           )}
@@ -3283,33 +3479,63 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           res.status(200).json({ success: true, data: record });
         } else {
           // Get all records with optional filtering and pagination
-          const { page = '1', limit = '100', search, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+          const { page = '1', limit = '100', search, sortBy, sortOrder = 'desc' } = req.query;
           const pageNum = parseInt(page as string, 10);
           const limitNum = parseInt(limit as string, 10);
           const skip = (pageNum - 1) * limitNum;
 
+          // Get model definition from embedded config
+          const embeddedModels = ${JSON.stringify(this.options.models)};
+          const modelDef = embeddedModels.find(m => m.name === modelName);
+          
+          let availableFields: string[] = [];
+          let defaultSortField = 'id'; // fallback
+          
+          if (modelDef && modelDef.fields) {
+            // Extract field names from model definition
+            availableFields = modelDef.fields.map((field: any) => field.name);
+            
+            // Prefer timestamp fields for default sorting
+            const timestampFields = ['createdAt', 'updatedAt', 'requestDate'];
+            const availableTimestamp = timestampFields.find(field => availableFields.includes(field));
+            
+            if (availableTimestamp) {
+              defaultSortField = availableTimestamp;
+            } else {
+              // Use the first field that's likely an ID field
+              const idFields = availableFields.filter(field => 
+                field.toLowerCase().includes('id') || field === 'id'
+              );
+              defaultSortField = idFields[0] || availableFields[0] || 'id';
+            }
+          } else {
+            console.log('Model definition not found in config, using fallback');
+          }
+
+          // Use provided sortBy if it exists in available fields, otherwise use default
+          const finalSortBy = (sortBy && availableFields.includes(sortBy as string)) ? 
+                              sortBy as string : defaultSortField;
+
           let where = {};
           if (search && typeof search === 'string') {
-            // Dynamic search - try to search across text fields that might exist
-            // This is a basic implementation that attempts common field names
+            // Use model definition to determine searchable fields
             const searchConditions = [];
             
-            try {
-              // Get a sample record to see what fields exist
-              const sampleRecord = await modelClient.findFirst();
-              if (sampleRecord) {
-                const stringFields = Object.keys(sampleRecord).filter(key => 
-                  typeof sampleRecord[key] === 'string' && 
-                  !['id', 'createdAt', 'updatedAt'].includes(key)
-                );
-                
-                stringFields.forEach(field => {
-                  searchConditions.push({ [field]: { contains: search, mode: 'insensitive' } });
-                });
-              }
-            } catch (error) {
-              // Fallback to common field names if schema inspection fails
-              const commonFields = ['name', 'title', 'description', 'label'];
+            if (modelDef && modelDef.fields) {
+              // Get string fields from model definition (exclude ID fields)
+              const stringFields = modelDef.fields
+                .filter((field: any) => 
+                  (field.type === 'String' || field.type === 'string') && 
+                  !field.name.toLowerCase().includes('id')
+                )
+                .map((field: any) => field.name);
+              
+              stringFields.forEach(field => {
+                searchConditions.push({ [field]: { contains: search, mode: 'insensitive' } });
+              });
+            } else {
+              // Fallback to common field names if model definition not available
+              const commonFields = ['name', 'title', 'description', 'label', 'content', 'requestContent', 'featureName', 'featureDescription', 'requirementDescription'];
               commonFields.forEach(field => {
                 searchConditions.push({ [field]: { contains: search, mode: 'insensitive' } });
               });
@@ -3325,7 +3551,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
               where,
               skip,
               take: limitNum,
-              orderBy: { [sortBy as string]: sortOrder }
+              orderBy: { [finalSortBy]: sortOrder }
             }),
             modelClient.count({ where })
           ]);

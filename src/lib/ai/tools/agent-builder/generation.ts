@@ -4271,15 +4271,29 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    - One-to-Many: use array on "many" side
    - Many-to-Many: use explicit join table or implicit relations
    
-   **🚨 CRITICAL RELATION RULES:** 
+   **🚨 CRITICAL RELATION RULES - WILL CAUSE DEPLOYMENT FAILURE IF VIOLATED:** 
    - ONLY ONE SIDE of a relation should have \`fields\` and \`references\` in the @relation attribute
    - The side WITHOUT the foreign key should NOT have \`fields\` and \`references\`
    - ALWAYS reference the primary key \`id\` field, NEVER reference other fields like \`userId\`, \`topicId\`
    - Foreign key fields should be named descriptively (e.g., \`authorId\`, \`categoryId\`) but relations reference \`id\`
-   - If both sides have \`fields\` and \`references\`, Prisma will throw a validation error
+   - **CRITICAL**: If both sides have \`fields\` and \`references\`, you will get "both provide the fields/references argument" error
+   - **CRITICAL**: This is the most common cause of deployment failures
    
-   **CORRECT Example:**
+   **CORRECT Examples:**
    \`\`\`
+   // ✅ CORRECT: TaskModel ↔ ScheduleModel (one-to-one)
+   model TaskModel {
+     id         String @id @default(cuid())
+     scheduleId String? @unique  // @unique required for one-to-one
+     schedule   ScheduleModel? @relation(fields: [scheduleId], references: [id])
+   }
+
+   model ScheduleModel {
+     id    String @id @default(cuid())
+     task  TaskModel[]  // NO @relation here - this is correct
+   }
+   
+   // ✅ CORRECT: User ↔ Post (one-to-many)
    model User {
      id       String   @id @default(cuid())
      email    String?  @unique
@@ -4296,7 +4310,18 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    
    **WRONG Examples (cause validation errors):**
    \`\`\`
-   // ❌ WRONG: Both sides have @relation with fields/references
+   // ❌ WRONG: Both sides have @relation with fields/references (COMMON ERROR!)
+   model TaskModel {
+     scheduleId  String?
+     schedule    ScheduleModel? @relation(fields: [scheduleId], references: [id])  // ❌ WRONG
+   }
+
+   model ScheduleModel {
+     taskId      String? @unique
+     task        TaskModel? @relation(fields: [taskId], references: [id])  // ❌ WRONG - both have fields/references
+   }
+   
+   // ❌ WRONG: Another example
    model User {
      posts    Post[]   @relation(fields: [id], references: [authorId])  // ❌ WRONG
    }
@@ -4315,9 +4340,11 @@ PRISMA SCHEMA GENERATION GUIDELINES:
    }
    \`\`\`
    
-   **One-to-One Relations:**
+   **🚨 CRITICAL One-to-One Relations:**
    - Must use \`@unique\` on the foreign key field
    - Example: \`userId String? @unique\` and \`user User? @relation(fields: [userId], references: [id])\`
+   - **FAILURE TO ADD @unique WILL CAUSE DEPLOYMENT ERRORS**
+   - If you see relation field without array ([]) it's one-to-one and needs @unique
 
 7. **🚨 CRITICAL FIELD REQUIREMENTS - MUST FOLLOW:**
    - ONLY id fields should be required (no ? suffix)
@@ -4421,7 +4448,7 @@ AUTOMATIC ERROR PREVENTION:
 Generate a complete, production-ready Prisma schema that supports the business requirements from the Step 0 analysis.
 The schema should be practical, well-structured, and follow Prisma best practices.
 
-Return ONLY the complete Prisma schema as a single string, starting with the generator and datasource blocks.`;
+CRITICAL: Return ONLY the complete Prisma schema as raw text, starting with the generator and datasource blocks. DO NOT wrap the schema in markdown code blocks. Return the raw schema content directly.`;
 
   const generateSchemaFunction = async () => {
     const result = await generateObject({
@@ -4440,7 +4467,11 @@ Return ONLY the complete Prisma schema as a single string, starting with the gen
 
   // Generate initial schema
   const initialSchema = await generateSchemaFunction();
-  return initialSchema;
+  
+  // Clean any markdown formatting that might have been included
+  const cleanedSchema = cleanSchemaMarkdown(initialSchema);
+  
+  return cleanedSchema;
   // Validate the generated schema
   // console.log('🔍 Validating generated Prisma schema...');
   // const validation = await validatePrismaSchema(initialSchema);
@@ -4462,6 +4493,29 @@ Return ONLY the complete Prisma schema as a single string, starting with the gen
   // }
 }
 
+/**
+ * Clean markdown formatting from Prisma schema
+ */
+function cleanSchemaMarkdown(schema: string): string {
+  if (!schema) return schema;
+  
+  // Remove markdown code blocks (```prisma and ```)
+  let cleaned = schema
+    .replace(/^```prisma\s*/gm, '') // Remove opening ```prisma
+    .replace(/^```\s*/gm, '') // Remove opening ```
+    .replace(/```\s*$/gm, '') // Remove closing ```
+    .trim();
+  
+  // Remove any remaining backticks at start/end
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.substring(3).trim();
+  }
+  if (cleaned.endsWith('```')) {
+    cleaned = cleaned.substring(0, cleaned.length - 3).trim();
+  }
+  
+  return cleaned;
+}
 
 import { ConvertSchemaToObject } from './schema/json';
 import { mergeSchema } from './schema/mergeSchema';

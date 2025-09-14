@@ -201,6 +201,17 @@ export async function executeStep0AFeatureCollection(
     
     const systemPrompt = `You are a business analyst focused on understanding user requirements at a semantic level. Your goal is to extract business features, understand user intent, and identify high-level requirements without getting into technical implementation details.
 
+You excel at inferring detailed requirements from minimal user input. Users will typically provide:
+1. Their CONTEXT (role, industry, situation)
+2. A LIST OF TASKS they want help with
+
+From this minimal information, you must intelligently infer:
+- What commands users would naturally want to give
+- What variables should be flexible in those commands
+- What background automation should happen after commands
+- What data needs to be tracked and processed
+- What integrations would be valuable
+
 ${existingAgent ? `
 EXISTING SYSTEM CONTEXT:
 Models: ${existingAgent.models?.map(m => m.name).join(', ') || 'none'}
@@ -218,7 +229,27 @@ ANALYSIS FOCUS:
    - How complex is this requirement?
    - How urgent and clear is the request?
 
-2. IDENTIFY EXTERNAL API REQUIREMENTS:
+2. INTELLIGENT COMMAND INFERENCE:
+   - Based on their context and tasks, what commands would users naturally want to give?
+   - What would be the most useful commands for someone in their situation?
+   - Think about their daily workflow and pain points
+   - Consider what they'd want to say to an assistant: "Create...", "Monitor...", "Update...", "Generate...", "Track..."
+
+3. VARIABLE IDENTIFICATION:
+   - For each inferred command, what parts should be flexible?
+   - What would users want to customize each time? (quantities, topics, timeframes, criteria, etc.)
+   - What parameters would make commands reusable for different situations?
+   - Think about: numbers, dates, categories, thresholds, recipients, formats, etc.
+
+4. BACKGROUND AUTOMATION PLANNING:
+   - After a user gives a command, what should happen automatically?
+   - Should the agent monitor things continuously?
+   - What data processing needs to happen?
+   - When should notifications be sent?
+   - What reports or summaries should be generated?
+   - How often should things be checked or updated?
+
+5. IDENTIFY EXTERNAL API REQUIREMENTS:
    - Does this request EXPLICITLY mention any external services or APIs?
    - ONLY include APIs that are DIRECTLY MENTIONED in the user's request
    - Do NOT infer or suggest APIs that aren't explicitly mentioned
@@ -228,28 +259,28 @@ ANALYSIS FOCUS:
    - What scopes/permissions would be required for each MENTIONED API?
    - IMPORTANT: Only process APIs that the user specifically requested
 
-3. IDENTIFY BUSINESS FEATURES:
+6. IDENTIFY BUSINESS FEATURES:
    - What are the 3-5 core features needed?
    - What 2-3 additional features would add value?
    - What user experience improvements are required?
    - What business rules must be enforced?
    - What integrations might be needed?
 
-4. EXTRACT SEMANTIC REQUIREMENTS:
+7. EXTRACT SEMANTIC REQUIREMENTS:
    - What business entities/concepts need to be represented?
    - What business processes need to happen?
    - What manual actions do users need to perform?
    - What automated schedules need to run?
    - Focus on WHAT needs to be done, not HOW
 
-5. AGENT DETAILS:
+8. AGENT DETAILS:
    - Suggest an appropriate agent name
    - Provide a clear agent description
    - Identify the business domain
    - What's the primary intent?
    - List relevant keywords
 
-Be focused on business value and user needs. Don't worry about technical implementation - that comes in the next phase.`;
+Be focused on business value and user needs. Use your intelligence to fill in the gaps from minimal user input. Think about what would make their life easier and their work more efficient.`;
 
     const result = await generateObject({
       model,
@@ -333,7 +364,29 @@ Be focused on business value and user needs. Don't worry about technical impleme
           role: 'user',
           content: `USER REQUEST: "${userRequest}"
 
-Analyze this request and extract the business features and semantic requirements. Focus on WHAT needs to be done and WHY, not HOW to implement it.
+Analyze this request and extract the business features and semantic requirements. The user has provided minimal information - use your intelligence to infer detailed requirements.
+
+INTELLIGENT ANALYSIS REQUIRED:
+- The user likely provided their CONTEXT (role/situation) and a LIST OF TASKS
+- From this minimal input, infer what commands they'd naturally want to give
+- Determine what variables should be flexible in those commands
+- Plan what background automation should happen after commands are given
+- Think about their daily workflow and what would make their life easier
+
+COMMAND INFERENCE EXAMPLES:
+- If they mention "social media posts" → infer commands like "Create social media campaign", "Schedule posts", "Analyze engagement"
+- If they mention "price monitoring" → infer commands like "Monitor product prices", "Set price alerts", "Generate price reports"
+- If they mention "expense tracking" → infer commands like "Log expenses", "Categorize transactions", "Generate budget reports"
+
+VARIABLE INFERENCE EXAMPLES:
+- "Create posts" → variables: number of posts, topics, platforms, scheduling times
+- "Monitor prices" → variables: products, price thresholds, monitoring frequency
+- "Track expenses" → variables: categories, date ranges, budget limits
+
+BACKGROUND AUTOMATION EXAMPLES:
+- After "Monitor prices" → continuously check prices, send alerts when thresholds hit, generate trend reports
+- After "Schedule posts" → automatically post at specified times, track engagement, suggest optimal times
+- After "Log expenses" → categorize automatically, update budgets, send spending alerts
 
 EXTERNAL API DETECTION:
 - Carefully analyze the request for EXPLICIT mentions of external services or APIs
@@ -343,7 +396,9 @@ EXTERNAL API DETECTION:
 - If multiple APIs are explicitly mentioned, prioritize based on their importance to the core functionality
 - If no external API is explicitly mentioned, set requiresExternalApi to false and primaryApi to null
 
-${existingAgent ? 'Focus on what NEW functionality is needed beyond what already exists.' : 'This is a new system - identify all requirements from scratch.'}`
+${existingAgent ? 'Focus on what NEW functionality is needed beyond what already exists.' : 'This is a new system - identify all requirements from scratch.'}
+
+Use your intelligence to create a comprehensive analysis from this minimal input. Think about what someone in their situation would really need and want.`
         }
       ],
       temperature: 0.4,
@@ -385,6 +440,14 @@ export async function executeStep0BTechnicalAggregation(
     
     const systemPrompt = `You are a technical architect who converts business requirements into concrete technical specifications for database models, actions, and schedules.
 
+You specialize in converting INFERRED user needs into technical implementations. Phase A has analyzed minimal user input (context + task list) and intelligently inferred:
+- What commands users would want to give
+- What variables should be flexible in those commands  
+- What background automation should happen
+- What data needs to be tracked
+
+Your job is to convert these inferred requirements into concrete technical specifications.
+
 ${existingAgent ? `
 EXISTING SYSTEM:
 Models: ${existingAgent.models?.map(m => `${m.name} (${m.fields?.map(f => f.name).join(', ') || 'no fields'})`).join(', ') || 'none'}
@@ -410,7 +473,7 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
      * Specify required scopes/permissions for the intended functionality
    - Design models, actions, and schedules to work ONLY with the APIs from Phase A analysis
 
-1. DATABASE MODELS:
+1. DATABASE MODELS - Convert inferred data needs into database schemas:
    ${existingAgent ? `
    - For EXISTING models: operation="update", add new fields, update existing fields, add enums
    - For NEW models: operation="create", design complete new models
@@ -424,9 +487,10 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    - Include proper field types (String, Int, DateTime, Boolean, etc.)
    - Define necessary enums (max 3 per model, 5 values each)
    - Specify relationships between models
+   - Design models to support the inferred commands and their variables
    - If external APIs are specified, design models that integrate with those APIs' data structures
 
-2. BUSINESS PROCESS ACTIONS (query/mutation only):
+2. BUSINESS PROCESS ACTIONS - Convert inferred commands into action specifications:
    ${existingAgent ? `
    - For EXISTING actions: operation="update" with updateDescription of what changes
    - For NEW actions: operation="create"
@@ -434,25 +498,22 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    ` : 'All actions are new (operation="create")'}
    - Operation: MUST be either 'create' (new action) or 'update' (modify existing action)
    
-   CRITICAL: Generate BUSINESS PROCESS ACTIONS, not basic CRUD operations
-   - Focus on workflows that integrate multiple systems
-   - Each action should orchestrate external API calls, data processing, and business logic
-   - Actions should represent complete business processes, not database operations
+   CRITICAL: Convert Phase A's inferred commands into BUSINESS PROCESS ACTIONS, not basic CRUD operations
+   - Each action should represent a complete workflow that users would naturally want to trigger
+   - Focus on the commands that Phase A identified users would want to give
+   - Include the flexible variables that Phase A identified for each command
+   - Actions should orchestrate external API calls, data processing, and business logic
    - Users already have basic CRUD capabilities - don't generate those
    
-   EXAMPLES for inventory system with Shopify + Google Sheets + Gmail:
-   - "Sync Shopify Inventory" (mutation) - Connect to Shopify API, fetch inventory, process data
-   - "Update Stock Alerts" (mutation) - Write formatted alerts to Google Sheets with conditional highlighting  
-   - "Send Restock Notifications" (mutation) - Send personalized Gmail notifications with priority levels
-   - "Generate Inventory Analysis" (query) - Analyze trends, calculate reorder points, predict demand
+   COMMAND → ACTION MAPPING EXAMPLES:
+   - Inferred command "Create social media campaign" → "Generate Social Media Campaign" action
+   - Inferred command "Monitor product prices" → "Track Product Price Changes" action  
+   - Inferred command "Generate expense report" → "Create Expense Analysis Report" action
+   - Inferred command "Schedule content posts" → "Schedule Content Publishing" action
    
-   AVOID basic CRUD like:
-   - "Create Inventory Item", "Update Product", "List Orders" - these are basic database operations
-   - "Set Alert Thresholds" - this is configuration, not a business process
-   
-   Generate 3-5 meaningful business process actions that solve real automation needs
+   Generate 3-7 meaningful business process actions that implement the inferred user commands
 
-3. AUTOMATED SCHEDULES (query/mutation only):
+3. AUTOMATED SCHEDULES - Convert inferred background automation into schedule specifications:
    ${existingAgent ? `
    - For EXISTING schedules: operation="update" with updateDescription of what changes
    - For NEW schedules: operation="create"  
@@ -460,9 +521,9 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    ` : 'All schedules are new (operation="create")'}
    - Operation: MUST be either 'create' (new schedule) or 'update' (modify existing schedule)
    - Frequency: daily, weekly, or monthly
-   - Automated recurring operations that run without user intervention
-   - Define frequency and timing
-   - Specify expected outputs
+   - Convert Phase A's background automation plans into automated recurring operations
+   - Each schedule should implement the continuous monitoring/processing that Phase A identified
+   - Define frequency and timing based on the business needs identified
    - If external APIs are specified, design schedules that sync with or process those APIs' data
 
 4. UPDATE DESCRIPTIONS:
@@ -472,7 +533,7 @@ TECHNICAL SPECIFICATION REQUIREMENTS:
    - For actions: "Enhance action to support Z functionality"
    - For schedules: "Update schedule to include X processing"
 
-Convert the semantic requirements into concrete technical specifications with proper create/update tracking, supporting multiple external API integrations as specified.
+Convert the inferred semantic requirements into concrete technical specifications with proper create/update tracking, supporting multiple external API integrations as specified.
 
 🚨 CRITICAL NAMING FORMAT REQUIREMENTS FOR ALL ENTITIES:
 
@@ -632,7 +693,7 @@ ${phaseAOutput.semanticRequirements.automatedSchedules.map(s => `
 
 TECHNICAL DESIGN INSTRUCTIONS:
 
-Using ALL the above information, convert these semantic requirements into concrete technical specifications:
+Using ALL the above information, convert these inferred semantic requirements into concrete technical specifications:
 
 0. EXTERNAL API INTEGRATION:
    - Required APIs: ${phaseAOutput.externalApiAnalysis.requiredApis.map(api => api.name).join(', ') || 'none'}
@@ -640,53 +701,57 @@ Using ALL the above information, convert these semantic requirements into concre
    - For each API, set appropriate priority (primary for core functionality, secondary for additional features)
    - All models, actions, and schedules should support integration with the relevant APIs
 
-1. DATABASE MODELS - Use entity priorities, relationships, and business rules:
+1. DATABASE MODELS - Convert inferred data tracking needs into database schemas:
+   - Use entity priorities, relationships, and business rules from the semantic analysis
+   - Design models to support the inferred commands and their flexible variables
    - High/Critical priority entities should become primary models
    - Use relationship information to design proper foreign keys and associations
    - Apply business rules as field constraints and validations
    - Consider integration requirements for external data fields
    - If external APIs specified, design models that match those APIs' data structures
 
-2. BUSINESS PROCESS ACTIONS - Use core features and external API integrations:
-   - Map each core feature to a complete business process action
+2. BUSINESS PROCESS ACTIONS - Convert inferred user commands into action implementations:
+   - Map each inferred command from the manual actions analysis to a complete business process action
    - For external API requirements, create dedicated integration actions
    - Each action should represent a full workflow, not a single database operation
    - Focus on automation between systems (API → Processing → Output)
+   - Include support for the flexible variables identified for each command
    
-   MAPPING STRATEGY:
-   - Shopify integration → "Sync Shopify Inventory" action
-   - Google Sheets integration → "Update Google Sheets" action  
-   - Gmail integration → "Send Notifications" action
-   - Analytics/reporting needs → "Generate Analysis" action
-   - Multi-system workflows → Combined process actions
+   COMMAND MAPPING STRATEGY:
+   - Look at the "Manual Actions" from semantic requirements - these are the commands users want to give
+   - Convert each manual action into an automated business process action
+   - For multi-system workflows, create combined process actions
+   - Ensure actions support the variable parameters that would make them flexible
    
    AVOID creating actions for basic CRUD operations that users already have
 
-3. AUTOMATED SCHEDULES - Use business processes and automation potential:
+3. AUTOMATED SCHEDULES - Convert inferred background automation into schedule implementations:
+   - Use the "Automated Schedules" from semantic requirements as the foundation
    - High automation potential processes should become schedules
-   - Use frequency information from automated schedules
+   - Use frequency information from automated schedules analysis
    - Consider business process triggers and outcomes
    - Map recurring business processes to schedule operations
+   - Implement the continuous monitoring/processing that was inferred
    - If external APIs specified, design schedules that sync with or process those APIs' data
 
-${existingAgent ? 'Focus on NEW models and additional fields for existing models, plus new actions and schedules that fulfill the identified requirements.' : 'Design everything from scratch based on the comprehensive analysis above.'}
+${existingAgent ? 'Focus on NEW models and additional fields for existing models, plus new actions and schedules that fulfill the inferred requirements.' : 'Design everything from scratch based on the comprehensive inference above.'}
 
 CRITICAL ACTION GENERATION REQUIREMENTS:
 
-For inventory tracking with Shopify + Google Sheets + Gmail, generate these types of business process actions:
+Convert the inferred user commands into business process actions. For example:
 
-✅ CORRECT Business Process Actions:
-1. "Sync Shopify Inventory Data" (mutation) - Connect to Shopify API, fetch all product inventory levels, process and validate data
-2. "Update Google Sheets Dashboard" (mutation) - Format inventory data, write to Google Sheets with conditional formatting for low stock
-3. "Send Restocking Email Alerts" (mutation) - Generate personalized Gmail notifications with product details and reorder recommendations  
-4. "Generate Inventory Analytics Report" (query) - Analyze inventory trends, calculate velocity, predict stockouts, suggest reorder points
+✅ CORRECT Business Process Actions (based on inferred commands):
+1. If Phase A inferred "Create social media campaign" command → "Generate Social Media Campaign" action
+2. If Phase A inferred "Monitor price changes" command → "Track Product Price Changes" action  
+3. If Phase A inferred "Send status updates" command → "Distribute Status Notifications" action
+4. If Phase A inferred "Generate reports" command → "Create Analytics Report" action
 
 ❌ AVOID Basic CRUD Actions:
-- "Create Product", "Update Inventory Item", "Delete Stock Record" - users already have these
-- "Set Alert Threshold", "Configure Settings" - these are configuration, not business processes
-- "List Products", "View Inventory" - these are basic queries users already have
+- "Create Product", "Update Inventory Item", "Delete Record" - users already have these
+- "Set Configuration", "Update Settings" - these are configuration, not business processes
+- "List Items", "View Data" - these are basic queries users already have
 
-Generate 3-5 business process actions that represent complete workflows integrating the specified external APIs.`
+Generate 3-7 business process actions that implement the commands Phase A inferred users would want to give.`
         }
       ],
       temperature: 0.3,

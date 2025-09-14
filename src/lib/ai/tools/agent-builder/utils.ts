@@ -69,8 +69,10 @@ export function createAgentData(
     description,
     domain,
     models,
+    enums: [],
     actions,
     schedules,
+    prismaSchema: '',
     createdAt: new Date().toISOString(),
     metadata,
     ...(exampleRecords && exampleRecords.length > 0 && { exampleRecords })
@@ -317,8 +319,10 @@ export function createInitialAgentData(
     description,
     domain,
     models,
+    enums: [],
     actions,
     schedules,
+    prismaSchema: '',
     createdAt: now,
     metadata: {
       createdAt: now,
@@ -670,9 +674,40 @@ export function generateTitleAndName(userInput: string): { title: string; name: 
  * Also removes action name prefixes that violate naming conventions.
  */
 export function sanitizeEnvironmentVariableName(name: string): string | null {
+  // FIRST: Filter out system-provided environment variables
+  const systemVariables = [
+    'DATABASE_URL',
+    'OPENAI_API_KEY',
+    'ANTHROPIC_API_KEY', 
+    'GROK_API_KEY',
+    'AI_MODEL_PROVIDER',
+    'AI_MODEL_NAME',
+    'NEXTAUTH_SECRET',
+    'NEXTAUTH_URL',
+    'CRON_SECRET',
+    'NODE_ENV',
+    'ENVIRONMENT',
+    'PORT',
+    'VERCEL_URL',
+    'NEXT_PUBLIC_VERCEL_URL'
+  ];
+  
+  // Check if this is a system variable (case-insensitive)
+  if (systemVariables.some(sysVar => sysVar.toLowerCase() === name.toLowerCase())) {
+    console.log(`🚫 Filtered out system variable: "${name}" (system-provided)`);
+    return null;
+  }
+  
+  // Check for variables starting with system prefixes
+  const systemPrefixes = ['NEXT_', 'VERCEL_', 'NEXTAUTH_', 'PRISMA_'];
+  if (systemPrefixes.some(prefix => name.toUpperCase().startsWith(prefix))) {
+    console.log(`🚫 Filtered out system variable: "${name}" (system prefix)`);
+    return null;
+  }
+  
   let sanitized = name;
   
-  // First, remove action name prefixes that contain hyphens or invalid characters
+  // Remove action name prefixes that contain hyphens or invalid characters
   // Pattern: ACTION-NAME-WITH-HYPHENS_API_PROVIDER_TYPE -> API_PROVIDER_TYPE
   if (sanitized.includes('_') && sanitized.match(/^[^_]*-[^_]*_/)) {
     // Find the first underscore after hyphens and extract everything after it

@@ -42,7 +42,6 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
   const [userProfile, setUserProfile] = useState<UserProfile>({});
   const [userInput, setUserInput] = useState('');
   const [variablesList, setVariablesList] = useState<string[]>(['']);
-  const [newVariable, setNewVariable] = useState('');
   const router = useRouter();
 
   // Fetch chat history for the selection phase
@@ -60,12 +59,12 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
   const welcomeMessages: WelcomeMessage[] = [
     {
       id: 'msg-1',
-      text:  "I'm here to create a special digital companion - think of it as your personal Digimon - that will help with your daily life!",
+      text:  "I'm here to create a special digital companion that will help with your daily tasks and workflow!",
       delay: 500,
     },
     {
       id: 'msg-2', 
-      text: "✨ Just like how each Digimon has unique abilities, your digital companion will have powers tailored specifically to YOUR needs.",
+      text: "✨ Just tell me a bit about your context and what tasks you need help with, and I'll design the perfect AI assistant for you.",
       delay: 500,
     },
   ];
@@ -80,35 +79,17 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
 
   const questions: Question[] = [
     {
-      id: 'category',
-      question: "What type of assistant do you want to create?",
-      placeholder: "Content Creator, Price Monitor, Research Assistant, Social Media Manager, Document Tracker...",
+      id: 'context',
+      question: "What's the general context for this agent? (your role, industry, or main area of focus)",
+      placeholder: "Marketing manager at a tech startup, freelance content creator, busy parent managing household, student researcher...",
       key: 'assistantType' as keyof UserProfile
     },
     {
-      id: 'purpose',
-      question: "What ongoing job should this assistant handle for you?",
-      placeholder: "Monitor products for changes, make daily posts, generate content, track documents...",
-      key: 'job' as keyof UserProfile
-    },
-    {
-      id: 'instruction',
-      question: "Tell me the instruction you'd give me — and list the items if there are more than one.",
-      placeholder: "Write 3 posts about travel and food, or watch prices for ETH, SOL, and BTC...",
-      key: 'workChallenges' as keyof UserProfile
-    },
-    {
-      id: 'variables',
-      question: "Which parts of that instruction should stay flexible?",
-      placeholder: "Add variables like: number of posts, topic, coin, threshold, date/time...",
-      key: 'contentNeeds' as keyof UserProfile,
+      id: 'tasks',
+      question: "What specific tasks or activities do you want this agent to help you with?",
+      placeholder: "Monitor product prices, create social media posts, track expenses, research topics, schedule appointments, analyze data...",
+      key: 'job' as keyof UserProfile,
       isVariablesList: true
-    },
-    {
-      id: 'frequency',
-      question: "Do you want me to: run once, keep watching continuously, or send updates on a schedule? And for how long?",
-      placeholder: "Check every hour for 30 days, run once now, send daily updates for a week...",
-      key: 'automationDesires' as keyof UserProfile
     }
   ];
 
@@ -148,18 +129,40 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
     // Handle variables list differently
     if (currentQuestion.isVariablesList) {
       const validVariables = variablesList.filter(v => v.trim() !== '');
-      if (validVariables.length === 0) return;
       
-      setUserProfile(prev => ({
-        ...prev,
-        [currentQuestion.key]: validVariables.join(', ')
-      }));
+      if (validVariables.length === 0) {
+        return;
+      }
+      
+      const joinedVariables = validVariables.join(', ');
+      
+      const updatedProfile = {
+        ...userProfile,
+        [currentQuestion.key]: joinedVariables
+      };
+      
+      setUserProfile(updatedProfile);
+      
+      if (currentQuestionIndex === questions.length - 1) {
+        // All questions answered, create the companion with the updated profile
+        createDigitalCompanion(updatedProfile);
+        return;
+      }
     } else {
       if (!userInput.trim()) return;
-      setUserProfile(prev => ({
-        ...prev,
+      
+      const updatedProfile = {
+        ...userProfile,
         [currentQuestion.key]: userInput.trim()
-      }));
+      };
+      
+      setUserProfile(updatedProfile);
+      
+      if (currentQuestionIndex === questions.length - 1) {
+        // All questions answered, create the companion with the updated profile
+        createDigitalCompanion(updatedProfile);
+        return;
+      }
     }
 
     setUserInput('');
@@ -170,9 +173,6 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
       if (questions[currentQuestionIndex + 1]?.isVariablesList) {
         setVariablesList(['']);
       }
-    } else {
-      // All questions answered, create the companion
-      createDigitalCompanion();
     }
   };
 
@@ -188,19 +188,21 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
     }
   };
 
-  const addVariable = () => {
-    if (newVariable.trim()) {
-      setVariablesList(prev => [...prev.filter(v => v.trim() !== ''), newVariable.trim(), '']);
-      setNewVariable('');
+  const removeVariable = (index: number) => {
+    if (variablesList.length > 1) {
+      setVariablesList(prev => prev.filter((_, i) => i !== index));
     }
   };
 
-  const removeVariable = (index: number) => {
-    setVariablesList(prev => prev.filter((_, i) => i !== index));
-  };
-
   const updateVariable = (index: number, value: string) => {
-    setVariablesList(prev => prev.map((v, i) => i === index ? value : v));
+    const newList = [...variablesList];
+    newList[index] = value;
+    setVariablesList(newList);
+    
+    // If user typed in the last field and it's not empty, add a new empty field
+    if (index === variablesList.length - 1 && value.trim()) {
+      setVariablesList(prev => [...prev, '']);
+    }
   };
 
   const goBackQuestion = () => {
@@ -216,24 +218,28 @@ export const Greeting = ({ chatId, append, selectedVisibilityType, user }: Greet
     setUserInput('');
   };
 
-  const createDigitalCompanion = () => {
+  const createDigitalCompanion = (profileOverride?: UserProfile) => {
+    // Use the override profile if provided, otherwise use the current userProfile
+    const currentProfile = profileOverride || userProfile;
+    
     // Build a comprehensive prompt from the user's answers
-    const answers = Object.entries(userProfile).filter(([_, value]) => value && value.trim() !== '');
+    const answers = Object.entries(currentProfile).filter(([_, value]) => value && value.trim() !== '');
     
     if (answers.length > 0) {
-      const companionPrompt = `I want to create a digital assistant/companion for my work and life. Here's information about me:
+      const companionPrompt = `I want to create a digital assistant/companion for my work and life. Here's my information:
 
-${userProfile.assistantType ? `🤖 Assistant type I want: ${userProfile.assistantType}` : ''}
+${currentProfile.assistantType ? `🎯 My Context: ${currentProfile.assistantType}` : ''}
 
-${userProfile.job ? `📋 Ongoing job for the assistant: ${userProfile.job}` : ''}
+${currentProfile.job ? `📋 Tasks I Need Help With: ${currentProfile.job}` : ''}
 
-${userProfile.workChallenges ? `📝 My specific instructions: ${userProfile.workChallenges}` : ''}
+Based on this information, please create a personalized AI agent that can help me with these specific needs. I want you to:
 
-${userProfile.contentNeeds ? `⚙️ Variables to keep flexible: ${userProfile.contentNeeds}` : ''}
+1. **Analyze my context and tasks** to understand what I do and what I need help with
+2. **Design intelligent commands** that I can give to the agent - think about what commands would be most useful for someone in my situation
+3. **Determine flexible variables** for each command so I can customize them for different situations (like quantities, topics, timeframes, etc.)
+4. **Plan background automation** - what should the agent do behind the scenes after I give it a command? Should it monitor things continuously, process data, send notifications, generate reports, etc.?
 
-${userProfile.automationDesires ? `⏰ Frequency and duration: ${userProfile.automationDesires}` : ''}
-
-Please create a personalized AI agent that can help me with these specific needs and integrate with my workflow. Make it like a digital companion that understands my unique situation and can assist me in practical ways.`;
+Create an agent that truly understands my workflow and can anticipate what I need. Make it like a smart digital companion that knows how to help someone in my specific situation.`;
 
       // Trigger the chat with this prompt
       triggerChatStart(companionPrompt);
@@ -263,73 +269,77 @@ Please create a personalized AI agent that can help me with these specific needs
       emoji: '👋',
       title: 'Marketing Manager Assistant',
       label: 'Social media, content creation, and campaign management',
-      action: `I want to create a digital assistant/companion for my work and life. Here's information about me:
+      action: `I want to create a digital assistant/companion for my work and life. Here's my information:
 
-🏢 My job/role: Marketing Manager at a tech startup
+🎯 My Context: Marketing Manager at a tech startup
 
-⚡ My biggest work challenges: Creating consistent social media content across multiple platforms, managing campaign timelines, and tracking performance metrics manually
+📋 Tasks I Need Help With: Create consistent social media content across multiple platforms, manage campaign timelines, track performance metrics, generate content calendars, pull performance reports from different platforms, create weekly marketing summaries
 
-✍️ Content creation needs: I struggle with generating fresh content ideas, writing engaging captions, and maintaining brand voice consistency across LinkedIn, Twitter, and Instagram
+Based on this information, please create a personalized AI agent that can help me with these specific needs. I want you to:
 
-🤖 Tasks I want to automate: Scheduling social media posts, generating content calendars, pulling performance reports from different platforms, and creating weekly marketing summaries
+1. **Analyze my context and tasks** to understand what I do and what I need help with
+2. **Design intelligent commands** that I can give to the agent - think about what commands would be most useful for someone in my situation
+3. **Determine flexible variables** for each command so I can customize them for different situations (like quantities, topics, timeframes, etc.)
+4. **Plan background automation** - what should the agent do behind the scenes after I give it a command? Should it monitor things continuously, process data, send notifications, generate reports, etc.?
 
-🛠️ Tools I currently use: Hootsuite for scheduling, Canva for graphics, Google Analytics, Slack for team communication, and Notion for content planning
-
-Please create a personalized AI agent that can help me with these specific needs and integrate with my workflow. Make it like a digital companion that understands my unique situation and can assist me in practical ways.`,
+Create an agent that truly understands my workflow and can anticipate what I need. Make it like a smart digital companion that knows how to help someone in my specific situation.`,
     },
     {
       emoji: '💪',
       title: 'Fitness & Wellness Coach',
       label: 'Health tracking, workout planning, and wellness habits',
-      action: `I want to create a digital assistant/companion for my work and life. Here's information about me:
+      action: `I want to create a digital assistant/companion for my work and life. Here's my information:
 
-🏢 My job/role: Software developer working remotely
+🎯 My Context: Software developer working remotely
 
-⚡ My biggest work challenges: Sitting for long hours, irregular eating schedules, and forgetting to take breaks or exercise
+📋 Tasks I Need Help With: Track daily water intake, remind me to take movement breaks, log workouts, monitor sleep patterns, generate weekly health reports, document fitness journey for social media accountability
 
-✍️ Content creation needs: I want to document my fitness journey and share progress on social media to stay accountable
+Based on this information, please create a personalized AI agent that can help me with these specific needs. I want you to:
 
-🤖 Tasks I want to automate: Tracking daily water intake, reminding me to take movement breaks, logging workouts, monitoring sleep patterns, and generating weekly health reports
+1. **Analyze my context and tasks** to understand what I do and what I need help with
+2. **Design intelligent commands** that I can give to the agent - think about what commands would be most useful for someone in my situation
+3. **Determine flexible variables** for each command so I can customize them for different situations (like quantities, topics, timeframes, etc.)
+4. **Plan background automation** - what should the agent do behind the scenes after I give it a command? Should it monitor things continuously, process data, send notifications, generate reports, etc.?
 
-🛠️ Tools I currently use: Apple Health for basic tracking, MyFitnessPal for nutrition, and a basic workout app
-
-Please create a personalized AI agent that can help me with these specific needs and integrate with my workflow. Make it like a digital companion that understands my unique situation and can assist me in practical ways.`,
+Create an agent that truly understands my workflow and can anticipate what I need. Make it like a smart digital companion that knows how to help someone in my specific situation.`,
     },
     {
       emoji: '🎯',
       title: 'Content Creator & Influencer',
       label: 'Content planning, audience engagement, and brand partnerships',
-      action: `I want to create a digital assistant/companion for my work and life. Here's information about me:
+      action: `I want to create a digital assistant/companion for my work and life. Here's my information:
 
-🏢 My job/role: Full-time content creator and lifestyle influencer
+🎯 My Context: Full-time content creator and lifestyle influencer
 
-⚡ My biggest work challenges: Maintaining consistent posting schedules, managing brand partnership deadlines, and engaging with my audience across multiple platforms
+📋 Tasks I Need Help With: Maintain consistent posting schedules, manage brand partnership deadlines, engage with audience across multiple platforms, brainstorm fresh content ideas, write captions that drive engagement, repurpose content across different platforms, conduct hashtag research, track performance analytics, handle brand outreach follow-ups, monitor audience engagement
 
-✍️ Content creation needs: I need help brainstorming fresh content ideas, writing captions that drive engagement, and repurposing content across different platforms (Instagram, TikTok, YouTube)
+Based on this information, please create a personalized AI agent that can help me with these specific needs. I want you to:
 
-🤖 Tasks I want to automate: Content calendar planning, hashtag research, performance analytics tracking, brand outreach follow-ups, and audience engagement monitoring
+1. **Analyze my context and tasks** to understand what I do and what I need help with
+2. **Design intelligent commands** that I can give to the agent - think about what commands would be most useful for someone in my situation
+3. **Determine flexible variables** for each command so I can customize them for different situations (like quantities, topics, timeframes, etc.)
+4. **Plan background automation** - what should the agent do behind the scenes after I give it a command? Should it monitor things continuously, process data, send notifications, generate reports, etc.?
 
-🛠️ Tools I currently use: Later for scheduling, Photoshop for editing, Google Sheets for tracking partnerships, and native platform analytics
-
-Please create a personalized AI agent that can help me with these specific needs and integrate with my workflow. Make it like a digital companion that understands my unique situation and can assist me in practical ways.`,
+Create an agent that truly understands my workflow and can anticipate what I need. Make it like a smart digital companion that knows how to help someone in my specific situation.`,
     },
     {
       emoji: '🏠',
       title: 'Busy Parent & Household Manager',
       label: 'Family scheduling, household tasks, and personal organization',
-      action: `I want to create a digital assistant/companion for my work and life. Here's information about me:
+      action: `I want to create a digital assistant/companion for my work and life. Here's my information:
 
-🏢 My job/role: Working parent managing both a part-time consulting business and household responsibilities
+🎯 My Context: Working parent managing both a part-time consulting business and household responsibilities
 
-⚡ My biggest work challenges: Juggling client deadlines with family schedules, keeping track of kids' activities and appointments, and managing household budgets and tasks
+📋 Tasks I Need Help With: Juggle client deadlines with family schedules, keep track of kids' activities and appointments, manage household budgets and tasks, plan meals and create grocery lists, schedule maintenance tasks, organize kids' school and activity schedules, track household expenses, document family memories
 
-✍️ Content creation needs: I want to document family memories and share parenting tips, but struggle to find time for consistent posting
+Based on this information, please create a personalized AI agent that can help me with these specific needs. I want you to:
 
-🤖 Tasks I want to automate: Family calendar management, meal planning and grocery lists, tracking household expenses, scheduling maintenance tasks, and organizing kids' school and activity schedules
+1. **Analyze my context and tasks** to understand what I do and what I need help with
+2. **Design intelligent commands** that I can give to the agent - think about what commands would be most useful for someone in my situation
+3. **Determine flexible variables** for each command so I can customize them for different situations (like quantities, topics, timeframes, etc.)
+4. **Plan background automation** - what should the agent do behind the scenes after I give it a command? Should it monitor things continuously, process data, send notifications, generate reports, etc.?
 
-🛠️ Tools I currently use: Google Calendar for family scheduling, Mint for budgeting, a shared grocery list app, and basic photo storage
-
-Please create a personalized AI agent that can help me with these specific needs and integrate with my workflow. Make it like a digital companion that understands my unique situation and can assist me in practical ways.`,
+Create an agent that truly understands my workflow and can anticipate what I need. Make it like a smart digital companion that knows how to help someone in my specific situation.`,
     },
   ];
 
@@ -411,7 +421,7 @@ Please create a personalized AI agent that can help me with these specific needs
               <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-purple-200 dark:border-purple-700">
                 <div className="flex items-center justify-center gap-2 text-purple-600 dark:text-purple-400 font-medium">
                   <span className="text-lg">⚡</span>
-                  <span>Build Your Digimon</span>
+                  <span>Build Your Assistant</span>
                 </div>
               </div>
             </div>
@@ -591,7 +601,7 @@ Please create a personalized AI agent that can help me with these specific needs
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.5, duration: 0.6 }}
           >
-            Creating your personalized AI Digimon ⚡
+            Creating your personalized AI assistant ⚡
           </motion.p>
         </div>
 
@@ -655,7 +665,7 @@ Please create a personalized AI agent that can help me with these specific needs
           </div>
           
           <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-200 mb-3">
-            Creating Your Digital Companion
+            Creating Your Digital Assistant
           </h1>
           
           <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mb-4">
@@ -752,48 +762,30 @@ Please create a personalized AI agent that can help me with these specific needs
                 /* Variables List Input */
                 <div className="space-y-3">
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    Add the flexible parts of your instruction (one at a time):
+                    Add the tasks you want help with (one at a time):
                   </p>
                   
                   {/* Existing Variables */}
-                  {variablesList.filter(v => v.trim() !== '').map((variable, index) => (
+                  {variablesList.map((variable, index) => (
                     <div key={index} className="flex gap-2 items-center">
                       <input
                         type="text"
                         value={variable}
                         onChange={(e) => updateVariable(index, e.target.value)}
                         className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white text-sm"
-                        placeholder="e.g., number of posts"
+                        placeholder={index === 0 ? "e.g., monitor crypto prices" : "Add another task..."}
                       />
-                      <button
-                        type="button"
-                        onClick={() => removeVariable(index)}
-                        className="px-2 py-2 text-red-500 hover:text-red-700 text-sm"
-                      >
-                        ✕
-                      </button>
+                      {variablesList.length > 1 && variable.trim() && (
+                        <button
+                          type="button"
+                          onClick={() => removeVariable(index)}
+                          className="px-2 py-2 text-red-500 hover:text-red-700 text-sm"
+                        >
+                          ✕
+                        </button>
+                      )}
                     </div>
                   ))}
-                  
-                  {/* Add New Variable */}
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newVariable}
-                      onChange={(e) => setNewVariable(e.target.value)}
-                      placeholder="Add another variable..."
-                      className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white text-sm"
-                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addVariable())}
-                    />
-                    <button
-                      type="button"
-                      onClick={addVariable}
-                      disabled={!newVariable.trim()}
-                      className="px-3 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 disabled:opacity-50 text-sm"
-                    >
-                      Add
-                    </button>
-                  </div>
                 </div>
               ) : (
                 /* Regular Text Input */
@@ -815,7 +807,7 @@ Please create a personalized AI agent that can help me with these specific needs
                     !userInput.trim()}
                   className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:from-green-600 hover:to-emerald-600 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
-                  {currentQuestionIndex === questions.length - 1 ? 'Create My Companion! 🎉' : 'Send →'}
+                  {currentQuestionIndex === questions.length - 1 ? 'Create My Agent! 🎉' : 'Next →'}
                 </button>
                 
                 <button
