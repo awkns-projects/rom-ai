@@ -864,7 +864,7 @@ The chat will work immediately with your AI provider.
   }
 
   private generateSeedScript(options: MobileAppTemplateOptions): string {
-    const { models, enums, projectName, agentConfig } = options;
+    const { models, enums, projectName, agentConfig, prismaSchema } = options;
     const agentName = agentConfig?.name || projectName;
     const agentDescription = agentConfig?.description || 'Smart agent powered by AI';
     
@@ -879,92 +879,35 @@ const prisma = new PrismaClient();
  * using AI to create contextually appropriate sample records.
  */
 
-// AI Prompt Template for generating seed data with proper Prisma schema awareness
-const generateSeedDataPrompt = (modelName: string, fields: any[], agentContext: string, recordCount: number = 5, enums: any[] = []) => {
-  // Filter out relation fields more aggressively
-  const scalarFields = fields.filter(field => {
-    // Skip id field - Prisma auto-generates it
-    if (field.name === 'id') return false;
-    
-    // Skip if explicitly marked as relation field
-    if (field.relationField === true) return false;
-    
-    // Skip if field kind is 'object' (indicates relation)
-    if (field.kind === 'object') return false;
-    
-    // Skip if field type is a model name (not a primitive type)
-    const primitiveTypes = ['String', 'Int', 'Float', 'Boolean', 'DateTime', 'Json', 'Bytes'];
-    const isEnum = enums.some(e => e.name === field.type);
-    if (!primitiveTypes.includes(field.type) && !isEnum) return false;
-    
-    // Skip common relation field patterns
-    const relationPatterns = [
-      /Records$/,     // medicationRecords, weeklyReports
-      /^patient$/i,   // patient
-      /^doctor$/i,    // doctor
-      /^user$/i,      // user
-      /^author$/i,    // author
-      /^owner$/i,     // owner
-      /s$/           // plural fields are usually relations
-    ];
-    
-    for (const pattern of relationPatterns) {
-      if (pattern.test(field.name)) return false;
-    }
-    
-    return true;
-  });
+// AI Prompt Template for generating seed data using Prisma schema
+const generateSeedDataPrompt = (modelName: string, prismaSchema: string, agentContext: string, recordCount: number = 5) => \`
+You are a Prisma database seeding expert. Generate \${recordCount} realistic sample records for the "\${modelName}" model.
 
-  return \`
-You are a Prisma database seeding expert. Generate \${recordCount} realistic sample records for the "\${modelName}" model in the context of: \${agentContext}
+CONTEXT: \${agentContext}
 
-🚨 CRITICAL PRISMA RULES:
-1. ONLY generate scalar fields (String, Int, Float, Boolean, DateTime)
-2. NEVER generate relation fields (fields that reference other models)
-3. For enum fields, use ONLY the exact values provided below
-4. Skip the 'id' field - Prisma auto-generates it
-5. Return ONLY a JSON array of objects, no other text
+FULL PRISMA SCHEMA:
+\${prismaSchema}
 
-SCALAR FIELDS TO POPULATE:
-\${scalarFields.map(field => {
-  const enumInfo = enums.find(e => e.name === field.type);
-  if (enumInfo) {
-    return \`- \${field.name}: \${field.type} enum (valid values: \${enumInfo.fields.map(f => f.name).join(', ')})\${field.optional ? ' (optional)' : ''}\`;
-  }
-  return \`- \${field.name}: \${field.type}\${field.optional ? ' (optional)' : ''}\`;
-}).join('\\n')}
+🚨 CRITICAL RULES:
+1. Look at the Prisma schema above to understand the EXACT field structure for \${modelName}
+2. ONLY generate scalar fields (String, Int, Float, Boolean, DateTime) - NOT relation fields
+3. Skip the 'id' field - Prisma auto-generates it with @id @default(cuid())
+4. Skip relation fields (fields that don't have primitive types)
+5. For DateTime fields, use ISO string format: "2023-10-15T10:30:00.000Z"
+6. Return ONLY a JSON array of objects, no markdown or extra text
 
-\${enums.length > 0 ? \`
-ENUM DEFINITIONS (use exact values):
-\${enums.map(enumDef => \`- \${enumDef.name}: [\${enumDef.fields.map(f => f.name).join(', ')}]\`).join('\\n')}
-\` : ''}
+FIELD IDENTIFICATION:
+- ✅ INCLUDE: Fields with types String, Int, Float, Boolean, DateTime, Json
+- ❌ SKIP: Fields with model names as types (these are relations)
+- ❌ SKIP: Fields with arrays [] (these are relation arrays)
+- ❌ SKIP: The 'id' field (auto-generated)
 
-REQUIREMENTS:
-1. Generate realistic, diverse data that makes sense for \${agentContext}
-2. For enum fields, use ONLY the exact enum values listed above
-3. Use proper formatting for dates (ISO strings), emails, etc.
-4. Make data contextually relevant to the healthcare/medical domain
-5. Return ONLY a JSON array of objects, no markdown or extra text
-6. Do NOT include relation fields or nested objects
+For the \${modelName} model, generate realistic data that makes sense in the context of: \${agentContext}
 
-FORBIDDEN:
-- Do NOT generate 'id' fields
-- Do NOT generate relation fields (like 'patient', 'doctor', 'medications')
-- Do NOT create nested objects or arrays for relations
-- Do NOT use enum values not listed above
+Return format: [{"field1": "value1", "field2": "value2"}, ...]
 
-Example format:
-[
-  {
-    "name": "Dr. Smith",
-    "specialization": "Cardiology",
-    "contactInformation": "dr.smith@hospital.com"
-  }
-]
-
-Generate the seed data now:
+Generate the JSON array now:
 \`;
-};
 
 // Available AI providers for seed generation
 const AI_PROVIDERS = {
@@ -1014,17 +957,17 @@ const AI_PROVIDERS = {
 };
 
 // Generate seed data using AI
-async function generateSeedDataWithAI(modelName: string, fields: any[], agentContext: string, recordCount: number = 5, enums: any[] = []): Promise<any[]> {
+async function generateSeedDataWithAI(modelName: string, prismaSchema: string, agentContext: string, recordCount: number = 5): Promise<any[]> {
   const provider = process.env.AI_MODEL_PROVIDER || 'openai';
   const apiKey = provider === 'openai' ? process.env.OPENAI_API_KEY : process.env.ANTHROPIC_API_KEY;
   
   if (!apiKey) {
     console.warn(\`⚠️ No API key found for \${provider}. Using fallback seed data for \${modelName}\`);
-    return generateFallbackSeedData(modelName, fields, recordCount, enums);
+    return generateFallbackSeedData(modelName, recordCount);
   }
 
   try {
-    const prompt = generateSeedDataPrompt(modelName, fields, agentContext, recordCount, enums);
+    const prompt = generateSeedDataPrompt(modelName, prismaSchema, agentContext, recordCount);
     const aiProvider = AI_PROVIDERS[provider as keyof typeof AI_PROVIDERS];
     
     console.log(\`🤖 Generating \${recordCount} seed records for \${modelName} using \${provider}...\`);
@@ -1054,12 +997,12 @@ async function generateSeedDataWithAI(modelName: string, fields: any[], agentCon
       seedData = JSON.parse(cleanContent);
     } catch (parseError) {
       console.warn(\`⚠️ Failed to parse AI response as JSON for \${modelName}. Using fallback data.\`);
-      return generateFallbackSeedData(modelName, fields, recordCount, enums);
+      return generateFallbackSeedData(modelName, recordCount);
     }
 
     if (!Array.isArray(seedData)) {
       console.warn(\`⚠️ AI response is not an array for \${modelName}. Using fallback data.\`);
-      return generateFallbackSeedData(modelName, fields, recordCount, enums);
+      return generateFallbackSeedData(modelName, recordCount);
     }
 
     console.log(\`✅ Generated \${seedData.length} AI-powered seed records for \${modelName}\`);
@@ -1072,57 +1015,16 @@ async function generateSeedDataWithAI(modelName: string, fields: any[], agentCon
 }
 
 // Fallback seed data generator
-function generateFallbackSeedData(modelName: string, fields: any[], recordCount: number = 5, enums: any[] = []): any[] {
-  console.log(\`🔄 Generating fallback seed data for \${modelName}\`);
+function generateFallbackSeedData(modelName: string, recordCount: number = 5): any[] {
+  console.log(\`🔄 Generating simple fallback seed data for \${modelName}\`);
   
   const records = [];
   
   for (let i = 0; i < recordCount; i++) {
-    const record: any = {};
-    
-    fields.forEach(field => {
-      if (field.name === 'id' || field.relationField || field.kind === 'object') return; // Skip ID and relation fields, Prisma handles them
-      
-      // Check if this is an enum field
-      const enumInfo = enums.find(e => e.name === field.type);
-      if (enumInfo) {
-        // Use first enum value as default
-        record[field.name] = enumInfo.fields[0]?.name || field.type;
-        return;
-      }
-      
-      switch (field.type) {
-        case 'String':
-          if (field.name.toLowerCase().includes('email')) {
-            record[field.name] = \`user\${i + 1}@example.com\`;
-          } else if (field.name.toLowerCase().includes('name')) {
-            record[field.name] = \`Sample \${modelName} \${i + 1}\`;
-          } else if (field.name.toLowerCase().includes('description')) {
-            record[field.name] = \`This is a sample \${field.name.toLowerCase()} for \${modelName} record \${i + 1}\`;
-          } else {
-            record[field.name] = \`Sample \${field.name} \${i + 1}\`;
-          }
-          break;
-        case 'Int':
-          record[field.name] = (i + 1) * 10;
-          break;
-        case 'Float':
-          record[field.name] = parseFloat(((i + 1) * 10.5).toFixed(2));
-          break;
-        case 'Boolean':
-          record[field.name] = i % 2 === 0;
-          break;
-        case 'DateTime':
-          const date = new Date();
-          date.setDate(date.getDate() - i);
-          record[field.name] = date.toISOString();
-          break;
-        default:
-          if (!field.optional) {
-            record[field.name] = \`Sample \${field.type} \${i + 1}\`;
-          }
-      }
-    });
+    const record: any = {
+      name: \`Sample \${modelName} \${i + 1}\`,
+      description: \`Fallback description for \${modelName} record \${i + 1}\`
+    };
     
     records.push(record);
   }
@@ -1139,45 +1041,7 @@ const enums = ${JSON.stringify(enums || [], null, 2)};
 // Agent context for AI seed generation
 const agentContext = "${agentDescription}";
 
-// Sort models by dependency (parent models first, child models last)
-function sortModelsByDependency(models) {
-  const modelMap = new Map(models.map(m => [m.name, m]));
-  const visited = new Set();
-  const visiting = new Set();
-  const sorted = [];
-  
-  function visit(modelName) {
-    if (visited.has(modelName)) return;
-    if (visiting.has(modelName)) return; // Circular dependency, skip
-    
-    visiting.add(modelName);
-    const model = modelMap.get(modelName);
-    
-    if (model && model.fields) {
-      // Find dependencies (fields that reference other models)
-      const dependencies = model.fields
-        .filter(field => field.relationField === true || field.kind === 'object')
-        .map(field => field.type)
-        .filter(type => modelMap.has(type));
-      
-      // Visit dependencies first
-      for (const dep of dependencies) {
-        visit(dep);
-      }
-    }
-    
-    visiting.delete(modelName);
-    visited.add(modelName);
-    if (model) sorted.push(model);
-  }
-  
-  // Visit all models
-  for (const model of models) {
-    visit(model.name);
-  }
-  
-  return sorted;
-}
+
 
 async function seedDatabase() {
   console.log('🌱 Starting database seeding for ${agentName}...');
@@ -1190,12 +1054,8 @@ async function seedDatabase() {
     
     let totalRecordsCreated = 0;
     
-    // Sort models by dependency order (parent models first)
-    const sortedModels = sortModelsByDependency(models);
-    console.log(\`📋 Seeding order: \${sortedModels.map(m => m.name).join(' → ')}\`);
-    
-    // Seed each model in dependency order
-    for (const model of sortedModels) {
+    // Seed each model with scalar fields only
+    for (const model of models) {
       console.log(\`\\n🌱 Seeding model: \${model.name}\`);
       
       try {
@@ -1215,20 +1075,12 @@ async function seedDatabase() {
           continue;
         }
         
-        // Check if this model has foreign key dependencies
-        const foreignKeyFields = (model.fields || []).filter(field => 
-          field.name.endsWith('Id') && 
-          field.name !== 'id' &&
-          field.type === 'String'
-        );
-        
-        // Generate seed data using AI (only scalar fields)
+        // Generate seed data using AI with full Prisma schema context
         const seedRecords = await generateSeedDataWithAI(
           model.name,
-          model.fields || [],
+          \`${prismaSchema || ''}\`, // Pass the full Prisma schema
           agentContext,
-          5, // Generate 5 records per model
-          enums // Pass enum definitions for proper validation
+          5 // Generate 5 records per model
         );
         
         if (seedRecords.length === 0) {
@@ -1241,26 +1093,6 @@ async function seedDatabase() {
         
         for (const record of seedRecords) {
           try {
-            // For child models, try to link to existing parent records
-            for (const fkField of foreignKeyFields) {
-              const parentModelName = fkField.name.replace('Id', '');
-              const parentModelClient = (prisma as any)[parentModelName.toLowerCase()];
-              
-              if (parentModelClient) {
-                try {
-                  const parentRecords = await parentModelClient.findMany({ take: 5 });
-                  if (parentRecords.length > 0) {
-                    // Randomly assign a parent record
-                    const randomParent = parentRecords[Math.floor(Math.random() * parentRecords.length)];
-                    record[fkField.name] = randomParent.id;
-                    console.log(\`🔗 Linked \${model.name} to \${parentModelName} (\${randomParent.id})\`);
-                  }
-                } catch (parentError) {
-                  console.log(\`ℹ️ Could not link to parent \${parentModelName}, creating orphan record\`);
-                }
-              }
-            }
-            
             await modelClient.create({
               data: record
             });
@@ -1281,7 +1113,7 @@ async function seedDatabase() {
     
     console.log(\`\\n🎉 Database seeding completed!\`);
     console.log(\`📊 Total records created: \${totalRecordsCreated}\`);
-    console.log(\`📋 Models seeded: \${sortedModels.length}\`);
+    console.log(\`📋 Models seeded: \${models.length}\`);
     
   } catch (error) {
     console.error('❌ Database seeding failed:', error);
