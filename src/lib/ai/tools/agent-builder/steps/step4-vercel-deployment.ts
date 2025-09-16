@@ -6,7 +6,7 @@ import type { Step1Output } from './step1-database-generation';
 import type { Step2Output } from './step2-action-generation';
 import type { Step3Output } from './step3-schedule-generation';
 import type { AgentAction, AgentSchedule } from '../types';
-import { MobileAppTemplate } from './templates/mobile-app-template';
+import { MobileAppTemplate } from './templates/MobileAppTemplate';
 
 
 /**
@@ -68,6 +68,8 @@ export interface Step4Input {
     theme?: string;
     avatar?: any;
     domain?: string;
+    personality?: string;
+    characterNames?: string;
   };
   // Custom domain configuration (automatic by default)
   customDomain?: {
@@ -763,7 +765,7 @@ export async function generateNextJsProject(
   step3Output: Step3Output, 
   projectName: string,
   neonOptions?: { region?: string; pgVersion?: number; autoSuspend?: boolean; },
-  agentConfig?: { name?: string; description?: string; theme?: string; avatar?: any; domain?: string; },
+  agentConfig?: { name?: string; description?: string; theme?: string; avatar?: any; domain?: string; personality?: string; characterNames?: string; },
   environmentVariables?: Record<string, string>
 ) {
   console.log('📁 Generating Vercel-optimized Next.js project files...');
@@ -771,6 +773,14 @@ export async function generateNextJsProject(
   const actions = validateAndNormalizeActions(step2Output.actions);
   const schedules = validateAndNormalizeSchedules(step3Output.schedules);
   const models = step1Output.models;
+
+  // Extract discovered packages from web search results
+  const discoveredPackages = step2Output.webSearchResults?.recommendedPackages?.map(pkg => ({
+    name: pkg.name,
+    version: pkg.version,
+    description: pkg.description,
+    useCase: pkg.useCase
+  })) || [];
 
   // Use unified mobile app template system with Vercel configuration
   const mobileTemplate = new MobileAppTemplate({
@@ -785,7 +795,8 @@ export async function generateNextJsProject(
     vercelConfig: {
       cronJobs: schedules.length > 0,
       aiSdkEnabled: true, // Enable AI SDK for Vercel deployments
-      buildCommand: "npm run vercel-build"
+      buildCommand: "npm run vercel-build",
+      discoveredPackages // Pass web search discovered packages
     },
     environmentVariables: {
       PRISMA_GENERATE_DATAPROXY: "true"
@@ -890,6 +901,9 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
       AI_MODEL_PROVIDER: process.env.AI_MODEL_PROVIDER || 'openai',
       AI_MODEL_NAME: process.env.AI_MODEL_NAME || 'gpt-4o-mini',
       
+      // Blob Storage (for avatar images)
+      BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN || '',
+      
       // Application Configuration (fully local)
       NEXT_PUBLIC_APP_NAME: input.agentConfig?.name || projectName,
       NEXT_PUBLIC_APP_DESCRIPTION: input.agentConfig?.description || description || 'Smart agent powered by AI',
@@ -911,7 +925,7 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
     console.log('  Variable names:', Object.keys(allEnvVars));
     console.log('  Total count:', Object.keys(allEnvVars).length);
     console.log('  Project name used in NEXT_PUBLIC_APP_NAME:', projectName);
-    
+
     // Step 4: Generate Next.js project files (after environment variables are defined)
     sendProgress('📁 Generating project files...');
     const projectFiles = await generateNextJsProject(step1Output, step2Output, step3Output, projectName, neonOptions, input.agentConfig, allEnvVars);
@@ -1322,6 +1336,11 @@ This backup was automatically created during Vercel deployment in development mo
     return null;
   }
 }
+
+/**
+ * Pre-upload unicorn assets to blob storage for deployed agents
+ */
+
 
 /**
  * Utility functions

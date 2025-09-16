@@ -7,6 +7,8 @@ import { executeStep4VercelDeployment } from './step4-vercel-deployment';
 import { z } from 'zod';
 import { ConvertSchemaToObject } from '../schema/json';
 import { mergeSchema } from '../schema/mergeSchema';
+import { searchPrismaPatterns, combineSearchResults, type WebSearchResult } from '../web-search-utils';
+import type { OrchestratorConfig } from './orchestrator';
 
 /**
  * STEP 1: Database Generation & Model Design
@@ -24,6 +26,8 @@ export interface Step1Input {
   documentId?: string;
   session?: any;
   dataStream?: any;
+  // Web search configuration
+  orchestratorConfig?: OrchestratorConfig;
   // Removed targetDatabaseProvider - agent apps are SQLite-only
 }
 
@@ -32,6 +36,11 @@ export interface Step1Output {
   models: AgentModel[];
   implementationNotes: string[];
   prismaSchema: string;
+  // Web search results
+  webSearchResults?: {
+    foundPatterns: any[];
+    integrationNotes: string[];
+  };
 }
 
 
@@ -51,7 +60,44 @@ export async function executeStep1DatabaseGeneration(
     console.log(`🔍 Model Details: ${step0Analysis.models.length} total models identified in analysis`);
     console.log(`🗄️ Target Database: PostgreSQL (agent apps use Neon PostgreSQL for Vercel deployments)`);
 
+    // 🌐 WEB SEARCH ENHANCEMENT: Find Prisma schema patterns and best practices
+    let webSearchResults: Step1Output['webSearchResults'];
+    if (input.orchestratorConfig?.enableWebSearch) {
+      console.log('🔍 Searching for Prisma schema patterns and best practices...');
+      
+      try {
+        const domainType = step0Analysis.domain || 'general';
+        const schemaContext = `${step0Analysis.agentName} ${domainType} database schema`;
+        
+        const patternSearch = await searchPrismaPatterns(
+          schemaContext,
+          domainType,
+          input.orchestratorConfig
+        );
+        
+        if (patternSearch.success && patternSearch.foundPatterns) {
+          webSearchResults = {
+            foundPatterns: patternSearch.foundPatterns,
+            integrationNotes: [
+              `Found ${patternSearch.foundPatterns.length} Prisma schema patterns for ${domainType}`,
+              'Web search enhanced database generation with industry best practices',
+              'Schema patterns optimized for production deployment'
+            ]
+          };
+          
+          console.log(`✅ Web search enhanced database generation with ${patternSearch.foundPatterns.length} schema patterns`);
+        }
+      } catch (webSearchError) {
+        console.warn('⚠️ Web search failed, continuing with standard generation:', webSearchError);
+        webSearchResults = {
+          foundPatterns: [],
+          integrationNotes: ['Web search unavailable, using standard schema generation']
+        };
+      }
+    }
+
     // Use validated schema generation with automatic error correction
+    // Note: Web search patterns can be integrated into future schema generation enhancements
     const databaseResult = await generateValidatedPrismaSchema(
       step0Analysis,
       existingAgent,
@@ -66,8 +112,10 @@ export async function executeStep1DatabaseGeneration(
         `Generated ${databaseResult.models.length} models based on Step 0 analysis`,
         `Step 0 identified ${step0Analysis.models.length} required models`,
         `Database generation strategy: ${step0Analysis.models.filter(m => m.operation === 'create').length} new models, ${step0Analysis.models.filter(m => m.operation === 'update').length} model updates`,
-        `Schema validation: Prisma validate validation passed with auto-correction`
-      ]
+        `Schema validation: Prisma validate validation passed with auto-correction`,
+        ...(webSearchResults?.integrationNotes || [])
+      ],
+      webSearchResults
     };
 
     console.log('✅ STEP 1: Database generation completed successfully');

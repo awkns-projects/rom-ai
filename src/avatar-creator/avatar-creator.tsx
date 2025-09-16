@@ -450,6 +450,10 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
   // Avatar management hooks
   const { avatars, createAvatar: createAvatarInDB, setActiveAvatar } = useAvatars(documentId)
 
+  // Debounced save timer
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const SAVE_DELAY = 1000 // 1 second delay
+
   // Function to explicitly sync current avatar data to main agent content
   const syncToMainContent = useCallback(async () => {
     console.log('🔄 Syncing avatar and theme data to main agent content...');
@@ -464,6 +468,8 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
       customType: avatarData.customType,
       uploadedImage: avatarData.uploadedImage,
       selectedNFT: avatarData.selectedNFT,
+      personality: avatarData.personality,
+      characterNames: avatarData.characterNames,
     };
     
     // Update the main agent data through the callback
@@ -539,6 +545,8 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
       customType: data.customType,
       uploadedImage: data.uploadedImage,
       selectedNFT: data.selectedNFT,
+      personality: data.personality,
+      characterNames: data.characterNames,
     };
     
     // MODIFIED: Only update the main agent data if explicitly requested
@@ -615,6 +623,19 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
      
      setLastSaved(new Date())
    }, [documentId, onAvatarChange, currentTheme])
+
+  // Debounced save function to prevent excessive database calls
+  const debouncedSaveToDatabase = useCallback((data: AvatarData, currentStep: number, updateContent = false) => {
+    // Clear existing timer
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+
+    // Set new timer
+    saveTimerRef.current = setTimeout(() => {
+      saveToDatabase(data, currentStep, updateContent);
+    }, SAVE_DELAY);
+  }, [saveToDatabase])
 
   // Load from database on mount, then merge with agentData if available
   useEffect(() => {
@@ -729,36 +750,27 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
         customType: agentAvatar.customType || prev.customType,
       }));
     }
-  }, [agentData?.avatar, avatarData.type, avatarData.unicornParts, avatarData.uploadedImage, hasLoadedFromDatabase]);
+  }, [agentData?.avatar, hasLoadedFromDatabase]); // Removed avatarData dependencies to prevent loops
 
-  // ADDED: Monitor theme changes from agentData
+  // ADDED: Monitor theme changes from agentData (reduced frequency to prevent conflicts)
   useEffect(() => {
-    // CRITICAL FIX: Only sync FROM agentData TO currentTheme during initial load or if user hasn't made selections
-    // Don't override user selections when orchestrator sends updates with default/missing theme
+    // Only sync during initial load or significant changes
+    if (!hasLoadedFromDatabase) return;
     
     // Skip sync if user has already made a theme selection (currentTheme !== 'green' default)
     if (currentTheme !== 'green' && agentData?.theme === 'green') {
-      console.log('🚫 SKIPPING agentData theme sync - preserving user selection:', {
-        userTheme: currentTheme,
-        agentDataTheme: agentData.theme,
-        reason: 'user_selection_priority'
-      });
-      return;
+      return; // Preserve user selection
     }
     
     // Only sync if agentData has a non-default theme AND it's different from current
     if (agentData?.theme && agentData.theme !== 'green' && agentData.theme !== currentTheme) {
       console.log('🎨 Updating theme from agentData changes:', {
         oldTheme: currentTheme,
-        newTheme: agentData.theme,
-        source: 'agentData_update',
-        reason: 'non_default_theme_from_external'
+        newTheme: agentData.theme
       });
       setCurrentTheme(agentData.theme);
     }
-    // CRITICAL: Don't reset currentTheme if agentData.theme becomes undefined or default
-    // This preserves user selections during orchestrator updates
-  }, [agentData?.theme, currentTheme]);
+  }, [agentData?.theme, hasLoadedFromDatabase]); // Removed currentTheme dependency to prevent loops
 
   // REMOVED: Control Matrix Box visibility useEffect - let manual control handle it
   // This was causing conflicts with the regenerate function
@@ -817,28 +829,28 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
   const handleNameChange = (name: string) => {
     const updatedData = { ...avatarData, name };
     setAvatarData(updatedData);
-    // FIXED: Save only to metadata, don't update main content for performance
-    saveToDatabase(updatedData, step, false);
+    // Use debounced save to prevent glitchy behavior
+    debouncedSaveToDatabase(updatedData, step, false);
   }
 
   const handleTypeChange = (type: AvatarType) => {
     const updatedData = { ...avatarData, type };
     setAvatarData(updatedData);
-    // FIXED: Save only to metadata, don't update main content for performance
+    // Immediate save for type changes (important)
     saveToDatabase(updatedData, step, false);
   }
 
   const handleRomUnicornTypeChange = (romUnicornType: RomUnicornType) => {
     const updatedData = { ...avatarData, romUnicornType };
     setAvatarData(updatedData);
-    // FIXED: Save only to metadata, don't update main content for performance
+    // Immediate save for type changes (important)
     saveToDatabase(updatedData, step, false);
   }
 
   const handleCustomTypeChange = (customType: CustomType) => {
     const updatedData = { ...avatarData, customType };
     setAvatarData(updatedData);
-    // FIXED: Save only to metadata, don't update main content for performance
+    // Immediate save for type changes (important)
     saveToDatabase(updatedData, step, false);
   }
 
@@ -1028,15 +1040,15 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
   const handlePersonalityChange = (personality: string) => {
     const updatedData = { ...avatarData, personality };
     setAvatarData(updatedData);
-    // FIXED: Save only to metadata, don't update main content for performance
-    saveToDatabase(updatedData, step, false);
+    // Use debounced save for text fields to prevent glitchy behavior
+    debouncedSaveToDatabase(updatedData, step, true);
   }
 
   const handleCharacterNamesChange = (characterNames: string) => {
     const updatedData = { ...avatarData, characterNames };
     setAvatarData(updatedData);
-    // FIXED: Save only to metadata, don't update main content for performance
-    saveToDatabase(updatedData, step, false);
+    // Use debounced save for text fields to prevent glitchy behavior
+    debouncedSaveToDatabase(updatedData, step, true);
   }
 
   const nextStep = () => setStep((prev) => Math.min(prev + 1, 4))
@@ -1107,21 +1119,43 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
     const timestamp = Date.now()
     console.log("Starting avatar generation with timestamp:", timestamp)
     
-    // Update avatar data with generated parts
-    const updatedAvatarData = {
-      ...avatarData,
-      unicornParts,
-      type: "rom-unicorn" as AvatarType,
-      romUnicornType: "random" as RomUnicornType,
-      name: avatarData.name || `Unicorn ${timestamp}` // Use specific timestamp
-    }
-    
-    setAvatarData(updatedAvatarData)
-    setShowMatrixBox(false) // Hide Matrix Box when unicorn is generated
-    console.log("🎲 Matrix Box hidden - unicorn generated successfully");
-    
-    // FIXED: Immediately save and propagate changes to main agent data
     try {
+      // Upload unicorn parts to blob storage (with fallback to local paths)
+      console.log("🔄 Processing unicorn parts for storage...");
+      const uploadResponse = await fetch('/api/avatar/upload-parts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ parts: unicornParts }),
+      });
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        console.error("❌ Upload API failed:", { status: uploadResponse.status, statusText: uploadResponse.statusText, errorText });
+        throw new Error(`Failed to process parts: ${uploadResponse.statusText}. ${errorText}`);
+      }
+
+      const uploadResult = await uploadResponse.json();
+      console.log("✅ Unicorn parts processed successfully:", { 
+        source: uploadResult.source, 
+        parts: uploadResult.uploadedParts 
+      });
+
+      // Update avatar data with processed URLs (blob URLs or local paths)
+      const updatedAvatarData = {
+        ...avatarData,
+        unicornParts: uploadResult.uploadedParts, // Use processed URLs (blob or local)
+        type: "rom-unicorn" as AvatarType,
+        romUnicornType: "random" as RomUnicornType,
+        name: avatarData.name || `Unicorn ${timestamp}` // Use specific timestamp
+      }
+      
+      setAvatarData(updatedAvatarData)
+      setShowMatrixBox(false) // Hide Matrix Box when unicorn is generated
+      console.log("🎲 Matrix Box hidden - unicorn generated successfully");
+      
+      // FIXED: Immediately save and propagate changes to main agent data
       await saveToDatabase(updatedAvatarData, step, true);
       console.log("✅ Generated unicorn saved and propagated to agent data");
       
@@ -1130,7 +1164,7 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
         name: updatedAvatarData.name,
         type: updatedAvatarData.type,
         romUnicornType: updatedAvatarData.romUnicornType,
-        unicornParts: updatedAvatarData.unicornParts,
+        unicornParts: updatedAvatarData.unicornParts, // Now contains blob URLs
         isActive: false,
       };
       
@@ -1144,15 +1178,55 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
       if (updatedAvatarData.connectedWallet) avatarPayload.connectedWallet = updatedAvatarData.connectedWallet;
       if (updatedAvatarData.selectedNFT) avatarPayload.selectedNFT = updatedAvatarData.selectedNFT;
       
-      console.log("Avatar payload being sent:", JSON.stringify(avatarPayload, null, 2));
+      console.log("Avatar payload with blob URLs:", JSON.stringify(avatarPayload, null, 2));
       
       const newAvatar = await createAvatarInDB(avatarPayload)
       
-      console.log("Avatar saved to database for selection:", newAvatar)
+      console.log("Avatar with blob URLs saved to database:", newAvatar)
     } catch (error) {
       console.error("Failed to save avatar:", error)
-      // Show error to user
-      alert("Failed to save avatar. Please try again.")
+      
+      // Fallback: Use original unicorn parts (filenames) if API fails
+      console.log("🔄 API failed, using original unicorn parts as fallback");
+      const fallbackAvatarData = {
+        ...avatarData,
+        unicornParts: unicornParts, // Use original filenames - CompositeUnicorn will map them
+        type: "rom-unicorn" as AvatarType,
+        romUnicornType: "random" as RomUnicornType,
+        name: avatarData.name || `Unicorn ${timestamp}`
+      }
+      
+      try {
+        setAvatarData(fallbackAvatarData)
+        setShowMatrixBox(false)
+        await saveToDatabase(fallbackAvatarData, step, true);
+        console.log("✅ Fallback avatar saved successfully");
+        
+        // Still try to save to avatar database for selection
+        const avatarPayload: any = {
+          name: fallbackAvatarData.name,
+          type: fallbackAvatarData.type,
+          romUnicornType: fallbackAvatarData.romUnicornType,
+          unicornParts: fallbackAvatarData.unicornParts, // Original filenames
+          isActive: false,
+        };
+        
+        if (documentId) avatarPayload.documentId = documentId;
+        if (fallbackAvatarData.personality) avatarPayload.personality = fallbackAvatarData.personality;
+        if (fallbackAvatarData.characterNames) avatarPayload.characterNames = fallbackAvatarData.characterNames;
+        if (fallbackAvatarData.customType) avatarPayload.customType = fallbackAvatarData.customType;
+        if (fallbackAvatarData.uploadedImage) avatarPayload.uploadedImage = fallbackAvatarData.uploadedImage;
+        if (fallbackAvatarData.selectedStyle) avatarPayload.selectedStyle = fallbackAvatarData.selectedStyle;
+        if (fallbackAvatarData.connectedWallet) avatarPayload.connectedWallet = fallbackAvatarData.connectedWallet;
+        if (fallbackAvatarData.selectedNFT) avatarPayload.selectedNFT = fallbackAvatarData.selectedNFT;
+        
+        await createAvatarInDB(avatarPayload);
+        console.log("✅ Fallback avatar saved to database");
+        
+      } catch (fallbackError) {
+        console.error("❌ Fallback save also failed:", fallbackError);
+        alert("Failed to save avatar. Please try again.")
+      }
     } finally {
       setIsSaving(false)
       isProcessingRef.current = false
@@ -1229,12 +1303,12 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
   // Theme selection handler with immediate save
   const handleThemeSelect = useCallback((theme: string) => {
     console.log('🎨 Theme selected:', theme);
-    console.log('🎨 Theme selection debug:', {
-      receivedTheme: theme,
-      themeType: typeof theme,
-      currentTheme,
-      previousTheme: currentTheme
-    });
+    
+    // Prevent unnecessary updates
+    if (theme === currentTheme) {
+      console.log('🎨 Theme unchanged, skipping update');
+      return;
+    }
     
     setCurrentTheme(theme);
     
@@ -1244,26 +1318,11 @@ export default function AvatarCreator({ documentId, externalApisMetadata, agentD
       onThemeChange(theme);
     }
     
-    // CRITICAL FIX: Save with new theme immediately (don't wait for state update)
+    // Use debounced save for theme to prevent conflicts
     if (documentId && documentId !== 'init') {
-      // Create a custom save call with the new theme
-      const saveWithNewTheme = async () => {
-        try {
-          await saveAvatarCreatorState(documentId, {
-            avatarData,
-            step,
-            theme: theme, // Use the new theme directly, not currentTheme state
-            name: avatarData.name,
-          });
-          console.log('✅ Avatar data and theme saved with new theme:', theme);
-        } catch (error) {
-          console.error('❌ Failed to save theme to database metadata:', error);
-        }
-      };
-      
-      saveWithNewTheme();
+      debouncedSaveToDatabase(avatarData, step, false);
     }
-  }, [onThemeChange, documentId, avatarData, step]);
+  }, [onThemeChange, documentId, avatarData, step, currentTheme, debouncedSaveToDatabase]);
 
   return (
     <div className="min-h-screen text-gray-100 p-3 sm:p-6 font-mono">

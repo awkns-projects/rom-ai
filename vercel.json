@@ -1,8 +1,7 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/execute-schedules",
-      "schedule": "*/10 * * * *"
+  "functions": {
+    "api/chat.js": {
+      "maxDuration": 300
     }
-  ]
+  }
 }

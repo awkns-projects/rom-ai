@@ -261,20 +261,7 @@ export const ScheduleMindMapEditor = memo(({
           }.`
         : (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4">
-              {/* <div className="space-y-2">
-                <Label className="text-orange-300 font-mono text-sm">✨ Schedule Name</Label>
-                <Input
-                  value={schedule.name || ''}
-                  onChange={(e) => onUpdate({ ...schedule, name: e.target.value })}
-                  placeholder="e.g., Daily Reports, Weekly Sync"
-                  className="bg-slate-800 border-slate-600 text-white font-mono"
-                />
-                <p className="text-xs text-orange-400/70 font-mono">
-                  Internal identifier (camelCase, no spaces)
-                </p>
-              </div> */}
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-orange-300 font-mono text-sm">🏷️ Display Title</Label>
                 <Input
@@ -287,6 +274,23 @@ export const ScheduleMindMapEditor = memo(({
                   What users see in the interface
                 </p>
               </div>
+
+              <div className="space-y-2">
+                <Label className="text-orange-300 font-mono text-sm">🎨 Emoji</Label>
+                <Input
+                  value={schedule.emoji || ''}
+                  onChange={(e) => onUpdate({ ...schedule, emoji: e.target.value })}
+                  placeholder="⏰"
+                  className="bg-slate-800 border-slate-600 text-white font-mono text-center"
+                  maxLength={2}
+                />
+                <p className="text-xs text-orange-400/70 font-mono">
+                  Visual identifier (single emoji)
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
 
               <div className="space-y-2">
                 <Label className="text-orange-300 font-mono text-sm">📝 Vision & Purpose</Label>

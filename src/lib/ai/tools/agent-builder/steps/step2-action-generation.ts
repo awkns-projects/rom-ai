@@ -6,6 +6,8 @@ import type { Step1Output } from './step1-database-generation';
 import { generateTitleAndName, sanitizeAgentName } from '../utils';
 import { generateObject } from 'ai';
 import { z } from 'zod';
+import { searchNpmPackages, searchApiDocumentation, combineSearchResults, type WebSearchResult, type NpmPackage } from '../web-search-utils';
+import type { OrchestratorConfig } from './orchestrator';
 
 /**
  * STEP 2: Action Generation & API Design
@@ -25,12 +27,19 @@ export interface Step2Input {
   existingAgent?: AgentData;
   conversationContext?: string;
   command?: string;
+  // Web search configuration
+  orchestratorConfig?: OrchestratorConfig;
 }
 
 export interface Step2Output {
   actions: AgentAction[];
   implementationNotes: string;
   implementationComplexity: 'low' | 'medium' | 'high';
+  // Web search results
+  webSearchResults?: {
+    recommendedPackages: NpmPackage[];
+    integrationNotes: string[];
+  };
 }
 
 // Schemas and functions moved to action-generation-shared.ts for reuse
@@ -324,6 +333,81 @@ export async function executeStep2ActionGeneration(
     
     console.log(`🎯 Context: ${businessContext} | Domain: ${entityType} | Models: ${availableModels.length}`);
     
+    // 🌐 WEB SEARCH ENHANCEMENT: Find relevant npm packages and API documentation
+    let webSearchResults: Step2Output['webSearchResults'];
+    if (input.orchestratorConfig?.enableWebSearch) {
+      console.log('🔍 Searching for relevant npm packages and API documentation...');
+      
+      try {
+        const packageSearches: Promise<WebSearchResult>[] = [];
+        const docSearches: Promise<WebSearchResult>[] = [];
+        
+        // Search for domain-specific packages
+        packageSearches.push(
+          searchNpmPackages(
+            `${entityType} ${businessContext} next.js typescript`,
+            `${entityType} business automation`,
+            input.orchestratorConfig
+          )
+        );
+        
+        // Search for external API packages if APIs are specified
+        if (step0Analysis.externalApis && step0Analysis.externalApis.length > 0) {
+          for (const api of step0Analysis.externalApis.slice(0, 3)) { // Limit to first 3 APIs
+            packageSearches.push(
+              searchNpmPackages(
+                `${api.provider} typescript sdk client`,
+                `${api.provider} integration`,
+                input.orchestratorConfig
+              )
+            );
+            
+            docSearches.push(
+              searchApiDocumentation(
+                api.provider,
+                `${entityType} integration with Next.js`,
+                input.orchestratorConfig
+              )
+            );
+          }
+        }
+        
+        // Search for common business automation packages
+        packageSearches.push(
+          searchNpmPackages(
+            'prisma database orm validation zod',
+            'database and validation utilities',
+            input.orchestratorConfig
+          )
+        );
+        
+        const [packageResults, docResults] = await Promise.all([
+          Promise.all(packageSearches),
+          Promise.all(docSearches)
+        ]);
+        
+        const combinedResults = await combineSearchResults(packageResults, [], docResults);
+        
+        webSearchResults = {
+          recommendedPackages: combinedResults.recommendedPackages,
+          integrationNotes: [
+            `Found ${combinedResults.recommendedPackages.length} recommended npm packages for enhanced functionality`,
+            `Located ${combinedResults.relevantDocs.length} documentation resources for API integrations`,
+            'Web search enhanced action generation with industry-standard packages'
+          ]
+        };
+        
+        console.log(`✅ Web search enhanced action generation with ${combinedResults.recommendedPackages.length} packages and ${combinedResults.relevantDocs.length} docs`);
+        
+      } catch (webSearchError) {
+        console.warn('⚠️ Web search failed, continuing with standard generation:', webSearchError);
+        webSearchResults = {
+          recommendedPackages: [],
+          integrationNotes: ['Web search unavailable, using standard action generation']
+        };
+      }
+    }
+    
     // If no specific actions defined, use AI to generate intelligent actions based on business context
     let actionsToGenerate = actionRequirements;
     if (actionsToGenerate.length === 0) {
@@ -391,7 +475,9 @@ export async function executeStep2ActionGeneration(
       implementationNotes: `Generated ${finalActions.length} actions following NEW 3-step pattern (technical spec → pseudo steps → executable code). ` +
         `${codeGeneratedCount} actions have executable code. ` +
         `Step 0 identified ${actionRequirements.length} required actions. ` +
-        `Implementation complexity: ${implementationComplexity} (${hasExternalAPIs ? 'external APIs, ' : ''}${hasComplexDatabase ? 'complex database, ' : ''}${finalActions.length} total actions).`
+        `Implementation complexity: ${implementationComplexity} (${hasExternalAPIs ? 'external APIs, ' : ''}${hasComplexDatabase ? 'complex database, ' : ''}${finalActions.length} total actions). ` +
+        `${webSearchResults?.integrationNotes.join(' ') || ''}`,
+      webSearchResults
     };
 
     console.log('✅ STEP 2: Action generation with NEW 3-step pattern completed successfully');

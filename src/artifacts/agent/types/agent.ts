@@ -14,6 +14,8 @@ export interface AgentData {
   prismaSchema?: string; // Generated database schema for deployment
   createdAt: string;
   theme?: string; // Stored theme selection for the agent
+  personality?: string; // Agent personality traits
+  characterNames?: string; // Character inspirations
   avatar?: {
     type: 'rom-unicorn' | 'custom';
     unicornParts?: {
@@ -26,6 +28,8 @@ export interface AgentData {
     customType?: 'upload' | 'wallet';
     uploadedImage?: string;
     selectedNFT?: string;
+    personality?: string;
+    characterNames?: string;
   };
   externalApis?: Array<{
     provider: string;

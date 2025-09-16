@@ -2347,40 +2347,125 @@ const AgentBuilderContent = memo(({
                             {!isCollapsed && (
                               <div className="px-4 pb-4 border-t border-gray-700/50">
                                 <div className="space-y-3 pt-3">
-                                  {action.execute?.code?.envVars?.map((envVar, index) => (
-                                    <div key={index} className="space-y-1.5">
-                                      <div className="flex items-center gap-2">
-                                        <Label className="text-gray-300 text-sm font-medium">
-                                          {envVar.name}
-                                        </Label>
-                                        {envVar.required && (
-                                          <span className="text-red-400 text-xs">*</span>
-                                        )}
-                                        {envVar.sensitive && (
-                                          <span className="px-1.5 py-0.5 rounded text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                            Sensitive
-                                          </span>
-                                        )}
-                                      </div>
-                                      <Input
-                                        type={envVar.sensitive ? 'password' : 'text'}
-                                        value={deploymentEnvVars[action.id]?.[envVar.name] || ''}
-                                        onChange={(e) => setDeploymentEnvVars(prev => ({
-                                          ...prev,
-                                          [action.id]: {
-                                            ...prev[action.id],
-                                            [envVar.name]: e.target.value
-                                          }
-                                        }))}
-                                        placeholder={envVar.description}
-                                        className="h-9 bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg text-sm"
-                                      />
-                                      {envVar.description && (
-                                        <p className="text-xs text-gray-500">{envVar.description}</p>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
+                                  {action.execute?.code?.envVars?.map((envVar, index) => {
+                                                                         // Find documentation for this environment variable
+                                     const getEnvVarDocumentation = () => {
+                                       const recommendedPackages = (agentData as any).webSearchResults?.recommendedPackages || [];
+                                       const docs: any[] = [];
+                                       
+                                       recommendedPackages.forEach((pkg: any) => {
+                                         if (pkg.envVarDocumentation) {
+                                           pkg.envVarDocumentation.forEach((doc: any) => {
+                                             // Match documentation to environment variable name patterns
+                                             const envVarLower = envVar.name.toLowerCase();
+                                             const packageName = pkg.name.toLowerCase();
+                                            
+                                            if (
+                                              envVarLower.includes(packageName) ||
+                                              packageName.includes(envVarLower.split('_')[0]) ||
+                                              envVarLower.includes('api') && doc.keyType === 'api_key' ||
+                                              envVarLower.includes('token') && doc.keyType === 'token' ||
+                                              envVarLower.includes('oauth') && doc.keyType === 'oauth' ||
+                                              envVarLower.includes('key') && doc.keyType === 'api_key'
+                                            ) {
+                                              docs.push({ ...doc, packageName: pkg.name });
+                                            }
+                                          });
+                                        }
+                                      });
+                                      
+                                      return docs;
+                                    };
+                                    
+                                    const envVarDocs = getEnvVarDocumentation();
+                                    
+                                    return (
+                                      <div key={index} className="space-y-1.5">
+                                        <div className="flex items-center gap-2">
+                                          <Label className="text-gray-300 text-sm font-medium">
+                                            {envVar.name}
+                                          </Label>
+                                          {envVar.required && (
+                                            <span className="text-red-400 text-xs">*</span>
+                                          )}
+                                          {envVar.sensitive && (
+                                            <span className="px-1.5 py-0.5 rounded text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                              Sensitive
+                                            </span>
+                                          )}
+                                          {/* Documentation Help Icon */}
+                                          {envVarDocs.length > 0 && (
+                                            <div className="relative group">
+                                              <button
+                                                type="button"
+                                                className="w-4 h-4 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400 hover:bg-blue-500/30 hover:border-blue-500/60 transition-colors cursor-help"
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  // Open the first documentation link in a new tab
+                                                  if (envVarDocs[0]?.url) {
+                                                    window.open(envVarDocs[0].url, '_blank', 'noopener,noreferrer');
+                                                  }
+                                                }}
+                                                title={`Click to view ${envVar.name} setup documentation`}
+                                              >
+                                                <span className="text-xs font-bold">?</span>
+                                              </button>
+                                              
+                                              {/* Tooltip showing available documentation */}
+                                              <div className="absolute left-0 top-6 z-50 hidden group-hover:block">
+                                                <div className="bg-gray-900 border border-gray-600 rounded-lg shadow-xl p-3 min-w-[280px] max-w-[400px]">
+                                                  <div className="text-xs font-medium text-gray-200 mb-2">
+                                                    📚 Documentation Available
+                                                  </div>
+                                                  <div className="space-y-2">
+                                                    {envVarDocs.slice(0, 3).map((doc, docIndex) => (
+                                                      <div key={docIndex} className="text-xs">
+                                                        <div className="text-blue-300 font-medium">{doc.title}</div>
+                                                        <div className="text-gray-400 mb-1">{doc.description}</div>
+                                                        <div className="text-blue-400 underline truncate">
+                                                          {doc.url}
+                                                        </div>
+                                                        {doc.packageName && (
+                                                          <div className="text-gray-500 text-xs">
+                                                            From: {doc.packageName}
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    ))}
+                                                    {envVarDocs.length > 3 && (
+                                                      <div className="text-gray-500 text-xs">
+                                                        +{envVarDocs.length - 3} more documentation links
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                  <div className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-700">
+                                                    💡 Click the ? icon to open documentation
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            </div>
+                                                                                     )}
+                                         </div>
+                                         <Input
+                                           type={envVar.sensitive ? 'password' : 'text'}
+                                           value={deploymentEnvVars[action.id]?.[envVar.name] || ''}
+                                           onChange={(e) => setDeploymentEnvVars(prev => ({
+                                             ...prev,
+                                             [action.id]: {
+                                               ...prev[action.id],
+                                               [envVar.name]: e.target.value
+                                             }
+                                           }))}
+                                           placeholder={envVar.description}
+                                           className="h-9 bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg text-sm"
+                                         />
+                                         {envVar.description && (
+                                           <p className="text-xs text-gray-500">{envVar.description}</p>
+                                         )}
+                                       </div>
+                                     );
+                                   })}
+                                  </div>
                               </div>
                             )}
                           </div>

@@ -2142,6 +2142,11 @@ export async function generateCompleteAction(
           inputType = 'url';
         } else if (field.list || fieldType === 'Json' || fieldName.includes('content') || fieldName.includes('description')) {
           inputType = 'textarea';
+        } else if (field.kind === 'object' && field.relationModel) {
+          // Handle database relation fields - create select dropdown that loads records dynamically
+          inputType = 'select';
+          options = []; // Empty options - will be loaded dynamically
+          console.log(`🎯 Database relation field detected: ${fieldName} -> ${field.relationModel}`);
         } else if (field.kind === 'enum' || fieldType.endsWith('Enum') || enumInfo.hasOwnProperty(fieldType)) {
           // Handle enum fields - create select dropdown
           inputType = 'select';
@@ -2193,7 +2198,7 @@ export async function generateCompleteAction(
           defaultValue = ''; // Empty string for select - user must choose
         }
         
-        return {
+        const component: any = {
           id: `fallback_${index}`,
           name: field.name,
           type: inputType,
@@ -2208,6 +2213,15 @@ export async function generateCompleteAction(
           defaultValue: defaultValue,
           options: options
         };
+        
+        // Add database model metadata for relation fields
+        if (field.kind === 'object' && field.relationModel) {
+          component.databaseModel = field.relationModel;
+          component.multiple = field.list || false;
+          console.log(`🎯 Added database metadata: ${field.name} -> ${field.relationModel} (multiple: ${component.multiple})`);
+        }
+        
+        return component;
       };
       
       // Create fallback components using the helper function with correct enum data

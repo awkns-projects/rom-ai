@@ -41,6 +41,20 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('🚀 Starting agent deployment...');
+    console.log('🎭 Agent personality debug:', {
+      hasAgentData: !!agentData,
+      agentDataPersonality: agentData.personality,
+      agentDataCharacterNames: agentData.characterNames,
+      hasAvatar: !!agentData.avatar,
+      avatarPersonality: agentData.avatar?.personality,
+      avatarCharacterNames: agentData.avatar?.characterNames,
+      avatarType: agentData.avatar?.type,
+      avatarUnicornParts: !!agentData.avatar?.unicornParts,
+      // Debug the full avatar object
+      fullAvatar: JSON.stringify(agentData.avatar, null, 2),
+      // Debug agent data keys
+      agentDataKeys: Object.keys(agentData)
+    });
 
     // Extract data from agent for deployment
     const step1Output = {
@@ -110,6 +124,30 @@ export async function POST(request: NextRequest) {
     } else {
       console.log('🚀 Creating new deployment...');
 
+      const agentConfig = {
+        name: agentData.name,
+        description: agentData.description,
+        theme: agentData.theme,
+        avatar: agentData.avatar,
+        domain: agentData.domain,
+        personality: agentData.personality || agentData.avatar?.personality,
+        characterNames: agentData.characterNames || agentData.avatar?.characterNames
+      };
+
+      console.log('🎭 Final agentConfig for deployment:', {
+        name: agentConfig.name,
+        hasAvatar: !!agentConfig.avatar,
+        avatarType: agentConfig.avatar?.type,
+        hasUnicornParts: !!agentConfig.avatar?.unicornParts,
+        unicornParts: agentConfig.avatar?.unicornParts,
+        personality: agentConfig.personality,
+        characterNames: agentConfig.characterNames,
+        hasPersonality: !!agentConfig.personality,
+        hasCharacterNames: !!agentConfig.characterNames,
+        avatarPersonality: agentConfig.avatar?.personality,
+        avatarCharacterNames: agentConfig.avatar?.characterNames
+      });
+
       const step4Input: Step4Input = {
         step1Output,
         step2Output,
@@ -119,13 +157,7 @@ export async function POST(request: NextRequest) {
         environmentVariables: environmentVariables || {},
         vercelTeam,
         documentId,
-        agentConfig: {
-          name: agentData.name,
-          description: agentData.description,
-          theme: agentData.theme,
-          avatar: agentData.avatar,
-          domain: agentData.domain
-        }
+        agentConfig
       };
 
       deploymentResult = await executeStep4VercelDeployment(step4Input);

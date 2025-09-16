@@ -995,18 +995,35 @@ export const ScheduleEditor = memo(({
                   </p>
                 </div>
 
-                <div>
-                  <Label htmlFor="schedule-title">Display Title</Label>
-                  <Input
-                    id="schedule-title"
-                    value={schedule.title || ''}
-                    onChange={(e) => onUpdate({ ...schedule, title: e.target.value })}
-                    placeholder="e.g., Daily Customer Data Backup, Weekly Sales Report"
-                    className="bg-black/50 border-orange-500/30 text-orange-100"
-                  />
-                  <p className="text-xs text-orange-400/70 font-mono mt-1">
-                    What users see in the interface
-                  </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="schedule-title">Display Title</Label>
+                    <Input
+                      id="schedule-title"
+                      value={schedule.title || ''}
+                      onChange={(e) => onUpdate({ ...schedule, title: e.target.value })}
+                      placeholder="e.g., Daily Customer Data Backup, Weekly Sales Report"
+                      className="bg-black/50 border-orange-500/30 text-orange-100"
+                    />
+                    <p className="text-xs text-orange-400/70 font-mono mt-1">
+                      What users see in the interface
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="schedule-emoji">Emoji</Label>
+                    <Input
+                      id="schedule-emoji"
+                      value={schedule.emoji || ''}
+                      onChange={(e) => onUpdate({ ...schedule, emoji: e.target.value })}
+                      placeholder="⏰"
+                      className="bg-black/50 border-orange-500/30 text-orange-100 text-center"
+                      maxLength={2}
+                    />
+                    <p className="text-xs text-orange-400/70 font-mono mt-1">
+                      Visual identifier (single emoji)
+                    </p>
+                  </div>
                 </div>
 
                 <div>

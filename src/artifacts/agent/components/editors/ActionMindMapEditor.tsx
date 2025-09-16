@@ -993,35 +993,53 @@ Make the action self-contained but also chain-friendly.`
       case 'description':
         return (
           <div className="mt-4 space-y-3" onClick={(e) => e.stopPropagation()}>
-            <div className="space-y-2">
-              <Label htmlFor="action-name" className="text-blue-300 font-mono text-sm">✨ Action Name</Label>
-              <Input
-                id="action-name"
-                value={action.name}
-                onChange={(e) => onUpdate({ ...action, name: e.target.value })}
-                placeholder="e.g., Create Customer Invoice"
-                className="bg-black/50 border-blue-500/30 text-blue-200 font-mono text-sm"
-                onClick={(e) => e.stopPropagation()}
-                onFocus={(e) => e.stopPropagation()}
-              />
-              <p className="text-xs text-blue-400/70 font-mono">
-                Internal identifier (camelCase, no spaces)
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="action-title" className="text-blue-300 font-mono text-sm">🏷️ Display Title</Label>
-              <Input
-                id="action-title"
-                value={action.title || ''}
-                onChange={(e) => onUpdate({ ...action, title: e.target.value })}
-                placeholder="e.g., Create Customer Invoice Record"
-                className="bg-black/50 border-blue-500/30 text-blue-200 font-mono text-sm"
-                onClick={(e) => e.stopPropagation()}
-                onFocus={(e) => e.stopPropagation()}
-              />
-              <p className="text-xs text-blue-400/70 font-mono">
-                What users see in the interface
-              </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="action-name" className="text-blue-300 font-mono text-sm">✨ Action Name</Label>
+                <Input
+                  id="action-name"
+                  value={action.name}
+                  onChange={(e) => onUpdate({ ...action, name: e.target.value })}
+                  placeholder="e.g., Create Customer Invoice"
+                  className="bg-black/50 border-blue-500/30 text-blue-200 font-mono text-sm"
+                  onClick={(e) => e.stopPropagation()}
+                  onFocus={(e) => e.stopPropagation()}
+                />
+                <p className="text-xs text-blue-400/70 font-mono">
+                  Internal identifier (camelCase, no spaces)
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="action-title" className="text-blue-300 font-mono text-sm">🏷️ Display Title</Label>
+                <Input
+                  id="action-title"
+                  value={action.title || ''}
+                  onChange={(e) => onUpdate({ ...action, title: e.target.value })}
+                  placeholder="e.g., Create Customer Invoice Record"
+                  className="bg-black/50 border-blue-500/30 text-blue-200 font-mono text-sm"
+                  onClick={(e) => e.stopPropagation()}
+                  onFocus={(e) => e.stopPropagation()}
+                />
+                <p className="text-xs text-blue-400/70 font-mono">
+                  What users see in the interface
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="action-emoji" className="text-blue-300 font-mono text-sm">🎨 Emoji</Label>
+                <Input
+                  id="action-emoji"
+                  value={action.emoji || ''}
+                  onChange={(e) => onUpdate({ ...action, emoji: e.target.value })}
+                  placeholder="⚡"
+                  className="bg-black/50 border-blue-500/30 text-blue-200 font-mono text-sm text-center"
+                  onClick={(e) => e.stopPropagation()}
+                  onFocus={(e) => e.stopPropagation()}
+                  maxLength={2}
+                />
+                <p className="text-xs text-blue-400/70 font-mono">
+                  Visual identifier (single emoji)
+                </p>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="action-description" className="text-blue-300 font-mono text-sm">📝 Vision & Purpose</Label>

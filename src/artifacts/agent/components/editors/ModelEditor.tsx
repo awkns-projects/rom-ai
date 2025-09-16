@@ -101,7 +101,7 @@ export const ModelEditor = memo(({
           </Button>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="space-y-2">
             <Label htmlFor={`model-name-${model.id}`} className="text-green-300 font-mono font-medium">Model Name</Label>
             <Input
@@ -126,6 +126,20 @@ export const ModelEditor = memo(({
             />
             <p className="text-xs text-green-400/70 font-mono">
               What users see in the interface
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`model-emoji-${model.id}`} className="text-green-300 font-mono font-medium">Emoji</Label>
+            <Input
+              id={`model-emoji-${model.id}`}
+              value={model.emoji || ''}
+              onChange={(e) => onUpdate({ ...model, emoji: e.target.value })}
+              placeholder="🗃️"
+              className="bg-black/50 border-green-500/30 text-green-200 placeholder-green-500/50 focus:border-green-400 focus:ring-green-400/20 font-mono text-center"
+              maxLength={2}
+            />
+            <p className="text-xs text-green-400/70 font-mono">
+              Visual identifier (single emoji)
             </p>
           </div>
           <div className="space-y-2">

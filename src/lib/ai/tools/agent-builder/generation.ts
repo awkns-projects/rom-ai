@@ -4004,6 +4004,8 @@ export async function generateUIComponents(
 
   const systemPrompt = `You are a UX expert creating interactive UI components for testing business actions.
 
+🚨 CRITICAL RULE: NEVER GENERATE FAKE/MOCK DATA FOR DATABASE RELATIONS OR ENUMS
+
 ACTION DETAILS:
 - Name: ${name}
 - Description: ${description}
@@ -4025,6 +4027,12 @@ ${businessContext ? `BUSINESS CONTEXT: ${businessContext}` : ''}
 
 REQUIRED INPUT FIELDS TO HANDLE (STEP 1 ONLY):
 ${step1InputFields.map(field => `- ${field.name} (${field.type}${field.relationModel ? ` -> ${field.relationModel}` : ''}) - Required: ${field.required || false}`).join('\n')}
+
+🚨 CRITICAL REQUIREMENTS FOR DATABASE RELATION FIELDS:
+- For fields ending in "Id" or with relationModel: Use empty options array []
+- NEVER generate fake options like [{"value": "campaign1", "label": "Summer Sale 2023"}]
+- Options will be loaded dynamically from the actual database
+- Add metadata to indicate which model the options come from
 
 🚨 CRITICAL BATCH PROCESSING UI REQUIREMENTS:
 
@@ -4137,7 +4145,7 @@ REMEMBER: Every UI component should support batch operations and filtering - NEV
         value: z.string().describe('Option value'),
         label: z.string().describe('Option display text'),
         description: z.string().optional().describe('Additional context about this option')
-      })).optional().describe('For select components - realistic mock data options'),
+      })).optional().describe('For select components - ONLY use real enum values or empty array for database relations'),
       validation: z.object({
         minLength: z.number().optional(),
         maxLength: z.number().optional(),
@@ -4145,7 +4153,9 @@ REMEMBER: Every UI component should support batch operations and filtering - NEV
         min: z.number().optional(),
         max: z.number().optional()
       }).optional().describe('Validation rules'),
-      defaultValue: z.string().optional().describe('Default value if any')
+      defaultValue: z.string().optional().describe('Default value if any'),
+      databaseModel: z.string().optional().describe('For database relation fields - the model name to query for options'),
+      multiple: z.boolean().optional().describe('Whether multiple values can be selected')
     }))
   });
 
@@ -4163,9 +4173,18 @@ REMEMBER: Every UI component should support batch operations and filtering - NEV
 
 INPUTS TO HANDLE: ${pseudoSteps[0]?.inputFields?.map(f => `${f.name} (${f.type}${f.relationModel ? ` -> ${f.relationModel}` : ''})`).join(', ')}
 
-CRITICAL: For ANY field ending in "Id" or having a relationModel, use "select" type with realistic dropdown options. Users should NEVER type IDs manually - always provide them as dropdowns with meaningful labels.
+🚨 CRITICAL: For ANY field ending in "Id" or having a relationModel:
+- Use "select" type 
+- Set options: [] (empty array - will be populated dynamically from database)
+- Add databaseModel property to indicate which model to query
+- NEVER generate fake/mock data like "Summer Sale 2023" or "campaign1"
 
-Generate business-appropriate mock data for all dropdown options.`
+🚨 CRITICAL: For enum fields:
+- Use "select" type
+- Use ONLY the actual enum values from the database schema
+- NEVER generate fake enum values
+
+The UI will dynamically load real database records and use actual enum values - do not create mock data.`
       }
     ],
     temperature: 0.3,

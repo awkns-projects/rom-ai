@@ -264,6 +264,29 @@ export interface AgentData {
       customUrl?: string;
     };
   };
+  // Web search results for enhanced package discovery and documentation
+  webSearchResults?: {
+    recommendedPackages?: Array<{
+      name: string;
+      version: string;
+      description: string;
+      npmUrl: string;
+      githubUrl?: string;
+      weeklyDownloads?: number;
+      lastUpdated?: string;
+      tags: string[];
+      useCase: string;
+      integrationNotes?: string;
+      envVarDocumentation?: {
+        title: string;
+        url: string;
+        description: string;
+        keyType: 'api_key' | 'oauth' | 'token' | 'credentials' | 'config';
+      }[];
+    }>;
+    foundPatterns?: any[];
+    integrationNotes?: string[];
+  };
 }
 
 export interface PromptUnderstanding {

@@ -96,10 +96,63 @@ function defaultDisplayFields(model: Model) {
 }
 
 function handleNewModel(model: Model) {
+  // Generate appropriate emoji based on model name
+  const generateModelEmoji = (modelName: string): string => {
+    const name = modelName.toLowerCase();
+    
+    // Common business model emojis
+    if (name.includes('user') || name.includes('person') || name.includes('member') || name.includes('customer') || name.includes('client')) return '👤';
+    if (name.includes('product') || name.includes('item') || name.includes('inventory')) return '📦';
+    if (name.includes('order') || name.includes('purchase') || name.includes('transaction')) return '🛒';
+    if (name.includes('payment') || name.includes('invoice') || name.includes('billing')) return '💳';
+    if (name.includes('email') || name.includes('message') || name.includes('notification')) return '📧';
+    if (name.includes('report') || name.includes('analytics') || name.includes('metric')) return '📊';
+    if (name.includes('task') || name.includes('todo') || name.includes('activity')) return '✅';
+    if (name.includes('project') || name.includes('campaign') || name.includes('initiative')) return '🎯';
+    if (name.includes('company') || name.includes('organization') || name.includes('business')) return '🏢';
+    if (name.includes('category') || name.includes('tag') || name.includes('label')) return '🏷️';
+    if (name.includes('file') || name.includes('document') || name.includes('attachment')) return '📄';
+    if (name.includes('image') || name.includes('photo') || name.includes('picture')) return '🖼️';
+    if (name.includes('video') || name.includes('media') || name.includes('content')) return '🎬';
+    if (name.includes('event') || name.includes('meeting') || name.includes('appointment')) return '📅';
+    if (name.includes('comment') || name.includes('review') || name.includes('feedback')) return '💬';
+    if (name.includes('setting') || name.includes('config') || name.includes('preference')) return '⚙️';
+    if (name.includes('role') || name.includes('permission') || name.includes('access')) return '🔐';
+    if (name.includes('subscription') || name.includes('plan') || name.includes('package')) return '📋';
+    if (name.includes('contact') || name.includes('lead') || name.includes('prospect')) return '📞';
+    if (name.includes('location') || name.includes('address') || name.includes('place')) return '📍';
+    if (name.includes('team') || name.includes('group') || name.includes('department')) return '👥';
+    if (name.includes('ticket') || name.includes('support') || name.includes('issue')) return '🎫';
+    if (name.includes('blog') || name.includes('post') || name.includes('article')) return '📝';
+    if (name.includes('course') || name.includes('lesson') || name.includes('training')) return '🎓';
+    if (name.includes('health') || name.includes('medical') || name.includes('wellness')) return '🏥';
+    if (name.includes('fitness') || name.includes('workout') || name.includes('exercise')) return '💪';
+    if (name.includes('food') || name.includes('meal') || name.includes('recipe')) return '🍽️';
+    if (name.includes('travel') || name.includes('trip') || name.includes('journey')) return '✈️';
+    if (name.includes('book') || name.includes('library') || name.includes('reading')) return '📚';
+    if (name.includes('music') || name.includes('song') || name.includes('audio')) return '🎵';
+    if (name.includes('game') || name.includes('play') || name.includes('entertainment')) return '🎮';
+    if (name.includes('weather') || name.includes('climate') || name.includes('forecast')) return '🌤️';
+    if (name.includes('car') || name.includes('vehicle') || name.includes('transport')) return '🚗';
+    if (name.includes('house') || name.includes('home') || name.includes('property')) return '🏠';
+    if (name.includes('money') || name.includes('finance') || name.includes('budget')) return '💰';
+    if (name.includes('calendar') || name.includes('schedule') || name.includes('timeline')) return '📅';
+    if (name.includes('note') || name.includes('memo') || name.includes('reminder')) return '📝';
+    if (name.includes('chat') || name.includes('conversation') || name.includes('discussion')) return '💬';
+    if (name.includes('alert') || name.includes('warning') || name.includes('notification')) return '🚨';
+    if (name.includes('star') || name.includes('favorite') || name.includes('bookmark')) return '⭐';
+    if (name.includes('cart') || name.includes('basket') || name.includes('shopping')) return '🛒';
+    if (name.includes('delivery') || name.includes('shipping') || name.includes('logistics')) return '📦';
+    
+    // Default fallback
+    return '🗃️';
+  };
+
   const newItem: any = {
     id: model.name,
     title: getTitle(model.name),
     name: model.name,
+    emoji: generateModelEmoji(model.name), // Add AI-generated emoji based on model name
     idField: model.fields.find((field) => field.isId)?.name ?? '',
     displayFields: defaultDisplayFields(model),
     create: true,

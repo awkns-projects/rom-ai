@@ -41,6 +41,16 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('🔄 Starting agent complete redeployment...');
+    console.log('🎭 Agent personality debug (redeploy):', {
+      hasAgentData: !!agentData,
+      agentDataPersonality: agentData.personality,
+      agentDataCharacterNames: agentData.characterNames,
+      hasAvatar: !!agentData.avatar,
+      avatarPersonality: agentData.avatar?.personality,
+      avatarCharacterNames: agentData.avatar?.characterNames,
+      avatarType: agentData.avatar?.type,
+      avatarUnicornParts: !!agentData.avatar?.unicornParts
+    });
 
     // Extract data from agent for deployment
     const step1Output = {
@@ -79,7 +89,9 @@ export async function POST(request: NextRequest) {
         description: agentData.description,
         theme: agentData.theme,
         avatar: agentData.avatar,
-        domain: agentData.domain
+        domain: agentData.domain,
+        personality: agentData.personality || agentData.avatar?.personality,
+        characterNames: agentData.characterNames || agentData.avatar?.characterNames
       }
     };
 

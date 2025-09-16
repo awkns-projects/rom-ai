@@ -17,9 +17,19 @@ interface CompositeUnicornProps {
 }
 
 export function CompositeUnicorn({ parts, size = 128 }: CompositeUnicornProps) {
-  // Map the part names to their actual file paths
-  const getImageSrc = (category: string, filename: string) => {
-    // Direct mapping to the public folder files
+  // Function to get image source - now handles both blob URLs and local paths
+  const getImageSrc = (partUrl: string, fallbackCategory?: string) => {
+    // If it's already a full URL (blob URL), use it directly
+    if (partUrl.startsWith('http') || partUrl.startsWith('blob:')) {
+      return partUrl;
+    }
+    
+    // If it's a local path starting with /, use it directly
+    if (partUrl.startsWith('/')) {
+      return partUrl;
+    }
+    
+    // Fallback: try to map filename to local path (for backward compatibility)
     const imageMap: { [key: string]: { [key: string]: string } } = {
       bodies: {
         "body.png": "/images/unicorn/bodies/body.png",
@@ -42,14 +52,19 @@ export function CompositeUnicorn({ parts, size = 128 }: CompositeUnicornProps) {
         "corn_ice2.png": "/images/unicorn/accessories/corn_ice2.png",
       },
     }
-    return imageMap[category]?.[filename] || `/placeholder.svg?height=${size}&width=${size}`
+    
+    if (fallbackCategory && imageMap[fallbackCategory]?.[partUrl]) {
+      return imageMap[fallbackCategory][partUrl];
+    }
+    
+    return `/placeholder.svg?height=${size}&width=${size}`;
   }
 
   return (
     <div className="relative inline-block" style={{ width: size, height: size }}>
       {/* Body (base layer) */}
       <Image
-        src={getImageSrc("bodies", parts.body) || "/placeholder.svg"}
+        src={getImageSrc(parts.body, "bodies")}
         alt="Unicorn body"
         width={size}
         height={size}
@@ -59,7 +74,7 @@ export function CompositeUnicorn({ parts, size = 128 }: CompositeUnicornProps) {
 
       {/* Hair */}
       <Image
-        src={getImageSrc("hair", parts.hair) || "/placeholder.svg"}
+        src={getImageSrc(parts.hair, "hair")}
         alt="Unicorn hair"
         width={size}
         height={size}
@@ -69,7 +84,7 @@ export function CompositeUnicorn({ parts, size = 128 }: CompositeUnicornProps) {
 
       {/* Eyes */}
       <Image
-        src={getImageSrc("eyes", parts.eyes) || "/placeholder.svg"}
+        src={getImageSrc(parts.eyes, "eyes")}
         alt="Unicorn eyes"
         width={size}
         height={size}
@@ -79,7 +94,7 @@ export function CompositeUnicorn({ parts, size = 128 }: CompositeUnicornProps) {
 
       {/* Mouth */}
       <Image
-        src={getImageSrc("mouths", parts.mouth) || "/placeholder.svg"}
+        src={getImageSrc(parts.mouth, "mouths")}
         alt="Unicorn mouth"
         width={size}
         height={size}
@@ -89,7 +104,7 @@ export function CompositeUnicorn({ parts, size = 128 }: CompositeUnicornProps) {
 
       {/* Accessory (top layer) */}
       <Image
-        src={getImageSrc("accessories", parts.accessory) || "/placeholder.svg"}
+        src={getImageSrc(parts.accessory, "accessories")}
         alt="Unicorn accessory"
         width={size}
         height={size}

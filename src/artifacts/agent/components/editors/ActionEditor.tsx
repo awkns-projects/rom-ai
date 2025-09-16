@@ -982,6 +982,21 @@ export const ActionEditor = memo(({
                 </div>
 
                 <div>
+                  <Label htmlFor="action-emoji" className="text-blue-300 font-mono font-medium text-sm mb-3 block">Emoji</Label>
+                  <Input
+                    id="action-emoji"
+                    value={action.emoji || ''}
+                    onChange={(e) => onUpdate({ ...action, emoji: e.target.value })}
+                    placeholder="⚡"
+                    className="bg-black/50 border-cyan-500/30 text-cyan-100 h-11 text-center"
+                    maxLength={2}
+                  />
+                  <p className="text-xs text-cyan-400/70 font-mono mt-1">
+                    Visual identifier (single emoji)
+                  </p>
+                </div>
+
+                <div>
                   <Label htmlFor="action-description" className="text-blue-300 font-mono font-medium text-sm mb-3 block">Description</Label>
                   <Textarea
                     id="action-description"

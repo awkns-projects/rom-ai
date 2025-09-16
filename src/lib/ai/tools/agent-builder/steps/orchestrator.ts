@@ -30,6 +30,16 @@ export interface OrchestratorConfig {
   enableInsights?: boolean;
   stopOnValidationFailure?: boolean;
   maxRetries?: number;
+  // Web search options
+  enableWebSearch?: boolean;
+  webSearchConfig?: {
+    searchContextSize?: 'low' | 'medium' | 'high';
+    userLocation?: {
+      type: 'approximate';
+      city: string;
+      region: string;
+    };
+  };
   // Deployment options
   enableDeployment?: boolean;
   deploymentConfig?: {
@@ -208,6 +218,8 @@ export async function executeAgentGeneration(
           // PRESERVE USER-CONFIGURED DATA: Don't override avatar and theme from existing agent
           ...(existingAgent?.avatar && { avatar: existingAgent.avatar }),
           ...(existingAgent?.theme && { theme: existingAgent.theme }),
+          ...(existingAgent?.personality && { personality: existingAgent.personality }),
+          ...(existingAgent?.characterNames && { characterNames: existingAgent.characterNames }),
           // Preserve other user-configured data as well
           ...(existingAgent?.oauthTokens && { oauthTokens: existingAgent.oauthTokens }),
           ...(existingAgent?.apiKeys && { apiKeys: existingAgent.apiKeys }),
@@ -221,8 +233,13 @@ export async function executeAgentGeneration(
           hasTheme: !!partialAgentData.theme,
           themeIncluded: !!partialAgentData.theme,
           theme: partialAgentData.theme,
+          hasPersonality: !!partialAgentData.personality,
+          personalityIncluded: !!partialAgentData.personality,
+          personality: partialAgentData.personality,
+          hasCharacterNames: !!partialAgentData.characterNames,
+          characterNames: partialAgentData.characterNames,
           preservedKeys: Object.keys(partialAgentData).filter(key => 
-            ['avatar', 'theme', 'oauthTokens', 'apiKeys', 'credentials'].includes(key)
+            ['avatar', 'theme', 'personality', 'characterNames', 'oauthTokens', 'apiKeys', 'credentials'].includes(key)
           )
         });
 
@@ -282,7 +299,9 @@ export async function executeAgentGeneration(
         // Pass context for auto-deployment
         documentId: config.documentId,
         session: config.session,
-        dataStream: config.dataStream
+        dataStream: config.dataStream,
+        // Pass orchestrator config for web search
+        orchestratorConfig: config
       }),
       config,
       result
@@ -381,7 +400,9 @@ export async function executeAgentGeneration(
         databaseGeneration: step1Result,
         existingAgent: config.existingAgent,
         conversationContext: config.conversationContext,
-        command: config.command
+        command: config.command,
+        // Pass orchestrator config for web search
+        orchestratorConfig: config
       }),
       config,
       result
@@ -711,6 +732,15 @@ function assembleCompleteAgent(
     externalApis: step0.externalApis || [],
     // Preserve existing deployment data if available
     deployment: config.existingAgent?.deployment,
+    // Include web search results for enhanced package discovery and documentation
+    webSearchResults: {
+      recommendedPackages: step2.webSearchResults?.recommendedPackages || [],
+      foundPatterns: step1.webSearchResults?.foundPatterns || [],
+      integrationNotes: [
+        ...(step1.webSearchResults?.integrationNotes || []),
+        ...(step2.webSearchResults?.integrationNotes || [])
+      ]
+    },
     metadata: {
       createdAt: config.existingAgent?.metadata?.createdAt || now,
       updatedAt: now,
@@ -736,6 +766,16 @@ function assembleCompleteAgent(
   if (existingAgent?.theme) {
     preservedData.theme = existingAgent.theme;
     console.log('🎨 ASSEMBLY: Preserving user theme data:', existingAgent.theme);
+  }
+  
+  if (existingAgent?.personality) {
+    preservedData.personality = existingAgent.personality;
+    console.log('🎭 ASSEMBLY: Preserving user personality data:', existingAgent.personality);
+  }
+  
+  if (existingAgent?.characterNames) {
+    preservedData.characterNames = existingAgent.characterNames;
+    console.log('🎭 ASSEMBLY: Preserving user character names:', existingAgent.characterNames);
   }
   
   // Preserve other user-configured data
