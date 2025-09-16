@@ -11,6 +11,7 @@ export class ComponentGenerator implements TemplateGenerator {
       'src/components/ChatMessage.tsx': this.generateChatMessageComponent(),
       'src/components/LoadingSpinner.tsx': this.generateLoadingSpinnerComponent(),
       'src/components/ActionExecutionModal.tsx': this.generateActionExecutionModal(),
+      'src/components/ExecutionTracker.tsx': this.generateExecutionTracker(),
       'src/components/ClientProviders.tsx': this.generateClientProviders(),
       'src/components/CompositeUnicorn.tsx': this.generateCompositeUnicornComponent(options)
     };
@@ -315,7 +316,8 @@ export default function Layout({
                   { path: '/models', icon: '🗃️', label: 'Data' },
                   { path: '/actions', icon: '⚡', label: 'Actions' },
                   { path: '/schedules', icon: '⏰', label: 'Tasks' },
-                  { path: '/chat', icon: '💬', label: 'Chat' }
+                  { path: '/chat', icon: '💬', label: 'Chat' },
+                  { path: '/execution-logs', icon: '📊', label: 'Logs' }
                 ].map((item) => (
                   <button
                     key={item.path}
@@ -469,6 +471,7 @@ export default function ModelCard({ model }: ModelCardProps) {
     
     return `'use client'
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import ActionExecutionModal from './ActionExecutionModal';
 import { themes } from '@/lib/theme';
 
@@ -489,6 +492,7 @@ export default function ActionCard({ action }: ActionCardProps) {
   const [showModal, setShowModal] = useState(false);
   const [lastResult, setLastResult] = useState<any>(null);
   const [lastExecutionTime, setLastExecutionTime] = useState<string | null>(null);
+  const router = useRouter();
 
   // Use embedded local configuration
   const selectedTheme = '${agentTheme}';
@@ -500,22 +504,37 @@ export default function ActionCard({ action }: ActionCardProps) {
     setShowModal(false);
   };
 
+  // Handle action click - open execution modal for all actions
+  const handleActionClick = () => {
+    setShowModal(true);
+  };
+
+
+
+  const getActionTypeDisplay = () => {
+    return '⚡ Execute';
+  };
+
+  const getActionDescription = () => {
+    return action.description || \`Execute \${action.title || action.name}\`;
+  };
+
   return (
     <>
       <div 
         className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-5 cursor-pointer hover:\${currentTheme.bgHover} transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]\`}
-        onClick={() => setShowModal(true)}
+        onClick={handleActionClick}
       >
         <div className="flex items-start gap-4 mb-4">
-          <div className={\`w-12 h-12 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl flex items-center justify-center flex-shrink-0\`}>
-            <span className="text-2xl">{action.emoji || '⚡'}</span>
-          </div>
+                      <div className={\`w-12 h-12 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl flex items-center justify-center flex-shrink-0\`}>
+              <span className="text-2xl">{action.emoji || '⚡'}</span>
+            </div>
           <div className="flex-1 min-w-0">
             <h3 className={\`font-mono text-lg font-bold \${currentTheme.light} mb-1\`}>
               {action.title || action.name}
             </h3>
             <p className={\`font-mono text-sm \${currentTheme.dim} mb-2\`}>
-              {action.description || \`Execute \${action.title || action.name}\`}
+              {getActionDescription()}
             </p>
             <div className="flex items-center gap-4">
               <span className={\`font-mono text-xs px-3 py-1.5 rounded-full \${currentTheme.bgActive} border \${currentTheme.borderActive} \${currentTheme.accent}\`}>
@@ -547,7 +566,7 @@ export default function ActionCard({ action }: ActionCardProps) {
         {/* Click indicator */}
         <div className="flex items-center justify-between pt-3 border-t border-gray-700/50">
           <span className={\`font-mono text-xs \${currentTheme.dim}\`}>
-            Type: {action.type || 'Action'}
+            Type: {action.type || 'Business Process'}
           </span>
           <span className={\`font-mono text-sm \${currentTheme.dim} flex items-center gap-1\`}>
             <span>Tap to execute</span>
@@ -556,6 +575,7 @@ export default function ActionCard({ action }: ActionCardProps) {
         </div>
       </div>
 
+      {/* Execution modal for all actions */}
       {showModal && (
         <ActionExecutionModal
           action={action}
@@ -635,8 +655,10 @@ export default function ScheduleCard({ schedule }: ScheduleCardProps) {
 
   private generateChatMessageComponent(): string {
     return `'use client'
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { CompositeUnicorn } from './CompositeUnicorn';
+import ExecutionTracker from './ExecutionTracker';
+import ActionExecutionModal from './ActionExecutionModal';
 import Image from 'next/image';
 import { themes } from '@/lib/theme';
 
@@ -645,6 +667,7 @@ interface Message {
   type: 'user' | 'bot';
   content: string;
   timestamp: Date;
+  toolInvocations?: any[];
 }
 
 interface ChatMessageProps {
@@ -658,11 +681,23 @@ interface ChatMessageProps {
     uploadedImage?: string;
     selectedNFT?: string;
   };
+  availableActions?: any[];
+  onActionExecute?: (actionName: string) => void;
 }
 
-const ChatMessage = memo(({ message, isTyping = false, theme = 'green', avatar }: ChatMessageProps) => {
+const ChatMessage = memo(({ 
+  message, 
+  isTyping = false, 
+  theme = 'green', 
+  avatar,
+  availableActions = [],
+  onActionExecute
+}: ChatMessageProps) => {
   const isUser = message.type === 'user';
   const currentTheme = themes[theme] || themes.green;
+  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [selectedAction, setSelectedAction] = useState<any>(null);
   
   const formatTimestamp = (date: Date) => {
     return new Intl.DateTimeFormat('en-US', {
@@ -673,13 +708,69 @@ const ChatMessage = memo(({ message, isTyping = false, theme = 'green', avatar }
   };
 
   const formatContent = (content: string) => {
-    // Simple markdown-like formatting
-    return content
+    // Enhanced markdown-like formatting with action button detection
+    let formattedContent = content
       .replace(/\\*\\*(.*?)\\*\\*/g, '<strong>$1</strong>') // Bold
       .replace(/\\*(.*?)\\*/g, '<em>$1</em>') // Italic
       .replace(/\`(.*?)\`/g, \`<code class="\${currentTheme.bg} px-1 rounded \${currentTheme.light}">$1</code>\`) // Inline code
       .replace(/\\n/g, '<br>'); // Line breaks
+
+    // Look for action names in the content and convert them to clickable buttons
+    availableActions.forEach(action => {
+      const actionNameRegex = new RegExp(\`\\\\b\${action.name}\\\\b\`, 'gi');
+      if (formattedContent.match(actionNameRegex)) {
+        formattedContent = formattedContent.replace(
+          actionNameRegex,
+          \`<button 
+            onclick="window.executeActionFromChat && window.executeActionFromChat('\${action.name}')"
+            class="inline-flex items-center gap-1 px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded text-xs \${currentTheme.accent} hover:\${currentTheme.bgHover} transition-colors cursor-pointer"
+            title="Click to execute \${action.title || action.name}"
+          >
+            <span>\${action.emoji || '⚡'}</span>
+            <span>\${action.title || action.name}</span>
+          </button>\`
+        );
+      }
+    });
+
+    return formattedContent;
   };
+
+  const toggleToolExpansion = (toolId: string) => {
+    const newExpanded = new Set(expandedTools);
+    if (newExpanded.has(toolId)) {
+      newExpanded.delete(toolId);
+    } else {
+      newExpanded.add(toolId);
+    }
+    setExpandedTools(newExpanded);
+  };
+
+  // Handle action execution from inline buttons
+  const executeAction = (actionName: string) => {
+    const action = availableActions.find(a => a.name === actionName);
+    if (action) {
+      setSelectedAction(action);
+      setShowActionModal(true);
+    } else if (onActionExecute) {
+      onActionExecute(actionName);
+    } else {
+      console.error('Action not found:', actionName);
+    }
+  };
+
+  const handleChatActionComplete = (result: any) => {
+    setShowActionModal(false);
+    setSelectedAction(null);
+    console.log('Action completed from chat:', result);
+  };
+
+
+
+  // Make action execution available globally for inline buttons
+  if (typeof window !== 'undefined') {
+    (window as any).executeActionFromChat = executeAction;
+  }
 
   if (isTyping) {
     return (
@@ -699,46 +790,239 @@ const ChatMessage = memo(({ message, isTyping = false, theme = 'green', avatar }
   }
 
   return (
-    <div className={\`flex \${isUser ? 'justify-end' : 'justify-start'} mb-3\`}>
-      <div className={\`flex \${isUser ? 'flex-row-reverse' : 'flex-row'} items-end gap-2 max-w-[85%]\`}>
-        {!isUser && (
-          <div className="flex-shrink-0">
-            <div className={\`w-6 h-6 \${currentTheme.bg} border \${currentTheme.border} rounded-lg flex items-center justify-center overflow-hidden\`}>
-              {avatar?.type === 'rom-unicorn' && avatar.unicornParts ? (
-                <CompositeUnicorn parts={avatar.unicornParts} size={24} />
-              ) : avatar?.type === 'custom' && avatar.customType === 'upload' && avatar.uploadedImage ? (
-                <Image
-                  src={avatar.uploadedImage}
-                  alt="Agent Avatar"
-                  width={24}
-                  height={24}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <span className="text-xs">🤖</span>
-              )}
+    <>
+      <div className={\`flex \${isUser ? 'justify-end' : 'justify-start'} mb-3\`}>
+        <div className={\`flex \${isUser ? 'flex-row-reverse' : 'flex-row'} items-end gap-2 max-w-[85%]\`}>
+          {!isUser && (
+            <div className="flex-shrink-0">
+              <div className={\`w-6 h-6 \${currentTheme.bg} border \${currentTheme.border} rounded-lg flex items-center justify-center overflow-hidden\`}>
+                {avatar?.type === 'rom-unicorn' && avatar.unicornParts ? (
+                  <CompositeUnicorn parts={avatar.unicornParts} size={24} />
+                ) : avatar?.type === 'custom' && avatar.customType === 'upload' && avatar.uploadedImage ? (
+                  <Image
+                    src={avatar.uploadedImage}
+                    alt="Agent Avatar"
+                    width={24}
+                    height={24}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-xs">🤖</span>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-        <div className={\`px-4 py-3 rounded-2xl font-mono text-sm leading-relaxed shadow-sm \${
-          isUser 
-            ? \`\${currentTheme.bgActive} border \${currentTheme.borderActive} \${currentTheme.light} rounded-br-md\` 
-            : \`\${currentTheme.bg} border \${currentTheme.border} \${currentTheme.light} rounded-bl-md\`
-        }\`}>
-          <div className="mb-1">
-            <div 
-              className="whitespace-pre-wrap break-words"
-              dangerouslySetInnerHTML={{ __html: formatContent(message.content) }}
-            />
-          </div>
-          <div className={\`text-xs \${currentTheme.dim} text-right mt-1\`}>
-            {formatTimestamp(message.timestamp)}
+          )}
+          <div className={\`px-4 py-3 rounded-2xl font-mono text-sm leading-relaxed shadow-sm \${
+            isUser 
+              ? \`\${currentTheme.bgActive} border \${currentTheme.borderActive} \${currentTheme.light} rounded-br-md\` 
+              : \`\${currentTheme.bg} border \${currentTheme.border} \${currentTheme.light} rounded-bl-md\`
+          }\`}>
+            <div className="mb-1">
+              <div 
+                className="whitespace-pre-wrap break-words"
+                dangerouslySetInnerHTML={{ __html: formatContent(message.content) }}
+              />
+            </div>
+            
+            {/* Tool Invocations */}
+            {!isUser && message.toolInvocations && message.toolInvocations.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {message.toolInvocations.map((tool, index) => {
+                  const toolId = \`\${message.id}-tool-\${index}\`;
+                  const isExpanded = expandedTools.has(toolId);
+                  
+                  if (tool.toolName === 'executeAction') {
+                    const result = tool.result;
+                    const executionId = result?.executionId;
+                    
+                    return (
+                      <div key={index} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-3\`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">⚡</span>
+                            <span className={\`font-medium \${currentTheme.light}\`}>
+                              Action: {tool.args?.actionName}
+                            </span>
+                            <span className={\`px-2 py-1 rounded text-xs \${
+                              result?.success ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                            }\`}>
+                              {result?.success ? '✅ Success' : '❌ Failed'}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => toggleToolExpansion(toolId)}
+                            className={\`text-xs \${currentTheme.accent} hover:\${currentTheme.light}\`}
+                          >
+                            {isExpanded ? '▼ Hide' : '▶ Details'}
+                          </button>
+                        </div>
+                        
+                        {executionId && (
+                          <div className="mb-2">
+                            <div className={\`text-xs \${currentTheme.dim} mb-1\`}>Execution Tracking:</div>
+                            <ExecutionTracker
+                              executionId={executionId}
+                              title={tool.args?.actionName}
+                              compact={true}
+                              showSteps={isExpanded}
+                              theme={theme}
+                            />
+                          </div>
+                        )}
+                        
+                        {isExpanded && (
+                          <div className="space-y-2 text-xs">
+                            <div>
+                              <div className={\`\${currentTheme.dim} mb-1\`}>Parameters:</div>
+                              <pre className={\`\${currentTheme.bg} p-2 rounded overflow-x-auto \${currentTheme.light}\`}>
+                                {JSON.stringify(tool.args?.parameters, null, 2)}
+                              </pre>
+                            </div>
+                            {result?.result && (
+                              <div>
+                                <div className={\`\${currentTheme.dim} mb-1\`}>Result:</div>
+                                <pre className={\`\${currentTheme.bg} p-2 rounded overflow-x-auto \${currentTheme.light}\`}>
+                                  {JSON.stringify(result.result, null, 2)}
+                                </pre>
+                              </div>
+                            )}
+                            {result?.error && (
+                              <div>
+                                <div className="text-red-400 mb-1">Error:</div>
+                                <div className="bg-red-500/20 border border-red-400/50 p-2 rounded text-red-400">
+                                  {result.error}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  } else if (tool.toolName === 'getActionInfo') {
+                    const result = tool.result;
+                    
+                    return (
+                      <div key={index} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-3\`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-lg">ℹ️</span>
+                          <span className={\`font-medium \${currentTheme.light}\`}>
+                            Action Info: {tool.args?.actionName || 'All Actions'}
+                          </span>
+                        </div>
+                        
+                        {result?.success && result.action && (
+                          <div className="space-y-2 text-xs">
+                            <div>
+                              <div className={\`\${currentTheme.dim}\`}>Description:</div>
+                              <div className={\`\${currentTheme.light}\`}>{result.action.description}</div>
+                            </div>
+                            {result.action.parameters && result.action.parameters.length > 0 && (
+                              <div>
+                                <div className={\`\${currentTheme.dim}\`}>Required Parameters:</div>
+                                <div className="space-y-1 mt-1">
+                                  {result.action.parameters.map((param, idx) => (
+                                    <div key={idx} className={\`\${currentTheme.bg} p-2 rounded\`}>
+                                      <span className={\`font-medium \${currentTheme.light}\`}>{param.name}</span>
+                                      <span className={\`text-xs \${currentTheme.dim} ml-2\`}>
+                                        ({param.type}{param.required ? ', required' : ', optional'})
+                                      </span>
+                                      {param.description && (
+                                        <div className={\`text-xs \${currentTheme.dim} mt-1\`}>{param.description}</div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {/* Add execute button for the action */}
+                            <div className="mt-3">
+                              <button
+                                onClick={() => executeAction(tool.args?.actionName)}
+                                className={\`px-3 py-1.5 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg font-mono text-xs \${currentTheme.accent} hover:\${currentTheme.bgHover} transition-colors\`}
+                              >
+                                ⚡ Execute {result.action.title || result.action.name}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {result?.success && result.actions && (
+                          <div className="space-y-1 text-xs">
+                            <div className={\`\${currentTheme.dim}\`}>Available Actions:</div>
+                            {result.actions.map((action, idx) => (
+                              <div key={idx} className={\`\${currentTheme.bg} p-2 rounded flex justify-between items-center\`}>
+                                <div className="flex items-center gap-2">
+                                  <span className={\`\${currentTheme.light}\`}>{action.name}</span>
+                                  <span className={\`\${currentTheme.dim}\`}>({action.parameterCount} params)</span>
+                                </div>
+                                <button
+                                  onClick={() => executeAction(action.name)}
+                                  className={\`px-2 py-1 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded text-xs \${currentTheme.accent} hover:\${currentTheme.bgHover} transition-colors\`}
+                                >
+                                  ⚡ Run
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  } else if (tool.toolName === 'getExecutionStatus') {
+                    const result = tool.result;
+                    
+                    return (
+                      <div key={index} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-3\`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-lg">📊</span>
+                          <span className={\`font-medium \${currentTheme.light}\`}>
+                            Execution Status
+                          </span>
+                        </div>
+                        
+                        {result?.success && result.execution && (
+                          <ExecutionTracker
+                            executionId={result.execution.executionId}
+                            title={result.execution.actionName}
+                            compact={true}
+                            showSteps={true}
+                            theme={theme}
+                          />
+                        )}
+                        
+                        {result?.error && (
+                          <div className="text-red-400 text-xs">
+                            Error: {result.error}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  
+                  return null;
+                })}
+              </div>
+            )}
+            
+            <div className={\`text-xs \${currentTheme.dim} text-right mt-1\`}>
+              {formatTimestamp(message.timestamp)}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-});
+
+      {/* Action Execution Modal */}
+      {showActionModal && selectedAction && (
+        <ActionExecutionModal
+          action={selectedAction}
+          isOpen={showActionModal}
+          onClose={() => setShowActionModal(false)}
+          onComplete={handleChatActionComplete}
+          theme={theme}
+        />
+      )}
+         </>
+   );
+ });
 
 ChatMessage.displayName = 'ChatMessage';
 
@@ -773,6 +1057,267 @@ export default function LoadingSpinner({ size = 'md', theme = 'green' }: Loading
 }`;
   }
 
+  private generateExecutionTracker(): string {
+    return `'use client'
+import { useState, useEffect } from 'react';
+import LoadingSpinner from './LoadingSpinner';
+import { themes } from '@/lib/theme';
+
+interface ExecutionTrackerProps {
+  executionId: string;
+  title?: string;
+  compact?: boolean;
+  showSteps?: boolean;
+  theme?: keyof typeof themes;
+}
+
+interface ActionStepLog {
+  stepNumber: number;
+  stepName: string;
+  startTime: string;
+  endTime?: string;
+  input: Record<string, any>;
+  output?: Record<string, any>;
+  error?: string;
+  executionTime?: number;
+}
+
+interface ActionExecutionLog {
+  executionId: string;
+  actionName: string;
+  userId?: string;
+  startTime: string;
+  endTime?: string;
+  status: 'running' | 'completed' | 'failed';
+  parameters: Record<string, any>;
+  steps: ActionStepLog[];
+  error?: string;
+  totalExecutionTime?: number;
+}
+
+export default function ExecutionTracker({
+  executionId,
+  title = 'Action Execution',
+  compact = false,
+  showSteps = true,
+  theme = 'green'
+}: ExecutionTrackerProps) {
+  const [execution, setExecution] = useState<ActionExecutionLog | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const currentTheme = themes[theme] || themes.green;
+
+  // Fetch execution data
+  useEffect(() => {
+    const fetchExecution = async () => {
+      try {
+        setError(null);
+        const response = await fetch(\`/api/execution-logs/\${executionId}\`);
+        const result = await response.json();
+        
+        if (result.success) {
+          setExecution(result.data);
+        } else {
+          setError(result.error || 'Failed to fetch execution');
+        }
+      } catch (err) {
+        console.error('Failed to fetch execution:', err);
+        setError('Failed to fetch execution');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchExecution();
+    
+    // Auto-refresh every 2 seconds while execution is running
+    const intervalId = setInterval(fetchExecution, 2000);
+    
+    return () => clearInterval(intervalId);
+  }, [executionId]);
+
+  // Stop auto-refresh when execution is complete
+  useEffect(() => {
+    if (execution && (execution.status === 'completed' || execution.status === 'failed')) {
+      // Final fetch after 1 second to ensure we get the final state
+      setTimeout(() => {
+        fetch(\`/api/execution-logs/\${executionId}\`)
+          .then(response => response.json())
+          .then(result => {
+            if (result.success) {
+              setExecution(result.data);
+            }
+          })
+          .catch(console.error);
+      }, 1000);
+    }
+  }, [execution?.status, executionId]);
+
+  const getStatusDisplay = (status: string) => {
+    switch (status) {
+      case 'running':
+        return { icon: '🔄', color: currentTheme.accent, text: 'Running' };
+      case 'completed':
+        return { icon: '✅', color: 'text-green-400', text: 'Completed' };
+      case 'failed':
+        return { icon: '❌', color: 'text-red-400', text: 'Failed' };
+      default:
+        return { icon: '❓', color: currentTheme.dim, text: 'Unknown' };
+    }
+  };
+
+  const formatDuration = (ms?: number) => {
+    if (!ms) return 'N/A';
+    if (ms < 1000) return \`\${ms}ms\`;
+    if (ms < 60000) return \`\${(ms / 1000).toFixed(1)}s\`;
+    return \`\${(ms / 60000).toFixed(1)}m\`;
+  };
+
+  if (loading) {
+    return (
+      <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-4\`}>
+        <div className="flex items-center justify-center py-4">
+          <LoadingSpinner size="sm" theme={theme} />
+          <span className={\`ml-2 text-sm font-mono \${currentTheme.light}\`}>Loading execution...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className={\`\${currentTheme.bg} border border-red-400/50 rounded-lg p-4\`}>
+        <div className="flex items-center justify-center py-4 text-red-400">
+          <span className="text-sm font-mono">❌ {error}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!execution) {
+    return (
+      <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-4\`}>
+        <div className="flex items-center justify-center py-4">
+          <span className={\`text-sm font-mono \${currentTheme.dim}\`}>⚠️ Execution not found</span>
+        </div>
+      </div>
+    );
+  }
+
+  const status = getStatusDisplay(execution.status);
+  const totalSteps = execution.steps.length;
+  const completedSteps = execution.steps.filter(step => step.endTime).length;
+  const progress = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
+
+  return (
+    <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-4 space-y-4\`}>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{status.icon}</span>
+          <span className={\`font-mono font-medium \${currentTheme.light}\`}>{title}</span>
+        </div>
+        <div className={\`px-2 py-1 rounded text-xs font-mono \${status.color} \${currentTheme.bg} border \${currentTheme.border}\`}>
+          {status.text}
+        </div>
+      </div>
+
+      {/* Progress */}
+      <div className="space-y-2">
+        <div className="flex justify-between items-center text-sm font-mono">
+          <span className={\`\${currentTheme.light}\`}>Progress</span>
+          <span className={\`\${currentTheme.dim}\`}>{completedSteps}/{totalSteps} steps</span>
+        </div>
+        <div className="w-full bg-gray-700 rounded-full h-2">
+          <div 
+            className={\`\${currentTheme.bgActive} h-2 rounded-full transition-all duration-300\`}
+            style={{ width: \`\${progress}%\` }}
+          ></div>
+        </div>
+      </div>
+
+      {/* Timing */}
+      <div className="grid grid-cols-2 gap-4 text-xs font-mono">
+        <div className="flex items-center gap-1">
+          <span className="text-gray-500">⏱️</span>
+          <span className={\`\${currentTheme.dim}\`}>
+            {execution.totalExecutionTime ? 
+              formatDuration(execution.totalExecutionTime) : 
+              execution.endTime ? 
+                formatDuration(new Date(execution.endTime).getTime() - new Date(execution.startTime).getTime()) :
+                formatDuration(Date.now() - new Date(execution.startTime).getTime())
+            }
+          </span>
+        </div>
+        <div className="text-right">
+          <span className={\`\${currentTheme.dim}\`}>
+            {new Date(execution.startTime).toLocaleTimeString()}
+          </span>
+        </div>
+      </div>
+
+      {/* Error Display */}
+      {execution.error && (
+        <div className="p-2 bg-red-900/20 border border-red-400/50 rounded text-xs text-red-400 font-mono">
+          <strong>Error:</strong> {execution.error}
+        </div>
+      )}
+
+      {/* Steps */}
+      {showSteps && execution.steps.length > 0 && (
+        <div>
+          <div className={\`text-xs font-medium \${currentTheme.light} font-mono mb-2\`}>
+            Execution Steps
+          </div>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {execution.steps.map((step) => {
+              const stepCompleted = !!step.endTime;
+              const stepFailed = !!step.error;
+              
+              return (
+                <div
+                  key={step.stepNumber}
+                  className={\`flex items-center gap-2 p-2 rounded text-xs font-mono \${
+                    stepFailed ? 'bg-red-900/20 border border-red-400/50' :
+                    stepCompleted ? 'bg-green-900/20 border border-green-400/50' :
+                    'bg-blue-900/20 border border-blue-400/50'
+                  }\`}
+                >
+                  <span className="flex-shrink-0">
+                    {stepFailed ? '❌' : stepCompleted ? '✅' : '🔄'}
+                  </span>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className={\`font-medium truncate \${
+                      stepFailed ? 'text-red-400' :
+                      stepCompleted ? 'text-green-400' :
+                      'text-blue-400'
+                    }\`}>
+                      Step {step.stepNumber}: {step.stepName}
+                    </div>
+                    {stepCompleted && step.executionTime && (
+                      <div className="text-gray-500 text-xs">
+                        {formatDuration(step.executionTime)}
+                      </div>
+                    )}
+                    {stepFailed && step.error && (
+                      <div className="text-red-400 mt-1 text-xs">
+                        {step.error}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}`;
+  }
+
   private generateClientProviders(): string {
     return `'use client'
 import { AgentProvider } from '@/contexts/AgentContext'
@@ -795,6 +1340,7 @@ export default function ClientProviders({ children }: ClientProvidersProps) {
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import LoadingSpinner from './LoadingSpinner';
+import ExecutionTracker from './ExecutionTracker';
 import { themes } from '@/lib/theme';
 
 interface ActionExecutionModalProps {
@@ -820,6 +1366,8 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
   const [step, setStep] = useState<'input' | 'executing' | 'result'>('input');
   const [databaseOptions, setDatabaseOptions] = useState<Record<string, any[]>>({});
   const [loadingOptions, setLoadingOptions] = useState<Record<string, boolean>>({});
+  const [executionId, setExecutionId] = useState<string | null>(null);
+  const [showExecutionTracker, setShowExecutionTracker] = useState(false);
   
   const currentTheme = themes[theme] || themes.green;
 
@@ -916,7 +1464,7 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
     return errors;
   };
 
-  const executeAction = async () => {
+  const executeModalAction = async () => {
     // Validate required fields before execution
     const validationErrors = validateRequiredFields();
     if (validationErrors.length > 0) {
@@ -934,16 +1482,27 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
     setIsExecuting(true);
     setStep('executing');
     setResult(null);
+    
+    // Show execution tracker
+    setShowExecutionTracker(true);
 
     try {
-      // Execute action locally using embedded action endpoint
-      const actionResult = await api.executeAction(action.name, inputParameters);
+      // Execute action locally using embedded action endpoint with Redis logging
+      const actionResult = await api.executeActionWithTracking(action.name, inputParameters);
+      
+      // Set execution ID for tracking
+      if (actionResult.executionId) {
+        setExecutionId(actionResult.executionId);
+      }
 
       setResult(actionResult);
-      setStep('result');
       
-      // Notify parent component
-      onComplete(actionResult);
+      // Don't immediately go to result step - let user see execution tracker
+      setTimeout(() => {
+        setStep('result');
+        onComplete(actionResult);
+      }, 3000); // Wait 3 seconds to show execution steps
+      
     } catch (error) {
       const errorResult = {
         success: false,
@@ -1219,14 +1778,36 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
           )}
 
           {step === 'executing' && (
-            <div className="text-center py-8">
-              <LoadingSpinner size="lg" theme={theme} />
-              <p className={\`font-mono text-sm \${currentTheme.light} mt-4\`}>
-                Executing {action.title || action.name}...
-              </p>
-              <p className={\`font-mono text-xs \${currentTheme.dim} mt-1\`}>
-                Running locally with embedded code
-              </p>
+            <div className="space-y-4">
+              {showExecutionTracker && executionId ? (
+                <div>
+                  <div className="text-center mb-4">
+                    <p className={\`font-mono text-sm \${currentTheme.light}\`}>
+                      🚀 Executing {action.title || action.name}
+                    </p>
+                    <p className={\`font-mono text-xs \${currentTheme.dim} mt-1\`}>
+                      Execution ID: {executionId}
+                    </p>
+                  </div>
+                  <ExecutionTracker
+                    executionId={executionId}
+                    title={action.title || action.name}
+                    compact={true}
+                    showSteps={true}
+                    theme={theme}
+                  />
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <LoadingSpinner size="lg" theme={theme} />
+                  <p className={\`font-mono text-sm \${currentTheme.light} mt-4\`}>
+                    Initializing execution...
+                  </p>
+                  <p className={\`font-mono text-xs \${currentTheme.dim} mt-1\`}>
+                    Setting up Redis tracking
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -1270,7 +1851,7 @@ export default function ActionExecutionModal({ action, isOpen, onClose, onComple
                 Cancel
               </button>
               <button
-                onClick={executeAction}
+                onClick={executeModalAction}
                 disabled={isExecuting || validateRequiredFields().length > 0}
                 className={\`flex-1 p-3 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg font-mono text-sm \${currentTheme.light} hover:\${currentTheme.bgHover} disabled:opacity-50 transition-colors\`}
               >

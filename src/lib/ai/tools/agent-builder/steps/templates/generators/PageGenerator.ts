@@ -9,7 +9,8 @@ export class PageGenerator implements TemplateGenerator {
       'src/app/models/[modelName]/page.tsx': this.generateModelDetailPage(options),
       'src/app/actions/page.tsx': this.generateActionsPage(options),
       'src/app/schedules/page.tsx': this.generateSchedulesPage(options),
-      'src/app/chat/page.tsx': this.generateChatPage(options)
+      'src/app/chat/page.tsx': this.generateChatPage(options),
+      'src/app/execution-logs/page.tsx': this.generateExecutionLogsPage(options)
     };
   }
 
@@ -196,6 +197,10 @@ export default function ModelsPage() {
   const [loading, setLoading] = useState(true);
   const [models, setModels] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedModelForCreate, setSelectedModelForCreate] = useState<any>(null);
+  const [createFormData, setCreateFormData] = useState<Record<string, any>>({});
+  const [creating, setCreating] = useState(false);
 
   // Use embedded local configuration with fallback safety
   const selectedTheme = '${agentTheme}' || 'green';
@@ -269,6 +274,136 @@ export default function ModelsPage() {
     }
   };
 
+  // Handle create record
+  const handleCreateRecord = async () => {
+    if (!selectedModelForCreate || creating) return;
+    
+    try {
+      setCreating(true);
+      
+      // Validate required fields
+      const hasData = Object.keys(createFormData).some(key => 
+        createFormData[key] !== '' && createFormData[key] !== null && createFormData[key] !== undefined
+      );
+      
+      if (!hasData) {
+        alert('Please fill in at least one field');
+        return;
+      }
+
+      // Create record via API
+      const response = await fetch(\`/api/models/\${selectedModelForCreate.name}\`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(createFormData)
+      });
+
+      if (!response.ok) {
+        throw new Error(\`Failed to create record: \${response.status}\`);
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        // Refresh data
+        await fetchModelData();
+        
+        // Close modal and reset form
+        setShowCreateModal(false);
+        setSelectedModelForCreate(null);
+        setCreateFormData({});
+        
+        alert('Record created successfully!');
+      } else {
+        throw new Error(result.error || 'Failed to create record');
+      }
+    } catch (error) {
+      console.error('Create error:', error);
+      alert(\`Failed to create record: \${error instanceof Error ? error.message : 'Unknown error'}\`);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  // Open create modal for specific model
+  const openCreateModal = (model: any) => {
+    setSelectedModelForCreate(model);
+    setCreateFormData({});
+    setShowCreateModal(true);
+  };
+
+  // Handle form field changes
+  const handleFormChange = (fieldName: string, value: any) => {
+    setCreateFormData(prev => ({
+      ...prev,
+      [fieldName]: value
+    }));
+  };
+
+  // Render form field based on type
+  const renderFormField = (field: any) => {
+    const value = createFormData[field.name] || '';
+    
+    switch (field.type) {
+      case 'Boolean':
+        return (
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={!!value}
+              onChange={(e) => handleFormChange(field.name, e.target.checked)}
+              className="rounded"
+            />
+            <span className={\`font-mono text-sm \${currentTheme.light}\`}>{field.name}</span>
+          </label>
+        );
+      case 'Int':
+      case 'Float':
+        return (
+          <div>
+            <label className={\`block font-mono text-sm \${currentTheme.light} mb-1\`}>
+              {field.name}
+            </label>
+            <input
+              type="number"
+              value={value}
+              onChange={(e) => handleFormChange(field.name, parseFloat(e.target.value) || '')}
+              className={\`w-full \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg px-3 py-2 \${currentTheme.light} font-mono text-sm focus:outline-none focus:\${currentTheme.borderActive}\`}
+              placeholder={\`Enter \${field.name.toLowerCase()}\`}
+            />
+          </div>
+        );
+      case 'DateTime':
+        return (
+          <div>
+            <label className={\`block font-mono text-sm \${currentTheme.light} mb-1\`}>
+              {field.name}
+            </label>
+            <input
+              type="datetime-local"
+              value={value}
+              onChange={(e) => handleFormChange(field.name, e.target.value)}
+              className={\`w-full \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg px-3 py-2 \${currentTheme.light} font-mono text-sm focus:outline-none focus:\${currentTheme.borderActive}\`}
+            />
+          </div>
+        );
+      default:
+        return (
+          <div>
+            <label className={\`block font-mono text-sm \${currentTheme.light} mb-1\`}>
+              {field.name}
+            </label>
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => handleFormChange(field.name, e.target.value)}
+              className={\`w-full \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg px-3 py-2 \${currentTheme.light} font-mono text-sm focus:outline-none focus:\${currentTheme.borderActive}\`}
+              placeholder={\`Enter \${field.name.toLowerCase()}\`}
+            />
+          </div>
+        );
+    }
+  };
+
   return (
     <Layout title="Data Models">
       <div className="space-y-6">
@@ -320,8 +455,7 @@ export default function ModelsPage() {
             {modelsData.map((model, i) => (
               <div 
                 key={i} 
-                className={\`\${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl p-5 cursor-pointer hover:\${currentTheme?.bgHover || 'hover:bg-gray-700'} transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]\`}
-                onClick={() => router.push(\`/models/\${model.name}\`)}
+                className={\`\${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl p-5 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]\`}
               >
                 <div className="flex items-start gap-4 mb-4">
                   <div className={\`w-12 h-12 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-xl flex items-center justify-center flex-shrink-0\`}>
@@ -351,17 +485,29 @@ export default function ModelsPage() {
                   </div>
                 </div>
                 <div className="flex items-center justify-between pt-3 border-t border-gray-700/50">
-                  <span className={\`font-mono text-xs px-3 py-1.5 rounded-full \${
-                    model.error 
-                      ? 'bg-red-500/20 border border-red-400/30 text-red-300' 
-                      : \`\${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} \${currentTheme?.accent || 'text-green-400'}\`
-                  }\`}>
-                    {model.error ? '⚠️ Error' : '✅ Ready'}
-                  </span>
-                  <span className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'} flex items-center gap-1\`}>
-                    <span>Tap to explore</span>
+                  <div className="flex items-center gap-2">
+                    <span className={\`font-mono text-xs px-3 py-1.5 rounded-full \${
+                      model.error 
+                        ? 'bg-red-500/20 border border-red-400/30 text-red-300' 
+                        : \`\${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} \${currentTheme?.accent || 'text-green-400'}\`
+                    }\`}>
+                      {model.error ? '⚠️ Error' : '✅ Ready'}
+                    </span>
+                    <button
+                      onClick={() => openCreateModal(model)}
+                      disabled={model.error}
+                      className={\`px-3 py-1.5 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-full font-mono text-xs \${currentTheme?.accent || 'text-green-400'} hover:\${currentTheme?.bgHover || 'hover:bg-gray-600'} transition-colors disabled:opacity-50 disabled:cursor-not-allowed\`}
+                    >
+                      + Add Record
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => router.push(\`/models/\${model.name}\`)}
+                    className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'} flex items-center gap-1 hover:\${currentTheme?.accent || 'hover:text-green-400'} transition-colors\`}
+                  >
+                    <span>View Details</span>
                     <span className={\`\${currentTheme?.accent || 'text-green-400'}\`}>→</span>
-                  </span>
+                  </button>
                 </div>
               </div>
             ))}
@@ -377,6 +523,49 @@ export default function ModelsPage() {
             </div>
           </div>
         )}
+
+        {/* Create Record Modal */}
+        {showCreateModal && selectedModelForCreate && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className={\`\${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto\`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={\`text-xl font-mono font-bold \${currentTheme?.light || 'text-gray-200'}\`}>
+                  Create {selectedModelForCreate.title || selectedModelForCreate.name}
+                </h3>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className={\`p-2 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-lg \${currentTheme?.dim || 'text-gray-400'} hover:\${currentTheme?.bgHover || 'hover:bg-gray-600'} transition-colors\`}
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                {selectedModelForCreate.fields?.map((field: any) => (
+                  <div key={field.name}>
+                    {renderFormField(field)}
+                  </div>
+                ))}
+              </div>
+              
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className={\`flex-1 py-3 \${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl font-mono text-sm \${currentTheme?.dim || 'text-gray-400'} hover:\${currentTheme?.bgHover || 'hover:bg-gray-700'} transition-colors\`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateRecord}
+                  disabled={creating}
+                  className={\`flex-1 py-3 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-xl font-mono text-sm \${currentTheme?.accent || 'text-green-400'} hover:\${currentTheme?.bgHover || 'hover:bg-gray-600'} transition-colors disabled:opacity-50 disabled:cursor-not-allowed\`}
+                >
+                  {creating ? 'Creating...' : 'Create Record'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </Layout>
   );
@@ -389,18 +578,25 @@ export default function ModelsPage() {
     
     return `'use client'
 import Layout from '@/components/Layout';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { themes } from '@/lib/theme';
 
 export default function ModelDetailPage({ params }: { params: { modelName: string } }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { modelName } = params;
+  const actionParam = searchParams.get('action');
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modelDef, setModelDef] = useState<any>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<any>(null);
+  const [editFormData, setEditFormData] = useState<Record<string, any>>({});
+  const [updating, setUpdating] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   // Get model definition from embedded config
   const embeddedModels = ${JSON.stringify(options.models)};
@@ -410,8 +606,13 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
       const foundModel = embeddedModels.find(m => m.name === modelName);
       setModelDef(foundModel);
       fetchRecords();
+      
+      // Auto-open create modal if action=create parameter is present
+      if (actionParam === 'create' && foundModel) {
+        openEditModal({ id: 'new' }); // Use 'new' as a special ID for create mode
+      }
     }
-  }, [modelName]);
+  }, [modelName, actionParam]);
 
   const fetchRecords = async () => {
     try {
@@ -431,6 +632,193 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
       setRecords([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle edit record
+  const openEditModal = (record: any) => {
+    setEditingRecord(record);
+    // Initialize form with current record data (or empty for new records)
+    const formData: Record<string, any> = {};
+    if (modelDef?.fields) {
+      modelDef.fields.forEach((field: any) => {
+        formData[field.name] = record.id === 'new' ? '' : (record[field.name] || '');
+      });
+    }
+    setEditFormData(formData);
+    setShowEditModal(true);
+  };
+
+    const handleUpdateRecord = async () => {
+    if (!editingRecord || !modelDef || updating) return;
+    
+    try {
+      setUpdating(true);
+      
+      if (editingRecord.id === 'new') {
+        // Create new record
+        const response = await fetch(\`/api/models/\${modelName}\`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(editFormData)
+        });
+
+        if (!response.ok) {
+          throw new Error(\`Failed to create record: \${response.status}\`);
+        }
+
+        const result = await response.json();
+        if (result.success) {
+          // Refresh data
+          await fetchRecords();
+          
+          // Close modal and reset form
+          setShowEditModal(false);
+          setEditingRecord(null);
+          setEditFormData({});
+          
+          alert('Record created successfully!');
+        } else {
+          throw new Error(result.error || 'Failed to create record');
+        }
+      } else {
+        // Update existing record
+        const response = await fetch(\`/api/models/\${modelName}/\${editingRecord.id}\`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(editFormData)
+        });
+
+        if (!response.ok) {
+          throw new Error(\`Failed to update record: \${response.status}\`);
+        }
+
+        const result = await response.json();
+        if (result.success) {
+          // Refresh data
+          await fetchRecords();
+          
+          // Close modal and reset form
+          setShowEditModal(false);
+          setEditingRecord(null);
+          setEditFormData({});
+          
+          alert('Record updated successfully!');
+        } else {
+          throw new Error(result.error || 'Failed to update record');
+        }
+      }
+    } catch (error) {
+      console.error('Update error:', error);
+      alert(\`Failed to \${editingRecord.id === 'new' ? 'create' : 'update'} record: \${error instanceof Error ? error.message : 'Unknown error'}\`);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Handle delete record
+  const handleDeleteRecord = async (recordId: string) => {
+    if (!window.confirm('Are you sure you want to delete this record? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      setDeleting(recordId);
+      
+             const response = await fetch(\`/api/models/\${modelName}/\${recordId}\`, {
+         method: 'DELETE'
+       });
+
+      if (!response.ok) {
+        throw new Error(\`Failed to delete record: \${response.status}\`);
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        // Refresh data
+        await fetchRecords();
+        alert('Record deleted successfully!');
+      } else {
+        throw new Error(result.error || 'Failed to delete record');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      alert(\`Failed to delete record: \${error instanceof Error ? error.message : 'Unknown error'}\`);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  // Handle form field changes
+  const handleEditFormChange = (fieldName: string, value: any) => {
+    setEditFormData(prev => ({
+      ...prev,
+      [fieldName]: value
+    }));
+  };
+
+  // Render form field based on type
+  const renderEditFormField = (field: any) => {
+    const value = editFormData[field.name] || '';
+    
+    switch (field.type) {
+      case 'Boolean':
+        return (
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={!!value}
+              onChange={(e) => handleEditFormChange(field.name, e.target.checked)}
+              className="rounded"
+            />
+            <span className={\`font-mono text-sm \${currentTheme.light}\`}>{field.name}</span>
+          </label>
+        );
+      case 'Int':
+      case 'Float':
+        return (
+          <div>
+            <label className={\`block font-mono text-sm \${currentTheme.light} mb-1\`}>
+              {field.name}
+            </label>
+            <input
+              type="number"
+              value={value}
+              onChange={(e) => handleEditFormChange(field.name, parseFloat(e.target.value) || '')}
+              className={\`w-full \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg px-3 py-2 \${currentTheme.light} font-mono text-sm focus:outline-none focus:\${currentTheme.borderActive}\`}
+              placeholder={\`Enter \${field.name.toLowerCase()}\`}
+            />
+          </div>
+        );
+      case 'DateTime':
+        return (
+          <div>
+            <label className={\`block font-mono text-sm \${currentTheme.light} mb-1\`}>
+              {field.name}
+            </label>
+            <input
+              type="datetime-local"
+              value={value}
+              onChange={(e) => handleEditFormChange(field.name, e.target.value)}
+              className={\`w-full \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg px-3 py-2 \${currentTheme.light} font-mono text-sm focus:outline-none focus:\${currentTheme.borderActive}\`}
+            />
+          </div>
+        );
+      default:
+        return (
+          <div>
+            <label className={\`block font-mono text-sm \${currentTheme.light} mb-1\`}>
+              {field.name}
+            </label>
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => handleEditFormChange(field.name, e.target.value)}
+              className={\`w-full \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg px-3 py-2 \${currentTheme.light} font-mono text-sm focus:outline-none focus:\${currentTheme.borderActive}\`}
+              placeholder={\`Enter \${field.name.toLowerCase()}\`}
+            />
+          </div>
+        );
     }
   };
 
@@ -554,6 +942,23 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
                   <span className={\`font-mono text-lg font-semibold \${currentTheme?.light || 'text-gray-200'}\`}>
                     Record #{getRecordId(record)}
                   </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => openEditModal(record)}
+                      className={\`px-3 py-1.5 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-lg font-mono text-xs \${currentTheme?.accent || 'text-green-400'} hover:\${currentTheme?.bgHover || 'hover:bg-gray-600'} transition-colors\`}
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteRecord(getRecordId(record))}
+                      disabled={deleting === getRecordId(record)}
+                      className={\`px-3 py-1.5 bg-red-500/20 border border-red-400/50 rounded-lg font-mono text-xs text-red-300 hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed\`}
+                    >
+                      {deleting === getRecordId(record) ? '🗑️ Deleting...' : '🗑️ Delete'}
+                    </button>
+                  </div>
+                </div>
+                <div className="mb-2">
                   <span className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'}\`}>
                     {getRecordDate(record)}
                   </span>
@@ -579,9 +984,52 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
               <span className={\`text-3xl \${currentTheme?.dim || 'text-gray-400'}\`}>📋</span>
             </div>
             <h3 className={\`font-mono text-lg font-bold \${currentTheme?.light || 'text-gray-200'} mb-2\`}>No Records</h3>
-            <p className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'} max-w-xs mx-auto\`}>
+            <div className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'} max-w-xs mx-auto\`}>
               This model doesn't have any records yet. Records will appear here once you add them.
-            </p>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Record Modal */}
+        {showEditModal && editingRecord && modelDef && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className={\`\${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto\`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={\`text-xl font-mono font-bold \${currentTheme?.light || 'text-gray-200'}\`}>
+                  {editingRecord.id === 'new' ? \`Create New \${modelName} Record\` : \`Edit Record #\${getRecordId(editingRecord)}\`}
+                </h3>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className={\`p-2 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-lg \${currentTheme?.dim || 'text-gray-400'} hover:\${currentTheme?.bgHover || 'hover:bg-gray-600'} transition-colors\`}
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                {modelDef.fields?.map((field: any) => (
+                  <div key={field.name}>
+                    {renderEditFormField(field)}
+                  </div>
+                ))}
+              </div>
+              
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className={\`flex-1 py-3 \${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl font-mono text-sm \${currentTheme?.dim || 'text-gray-400'} hover:\${currentTheme?.bgHover || 'hover:bg-gray-700'} transition-colors\`}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateRecord}
+                  disabled={updating}
+                  className={\`flex-1 py-3 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-xl font-mono text-sm \${currentTheme?.accent || 'text-green-400'} hover:\${currentTheme?.bgHover || 'hover:bg-gray-600'} transition-colors disabled:opacity-50 disabled:cursor-not-allowed\`}
+                >
+                  {updating ? (editingRecord.id === 'new' ? 'Creating...' : 'Updating...') : (editingRecord.id === 'new' ? 'Create Record' : 'Update Record')}
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -628,6 +1076,7 @@ export default function ActionsPage() {
       const data = await response.json();
       
       if (data.success && data.actions) {
+        // All actions are now complex actions (no CRUD actions generated)
         const formattedActions = data.actions.map((action: any) => ({
           id: action.name, // Use name as ID for consistency
           name: action.name,
@@ -636,6 +1085,7 @@ export default function ActionsPage() {
           description: action.description || 'Execute action',
           type: action.type || 'query',
           role: action.role || 'member',
+          actionType: action.actionType || 'complex',
           uiComponentsDesign: action.uiComponentsDesign || [],
           pseudoSteps: action.pseudoSteps || []
         }));
@@ -679,9 +1129,9 @@ export default function ActionsPage() {
         <div className={\`\${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl p-6\`}>
           <div className="flex items-center justify-between">
             <div>
-              <h1 className={\`text-3xl font-mono font-bold \${currentTheme?.light || 'text-gray-200'} mb-2\`}>Smart Actions</h1>
+              <h1 className={\`text-3xl font-mono font-bold \${currentTheme?.light || 'text-gray-200'} mb-2\`}>Business Process Actions</h1>
               <p className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'}\`}>
-                Execute automated workflows and tasks
+                Execute automated workflows and business processes
               </p>
             </div>
             <span className={\`text-lg font-mono px-4 py-2 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-xl \${currentTheme?.accent || 'text-green-400'}\`}>
@@ -700,8 +1150,11 @@ export default function ActionsPage() {
 
         <div className={\`mb-4 p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
           <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
-            💡 <strong>Embedded Actions:</strong> Click any action card to open the execution modal. 
+            💡 <strong>Business Process Actions:</strong> Click any action card to open the execution modal. 
             All action code is embedded and executes locally on this sub-agent for optimal performance.
+          </p>
+          <p className={\`font-mono text-xs \${currentTheme.dim} mt-2\`}>
+            🗃️ <strong>Data Management:</strong> Create, Read, Update, Delete operations are available in the <strong>Data Models</strong> section and <strong>Chat interface</strong>.
           </p>
         </div>
 
@@ -721,7 +1174,8 @@ export default function ActionsPage() {
             </div>
             <div className={\`font-mono text-lg font-bold \${currentTheme.light} mb-2\`}>No Actions Yet</div>
             <div className={\`font-mono text-sm \${currentTheme.dim} max-w-xs mx-auto\`}>
-              Smart actions and workflows will appear here
+              Business process actions and workflows will appear here.
+              Data management is available in the Data Models section and Chat interface.
             </div>
           </div>
         )}
@@ -956,6 +1410,7 @@ export default function SchedulesPage() {
     return `'use client'
 import Layout from '@/components/Layout';
 import ChatMessage from '@/components/ChatMessage';
+import ActionExecutionModal from '@/components/ActionExecutionModal';
 import { useChat } from '@ai-sdk/react';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -966,6 +1421,9 @@ export default function ChatPage() {
   const router = useRouter();
   const [showQuickActions, setShowQuickActions] = useState(false);
   const [isMobile, setIsMobile] = useState(true);
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [selectedAction, setSelectedAction] = useState<any>(null);
+  const [availableActions, setAvailableActions] = useState<any[]>([]);
   
   // Use embedded local configuration
   const selectedTheme = '${agentTheme}';
@@ -976,6 +1434,22 @@ export default function ChatPage() {
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Load available actions on component mount
+  useEffect(() => {
+    const loadActions = async () => {
+      try {
+        const response = await fetch('/api/agent/actions');
+        const data = await response.json();
+        if (data.success && data.actions) {
+          setAvailableActions(data.actions);
+        }
+      } catch (error) {
+        console.error('Failed to load actions:', error);
+      }
+    };
+    loadActions();
   }, []);
   
   const agentConfig = {
@@ -1056,6 +1530,28 @@ What would you like to explore first?\`,
       e.preventDefault();
       handleSubmit(e as any);
     }
+  };
+
+  // Handle action execution from chat
+  const executeActionFromChat = (actionName: string) => {
+    const action = availableActions.find(a => a.name === actionName);
+    if (action) {
+      setSelectedAction(action);
+      setShowActionModal(true);
+    } else {
+      console.error('Action not found:', actionName);
+    }
+  };
+
+  const handleActionComplete = (result: any) => {
+    setShowActionModal(false);
+    setSelectedAction(null);
+    
+    // Add the action result to the chat
+    const resultMessage = \`Action "\${selectedAction?.title || selectedAction?.name}" \${result.success ? 'completed successfully' : 'failed'}\${result.error ? ': ' + result.error : ''}.\`;
+    
+    // You could add this to the chat messages if needed
+    console.log('Action completed:', resultMessage, result);
   };
 
   // Smart input suggestions based on common patterns
@@ -1142,10 +1638,13 @@ What would you like to explore first?\`,
                 id: message.id,
                 type: message.role === 'user' ? 'user' : 'bot',
                 content: message.content,
-                timestamp: message.createdAt || new Date()
+                timestamp: message.createdAt || new Date(),
+                toolInvocations: message.toolInvocations
               }}
               theme={selectedTheme}
               avatar={avatar}
+              availableActions={availableActions}
+              onActionExecute={executeActionFromChat}
             />
           ))}
           
@@ -1176,6 +1675,41 @@ What would you like to explore first?\`,
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Quick Data Management Buttons */}
+        <div className={\`p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-xl mb-4\`}>
+          <div className={\`font-mono text-sm \${currentTheme.light} mb-3\`}>Quick Data Management:</div>
+          <div className="flex gap-2 overflow-x-auto">
+            <button
+              onClick={() => handleInputChange({ target: { value: 'Show me all records from my models' } } as any)}
+              className={\`px-4 py-2 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl font-mono text-xs \${currentTheme.accent} hover:\${currentTheme.bgHover} transition-colors whitespace-nowrap flex items-center gap-2\`}
+            >
+              <span>🗃️</span>
+              <span>List Records</span>
+            </button>
+            <button
+              onClick={() => handleInputChange({ target: { value: 'Help me create a new record' } } as any)}
+              className={\`px-4 py-2 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl font-mono text-xs \${currentTheme.accent} hover:\${currentTheme.bgHover} transition-colors whitespace-nowrap flex items-center gap-2\`}
+            >
+              <span>➕</span>
+              <span>Create Record</span>
+            </button>
+            <button
+              onClick={() => router.push('/models')}
+              className={\`px-4 py-2 \${currentTheme.bg} border \${currentTheme.border} rounded-xl font-mono text-xs \${currentTheme.dim} hover:\${currentTheme.bgHover} transition-colors whitespace-nowrap\`}
+            >
+              🗃️ Data Models
+            </button>
+            {availableActions.length > 0 && (
+              <button
+                onClick={() => router.push('/actions')}
+                className={\`px-4 py-2 \${currentTheme.bg} border \${currentTheme.border} rounded-xl font-mono text-xs \${currentTheme.dim} hover:\${currentTheme.bgHover} transition-colors whitespace-nowrap\`}
+              >
+                ⚡ Actions ({availableActions.length})
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Chat Input */}
         <div className={\`p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
           <div className="flex gap-3 items-end">
@@ -1204,7 +1738,7 @@ What would you like to explore first?\`,
             </button>
           </div>
           
-          {/* Quick Actions */}
+          {/* Navigation Quick Actions */}
           <div className="flex gap-2 mt-3 overflow-x-auto">
             <button 
               onClick={() => router.push('/models')}
@@ -1224,6 +1758,365 @@ What would you like to explore first?\`,
             >
               ⏰ View Tasks
             </button>
+          </div>
+        </div>
+
+        {/* Action Execution Modal */}
+        {showActionModal && selectedAction && (
+          <ActionExecutionModal
+            action={selectedAction}
+            isOpen={showActionModal}
+            onClose={() => setShowActionModal(false)}
+            onComplete={handleActionComplete}
+            theme={selectedTheme}
+          />
+        )}
+      </div>
+    </Layout>
+  );
+}`;
+  }
+
+  private generateExecutionLogsPage(options: MobileAppTemplateOptions): string {
+    const agentTheme = options.agentConfig?.theme || 'green';
+    
+    return `'use client'
+import React, { useState, useEffect } from 'react';
+import Layout from '@/components/Layout';
+import { themes } from '@/lib/theme';
+
+interface ActionExecutionLog {
+  executionId: string;
+  actionName: string;
+  scheduleName?: string;
+  userId?: string;
+  startTime: string;
+  endTime?: string;
+  status: 'running' | 'completed' | 'failed';
+  parameters: Record<string, any>;
+  steps: ActionStepLog[];
+  error?: string;
+  totalExecutionTime?: number;
+}
+
+interface ActionStepLog {
+  stepNumber: number;
+  stepName: string;
+  startTime: string;
+  endTime?: string;
+  input: Record<string, any>;
+  output?: Record<string, any>;
+  error?: string;
+  executionTime?: number;
+}
+
+export default function ExecutionLogsPage() {
+  const [executions, setExecutions] = useState<ActionExecutionLog[]>([]);
+  const [selectedExecution, setSelectedExecution] = useState<ActionExecutionLog | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+
+  const selectedTheme = '${agentTheme}';
+  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
+
+  // Fetch executions
+  const fetchExecutions = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch('/api/execution-logs?limit=50');
+      const result = await response.json();
+      
+      if (result.success) {
+        setExecutions(result.data);
+        if (result.data.length > 0 && !selectedExecution) {
+          setSelectedExecution(result.data[0]);
+        }
+      } else {
+        setError(result.error || 'Failed to fetch executions');
+      }
+    } catch (err) {
+      console.error('Failed to fetch executions:', err);
+      setError('Failed to fetch executions');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+     // Auto-refresh effect
+   useEffect(() => {
+    fetchExecutions();
+    
+    let intervalId: NodeJS.Timeout | null = null;
+    if (autoRefresh) {
+      intervalId = setInterval(fetchExecutions, 5000);
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [autoRefresh]);
+
+  const formatDuration = (ms?: number) => {
+    if (!ms) return 'N/A';
+    if (ms < 1000) return \`\${ms}ms\`;
+    if (ms < 60000) return \`\${(ms / 1000).toFixed(1)}s\`;
+    return \`\${(ms / 60000).toFixed(1)}m\`;
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    return new Date(timestamp).toLocaleString();
+  };
+
+  const getStatusDisplay = (status: string) => {
+    switch (status) {
+      case 'running':
+        return { icon: '🔄', color: currentTheme.accent, text: 'Running' };
+      case 'completed':
+        return { icon: '✅', color: 'text-green-400', text: 'Completed' };
+      case 'failed':
+        return { icon: '❌', color: 'text-red-400', text: 'Failed' };
+      default:
+        return { icon: '❓', color: currentTheme.dim, text: 'Unknown' };
+    }
+  };
+
+  return (
+    <Layout title="Execution Logs">
+      <div className="p-4 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className={\`text-2xl font-bold font-mono \${currentTheme.light}\`}>
+              📊 Execution Logs
+            </h1>
+            <p className={\`\${currentTheme.dim} font-mono text-sm\`}>
+              Monitor action and schedule executions with step-by-step details
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={autoRefresh}
+                onChange={(e) => setAutoRefresh(e.target.checked)}
+                className="rounded"
+              />
+              <span className={\`text-sm font-mono \${currentTheme.light}\`}>Auto Refresh</span>
+            </label>
+            <button
+              onClick={fetchExecutions}
+              disabled={loading}
+              className={\`px-4 py-2 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-lg font-mono text-sm \${currentTheme.light} hover:\${currentTheme.bgHover} disabled:opacity-50 transition-colors\`}
+            >
+              {loading ? '🔄 Loading...' : '🔄 Refresh'}
+            </button>
+          </div>
+        </div>
+
+        {error && (
+          <div className="bg-red-500/15 border border-red-400/30 rounded-lg p-4">
+            <div className="text-red-400 font-mono text-sm">
+              ❌ {error}
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Execution List */}
+          <div className={\`lg:col-span-1 \${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
+            <h2 className={\`text-lg font-bold font-mono \${currentTheme.light} mb-4\`}>
+              Recent Executions ({executions.length})
+            </h2>
+            
+            {loading ? (
+              <div className="text-center py-8">
+                <div className={\`\${currentTheme.accent}\`}>🔄 Loading...</div>
+              </div>
+            ) : executions.length === 0 ? (
+              <div className="text-center py-8">
+                <div className={\`\${currentTheme.dim} font-mono text-sm\`}>
+                  No executions found
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {executions.map((execution) => {
+                  const status = getStatusDisplay(execution.status);
+                  const isSelected = selectedExecution?.executionId === execution.executionId;
+                  
+                  return (
+                    <div
+                      key={execution.executionId}
+                      className={\`p-3 border rounded-lg cursor-pointer transition-colors \${
+                        isSelected
+                          ? \`\${currentTheme.borderActive} \${currentTheme.bgActive}\`
+                          : \`\${currentTheme.border} hover:\${currentTheme.bgHover}\`
+                      }\`}
+                      onClick={() => setSelectedExecution(execution)}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span>{status.icon}</span>
+                          <span className={\`font-medium font-mono text-sm \${currentTheme.light}\`}>
+                            {execution.scheduleName ? \`📅 \${execution.scheduleName}\` : execution.actionName}
+                          </span>
+                        </div>
+                        <span className={\`px-2 py-1 rounded text-xs font-mono \${status.color}\`}>
+                          {status.text}
+                        </span>
+                      </div>
+                      <div className={\`text-xs font-mono \${currentTheme.dim}\`}>
+                        {formatTimestamp(execution.startTime)}
+                      </div>
+                      <div className={\`text-xs font-mono \${currentTheme.dim}\`}>
+                        {execution.steps.length} steps • {formatDuration(execution.totalExecutionTime)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Execution Details */}
+          <div className={\`lg:col-span-2 \${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4\`}>
+            {selectedExecution ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className={\`text-lg font-bold font-mono \${currentTheme.light}\`}>
+                    {selectedExecution.scheduleName ? 
+                      \`📅 Schedule: \${selectedExecution.scheduleName}\` : 
+                      \`⚡ Action: \${selectedExecution.actionName}\`
+                    }
+                  </h2>
+                  <div className={\`px-3 py-1 rounded font-mono text-sm \${getStatusDisplay(selectedExecution.status).color}\`}>
+                    {getStatusDisplay(selectedExecution.status).text}
+                  </div>
+                </div>
+                
+                <div className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-lg p-3\`}>
+                  <div className="grid grid-cols-2 gap-4 text-sm font-mono">
+                    <div>
+                      <div className={\`\${currentTheme.dim}\`}>Execution ID:</div>
+                      <div className={\`\${currentTheme.light} break-all\`}>{selectedExecution.executionId}</div>
+                    </div>
+                    <div>
+                      <div className={\`\${currentTheme.dim}\`}>Duration:</div>
+                      <div className={\`\${currentTheme.light}\`}>{formatDuration(selectedExecution.totalExecutionTime)}</div>
+                    </div>
+                    <div>
+                      <div className={\`\${currentTheme.dim}\`}>Started:</div>
+                      <div className={\`\${currentTheme.light}\`}>{formatTimestamp(selectedExecution.startTime)}</div>
+                    </div>
+                    {selectedExecution.endTime && (
+                      <div>
+                        <div className={\`\${currentTheme.dim}\`}>Ended:</div>
+                        <div className={\`\${currentTheme.light}\`}>{formatTimestamp(selectedExecution.endTime)}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {selectedExecution.error && (
+                  <div className="bg-red-500/15 border border-red-400/30 rounded-lg p-3">
+                    <div className="text-red-400 font-mono text-sm">
+                      <strong>Error:</strong> {selectedExecution.error}
+                    </div>
+                  </div>
+                )}
+
+                {/* Steps */}
+                <div>
+                  <h3 className={\`text-md font-bold font-mono \${currentTheme.light} mb-3\`}>
+                    Execution Steps ({selectedExecution.steps.length})
+                  </h3>
+                  
+                  {selectedExecution.steps.length === 0 ? (
+                    <div className={\`text-center py-8 \${currentTheme.dim} font-mono text-sm\`}>
+                      No steps recorded
+                    </div>
+                  ) : (
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {selectedExecution.steps.map((step) => {
+                        const stepCompleted = !!step.endTime;
+                        const stepFailed = !!step.error;
+                        
+                        return (
+                          <div
+                            key={step.stepNumber}
+                            className={\`\${currentTheme.bg} border \${
+                              stepFailed ? 'border-red-400/50' :
+                              stepCompleted ? 'border-green-400/50' :
+                              'border-blue-400/50'
+                            } rounded-lg p-3\`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span>
+                                  {stepFailed ? '❌' : stepCompleted ? '✅' : '🔄'}
+                                </span>
+                                <span className={\`font-medium font-mono text-sm \${
+                                  stepFailed ? 'text-red-400' :
+                                  stepCompleted ? 'text-green-400' :
+                                  'text-blue-400'
+                                }\`}>
+                                  Step {step.stepNumber}: {step.stepName}
+                                </span>
+                              </div>
+                              {step.executionTime && (
+                                <span className={\`text-xs font-mono \${currentTheme.dim}\`}>
+                                  {formatDuration(step.executionTime)}
+                                </span>
+                              )}
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-mono">
+                              <div>
+                                <div className={\`\${currentTheme.dim} mb-1\`}>📥 Input:</div>
+                                <pre className={\`\${currentTheme.bg} p-2 rounded overflow-x-auto \${currentTheme.light} max-h-32\`}>
+                                  {JSON.stringify(step.input, null, 2)}
+                                </pre>
+                              </div>
+                              
+                              {step.output && (
+                                <div>
+                                  <div className={\`\${currentTheme.dim} mb-1\`}>📤 Output:</div>
+                                  <pre className={\`\${currentTheme.bg} p-2 rounded overflow-x-auto \${currentTheme.light} max-h-32\`}>
+                                    {JSON.stringify(step.output, null, 2)}
+                                  </pre>
+                                </div>
+                              )}
+                              
+                              {step.error && (
+                                <div className="md:col-span-2">
+                                  <div className="text-red-400 mb-1">❌ Error:</div>
+                                  <div className="bg-red-500/20 border border-red-400/50 p-2 rounded text-red-400">
+                                    {step.error}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className={\`text-4xl mb-4\`}>📊</div>
+                <h3 className={\`text-lg font-bold font-mono \${currentTheme.light} mb-2\`}>
+                  No Execution Selected
+                </h3>
+                <p className={\`\${currentTheme.dim} font-mono text-sm\`}>
+                  Select an execution from the list to view details
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

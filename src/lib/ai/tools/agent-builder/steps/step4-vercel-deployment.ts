@@ -892,6 +892,9 @@ export async function executeStep4VercelDeployment(input: Step4Input, onProgress
       NEON_API_KEY: process.env.NEON_API_KEY || '',
       NEON_PROJECT_ID: neonProjectId,
       
+      // Redis configuration for execution logging
+      REDIS_URL: process.env.REDIS_URL || '',
+      
       // AI Provider API Keys (self-contained)
       OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',

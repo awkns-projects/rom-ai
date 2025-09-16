@@ -19,7 +19,35 @@ export const SequentialStepSchema = z.object({
 });
 
 /**
+ * UI Component Schema for action execution interface
+ */
+export const UIComponentSchema = z.object({
+  id: z.string().describe('Unique component ID'),
+  name: z.string().describe('Parameter name this component is linked to'),
+  type: z.enum(['text', 'number', 'email', 'password', 'textarea', 'select', 'checkbox', 'radio', 'date', 'datetime-local', 'time', 'url', 'tel']).describe('Input component type'),
+  label: z.string().describe('Human-readable label for the component'),
+  description: z.string().describe('Help text or description for the user'),
+  required: z.boolean().describe('Whether this input is required'),
+  placeholder: z.string().optional().describe('Placeholder text for the input'),
+  defaultValue: z.any().optional().describe('Default value for the component'),
+  options: z.array(z.object({
+    value: z.string().describe('Option value'),
+    label: z.string().describe('Option display label')
+  })).optional().describe('Options for select/radio components'),
+  validation: z.object({
+    min: z.number().optional().describe('Minimum value for numbers'),
+    max: z.number().optional().describe('Maximum value for numbers'),
+    minLength: z.number().optional().describe('Minimum length for strings'),
+    maxLength: z.number().optional().describe('Maximum length for strings'),
+    pattern: z.string().optional().describe('Regex pattern for validation')
+  }).optional().describe('Validation rules for the component'),
+  databaseModel: z.string().optional().describe('Database model name for relation fields'),
+  multiple: z.boolean().optional().describe('Whether multiple values can be selected')
+});
+
+/**
  * Technical Specification Schema - architecture document that explains how pseudo steps connect and work together
+ * Now includes UI components for action execution interface
  */
 export const TechnicalSpecificationSchema = z.object({
   name: z.string().describe('Action name in camelCase'),
@@ -28,6 +56,9 @@ export const TechnicalSpecificationSchema = z.object({
   
   // Available Prisma Schema
   availablePrismaSchema: z.string().describe('Complete Prisma schema with all available models, fields, and relationships that this action can use'),
+  
+  // UI Components for action execution (NEW - moved from separate step)
+  uiComponents: z.array(UIComponentSchema).describe('UI components for action execution interface, generated based on input parameters and database relationships'),
   
   // Architecture and integration guidance (NOT step-by-step details)
   architectureOverview: z.string().describe('High-level architecture explaining how the pseudo steps work together as a cohesive system'),
@@ -141,18 +172,86 @@ TECHNICAL SPECIFICATION STRUCTURE:
 You must provide:
 
 1. **availablePrismaSchema**: Copy the exact Prisma schema provided above
-2. **architectureOverview**: High-level explanation of how the action works as a system
-3. **dataFlowStrategy**: How data flows between steps and transforms
-4. **integrationPatterns**: How steps connect and depend on each other
-5. **databaseIntegration**: How the action integrates with the database schema
-6. **typeSystemGuidance**: TypeScript type flow and conversion requirements
-7. **errorHandlingStrategy**: Overall approach to error handling across steps
-8. **performanceArchitecture**: Performance and scalability considerations
-9. **inputContract**: Overall input requirements and how they're distributed to steps
-10. **outputContract**: Overall output structure and how step outputs are aggregated
-11. **variableContracts**: Detailed variable flow between steps to prevent missing variables
-12. **implementationNotes**: Technical notes for implementing the step sequence
-13. **commonPitfalls**: Common mistakes to avoid when implementing
+2. **uiComponents**: UI components for action execution interface (NEW - see UI COMPONENT GENERATION section below)
+3. **architectureOverview**: High-level explanation of how the action works as a system
+4. **dataFlowStrategy**: How data flows between steps and transforms
+5. **integrationPatterns**: How steps connect and depend on each other
+6. **databaseIntegration**: How the action integrates with the database schema
+7. **typeSystemGuidance**: TypeScript type flow and conversion requirements
+8. **errorHandlingStrategy**: Overall approach to error handling across steps
+9. **performanceArchitecture**: Performance and scalability considerations
+10. **inputContract**: Overall input requirements and how they're distributed to steps
+11. **outputContract**: Overall output structure and how step outputs are aggregated
+12. **variableContracts**: Detailed variable flow between steps to prevent missing variables
+13. **implementationNotes**: Technical notes for implementing the step sequence
+14. **commonPitfalls**: Common mistakes to avoid when implementing
+
+🎨 UI COMPONENT GENERATION REQUIREMENTS:
+
+As part of the technical specification, you must ALSO generate UI components for the action execution interface. These components will be used to create forms for users to input parameters before executing the action.
+
+**UI COMPONENT GENERATION RULES:**
+
+1. **Parameter-Based Generation**: Create one UI component for each input parameter the action needs
+2. **Smart Type Detection**: Determine appropriate input types based on parameter names and types:
+   - Email fields → type: 'email'
+   - Password fields → type: 'password'
+   - Date fields → type: 'date' or 'datetime-local'
+   - Long text → type: 'textarea'
+   - Numbers → type: 'number'
+   - Boolean → type: 'checkbox'
+   - Enum fields → type: 'select' with options from enum values
+   - Database relations → type: 'select' with databaseModel specified
+
+3. **Database Relation Handling**: For parameters that reference other models:
+   - Set type: 'select'
+   - Set databaseModel: 'ModelName'
+   - Set multiple: true/false based on whether it's a list
+   - The UI will dynamically load records from the specified model
+
+4. **Enum Field Handling**: For parameters that use enum types:
+   - Set type: 'select'
+   - Generate options array with value/label pairs from enum values
+   - Use the exact enum values from the Prisma schema
+
+5. **Validation Rules**: Include appropriate validation:
+   - required: true for required parameters
+   - min/max for numeric fields
+   - minLength/maxLength for text fields
+   - pattern for specific formats (email, phone, etc.)
+
+6. **User Experience**: 
+   - Generate helpful labels and descriptions
+   - Provide sensible placeholders
+   - Set appropriate default values
+   - Group related parameters logically
+
+**EXAMPLE UI COMPONENT GENERATION:**
+
+If the action has input parameters:
+- userId (String, required, database relation to User model)
+- reportType (ReportType enum, required)
+- startDate (DateTime, required)
+- includeDetails (Boolean, optional)
+- batchSize (Int, optional, default: 50)
+
+Generate UI components following this pattern:
+- userId parameter → User selection dropdown with databaseModel: "User"
+- reportType parameter → Report type dropdown with enum options
+- startDate parameter → Date picker component
+- includeDetails parameter → Checkbox component
+- batchSize parameter → Number input with validation
+
+**CRITICAL UI COMPONENT REQUIREMENTS:**
+1. ✅ Generate components for ALL input parameters the action needs
+2. ✅ Use exact parameter names from the action's input contract
+3. ✅ Use exact enum values from the Prisma schema for select options
+4. ✅ Set databaseModel for relation fields to enable dynamic record loading
+5. ✅ Include helpful labels, descriptions, and placeholders
+6. ✅ Set appropriate validation rules based on parameter types
+7. ✅ Provide sensible default values where appropriate
+8. ❌ NEVER invent parameter names not in the input contract
+9. ❌ NEVER use enum values not in the Prisma schema
 
 Focus on ARCHITECTURE and INTEGRATION, not step-by-step implementation details.`;
 
@@ -591,7 +690,7 @@ export function generateInputValidationCode(
       return errors;
     };
     
-    const validationErrors = validateInputParameters(parameters);
+    const validationErrors = validateInputParameters(input);
     if (validationErrors.length > 0) {
       return { 
         success: false, 
@@ -822,6 +921,8 @@ export async function generateActionExecutableCode(
   console.log('- prismaSchema length:', prismaSchema?.length || 0);
   console.log('- prismaSchema preview:', prismaSchema?.substring(0, 200) || 'No schema');
   console.log('- technicalSpec available:', !!technicalSpec);
+  console.log('- technicalSpec.uiComponents count:', technicalSpec?.uiComponents?.length || 0);
+  console.log('- technicalSpec.uiComponents preview:', technicalSpec?.uiComponents?.slice(0, 3) || 'No UI components');
   console.log('- pseudoSteps count:', pseudoSteps?.length || 0);
 
   // Validate required fields
@@ -831,20 +932,54 @@ export async function generateActionExecutableCode(
 
   const model = await getAgentBuilderModel();
 
-  // Extract input parameters from first step if not provided
+  // Extract input parameters from technical specification UI components (authoritative source)
   const extractedInputParams = inputParameters || (
-    pseudoSteps.length > 0 && pseudoSteps[0].inputFields ? 
-    pseudoSteps[0].inputFields
-      .filter((field: any) => field.name && field.name.trim() !== '')
-      .map((field: any) => ({
-        name: field.name,
-        type: field.type,
-        required: field.required,
-        description: field.description || `Input parameter for ${field.name}`,
-        kind: field.kind || 'scalar', // Preserve the original kind from pseudo step generation
-        relationModel: field.relationModel
-      })) : []
+    technicalSpec?.uiComponents && technicalSpec.uiComponents.length > 0 ? 
+    technicalSpec.uiComponents
+      .filter((component: any) => component.name && component.name.trim() !== '')
+      .map((component: any) => ({
+        name: component.name,
+        type: component.type === 'number' ? 'Int' : 
+              component.type === 'checkbox' ? 'Boolean' :
+              component.type === 'date' || component.type === 'datetime-local' ? 'DateTime' :
+              'String', // Map UI component types to parameter types
+        required: component.required || false,
+        description: component.description || `Input parameter for ${component.name}`,
+        kind: component.databaseModel ? 'object' : 'scalar', // Set kind based on database relation
+        relationModel: component.databaseModel, // Database relation model if applicable
+        list: component.multiple || false // Handle multiple selections
+      })) : 
+    // Fallback to pseudo steps only if technical spec has no UI components
+    (pseudoSteps.length > 0 && pseudoSteps[0].inputFields ? 
+      pseudoSteps[0].inputFields
+        .filter((field: any) => field.name && field.name.trim() !== '')
+        .map((field: any) => ({
+          name: field.name,
+          type: field.type,
+          required: field.required,
+          description: field.description || `Input parameter for ${field.name}`,
+          kind: field.kind || 'scalar',
+          relationModel: field.relationModel
+        })) : []
+    )
   );
+
+  // 🚨 CRITICAL DEBUG: Log what input parameters were actually extracted
+  console.log('🔍 DEBUG: Input parameter extraction results:');
+  console.log('- extractedInputParams count:', extractedInputParams.length);
+  console.log('- extractedInputParams source:', 
+    technicalSpec?.uiComponents && technicalSpec.uiComponents.length > 0 ? 'Technical Spec UI Components' : 
+    pseudoSteps.length > 0 && pseudoSteps[0].inputFields ? 'Pseudo Steps Fallback' : 
+    'None/Empty'
+  );
+  console.log('- extractedInputParams preview:', extractedInputParams.slice(0, 3));
+  
+  if (technicalSpec?.uiComponents) {
+    console.log('- technicalSpec.uiComponents available:', technicalSpec.uiComponents.length);
+    console.log('- UI component names:', technicalSpec.uiComponents.map((c: any) => c.name));
+  } else {
+    console.log('- technicalSpec.uiComponents: NOT AVAILABLE');
+  }
 
   // Generate input validation code using structured database enum data (preferred) or fallbacks
   const inputValidationCode = generateInputValidationCode(extractedInputParams, prismaSchema, availableModels, availableEnums);
@@ -909,7 +1044,96 @@ export async function generateActionExecutableCode(
 
 🚨 CRITICAL SYNTAX REQUIREMENT: Use template literals (\`backticks\`) for ALL string literals in your code to prevent syntax errors from apostrophes and quotes. NEVER use single quotes in console.log statements or error messages.
 
+🚨 CRITICAL ERROR PREVENTION - THESE ERRORS KEEP HAPPENING AND MUST BE PREVENTED:
+
+1. "Cannot read properties of undefined (reading 'map')" - YOU MUST validate ALL variables before calling .map()
+2. "Unknown argument medicationRecords" - YOU MUST NOT use relation fields in update operations  
+3. "Invalid value for argument status" - YOU MUST validate enum values before using them
+
+🚨 🚨 🚨 ABSOLUTELY MANDATORY .map() VALIDATION - NO EXCEPTIONS:
+
+BEFORE calling .map(), .filter(), .forEach(), or ANY array method on ANY variable, you MUST use this EXACT pattern:
+
+REQUIRED VALIDATION PATTERN (copy this exactly):
+if (!variableName || !Array.isArray(variableName)) {
+  console.error(\`❌ Variable validation failed for variableName\`, {
+    isUndefined: !variableName,
+    isArray: Array.isArray(variableName),
+    actualType: typeof variableName,
+    actualValue: variableName
+  });
+  
+  // Choose one approach:
+  // Option 1: Use empty array fallback
+  variableName = [];
+  
+  // Option 2: Throw descriptive error
+  // throw new Error(\`Variable variableName is not available or not an array\`);
+}
+
+// Now safe to use array methods
+const results = variableName.map(item => processItem(item));
+
+🚨 THIS VALIDATION IS REQUIRED FOR:
+- Database query results: step1_patients.map(...)
+- AI generation results: aiGeneratedArray.map(...)  
+- Any variable that might be undefined: someVariable.map(...)
+- ALL array operations without exception
+
+❌ ABSOLUTELY FORBIDDEN (causes crashes):
+// This will crash if variable is undefined:
+const results = someVariable.map(item => item.id); // NO VALIDATION!
+
 TASK: Generate complete, executable JavaScript code based on the technical specification and pseudo steps.
+
+🚨 REDIS LOGGING REQUIREMENT:
+Your generated code MUST include Redis-based step logging for action execution tracking. The following globals are available:
+- actionLogger: ActionExecutionLogger instance (available globally)
+- executionId: string - unique execution ID for this action run (available globally)
+
+MANDATORY REDIS LOGGING PATTERN:
+1. ✅ At the start of EACH step, call: await actionLogger.startStep(executionId, stepNumber, stepName, inputData)
+2. ✅ At the end of EACH step, call: await actionLogger.completeStep(executionId, stepNumber, outputData, errorMessage)
+3. ✅ Use try-catch around each step to capture errors for Redis logging
+4. ✅ Log meaningful input/output data that helps debug issues
+
+EXAMPLE STEP LOGGING PATTERN:
+\`\`\`javascript
+// Step 1: Fetch user data
+try {
+  const stepInput = { userId: input.userId, batchSize: convertedParams.batchSize };
+  await actionLogger.startStep(executionId, 1, 'Fetch user data', stepInput);
+  
+  // Step implementation...
+  const step1_userData = await db.user.findMany({
+    where: { id: input.userId },
+    take: convertedParams.batchSize
+  });
+  
+  const stepOutput = { 
+    userCount: step1_userData.length,
+    userIds: step1_userData.map(u => u.id),
+    userData: step1_userData
+  };
+  
+  await actionLogger.completeStep(executionId, 1, stepOutput);
+  console.log(\`✅ Step 1 completed: Found \${step1_userData.length} users\`);
+  
+} catch (stepError) {
+  await actionLogger.completeStep(executionId, 1, {}, stepError.message);
+  console.error(\`❌ Step 1 failed:\`, stepError);
+  throw stepError;
+}
+\`\`\`
+
+🚨 CRITICAL REDIS LOGGING RULES:
+1. ✅ ALWAYS wrap each step in try-catch for error logging
+2. ✅ ALWAYS call startStep() before step implementation
+3. ✅ ALWAYS call completeStep() after step implementation (even on errors)
+4. ✅ Log meaningful data that helps with debugging
+5. ✅ Include record counts, IDs, and key results in step output
+6. ❌ NEVER skip Redis logging for any step
+7. ❌ NEVER log sensitive data (passwords, API keys, etc.)
 
 🚨 CRITICAL ERROR PREVENTION: The user has reported multiple critical errors:
 1. AI keeps generating hardcoded enum values that don't match the actual schema
@@ -917,6 +1141,8 @@ TASK: Generate complete, executable JavaScript code based on the technical speci
 3. AI ignores the provided input validation code and creates its own validation
 4. Generated code has runtime errors like "i.platforms.map is not a function"
 5. Generated code has syntax errors from unescaped quotes in console.log statements
+6. AI generates code that uses undefined input parameters (e.g., input.currentWeekStartDate when not provided)
+7. AI calls .map() on undefined variables causing "Cannot read properties of undefined (reading 'map')" errors
 
 🚨 ABSOLUTELY FORBIDDEN - DO NOT DO THESE THINGS:
 ❌ NEVER generate your own enum validation - use ONLY the provided INPUT PARAMETER VALIDATION CODE
@@ -926,6 +1152,14 @@ TASK: Generate complete, executable JavaScript code based on the technical speci
 ❌ NEVER use single quotes in console.log statements - ALWAYS use template literals (\`backticks\`)
 ❌ NEVER hardcode foreign key values - ALWAYS use parameters or validate existence first
 ❌ NEVER create records with foreign keys unless you validate the referenced record exists
+❌ NEVER hardcode any values like IDs, names, dates, or any data - ALWAYS use parameters or generate dynamically
+❌ NEVER use example values like "user123", "campaign1", "2023-01-01" in production code
+❌ NEVER use input parameters that aren't defined in the UI components (e.g., input.currentWeekStartDate when not provided)
+❌ NEVER call .map() on variables without checking if they exist and are arrays first
+❌ NEVER assume AI-generated objects exist - always validate before using them
+❌ NEVER try to update relation fields in Prisma update operations (e.g., medicationRecords: { push: ... })
+❌ NEVER use relation field names in the data object of update/create operations
+❌ NEVER try to create nested relations in update operations - update the related records separately
 
 🚨 CRITICAL SYNTAX ERROR PREVENTION:
 ALWAYS use template literals (\`backticks\`) for ALL string literals in your generated code, especially:
@@ -1013,24 +1247,24 @@ ${inputValidationCode}
 All form inputs come as strings from the UI. You MUST convert them to proper types before database operations:
 
 **COMMON TYPE CONVERSIONS NEEDED:**
-- \`take\` parameter: MUST be converted to integer: \`parseInt(parameters.batchSize || '50', 10)\`
-- \`skip\` parameter: MUST be converted to integer: \`parseInt(parameters.page || '0', 10) * parseInt(parameters.batchSize || '50', 10)\`
+- \`take\` parameter: MUST be converted to integer: \`parseInt(input.batchSize || '50', 10)\`
+- \`skip\` parameter: MUST be converted to integer: \`parseInt(input.page || '0', 10) * parseInt(input.batchSize || '50', 10)\`
 - Number parameters: Use \`parseInt()\` for integers, \`parseFloat()\` for decimals
-- Date parameters: Use \`new Date(parameters.dateField)\` for date strings
-- Boolean parameters: Use \`parameters.boolField === 'true'\` for boolean strings
+- Date parameters: Use \`new Date(input.dateField)\` for date strings
+- Boolean parameters: Use \`input.boolField === 'true'\` for boolean strings
 
 **EXAMPLE OF CORRECT TYPE CONVERSION:**
 \`\`\`javascript
 // ❌ WRONG: This causes "Expected Int, provided String" errors
-const records = await prisma.model.findMany({
-  take: parameters.batchSize,  // String value like "50"
-  skip: parameters.page * parameters.batchSize  // String multiplication
+const records = await db.model.findMany({
+  take: input.batchSize,  // String value like "50"
+  skip: input.page * input.batchSize  // String multiplication
 });
 
 // ✅ CORRECT: Convert strings to proper types
-const batchSize = parseInt(parameters.batchSize || '50', 10);
-const page = parseInt(parameters.page || '0', 10);
-const records = await prisma.model.findMany({
+const batchSize = parseInt(input.batchSize || '50', 10);
+const page = parseInt(input.page || '0', 10);
+const records = await db.model.findMany({
   take: batchSize,  // Integer value like 50
   skip: page * batchSize  // Proper integer arithmetic
 });
@@ -1041,16 +1275,16 @@ Always add this type conversion block after input validation:
 \`\`\`javascript
 // 🔄 Type Conversion: Convert string inputs to proper types
 const convertedParams = {
-  ...parameters,
+  ...input,
   // Convert numeric parameters
-  batchSize: parameters.batchSize ? parseInt(parameters.batchSize, 10) : 50,
-  page: parameters.page ? parseInt(parameters.page, 10) : 0,
-  performanceScore: parameters.performanceScore ? parseFloat(parameters.performanceScore) : 0,
+  batchSize: input.batchSize ? parseInt(input.batchSize, 10) : 50,
+  page: input.page ? parseInt(input.page, 10) : 0,
+  performanceScore: input.performanceScore ? parseFloat(input.performanceScore) : 0,
   // Convert date parameters
-  startDate: parameters.startDate ? new Date(parameters.startDate) : new Date(),
-  endDate: parameters.endDate ? new Date(parameters.endDate) : new Date(),
+  startDate: input.startDate ? new Date(input.startDate) : new Date(),
+  endDate: input.endDate ? new Date(input.endDate) : new Date(),
   // Convert boolean parameters
-  isActive: parameters.isActive === 'true'
+  isActive: input.isActive === 'true'
 };
 \`\`\`
 
@@ -1103,8 +1337,76 @@ CONTEXT:
 - Entity Type: ${entityType}
 - Business Context: ${businessContext || 'General business operations'}
 
-🚨 AVAILABLE MODELS - USE ONLY THESE MODEL NAMES:
-${availableModels?.map((m: any) => `- ${m.name}: ${m.fields?.map((f: any) => `${f.name}(${f.type})`).join(', ') || 'no fields'}`).join('\n') || 'No models available'}
+🚨 AVAILABLE MODELS - USE ONLY THESE MODEL NAMES AND FIELDS:
+${availableModels?.map((m: any) => `
+📋 MODEL: ${m.name}
+   AVAILABLE FIELDS: ${m.fields?.map((f: any) => `${f.name}(${f.type})`).join(', ') || 'no fields'}
+   🚨 CRITICAL: ONLY these fields exist - using any other field will cause runtime errors!
+`).join('') || 'No models available'}
+
+🚨 ABSOLUTELY CRITICAL FIELD VALIDATION RULES:
+1. ✅ BEFORE writing ANY Prisma query, verify the field exists in the model above
+2. ✅ ONLY use field names listed explicitly in the AVAILABLE FIELDS section
+3. ❌ NEVER assume common fields like 'status', 'isActive', 'deleted', 'createdAt' exist
+4. ❌ NEVER use fields not explicitly listed in the schema above
+5. ✅ If you need a field that doesn't exist, use a different approach or skip that filter
+6. ✅ Double-check every field name against the exact spelling in the schema
+7. ✅ DISTINGUISH between scalar fields and relation fields - NEVER update relation fields directly
+8. ❌ NEVER include relation field names (like 'medicationRecords', 'patient', 'doctor') in update data objects
+
+🚨 MANDATORY FIELD VERIFICATION PATTERN:
+Before using any field in a Prisma query, add this verification comment:
+// FIELD VERIFICATION: Confirmed [fieldName] exists in [ModelName] schema above ✅
+// RELATION CHECK: Confirmed [fieldName] is a SCALAR field, not a relation field ✅
+
+🚨 CRITICAL: HOW TO IDENTIFY SCALAR vs RELATION FIELDS:
+
+**SCALAR FIELDS (can be updated directly):**
+- String fields: name, description, email, phone, address, etc.
+- Number fields: age, price, quantity, score, etc.  
+- Boolean fields: isActive, completed, verified, etc.
+- DateTime fields: createdAt, updatedAt, startDate, endDate, etc.
+- Enum fields: status, type, category, etc.
+
+**RELATION FIELDS (CANNOT be updated directly):**
+- Fields ending in plural: medicationRecords, patients, orders, etc.
+- Fields referencing other models: patient, doctor, user, campaign, etc.
+- Array fields: any field that represents a list of related records
+
+**EXAMPLES FROM YOUR SCHEMA:**
+
+✅ SCALAR FIELDS you CAN update in PatientRecord:
+- id, patientId, name, dateOfBirth, medicalHistory, contactInformation
+
+❌ RELATION FIELDS you CANNOT update in PatientRecord:
+- medicationRecords (this is a relation to MedicationRecord model)
+- weeklyReports (this is a relation to WeeklyReport model)
+
+**CORRECT UPDATE PATTERN:**
+await prisma.patientRecord.update({
+  where: { id: patientId },
+  data: {
+    name: newName,           // ✅ Scalar field
+    dateOfBirth: newDate,    // ✅ Scalar field  
+    medicalHistory: newHistory // ✅ Scalar field
+    // ❌ medicationRecords: { ... } // FORBIDDEN! This is a relation field
+  }
+});
+
+EXAMPLE OF CORRECT FIELD VERIFICATION:
+// FIELD VERIFICATION: Confirmed 'prescriptionId' exists in Prescription schema above ✅
+const prescriptions = await prisma.prescription.findMany({
+  where: {
+    prescriptionId: parameters.prescriptionId  // ✅ Field exists in schema
+  }
+});
+
+// ❌ WRONG - This would cause the exact error you're seeing:
+// const prescriptions = await prisma.prescription.findMany({
+//   where: {
+//     status: "pending"  // ❌ 'status' field doesn't exist in Prescription model!
+//   }
+// });
 
 🚨 CRITICAL MODEL USAGE RULES:
 1. ✅ ONLY use model names listed above (e.g., "User", "AdCampaign", "Report")
@@ -1155,7 +1457,7 @@ ${step.model ? `- Database Model: ${step.model} (use prisma.${step.model.charAt(
 - Input Fields: ${step.inputFields?.map((f: any) => `${f.name} (${f.type}${f.required ? ', required' : ', optional'})`).join(', ') || 'None'}
 - Output Fields: ${step.outputFields?.map((f: any) => `${f.name} (${f.type}${f.required ? ', required' : ', optional'})`).join(', ') || 'None'}
 - Step Implementation: Based on type "${step.type}", implement the appropriate operation
-${index === 0 ? `- Access inputs as: ${extractedInputParams.map((p: any) => `parameters.${p.name}`).join(', ')} (action's main input parameters)` : step.inputFields?.length > 0 ? `- Access inputs from previous steps: ${step.inputFields.map((f: any) => `${f.name}`).join(', ')}` : ''}
+${index === 0 ? `- Can access global parameters: ${extractedInputParams.map((p: any) => `parameters.${p.name}`).join(', ')} (available to all steps)` : step.inputFields?.length > 0 ? `- Uses inputs from previous steps: ${step.inputFields.map((f: any) => `${f.name}`).join(', ')} + any global parameters needed` : ''}
 ${step.outputFields?.length > 0 ? `- Must produce: ${step.outputFields.map((f: any) => `${f.name}`).join(', ')}` : ''}
 
 🚨 CRITICAL: This step may have been customized by the user - implement EXACTLY as specified above.
@@ -1164,15 +1466,58 @@ ${step.outputFields?.length > 0 ? `- Must produce: ${step.outputFields.map((f: a
 DETAILED STEP BREAKDOWN:
 ${JSON.stringify(pseudoSteps, null, 2)}
 
-REQUIRED INPUT PARAMETERS (from first step):
+REQUIRED INPUT PARAMETERS (from technical specification UI components):
 ${JSON.stringify(extractedInputParams, null, 2)}
+
+${technicalSpec?.uiComponents && technicalSpec.uiComponents.length > 0 ? `
+🎨 UI COMPONENTS FROM TECHNICAL SPECIFICATION:
+The technical specification includes ${technicalSpec.uiComponents.length} UI components that define the action's input interface:
+
+${technicalSpec.uiComponents.map((component: any, index: number) => `
+Component ${index + 1}: ${component.name}
+- Type: ${component.type}
+- Label: ${component.label || component.name}
+- Required: ${component.required ? 'Yes' : 'No'}
+- Description: ${component.description || 'No description'}
+${component.databaseModel ? `- Database Model: ${component.databaseModel} (relation field)` : ''}
+${component.options ? `- Options: ${component.options.map((opt: any) => opt.value || opt).join(', ')}` : ''}
+${component.validation ? `- Validation: ${JSON.stringify(component.validation)}` : ''}
+`).join('')}
+
+🚨 CRITICAL: These UI components define the EXACT input parameters available as parameters.* in your code.
+The input parameters listed above were extracted from these UI components.
+` : `
+⚠️ NO UI COMPONENTS FOUND IN TECHNICAL SPECIFICATION
+This indicates the technical specification generation may not be working correctly.
+Using fallback input parameters from pseudo steps.
+`}
 
 BEFORE YOU START - SCHEMA FIELD VERIFICATION:
 ${prismaSchema ? `
-Review the Prisma schema above and list the exact fields available for each model:
+🚨 MANDATORY FIELD VERIFICATION CHECKLIST:
+Before writing ANY Prisma query, you MUST complete this checklist:
 
-⚠️ WARNING: If you reference ANY field not listed above, the code will fail at runtime!
-` : ''}
+1. ✅ Identify the model you're querying (e.g., "Prescription", "User", "Order")
+2. ✅ Find that model in the AVAILABLE MODELS section above
+3. ✅ Check the AVAILABLE FIELDS list for that model
+4. ✅ Verify EVERY field you plan to use exists in that list
+5. ✅ Add verification comments for each field: // FIELD VERIFICATION: Confirmed 'fieldName' exists ✅
+
+🚨 CRITICAL EXAMPLE - Prescription Model:
+If you see this in the available models:
+📋 MODEL: Prescription
+   AVAILABLE FIELDS: id(String), prescriptionId(String), patientId(String), medicationDetails(String), prescriptionDate(DateTime), doctorId(String)
+
+Then you can ONLY use these fields: id, prescriptionId, patientId, medicationDetails, prescriptionDate, doctorId
+❌ You CANNOT use: status, isActive, deleted, createdAt, updatedAt (they don't exist!)
+
+⚠️ CRITICAL WARNING: If you reference ANY field not listed in AVAILABLE FIELDS, the code will fail at runtime with "Unknown argument" errors!
+
+🚨 DOUBLE-CHECK REQUIREMENT:
+For every Prisma query you write, ask yourself:
+"Does this field exist in the AVAILABLE FIELDS list for this model?"
+If the answer is NO or UNSURE, DO NOT use that field!
+` : 'No Prisma schema provided - be extra careful with field names'}
 
 CODE GENERATION REQUIREMENTS:
 
@@ -1184,28 +1529,36 @@ CODE GENERATION REQUIREMENTS:
    - aiModel: AI model instance (available globally)  
    - parameters: User-provided input parameters (MUST include all parameters from the first step)
    - process.env: Environment variables for external APIs ONLY (do not include NODE_ENV, PORT, or other system variables)
+   - actionLogger: ActionExecutionLogger instance for Redis logging (available globally)
+   - executionId: Unique execution ID for this action run (available globally)
 
 2. INPUT PARAMETER STRUCTURE:
-   CRITICAL: Step 1 uses the action's main input parameters, NOT separate step input fields.
-   Access the action's input parameters directly as: parameters.parameterName
+   CRITICAL: The action's main input parameters are defined by the technical specification UI components.
+   These parameters are available as function parameters: input.parameterName
    
-   Example: If the action has input parameters { scheduledDate, userId, reportType }
-   Then Step 1 accesses them as: parameters.scheduledDate, parameters.userId, parameters.reportType
-   Step 1's inputFields in the pseudo steps are for reference only - use the actual action inputs!
+   Example: If the technical spec UI components define { scheduledDate, userId, reportType }
+   Then ANY step can access them as: input.scheduledDate, input.userId, input.reportType
+   Step 1 is just the first execution step - it can use any of the input parameters it needs!
 
 3. INPUT PARAMETER HANDLING:
    ${extractedInputParams.length > 0 ? `
-   The code should expect these input parameters from step 1:
+   The code should expect these input parameters (extracted from technical specification UI components):
    ${extractedInputParams.map((param: any) => `
-   - parameters.${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}
+   - input.${param.name}: ${param.type} (${param.required ? 'required' : 'optional'}) - ${param.description}
      ${param.kind === 'object' ? `This is a database relation ID for ${param.relationModel} model` : ''}
-     ${param.list ? `⚠️ This is an ARRAY parameter - use { in: parameters.${param.name} } for Prisma queries` : `⚠️ This is a SINGLE VALUE parameter - use direct comparison parameters.${param.name} for Prisma queries`}
+     ${param.list ? `⚠️ This is an ARRAY parameter - use { in: input.${param.name} } for database queries` : `⚠️ This is a SINGLE VALUE parameter - use direct comparison input.${param.name} for database queries`}
    `).join('')}
+   
+   🚨 CRITICAL INPUT PARAMETER SOURCE:
+   ${technicalSpec?.uiComponents && technicalSpec.uiComponents.length > 0 ? 
+     `✅ These parameters were extracted from ${technicalSpec.uiComponents.length} UI components in the technical specification.` :
+     `⚠️ These parameters were extracted from pseudo steps as fallback (technical spec had no UI components).`
+   }
    
    🚨 CRITICAL: Always validate required input parameters before processing.
    🚨 CRITICAL: Check if parameters are arrays vs single values before using in Prisma queries.
    🚨 CRITICAL: Convert string parameters to proper types (numbers, dates, etc.) before database operations.
-   ` : 'Parameters will be provided as defined in the first pseudo step.'}
+   ` : 'Parameters will be provided as defined in the technical specification UI components.'}
 
 4. CODE STRUCTURE - STEP-BY-STEP IMPLEMENTATION:
    Each pseudo step should be implemented as a distinct code block that:
@@ -1218,7 +1571,7 @@ CODE GENERATION REQUIREMENTS:
    STEP-BY-STEP CODE PATTERN:
    For each step, implement it as a separate code section with comments:
    // Step 1: [Step Description]
-   // Input: [list of input field names]
+   // Input: [what this step needs - can be global parameters or previous step outputs]
    // Output: [list of output field names]
    console.log('🔄 Step 1: [Step Description]');
    console.log('📥 Step 1 Input:', { inputField1: value1, inputField2: value2 });
@@ -1226,22 +1579,38 @@ CODE GENERATION REQUIREMENTS:
    console.log('📤 Step 1 Output:', { outputField1: result1, outputField2: result2 });
    
    CRITICAL: Follow the exact data flow defined in pseudo steps:
-   - Only use inputFields that are defined for each step
+   - Each step can use global input parameters (parameters.*) as needed
+   - Each step can use outputs from previous steps as defined in inputFields
    - Produce all outputFields that are defined for each step
-   - Use step outputs as inputs for subsequent steps
-   - Each step's outputs become available for subsequent steps
+   - Store each step's outputs in variables for use by subsequent steps
    
    DATA FLOW IMPLEMENTATION:
-   - Step 1 inputs MUST BE the action's main input parameters (parameters.parameterName)
-   - Step 1 should not define separate input fields - it uses the action's input directly
-   - Step 2+ inputs come from previous step outputs
+   - Input parameters (from UI components) are available to ALL steps as input.*
+   - Step 1 uses whatever input parameters it needs for its specific task
+   - Step 2+ can use both input parameters AND outputs from previous steps
    - Store each step's outputs in variables for use by subsequent steps
-   - Example: Step 1 uses parameters.userId, Step 1 outputs "customerData", Step 2 uses customerData
+   - Example: Step 1 uses input.userId, outputs "customerData", Step 2 uses both input.reportType AND customerData
    
    🚨 MANDATORY STEP VARIABLE NAMING PATTERN:
    - Step 1 outputs: step1_outputFieldName (e.g., step1_customerData)
    - Step 2 outputs: step2_outputFieldName (e.g., step2_analysisResult)
    - This ensures clear data flow tracking between steps
+   
+   🚨 MANDATORY VARIABLE VALIDATION BEFORE ARRAY OPERATIONS:
+   For EVERY variable that you call .map(), .filter(), or array methods on, you MUST validate it first:
+   
+   // ✅ REQUIRED PATTERN before ANY .map() call:
+   if (!step1_results || !Array.isArray(step1_results)) {
+     console.error(\`❌ Step 1 results validation failed\`, {
+       isUndefined: !step1_results,
+       isArray: Array.isArray(step1_results),
+       actualType: typeof step1_results
+     });
+     throw new Error(\`Step 1 results are not available or not an array\`);
+   }
+   
+   // Now safe to use array methods
+   const processedResults = step1_results.map(item => processItem(item));
    
    🚨 CRITICAL VARIABLE FLOW RULES:
    1. ✅ ALWAYS define variables before using them
@@ -1249,6 +1618,9 @@ CODE GENERATION REQUIREMENTS:
    3. ✅ Check if variables exist before accessing them
    4. ✅ Log variable values to verify they're defined correctly
    5. ❌ NEVER assume a variable exists without defining it first
+   6. ✅ ALWAYS validate that variables are defined before calling methods like .map()
+   7. ✅ Provide fallback values for undefined variables
+   8. ✅ Handle empty arrays and null values gracefully
    
    🚨 MANDATORY STEP LOGGING PATTERN:
    For each step, include these exact console.log statements:
@@ -1256,7 +1628,7 @@ CODE GENERATION REQUIREMENTS:
    // Step N: [Description]
    console.log(\`🔄 Step N: [Description]\`);
    console.log(\`📥 Step N Input:\`, { 
-     inputField1: parameters.inputField1 || 'undefined',
+     inputField1: input.inputField1 || 'undefined',
      inputField2: previousStepOutput || 'undefined'
    });
    
@@ -1271,24 +1643,100 @@ CODE GENERATION REQUIREMENTS:
    🚨 CRITICAL: Use template literals (\`backticks\`) instead of single quotes for console.log to avoid syntax errors with apostrophes.
    This logging helps debug data flow and identify where errors occur.
    
-   🚨 EXAMPLE OF CORRECT STEP IMPLEMENTATION WITH VARIABLE FLOW:
+   🚨 CRITICAL: NO HARDCODED VALUES ALLOWED:
+   Your generated code must NEVER contain hardcoded values. ALWAYS use input parameters or generate values dynamically:
+   
+   ❌ FORBIDDEN HARDCODED EXAMPLES:
+   - authorId: "user123"
+   - campaignId: "campaign1" 
+   - status: "ACTIVE"
+   - name: "Test Campaign"
+   - email: "test@example.com"
+   - date: "2023-01-01"
+   - quantity: 100
+   - Any specific IDs, names, dates, or values
+   
+   ✅ CORRECT DYNAMIC EXAMPLES:
+   - authorId: input.authorId
+   - campaignId: input.campaignId
+   - status: input.status
+   - name: input.name
+   - email: input.email
+   - date: input.date || new Date().toISOString()
+   - quantity: input.quantity || 0
+   - Use input parameters or generate values dynamically
+   
+   🚨 CRITICAL INPUT PARAMETER VALIDATION PATTERN:
+   Before using ANY input parameter, validate it exists and has a valid value:
+   
+   // ✅ CORRECT: Validate input parameters before use and provide dynamic defaults
+   const startDate = input.startDate || new Date().toISOString();
+   const endDate = input.endDate || new Date().toISOString();
+   
+   if (!input.patientId) {
+     console.error(\`❌ Required parameter patientId is missing\`);
+     throw new Error(\`Required parameter patientId is missing\`);
+   }
+   
+   // ❌ WRONG: Using parameters without validation OR hardcoded values
+   // const records = await db.model.findMany({
+   //   where: { 
+   //     startDate: { gte: input.currentWeekStartDate }, // ❌ might be undefined!
+   //     status: "ACTIVE" // ❌ hardcoded value!
+   //   }
+   // });
+   
+   // ✅ CORRECT: Use validated parameters with dynamic defaults
+   const records = await db.model.findMany({
+     where: { 
+       startDate: { gte: startDate }, // ✅ validated with fallback
+       status: input.status || 'pending' // ✅ dynamic with fallback
+     }
+   });
+   
+   🚨 CRITICAL ARRAY VALIDATION PATTERN:
+   Before calling .map(), .filter(), or any array method, validate the variable:
+   
+   // ✅ CORRECT: Validate arrays before using array methods
+   if (!step1_results || !Array.isArray(step1_results)) {
+     console.error(\`❌ Step 1 results validation failed\`, {
+       isUndefined: !step1_results,
+       isArray: Array.isArray(step1_results),
+       actualType: typeof step1_results,
+       actualValue: step1_results
+     });
+     throw new Error(\`Step 1 results are not available or not an array\`);
+   }
+   
+   const processedResults = step1_results.map(item => processItem(item)); // ✅ Safe to use .map()
+   
+   // ❌ WRONG: Calling .map() without validation
+   // const processedResults = step1_results.map(item => processItem(item)); // ❌ Will crash if undefined!
+   
+   🚨 EXAMPLE OF CORRECT STEP IMPLEMENTATION WITH VARIABLE FLOW AND ERROR PREVENTION:
    
    // Step 1: Fetch active campaigns
    console.log(\`🔄 Step 1: Fetch active campaigns\`);
    console.log(\`📥 Step 1 Input:\`, { 
-     status: parameters.status || 'undefined',
+     status: input.status || 'undefined',
      batchSize: convertedParams.batchSize || 'undefined'
    });
    
    // Define step 1 output variables (use exact names from pseudo step outputFields)
-   const step1_activeCampaigns = await prisma.adCampaign.findMany({
-     where: { status: parameters.status },
+   const step1_activeCampaigns = await db.adCampaign.findMany({
+     where: { status: input.status },
      take: convertedParams.batchSize
    });
    
-   // Validate step 1 outputs exist
-   if (!step1_activeCampaigns) {
-     throw new Error(\`Step 1 failed: activeCampaigns is undefined\`);
+   // ✅ CRITICAL: Validate step 1 outputs exist and are arrays
+   if (!step1_activeCampaigns || !Array.isArray(step1_activeCampaigns)) {
+     console.error(\`❌ Step 1 validation failed: activeCampaigns is not a valid array\`, { 
+       isUndefined: !step1_activeCampaigns,
+       isArray: Array.isArray(step1_activeCampaigns),
+       actualType: typeof step1_activeCampaigns,
+       actualValue: step1_activeCampaigns
+     });
+     throw new Error(\`Step 1 failed: activeCampaigns is not available or not an array\`);
    }
    
    console.log(\`📤 Step 1 Output:\`, { 
@@ -1303,21 +1751,33 @@ CODE GENERATION REQUIREMENTS:
      campaignIds: step1_activeCampaigns?.map(c => c.id) || []
    });
    
-   // Validate step 2 inputs exist (from step 1 outputs)
+   // ✅ CRITICAL: Validate step 2 inputs exist (from step 1 outputs)
    if (!step1_activeCampaigns || !Array.isArray(step1_activeCampaigns)) {
+     console.error(\`❌ Step 2 validation failed: step1_activeCampaigns is not available\`, {
+       isUndefined: !step1_activeCampaigns,
+       isArray: Array.isArray(step1_activeCampaigns),
+       length: step1_activeCampaigns?.length || 0
+     });
      throw new Error(\`Step 2 failed: step1_activeCampaigns is not available or not an array\`);
    }
    
-   // Define step 2 output variables (use exact names from pseudo step outputFields)
-   const step2_reports = step1_activeCampaigns.map(campaign => ({
-     campaignId: campaign.id,
-     reportData: generateReportData(campaign)
-   }));
-   
-   console.log(\`📤 Step 2 Output:\`, { 
-     reportsGenerated: step2_reports.length,
-     reportIds: step2_reports.map(r => r.campaignId)
-   });
+   // ✅ Handle empty results gracefully
+   if (step1_activeCampaigns.length === 0) {
+     console.log(\`⚠️ Step 2: No campaigns found, skipping report generation\`);
+     const step2_reports = []; // Empty array for consistent data flow
+     console.log(\`📤 Step 2 Output:\`, { reportsGenerated: 0, reportIds: [] });
+   } else {
+     // Define step 2 output variables (use exact names from pseudo step outputFields)
+     const step2_reports = step1_activeCampaigns.map(campaign => ({
+       campaignId: campaign.id,
+       reportData: generateReportData(campaign)
+     }));
+     
+     console.log(\`📤 Step 2 Output:\`, { 
+       reportsGenerated: step2_reports.length,
+       reportIds: step2_reports.map(r => r.campaignId)
+     });
+   }
 
 5. DATABASE OPERATIONS:
    🚨 CRITICAL: Each database step includes a "model" field that specifies which model to use!
@@ -1385,40 +1845,97 @@ CODE GENERATION REQUIREMENTS:
    5. ❌ NEVER generate random IDs for foreign key fields
    6. ❌ NEVER create records with foreign keys to non-existent records
 
+   🚨 CRITICAL RELATION FIELD HANDLING:
+   When working with Prisma relations, you MUST follow these rules:
+   
+   ❌ NEVER UPDATE RELATION FIELDS DIRECTLY:
+   // This will cause "Unknown argument medicationRecords" errors:
+   await prisma.patientRecord.update({
+     where: { id: patientId },
+     data: {
+       medicationRecords: { push: { ... } } // ❌ FORBIDDEN! Relations can't be updated this way
+     }
+   });
+   
+   ✅ CORRECT APPROACHES FOR RELATIONS:
+   
+   **Option 1: Update only scalar fields**
+   await prisma.patientRecord.update({
+     where: { id: patientId },
+     data: {
+       name: updatedName,
+       dateOfBirth: updatedDate,
+       // Only include scalar fields, NO relation fields
+     }
+   });
+   
+   **Option 2: Create related records separately**
+   // First update the main record
+   await prisma.patientRecord.update({
+     where: { id: patientId },
+     data: { name: updatedName }
+   });
+   
+   // Then create related records separately
+   await prisma.medicationRecord.create({
+     data: {
+       patientId: patientId, // Foreign key reference
+       medicationName: newMedication.name,
+       dosage: newMedication.dosage
+     }
+   });
+   
+   **Option 3: Use connect/disconnect for existing relations**
+   await prisma.patientRecord.update({
+     where: { id: patientId },
+     data: {
+       medicationRecords: {
+         connect: { id: existingMedicationId } // Connect to existing record
+       }
+     }
+   });
+   
+   🚨 FORBIDDEN RELATION PATTERNS:
+   ❌ medicationRecords: { push: ... }
+   ❌ medicationRecords: { create: ... } (in update operations)
+   ❌ medicationRecords: [{ ... }] (array of objects)
+   ❌ medicationRecords: "string value"
+   ❌ Any relation field name in update data object
+
    **CORRECT FOREIGN KEY PATTERN:**
    // Validate the foreign key exists first
-   if (parameters.authorId) {
+   if (input.authorId) {
      const authorExists = await prisma.user.findUnique({
-       where: { id: parameters.authorId }
+       where: { id: input.authorId }
      });
      if (!authorExists) {
-       throw new Error(\`Author with ID \${parameters.authorId} does not exist\`);
+       throw new Error(\`Author with ID \${input.authorId} does not exist\`);
      }
    }
 
    // Create record with validated foreign key (or without if not provided)
    const contentData = {
-     title: parameters.title,
-     body: parameters.body,
-     status: parameters.status
+     title: input.title,      // ✅ Use input parameters
+     body: input.body,        // ✅ Use input parameters
+     status: input.status     // ✅ Use input parameters
    };
    
    // Only add foreign key if provided and validated
-   if (parameters.authorId) {
-     contentData.authorId = parameters.authorId;
+   if (input.authorId) {
+     contentData.authorId = input.authorId;
    }
    
    const content = await prisma.contentModel.create({
-     data: contentData
+     data: contentData  // ✅ Uses processed data with input parameters
    });
 
    🚨 ALTERNATIVE PATTERN - Create without foreign keys:
    // If foreign key relationships are complex, create records independently
    const content = await prisma.contentModel.create({
      data: {
-       title: parameters.title,
-       body: parameters.body,
-       status: parameters.status
+       title: input.title,      // ✅ Use input parameters
+       body: input.body,        // ✅ Use input parameters
+       status: input.status     // ✅ Use input parameters
        // Note: No authorId - relationship can be established later if needed
      }
    });
@@ -1426,15 +1943,15 @@ CODE GENERATION REQUIREMENTS:
    **WRONG PATTERNS THAT CAUSE FOREIGN KEY ERRORS:**
    ❌ const content = await prisma.contentModel.create({
         data: {
-          authorId: "user123", // Hardcoded - will fail if user doesn't exist
-          title: parameters.title
+          authorId: "hardcoded-id", // Hardcoded - will fail if user doesn't exist
+          title: "hardcoded title" // Hardcoded - should use parameters
         }
       });
 
    ❌ const content = await prisma.contentModel.create({
         data: {
           authorId: generateRandomId(), // Random ID - will fail constraint
-          title: parameters.title  
+          status: "ACTIVE" // Hardcoded enum - should use parameters
         }
       });
    
@@ -1587,14 +2104,14 @@ CODE GENERATION REQUIREMENTS:
    //   }
    // });
    
-   EXAMPLES OF CORRECT PRISMA USAGE:
+   EXAMPLES OF CORRECT DATABASE USAGE:
    // Find multiple water intake records - ONLY use fields that exist in the schema
-   const batchSize = parseInt(parameters.batchSize || '50', 10);
-   const page = parseInt(parameters.page || '0', 10);
-   const waterIntakeRecords = await prisma.waterIntake.findMany({
+   const batchSize = parseInt(input.batchSize || '50', 10);
+   const page = parseInt(input.page || '0', 10);
+   const waterIntakeRecords = await db.waterIntake.findMany({
      where: {
-       userId: parameters.userId,  // ✅ userId exists in WaterIntake model
-       date: { gte: parameters.startDate, lte: parameters.endDate }  // ✅ date exists in WaterIntake model
+       userId: input.userId,  // ✅ userId exists in WaterIntake model
+       date: { gte: input.startDate, lte: input.endDate }  // ✅ date exists in WaterIntake model
      },
      take: batchSize,  // ✅ Converted to integer
      skip: page * batchSize,  // ✅ Proper integer arithmetic
@@ -1607,17 +2124,17 @@ CODE GENERATION REQUIREMENTS:
    // });
    
    // ✅ CORRECT - using only existing fields:
-   const sleepPatterns = await prisma.sleepPattern.findMany({
+   const sleepPatterns = await db.sleepPattern.findMany({
      where: { 
-       userId: parameters.userId,  // ✅ userId exists in SleepPattern model
-       sleepStartTime: { gte: parameters.startDate }  // ✅ sleepStartTime exists in SleepPattern model
+       userId: input.userId,  // ✅ userId exists in SleepPattern model
+       sleepStartTime: { gte: input.startDate }  // ✅ sleepStartTime exists in SleepPattern model
      }
    });
    
    // Create a new health report
-   const healthReport = await prisma.healthReport.create({
+   const healthReport = await db.healthReport.create({
      data: {
-       userId: parameters.userId, // Use the provided userId parameter
+       userId: input.userId, // Use the provided userId parameter
        reportDate: new Date(),
        waterIntakeSummary: analysisResult.waterIntakeSummary,
        workoutSummary: analysisResult.workoutSummary,
@@ -1627,7 +2144,7 @@ CODE GENERATION REQUIREMENTS:
 
    🚨 CRITICAL FOREIGN KEY HANDLING:
    When creating records with foreign key relationships:
-   - ✅ ALWAYS use parameters for foreign key values: userId: parameters.userId
+   - ✅ ALWAYS use input parameters for foreign key values: userId: input.userId
    - ❌ NEVER hardcode foreign key values: userId: "user123"
    - ✅ Validate foreign key parameters exist before creating records
    - ✅ Use existing IDs from previous steps or user input
@@ -1640,8 +2157,8 @@ CODE GENERATION REQUIREMENTS:
    // - Date.now().toString() + Math.random().toString(36).substr(2, 9) for simple unique strings
    
    // Update multiple workout logs
-   const updatedLogs = await prisma.workoutLog.updateMany({
-     where: { userId: parameters.userId, status: 'pending' },
+   const updatedLogs = await db.workoutLog.updateMany({
+     where: { userId: input.userId, status: 'pending' },
      data: { status: 'completed', processedAt: new Date() }
    });
 
@@ -1662,6 +2179,21 @@ CODE GENERATION REQUIREMENTS:
      })
    });
    
+   // 🚨 CRITICAL: ALWAYS validate AI single object results before using them
+   if (!object) {
+     console.error(\`❌ AI generation failed - no object returned\`);
+     throw new Error(\`AI analysis failed to return valid results\`);
+   }
+   
+   // 🚨 CRITICAL: If AI object contains arrays, validate them before .map()
+   if (object.recommendations && !Array.isArray(object.recommendations)) {
+     console.error(\`❌ AI returned invalid recommendations array\`, {
+       actualType: typeof object.recommendations,
+       actualValue: object.recommendations
+     });
+     object.recommendations = []; // Fallback to empty array
+   }
+   
    // For array results - CRITICAL: Use output: 'array' and schema defines INDIVIDUAL ITEMS:
    const { object: arrayResult } = await generateObject({
      model: aiModel,
@@ -1675,6 +2207,19 @@ CODE GENERATION REQUIREMENTS:
        value: z.string().describe('Item value')
      }) // 🚨 Schema describes INDIVIDUAL items, NOT the array
    });
+   
+   // 🚨 CRITICAL: ALWAYS validate AI results before using them
+   if (!arrayResult || !Array.isArray(arrayResult)) {
+     console.error(\`❌ AI generation failed or returned invalid data\`, {
+       isUndefined: !arrayResult,
+       isArray: Array.isArray(arrayResult),
+       actualType: typeof arrayResult,
+       actualValue: arrayResult
+     });
+     // Provide fallback or throw error
+     const arrayResult = []; // Empty array fallback
+     // OR: throw new Error(\`AI generation failed to return valid array\`);
+   }
    
    // 🚨 COMMON MISTAKE - DO NOT DO THIS:
    // ❌ WRONG: schema: z.array(z.object({...})) - This will cause "Invalid schema" error
@@ -1761,6 +2306,9 @@ CODE GENERATION REQUIREMENTS:
    - EMAIL_API_KEY, EMAIL_API_BASE_URL (too generic)
    - NOTIFICATION_API_KEY, NOTIFICATION_API_URL (too generic)  
    - SMS_API_KEY, PAYMENT_API_KEY (too generic)
+   - UI_API_ENDPOINT, UI_API_KEY, API_ENDPOINT (too generic)
+   - EXTERNAL_API_URL, THIRD_PARTY_API_KEY (too generic)
+   - SERVICE_API_KEY, PLATFORM_API_URL (too generic)
    
    ONLY generate environment variables for SPECIFIC, NAMED services:
    - STRIPE_API_KEY (only if user mentioned Stripe specifically)
@@ -1793,6 +2341,10 @@ CODE GENERATION REQUIREMENTS:
    - "TRACK-PERFORMANCE-ANALYTICS_INSTAGRAM_API_KEY" ← Contains action name + hyphens
    - "PLAN-CONTENT-CALENDAR_LATER_API_KEY" ← Contains action name + hyphens
    - "MANAGE-BRAND-OUTREACH_INSTAGRAM_API_BASE_URL" ← Contains action name + hyphens
+   - "UI_API_ENDPOINT" ← Too generic, not a specific service
+   - "UI_API_KEY" ← Too generic, not a specific service
+   - "API_ENDPOINT" ← Too generic, not a specific service
+   - "EXTERNAL_API_URL" ← Too generic, not a specific service
    - "DATABASE_URL" ← System-provided, NEVER generate this
    - "OPENAI_API_KEY" ← System-provided, NEVER generate this
    - "ANTHROPIC_API_KEY" ← System-provided, NEVER generate this
@@ -1823,20 +2375,45 @@ CODE GENERATION REQUIREMENTS:
    - Third-party API Key APIs (env vars needed ONLY if specifically mentioned): Stripe, SendGrid, Twilio, specific custom APIs
 
 9. FUNCTION SIGNATURE AND GLOBALS:
-   Your generated function should NOT accept any parameters. Use these global variables directly:
-   - prisma: Prisma client instance (use as prisma.modelName.method())
-   - generateObject: AI utility function (available globally)
-   - aiModel: AI model instance (available globally)
-   - parameters: User input parameters (available globally)
-   - process.env: Environment variables (available globally)
+   Your generated function receives these parameters directly (NOT as globals):
+   - db: Database interface with methods like db.user.findMany(), db.user.create(), etc.
+   - input: User input parameters (access as input.parameterName)
+   - envVars: Environment variables (access as envVars.VARIABLE_NAME)
+   - testMode: Boolean indicating test mode
+   - actionLogger: ActionExecutionLogger instance for Redis logging
+   - executionId: Unique execution ID for this action run
+   - console: Console logging interface
+   - generateId: ID generation function
+   - formatDate: Date formatting function
+   - validateRequired: Field validation function
+   - ai: AI interface for generateObject operations
+   - z: Zod schema validation library
    
-   CRITICAL: Use prisma directly, not through a context parameter:
-   - prisma.waterIntake.findMany() 
-   - prisma.healthReport.create()
-   - prisma.workoutLog.updateMany()
+   🚨 CRITICAL PARAMETER USAGE:
+   - Database operations: Use db.modelName.method() (NOT prisma.modelName.method())
+   - Input parameters: Use input.parameterName (NOT parameters.parameterName)
+   - Redis logging: Use actionLogger and executionId directly (these are correct)
+   - AI operations: Use ai.generateObject() (NOT generateObject())
    
-   Function signature: async function actionName() { ... }
-   Function return format: { success: boolean, data: any, message: string, executionTime: number }
+   CORRECT USAGE EXAMPLES:
+   ✅ const users = await db.user.findMany({ where: { id: input.userId } });
+   ✅ await actionLogger.startStep(executionId, 1, 'Fetch users', { userId: input.userId });
+   ✅ const result = await ai.generateObject({ model, schema, messages });
+   
+   WRONG USAGE (DO NOT DO THIS):
+   ❌ const users = await prisma.user.findMany({ where: { id: parameters.userId } });
+   ❌ await actionLogger.startStep(executionId, 1, 'Fetch users', { userId: parameters.userId });
+   ❌ const result = await generateObject({ model, schema, messages });
+   
+   🚨 CRITICAL FUNCTION SIGNATURE:
+   Your function MUST use this EXACT signature with destructured parameters:
+   
+   async function actionName({ db, input, envVars, testMode, actionLogger, executionId, console, generateId, formatDate, validateRequired, ai, z }) {
+     // Your code here
+     return { success: boolean, data: any, message: string, executionTime: number };
+   }
+   
+   The function will be called with a single object containing all parameters as named properties.
 
 Generate production-ready, executable JavaScript code that implements the business logic described in the pseudo steps and properly uses the input parameters.
 
@@ -1850,6 +2427,13 @@ Generate production-ready, executable JavaScript code that implements the busine
    - ❌ NEVER create your own validation logic for enum fields
    - ❌ NEVER generate lines like "const validEnumValues_status = ['DRAFT', 'APPROVED']"
    - ❌ NEVER ignore the provided validation code
+
+1.5. **Missing Parameter Handling**: MUST handle undefined input parameters gracefully:
+   - ✅ BEFORE using input.parameterName, check if it exists: if (!input.parameterName) { ... }
+   - ✅ PROVIDE fallback values: const startDate = input.startDate || new Date().toISOString()
+   - ✅ VALIDATE required parameters exist before database queries
+   - ❌ NEVER assume input parameters exist without checking
+   - ❌ NEVER use input.undefinedParameter in database queries
 
 2. **Step Logging**: MUST include console.log statements for each step:
    - ✅ Log step start: console.log('🔄 Step N: [Description]')
@@ -1884,7 +2468,11 @@ Generate production-ready, executable JavaScript code that implements the busine
    - ✅ CHECK if variables are defined: if (!variable) throw new Error('Variable undefined')
    - ✅ USE optional chaining: variable?.property instead of variable.property
    - ✅ PROVIDE fallbacks: variable || defaultValue
+   - ✅ VALIDATE arrays before .map(): if (!Array.isArray(variable)) throw new Error('Not an array')
+   - ✅ HANDLE AI generation failures: if (!aiResult) { console.error('AI failed'); return fallback; }
    - ❌ NEVER assume a variable from previous step exists without checking
+   - ❌ NEVER call .map() on variables that might be undefined
+   - ❌ NEVER assume AI generateObject calls succeed
 
 7. **Error Prevention**: Your code should:
    - Validate input parameters before using them
@@ -1897,11 +2485,32 @@ Generate production-ready, executable JavaScript code that implements the busine
 
 CRITICAL: The user has reported these exact errors that your code MUST prevent:
 1. "Invalid value for argument status. Expected StatusEnum" - caused by empty strings in enum fields
-2. "Argument \`take\`: Invalid value provided. Expected Int, provided String" - caused by string values in numeric fields
+2. "Argument take: Invalid value provided. Expected Int, provided String" - caused by string values in numeric fields
 3. "i.platforms.map is not a function" - caused by calling .map() on non-array variables
 4. "Expected ',', got 's'" - caused by unescaped apostrophes in console.log('campaign's data') statements
 5. "Foreign key constraint violated on the constraint: ContentModel_authorId_fkey" - caused by hardcoded foreign key values that don't exist
 6. "TypeError: (intermediate value).map is not a function" - caused by calling .map() on updateMany/deleteMany results which return { count: number }, not arrays
+7. "Unknown argument status. Available options are marked with ?" - caused by using fields that don't exist in the model schema
+8. "Unknown argument medicationRecords. Available options are marked with ?" - caused by trying to update relation fields directly in Prisma update operations
+
+🚨 CRITICAL FIELD VALIDATION ERROR PREVENTION:
+The error "Unknown argument status" occurs when you use a field that doesn't exist in the Prisma model.
+ALWAYS verify field existence before using in queries:
+
+❌ WRONG - This causes "Unknown argument" errors:
+const prescriptions = await prisma.prescription.findMany({
+  where: {
+    status: "pending"  // ❌ 'status' field doesn't exist in Prescription model!
+  }
+});
+
+✅ CORRECT - Only use fields that exist in the schema:
+// FIELD VERIFICATION: Confirmed 'prescriptionId' exists in Prescription schema above ✅
+const prescriptions = await prisma.prescription.findMany({
+  where: {
+    prescriptionId: parameters.prescriptionId  // ✅ Field exists in schema
+  }
+});
 
 🚨 MANDATORY ERROR PREVENTION PATTERNS:
 ✅ CORRECT array handling:
@@ -1939,10 +2548,14 @@ Your generated code MUST:
 2. ✅ ALL error messages use template literals: throw new Error(\`message\`)
 3. ✅ NO single quotes around strings that might contain apostrophes
 4. ✅ ALL dynamic content uses \${variable} syntax within template literals
-5. ✅ ALL foreign key fields use parameters or validated existing IDs
+5. ✅ ALL foreign key fields use input parameters or validated existing IDs
 6. ✅ NO hardcoded foreign key values like authorId: "user123"
 7. ✅ Foreign key existence is validated before creating related records
-8. ✅ NO .map() calls on updateMany/deleteMany results - use result.count instead`;
+8. ✅ NO .map() calls on updateMany/deleteMany results - use result.count instead
+9. ✅ NO hardcoded values anywhere - all data comes from input parameters or dynamic generation
+10. ✅ NO relation fields in update data objects - only scalar fields
+11. ✅ ALL arrays validated before calling .map(), .filter(), or array methods
+12. ✅ ALL AI-generated results validated before using (check for undefined/null)`;
 
   const result = await generateObject({
     model,
@@ -2027,8 +2640,8 @@ Generate production-ready code that follows the user-edited pseudo steps exactly
 }
 
 /**
- * Complete action generation workflow - NEW 3-step flow: Spec → Pseudo Steps → Code
- * Uses technical specification as primary source for implementation
+ * Complete action generation workflow - STREAMLINED 2-step flow: Technical Spec (with UI) → Pseudo Steps → Code
+ * Technical specification now includes UI components, eliminating the separate UI generation step
  */
 export async function generateCompleteAction(
   actionSpec: {
@@ -2047,16 +2660,16 @@ export async function generateCompleteAction(
   externalApis?: any[],
   availableEnums?: any[]
 ): Promise<any> {
-  console.log(`🚀 Generating complete action using NEW 3-step flow: ${actionSpec.name}`);
-  console.log(`📋 New Pattern: 1) Generate Technical Spec → 2) Generate Pseudo Steps → 3) Generate Code`);
+  console.log(`🚀 Generating complete action using STREAMLINED 2-step flow: ${actionSpec.name}`);
+  console.log(`📋 Streamlined Pattern: 1) Generate Technical Spec (with UI) → 2) Generate Pseudo Steps → 3) Generate Code`);
 
   const actionName = actionSpec.name;
   const actionTitle = actionSpec.title || actionSpec.name;
   const actionDescription = actionSpec.purpose || actionSpec.description || '';
 
   try {
-    // Step 1: Generate Technical Specification (NEW)
-    console.log(`📋 Step 1/3: Generating technical specification...`);
+    // Step 1: Generate Technical Specification (includes UI components)
+    console.log(`📋 Step 1/3: Generating technical specification with UI components...`);
     const technicalSpec = await generateTechnicalSpecification(
       actionName,
       actionDescription,
@@ -2067,7 +2680,7 @@ export async function generateCompleteAction(
       availableEnums
     );
     
-    console.log(`✅ Step 1/3 complete: Generated technical specification`);
+    console.log(`✅ Step 1/3 complete: Generated technical specification with ${technicalSpec.uiComponents?.length || 0} UI components`);
     
     // Step 2: Generate Pseudo Steps (informed by technical spec)
     console.log(`🧩 Step 2/3: Generating pseudo steps from technical specification...`);
@@ -2082,176 +2695,11 @@ export async function generateCompleteAction(
     
     console.log(`✅ Step 2/3 complete: Generated ${pseudoSteps.length} pseudo steps`);
     
-    // Step 2.5: Generate UI Components (NEW - needed for ActionExecutionModal)
-    console.log(`🎨 Step 2.5/3: Generating UI components for action execution...`);
-    const rawUIComponents = await generateActionUIComponents(
-      actionName,
-      actionDescription,
-      pseudoSteps,
-      availableModels,
-      businessContext,
-      availableEnums
-    );
+    // UI Components are now included in the technical specification (Step 1)
+    console.log(`🎨 Using UI components from technical specification...`);
+    const uiComponents = technicalSpec.uiComponents || [];
     
-    // Convert UI components to format expected by ActionExecutionModal
-    const uiComponents = rawUIComponents.map((component: any, index: number) => ({
-      id: component.id || `input_${index}`,
-      name: component.name || component.linkedToParameter || `input_${index}`,
-      type: component.type || component.inputType || 'text',
-      label: component.label || component.componentName || component.purpose || 'Input',
-      description: component.description || component.helpText || '',
-      required: component.required || false,
-      placeholder: component.placeholder || '',
-      options: component.options?.map((opt: any) => ({
-        value: typeof opt === 'string' ? opt : opt.value || opt,
-        label: typeof opt === 'string' ? opt : opt.label || opt.value || opt
-      })) || undefined,
-      defaultValue: component.defaultValue || (component.type === 'checkbox' ? false : ''),
-      validation: component.validation
-    }));
-    
-    // Fallback: If no UI components or insufficient components, extract from pseudo steps
-    if (uiComponents.length === 0 && pseudoSteps.length > 0 && pseudoSteps[0].inputFields) {
-      console.log(`🔄 Fallback: Extracting UI components from pseudo step input fields...`);
-      
-      // Helper function to create fallback components with enum support
-      const createFallbackComponent = (field: any, index: number, enumInfo: Record<string, string[]>) => {
-        // Determine input type based on field type and name
-        let inputType = 'text';
-        const fieldName = field.name.toLowerCase();
-        const fieldType = field.type;
-        let options: any[] | undefined = undefined;
-        
-        if (fieldType === 'Boolean') {
-          inputType = 'checkbox';
-        } else if (fieldType === 'Int' || fieldType === 'Float' || fieldType === 'Decimal') {
-          inputType = 'number';
-        } else if (fieldType === 'DateTime' || fieldName.includes('date') || fieldName.includes('time')) {
-          if (fieldName.includes('date') && fieldName.includes('time')) {
-            inputType = 'datetime-local';
-          } else if (fieldName.includes('date')) {
-            inputType = 'date';
-          } else if (fieldName.includes('time')) {
-            inputType = 'time';
-          } else {
-            inputType = 'datetime-local'; // Default for DateTime type
-          }
-        } else if (fieldName.includes('email')) {
-          inputType = 'email';
-        } else if (fieldName.includes('url') || fieldName.includes('link')) {
-          inputType = 'url';
-        } else if (field.list || fieldType === 'Json' || fieldName.includes('content') || fieldName.includes('description')) {
-          inputType = 'textarea';
-        } else if (field.kind === 'object' && field.relationModel) {
-          // Handle database relation fields - create select dropdown that loads records dynamically
-          inputType = 'select';
-          options = []; // Empty options - will be loaded dynamically
-          console.log(`🎯 Database relation field detected: ${fieldName} -> ${field.relationModel}`);
-        } else if (field.kind === 'enum' || fieldType.endsWith('Enum') || enumInfo.hasOwnProperty(fieldType)) {
-          // Handle enum fields - create select dropdown
-          inputType = 'select';
-          
-          // Extract enum values from the extracted enum information
-          const enumValues = enumInfo[fieldType] || [];
-          if (enumValues.length > 0) {
-            options = enumValues.map((value: string) => ({ 
-              value, 
-              label: value.replace(/([A-Z])/g, ' $1').trim() // Convert PascalCase to readable format
-            }));
-            console.log(`🎯 Found enum ${fieldType} with values:`, enumValues);
-          } else {
-            // No enum values found - this shouldn't happen if enum detection is working
-            console.error(`❌ No enum values found for ${fieldType} - this indicates an enum detection failure`);
-            console.error(`Available enums:`, Object.keys(enumInfo));
-            console.error(`Field info:`, { fieldName, fieldType, fieldKind: field.kind });
-            
-            // Only provide minimal fallback if absolutely necessary
-            options = [
-              { value: '', label: 'Please select an option' }
-            ];
-            console.log(`⚠️ Created empty fallback for ${fieldType} - user will need to select from available options`);
-          }
-        }
-        
-        // Set default value based on type
-        let defaultValue: any = '';
-        if (fieldType === 'Boolean') {
-          defaultValue = false;
-        } else if (inputType === 'date') {
-          defaultValue = new Date().toISOString().split('T')[0]; // Today's date
-        } else if (inputType === 'datetime-local') {
-          const now = new Date();
-          now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-          defaultValue = now.toISOString().slice(0, 16); // Current datetime
-        } else if (inputType === 'number') {
-          // Provide sensible defaults for common numeric parameters
-          if (fieldName.includes('batch') || fieldName.includes('size') || fieldName.includes('limit')) {
-            defaultValue = '50'; // Default batch size
-          } else if (fieldName.includes('page') || fieldName.includes('offset')) {
-            defaultValue = '0'; // Default page/offset
-          } else if (fieldName.includes('score') || fieldName.includes('rating')) {
-            defaultValue = '1'; // Default minimum score
-          } else {
-            defaultValue = '0'; // Generic numeric default
-          }
-        } else if (inputType === 'select' && options && options.length > 0) {
-          defaultValue = ''; // Empty string for select - user must choose
-        }
-        
-        const component: any = {
-          id: `fallback_${index}`,
-          name: field.name,
-          type: inputType,
-          label: field.name.replace(/([A-Z])/g, ' $1').replace(/^./, (str: string) => str.toUpperCase()),
-          description: field.description || `Enter ${field.name}`,
-          required: field.required || false,
-          placeholder: field.placeholder || (inputType === 'datetime-local' ? 'Select date and time' : 
-                                          inputType === 'date' ? 'Select date' :
-                                          inputType === 'time' ? 'Select time' :
-                                          inputType === 'select' ? 'Select an option' :
-                                          `Enter ${field.name}`),
-          defaultValue: defaultValue,
-          options: options
-        };
-        
-        // Add database model metadata for relation fields
-        if (field.kind === 'object' && field.relationModel) {
-          component.databaseModel = field.relationModel;
-          component.multiple = field.list || false;
-          console.log(`🎯 Added database metadata: ${field.name} -> ${field.relationModel} (multiple: ${component.multiple})`);
-        }
-        
-        return component;
-      };
-      
-      // Create fallback components using the helper function with correct enum data
-      let currentEnumInfo: Record<string, string[]> = {};
-      if (availableEnums && availableEnums.length > 0) {
-        currentEnumInfo = extractEnumInformationFromDatabase(availableEnums);
-        console.log('🔍 Using database enum info for fallback components:', currentEnumInfo);
-      } else {
-        currentEnumInfo = extractEnumInformation(prismaSchema || '');
-        console.log('🔍 Falling back to schema parsing for fallback components:', currentEnumInfo);
-      }
-      
-      const fallbackComponents = pseudoSteps[0].inputFields.map((field: any, index: number) => {
-        console.log(`🔍 Processing field for UI: ${field.name} (type: ${field.type}, kind: ${field.kind})`);
-        const component = createFallbackComponent(field, index, currentEnumInfo);
-        console.log(`🎯 Generated UI component:`, { 
-          name: component.name, 
-          type: component.type, 
-          hasOptions: !!component.options,
-          optionCount: component.options?.length || 0,
-          options: component.options
-        });
-        return component;
-      });
-      
-      uiComponents.push(...fallbackComponents);
-      console.log(`✅ Added ${fallbackComponents.length} fallback UI components from pseudo steps with proper input types`);
-    }
-    
-    console.log(`✅ Step 2.5/3 complete: Generated ${uiComponents.length} UI components (converted to modal format)`);
+    console.log(`✅ UI Components: Using ${uiComponents.length} components from technical specification`);
     
     // Step 3: Generate Executable Code (using technical spec as primary source)
     console.log(`🔨 Step 3/3: Generating executable code from technical specification...`);
@@ -2280,13 +2728,13 @@ export async function generateCompleteAction(
       description: actionDescription,
       role: actionSpec.role || 'member',
       
-      // Step 1 results: Technical Specification (NEW)
+      // Step 1 results: Technical Specification (includes UI components)
       technicalSpecification: technicalSpec,
       
       // Step 2 results: Pseudo Steps
       pseudoSteps: pseudoSteps,
       
-      // Step 2.5 results: UI Components (NEW)
+      // UI Components (from technical specification)
       uiComponentsDesign: uiComponents,
       
       // Step 3 results: Executable Code
@@ -2324,11 +2772,11 @@ export async function generateCompleteAction(
       }
     };
     
-    console.log(`🎉 Complete action generated using API route logic: ${actionName}`);
+    console.log(`🎉 Complete action generated using streamlined 2-step flow: ${actionName}`);
     return completeAction;
     
   } catch (error) {
-    console.error(`❌ Failed to generate complete action using API route logic: ${actionName}`, error);
+    console.error(`❌ Failed to generate complete action using streamlined flow: ${actionName}`, error);
     throw error;
   }
 } 

@@ -16,15 +16,21 @@ export class ApiGenerator implements TemplateGenerator {
     files['src/app/api/agent/schedules/route.ts'] = this.generateSchedulesEndpoint(options);
     files['src/app/api/agent/models/route.ts'] = this.generateModelsEndpoint(options);
     files['src/app/api/agent/config/route.ts'] = this.generateAgentConfigEndpoint(options);
+    files['src/app/api/execution-logs/route.ts'] = this.generateExecutionLogsEndpoint(options);
+    files['src/app/api/execution-logs/[executionId]/route.ts'] = this.generateExecutionLogByIdEndpoint();
     files['src/app/api/debug/route.ts'] = this.generateDebugEndpoint(options);
     
     // Avatar blob storage endpoint
     files['src/app/api/avatar/upload-parts/route.ts'] = this.generateAvatarUploadEndpoint(options);
 
-    // Static action endpoints (one file per action with embedded code)
-    options.actions.forEach(action => {
+    // Static action endpoints (only for complex actions with embedded code)
+    // CRUD actions redirect to model pages and don't need action endpoints
+    const complexActions = options.actions.filter(action => (action as any).actionType !== 'crud');
+    complexActions.forEach(action => {
       files[`src/app/api/actions/${action.name}/route.ts`] = this.generateStaticActionEndpoint(action);
     });
+    
+    console.log(`📦 Generated action endpoints: ${complexActions.length} complex actions (${options.actions.length - complexActions.length} CRUD actions skipped)`);
 
     // Static cron endpoints (one file per schedule with embedded code)
     options.schedules.forEach(schedule => {
@@ -371,8 +377,64 @@ export async function POST(request: NextRequest, { params }: { params: { modelNa
       return NextResponse.json({ error: 'Invalid data provided' }, { status: 400 });
     }
 
+    // Process datetime fields to ensure proper ISO format
+    const processedData = { ...createData };
+    
+    // Convert datetime-local format to proper ISO format for all potential date fields
+    Object.keys(processedData).forEach(key => {
+      const value = processedData[key];
+      if (typeof value === 'string') {
+        // Handle datetime-local format (YYYY-MM-DDTHH:MM)
+        if (value.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/)) {
+          processedData[key] = new Date(value + ':00.000Z').toISOString();
+        }
+        // Handle date format (YYYY-MM-DD)
+        else if (value.match(/^\\d{4}-\\d{2}-\\d{2}$/)) {
+          processedData[key] = new Date(value + 'T00:00:00.000Z').toISOString();
+        }
+        // Handle other date formats that need conversion
+        else if (value && (key.toLowerCase().includes('date') || key.toLowerCase().includes('time')) && !value.endsWith('Z')) {
+          try {
+            const parsedDate = new Date(value);
+            if (!isNaN(parsedDate.getTime())) {
+              processedData[key] = parsedDate.toISOString();
+            }
+          } catch (dateError) {
+            console.warn(\`Failed to parse potential date field \${key}:\`, value);
+            // Leave the original value and let Prisma handle validation
+          }
+        }
+        // Handle enum case correction for common enum fields
+        else if (key === 'gender' && value) {
+          // Auto-correct gender enum case
+          const genderMap = { 'male': 'Male', 'female': 'Female', 'other': 'Other', 'unknown': 'Unknown' };
+          const correctedGender = genderMap[value.toLowerCase()] || value;
+          if (correctedGender !== value) {
+            console.log(\`🔄 Auto-correcting gender enum: "\${value}" -> "\${correctedGender}"\`);
+            processedData[key] = correctedGender;
+          }
+        }
+        else if (key === 'status' && value) {
+          // Auto-correct common status enum cases
+          const statusValue = value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+          if (statusValue !== value) {
+            console.log(\`🔄 Auto-correcting status enum: "\${value}" -> "\${statusValue}"\`);
+            processedData[key] = statusValue;
+          }
+        }
+        else if (key === 'type' && value) {
+          // Auto-correct type enum cases
+          const typeValue = value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+          if (typeValue !== value) {
+            console.log(\`🔄 Auto-correcting type enum: "\${value}" -> "\${typeValue}"\`);
+            processedData[key] = typeValue;
+          }
+        }
+      }
+    });
+
     const newRecord = await modelClient.create({
-      data: createData
+      data: processedData
     });
     
     return NextResponse.json({ success: true, data: newRecord }, { status: 201 });
@@ -552,9 +614,65 @@ export async function PUT(request: NextRequest, { params }: { params: { modelNam
       return NextResponse.json({ error: 'Record not found' }, { status: 404 });
     }
 
+    // Process datetime fields to ensure proper ISO format
+    const processedData = { ...updateData };
+    
+    // Convert datetime-local format to proper ISO format for all potential date fields
+    Object.keys(processedData).forEach(key => {
+      const value = processedData[key];
+      if (typeof value === 'string') {
+        // Handle datetime-local format (YYYY-MM-DDTHH:MM)
+        if (value.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/)) {
+          processedData[key] = new Date(value + ':00.000Z').toISOString();
+        }
+        // Handle date format (YYYY-MM-DD)
+        else if (value.match(/^\\d{4}-\\d{2}-\\d{2}$/)) {
+          processedData[key] = new Date(value + 'T00:00:00.000Z').toISOString();
+        }
+        // Handle other date formats that need conversion
+        else if (value && (key.toLowerCase().includes('date') || key.toLowerCase().includes('time')) && !value.endsWith('Z')) {
+          try {
+            const parsedDate = new Date(value);
+            if (!isNaN(parsedDate.getTime())) {
+              processedData[key] = parsedDate.toISOString();
+            }
+          } catch (dateError) {
+            console.warn(\`Failed to parse potential date field \${key}:\`, value);
+            // Leave the original value and let Prisma handle validation
+          }
+        }
+        // Handle enum case correction for common enum fields
+        else if (key === 'gender' && value) {
+          // Auto-correct gender enum case
+          const genderMap = { 'male': 'Male', 'female': 'Female', 'other': 'Other', 'unknown': 'Unknown' };
+          const correctedGender = genderMap[value.toLowerCase()] || value;
+          if (correctedGender !== value) {
+            console.log(\`🔄 Auto-correcting gender enum: "\${value}" -> "\${correctedGender}"\`);
+            processedData[key] = correctedGender;
+          }
+        }
+        else if (key === 'status' && value) {
+          // Auto-correct common status enum cases
+          const statusValue = value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+          if (statusValue !== value) {
+            console.log(\`🔄 Auto-correcting status enum: "\${value}" -> "\${statusValue}"\`);
+            processedData[key] = statusValue;
+          }
+        }
+        else if (key === 'type' && value) {
+          // Auto-correct type enum cases
+          const typeValue = value.charAt(0).toUpperCase() + value.slice(1).toLowerCase();
+          if (typeValue !== value) {
+            console.log(\`🔄 Auto-correcting type enum: "\${value}" -> "\${typeValue}"\`);
+            processedData[key] = typeValue;
+          }
+        }
+      }
+    });
+
     const updatedRecord = await modelClient.update({
       where: { id },
-      data: updateData
+      data: processedData
     });
     
     return NextResponse.json({ success: true, data: updatedRecord });
@@ -782,6 +900,67 @@ Detect user intent and respond appropriately:
 Always be ready to help with queries about data, actions, schedules, or general system operations while maintaining your unique personality.\`;
 }
 
+// Define action execution tools for the chat interface
+const actionExecutionTools = {
+  executeAction: {
+    description: 'Execute a complex action with the provided parameters',
+    parameters: z.object({
+      actionName: z.string().describe('Name of the action to execute'),
+      parameters: z.record(z.any()).describe('Parameters for the action execution')
+    })
+  },
+  getActionInfo: {
+    description: 'Get information about available actions and their required parameters',
+    parameters: z.object({
+      actionName: z.string().optional().describe('Specific action name to get info for (optional)')
+    })
+  },
+  getExecutionStatus: {
+    description: 'Get the status of a running action execution',
+    parameters: z.object({
+      executionId: z.string().describe('Execution ID to check status for')
+    })
+  },
+  // CRUD operations for direct chat interaction
+  createRecord: {
+    description: 'Create a new record in a specific model',
+    parameters: z.object({
+      modelName: z.string().describe('Name of the model to create record in'),
+      data: z.record(z.any()).describe('Data for the new record')
+    })
+  },
+  updateRecord: {
+    description: 'Update an existing record in a specific model',
+    parameters: z.object({
+      modelName: z.string().describe('Name of the model containing the record'),
+      recordId: z.string().describe('ID of the record to update'),
+      data: z.record(z.any()).describe('Updated data for the record')
+    })
+  },
+  deleteRecord: {
+    description: 'Delete a record from a specific model',
+    parameters: z.object({
+      modelName: z.string().describe('Name of the model containing the record'),
+      recordId: z.string().describe('ID of the record to delete')
+    })
+  },
+  listRecords: {
+    description: 'List records from a specific model with optional filtering',
+    parameters: z.object({
+      modelName: z.string().describe('Name of the model to list records from'),
+      limit: z.number().optional().describe('Maximum number of records to return (default: 10)'),
+      search: z.string().optional().describe('Search term to filter records')
+    })
+  },
+  getRecord: {
+    description: 'Get a specific record by ID from a model',
+    parameters: z.object({
+      modelName: z.string().describe('Name of the model containing the record'),
+      recordId: z.string().describe('ID of the record to retrieve')
+    })
+  }
+};
+
 // App Router API Route Handler
 export async function POST(request: Request) {
   try {
@@ -795,21 +974,526 @@ export async function POST(request: Request) {
     // Get AI model with local API keys
     const model = await getAIModelWithApiKeys();
     
-    // Build system prompt
+    // Build system prompt with tool information
     const systemPrompt = await buildSystemPrompt();
+    const enhancedSystemPrompt = systemPrompt + \`
+
+**TOOL CAPABILITIES:**
+You have access to the following tools to help users:
+
+**COMPLEX ACTION TOOLS:**
+1. **executeAction**: Execute complex business process actions with parameters
+   - Use for AI generation, reports, multi-step workflows, external API integrations
+   - Collect required parameters through conversation
+   - Always confirm parameters before execution
+
+2. **getActionInfo**: Get details about available actions and their required parameters
+   - Use to understand what actions are available
+   - Get parameter requirements for actions
+   - Help users understand what each action does
+
+3. **getExecutionStatus**: Check the status of running action executions
+   - Use to check on long-running actions
+   - Provide real-time updates to users
+
+**CRUD TOOLS (Direct Database Operations):**
+4. **createRecord**: Create new records directly in chat
+   - Use when users want to add new data to any model
+   - Collect field data through conversation
+   - Immediate database operation
+
+5. **updateRecord**: Update existing records directly in chat
+   - Use when users want to modify existing data
+   - Get record ID and new field values
+   - Immediate database operation
+
+6. **deleteRecord**: Delete records directly in chat
+   - Use when users want to remove data
+   - Get record ID and confirm deletion
+   - Immediate database operation
+
+7. **listRecords**: Show records from any model directly in chat
+   - Use when users want to see data
+   - Support filtering and search
+   - Immediate database query
+
+8. **getRecord**: Retrieve specific record details directly in chat
+   - Use when users want to view one specific record
+   - Get record by ID
+   - Immediate database query
+
+**TOOL USAGE GUIDELINES:**
+
+**For CRUD Operations (create, read, update, delete data):**
+- Use CRUD tools (createRecord, updateRecord, deleteRecord, listRecords, getRecord) for direct database operations
+- These provide immediate results in chat without opening modals
+- Best for simple data management tasks
+- Example: "Show me all customers" → use listRecords tool
+- Example: "Create a new product with name 'Widget'" → use createRecord tool
+
+**For Complex Actions (AI generation, reports, workflows):**
+- Use executeAction for complex business processes that require:
+  - AI generation or analysis
+  - Multi-step workflows
+  - External API integrations
+  - Report generation
+  - Complex business logic
+- These open execution modals with progress tracking
+- Example: "Generate weekly sales report" → use executeAction
+- Example: "Sync data from external API" → use executeAction
+
+**CONVERSATION FLOWS:**
+
+**CRUD Flow (Direct in Chat):**
+1. User requests CRUD operation → Use appropriate CRUD tool directly
+2. Show results immediately in chat
+3. Offer to redirect to model page for more complex operations
+
+**Complex Action Flow (Modal Execution):**
+1. User requests complex action → Use getActionInfo to understand requirements
+2. Collect required parameters through conversation
+3. Confirm parameters with user
+4. Execute using executeAction
+5. Provide execution ID for tracking
+6. Use getExecutionStatus for updates if needed
+
+**SMART DETECTION:**
+- Simple data requests → Use CRUD tools
+- Complex workflows → Use executeAction
+- When in doubt, ask user if they want quick chat operation or full workflow execution
+
+Always be helpful and guide users through the action execution process step by step.\`;
 
     // Convert messages and add system message
     const coreMessages = convertToCoreMessages([
-      { role: 'system', content: systemPrompt },
+      { role: 'system', content: enhancedSystemPrompt },
       ...messages
     ]);
 
-    // Stream the response
+    // Stream the response with tools
     const result = await streamText({
       model,
       messages: coreMessages,
       maxTokens: 1000,
       temperature: 0.7,
+      tools: {
+        executeAction: {
+          description: 'Execute a complex action with the provided parameters',
+          parameters: z.object({
+            actionName: z.string().describe('Name of the action to execute'),
+            parameters: z.record(z.any()).describe('Parameters for the action execution')
+          }),
+          execute: async ({ actionName, parameters }) => {
+            try {
+              console.log(\`🚀 Chat tool executing action: \${actionName}\`, parameters);
+              
+              // Execute the action using the local action endpoint
+              const actionResponse = await fetch(\`\${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/actions/\${actionName}\`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ parameters })
+              });
+              
+              const actionResult = await actionResponse.json();
+              
+              if (actionResult.success) {
+                return {
+                  success: true,
+                  result: actionResult.result,
+                  executionId: actionResult.executionId,
+                  executionTime: actionResult.executionTime,
+                  message: \`Action "\${actionName}" executed successfully!\`
+                };
+              } else {
+                return {
+                  success: false,
+                  error: actionResult.error || actionResult.details,
+                  executionId: actionResult.executionId,
+                  message: \`Action "\${actionName}" failed: \${actionResult.error}\`
+                };
+              }
+            } catch (error) {
+              console.error('Tool execution error:', error);
+              return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                message: \`Failed to execute action "\${actionName}"\`
+              };
+            }
+          }
+        },
+        getActionInfo: {
+          description: 'Get information about available actions and their required parameters',
+          parameters: z.object({
+            actionName: z.string().optional().describe('Specific action name to get info for (optional)')
+          }),
+          execute: async ({ actionName }) => {
+            try {
+              const actions = ${JSON.stringify(options.actions)};
+              
+              if (actionName) {
+                const action = actions.find(a => a.name === actionName);
+                if (!action) {
+                  return {
+                    success: false,
+                    error: \`Action "\${actionName}" not found\`,
+                    availableActions: actions.map(a => a.name)
+                  };
+                }
+                
+                // Extract parameter info from action
+                const parameterInfo = action.uiComponentsDesign?.map(component => ({
+                  name: component.name,
+                  type: component.type,
+                  required: component.required,
+                  description: component.description || component.label,
+                  options: component.options?.map(opt => opt.value || opt)
+                })) || [];
+                
+                return {
+                  success: true,
+                  action: {
+                    name: action.name,
+                    title: action.title,
+                    description: action.description,
+                    parameters: parameterInfo
+                  }
+                };
+              } else {
+                // Return all actions
+                return {
+                  success: true,
+                  actions: actions.map(action => ({
+                    name: action.name,
+                    title: action.title,
+                    description: action.description,
+                    parameterCount: action.uiComponentsDesign?.length || 0
+                  }))
+                };
+              }
+            } catch (error) {
+              return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+              };
+            }
+          }
+        },
+        getExecutionStatus: {
+          description: 'Get the status of a running action execution',
+          parameters: z.object({
+            executionId: z.string().describe('Execution ID to check status for')
+          }),
+          execute: async ({ executionId }) => {
+            try {
+              const response = await fetch(\`\${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/execution-logs/\${executionId}\`);
+              const result = await response.json();
+              
+              if (result.success) {
+                const execution = result.data;
+                const totalSteps = execution.steps.length;
+                const completedSteps = execution.steps.filter(step => step.endTime).length;
+                
+                return {
+                  success: true,
+                  execution: {
+                    executionId: execution.executionId,
+                    actionName: execution.actionName,
+                    status: execution.status,
+                    progress: totalSteps > 0 ? \`\${completedSteps}/\${totalSteps} steps\` : 'No steps',
+                    startTime: execution.startTime,
+                    endTime: execution.endTime,
+                    totalExecutionTime: execution.totalExecutionTime,
+                    error: execution.error
+                  }
+                };
+              } else {
+                return {
+                  success: false,
+                  error: result.error || 'Execution not found'
+                };
+              }
+            } catch (error) {
+              return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+              };
+            }
+          }
+        },
+        createRecord: {
+          description: 'Create a new record in a specific model',
+          parameters: z.object({
+            modelName: z.string().describe('Name of the model to create record in'),
+            data: z.record(z.any()).describe('Data for the new record')
+          }),
+                     execute: async ({ modelName, data }) => {
+             try {
+               // Convert PascalCase model name to camelCase for Prisma client access
+               const camelCaseModelName = modelName.charAt(0).toLowerCase() + modelName.slice(1);
+               const modelClient = (prisma as any)[camelCaseModelName];
+               if (!modelClient) {
+                 return {
+                   success: false,
+                   error: \`Model '\${modelName}' not found\`,
+                   details: \`Available models: \${Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_')).join(', ')}\`
+                 };
+               }
+
+               // Process data for datetime and enum fields (same logic as model endpoint)
+               const processedData = { ...data };
+               Object.keys(processedData).forEach(key => {
+                 const value = processedData[key];
+                 if (typeof value === 'string') {
+                   // Handle datetime-local format (YYYY-MM-DDTHH:MM)
+                   if (value.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/)) {
+                     processedData[key] = new Date(value + ':00.000Z').toISOString();
+                   }
+                   // Handle date format (YYYY-MM-DD)
+                   else if (value.match(/^\\d{4}-\\d{2}-\\d{2}$/)) {
+                     processedData[key] = new Date(value + 'T00:00:00.000Z').toISOString();
+                   }
+                   // Handle enum case correction
+                   else if (key === 'gender' && value) {
+                     const genderMap = { 'male': 'Male', 'female': 'Female', 'other': 'Other', 'unknown': 'Unknown' };
+                     const corrected = genderMap[value.toLowerCase()] || value;
+                     if (corrected !== value) {
+                       console.log(\`🔄 Auto-correcting gender: "\${value}" -> "\${corrected}"\`);
+                       processedData[key] = corrected;
+                     }
+                   }
+                 }
+               });
+
+               const newRecord = await modelClient.create({ data: processedData });
+               return {
+                 success: true,
+                 data: newRecord,
+                 message: \`Record created successfully in model \${modelName}\`
+               };
+            } catch (error) {
+              console.error(\`Create record error for \${modelName}:\`, error);
+              return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                details: \`Failed to create record in model \${modelName}. Error: \${error instanceof Error ? error.message : 'Unknown'}\`
+              };
+            }
+          }
+        },
+        updateRecord: {
+          description: 'Update an existing record in a specific model',
+          parameters: z.object({
+            modelName: z.string().describe('Name of the model containing the record'),
+            recordId: z.string().describe('ID of the record to update'),
+            data: z.record(z.any()).describe('Updated data for the record')
+          }),
+                     execute: async ({ modelName, recordId, data }) => {
+             try {
+               // Convert PascalCase model name to camelCase for Prisma client access
+               const camelCaseModelName = modelName.charAt(0).toLowerCase() + modelName.slice(1);
+               const modelClient = (prisma as any)[camelCaseModelName];
+               if (!modelClient) {
+                 return {
+                   success: false,
+                   error: \`Model '\${modelName}' not found\`,
+                   details: \`Available models: \${Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_')).join(', ')}\`
+                 };
+               }
+
+               // Process data for datetime and enum fields (same logic as model endpoint)
+               const processedData = { ...data };
+               Object.keys(processedData).forEach(key => {
+                 const value = processedData[key];
+                 if (typeof value === 'string') {
+                   // Handle datetime-local format (YYYY-MM-DDTHH:MM)
+                   if (value.match(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/)) {
+                     processedData[key] = new Date(value + ':00.000Z').toISOString();
+                   }
+                   // Handle date format (YYYY-MM-DD)
+                   else if (value.match(/^\\d{4}-\\d{2}-\\d{2}$/)) {
+                     processedData[key] = new Date(value + 'T00:00:00.000Z').toISOString();
+                   }
+                   // Handle enum case correction
+                   else if (key === 'gender' && value) {
+                     const genderMap = { 'male': 'Male', 'female': 'Female', 'other': 'Other', 'unknown': 'Unknown' };
+                     const corrected = genderMap[value.toLowerCase()] || value;
+                     if (corrected !== value) {
+                       console.log(\`🔄 Auto-correcting gender: "\${value}" -> "\${corrected}"\`);
+                       processedData[key] = corrected;
+                     }
+                   }
+                 }
+               });
+
+               const updatedRecord = await modelClient.update({
+                 where: { id: recordId },
+                 data: processedData
+               });
+               return {
+                 success: true,
+                 data: updatedRecord,
+                 message: \`Record updated successfully in model \${modelName}\`
+               };
+            } catch (error) {
+              console.error(\`Update record error for \${modelName}:\`, error);
+              return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                details: \`Failed to update record in model \${modelName}. Error: \${error instanceof Error ? error.message : 'Unknown'}\`
+              };
+            }
+          }
+        },
+                 deleteRecord: {
+           description: 'Delete a record from a specific model',
+           parameters: z.object({
+             modelName: z.string().describe('Name of the model containing the record'),
+             recordId: z.string().describe('ID of the record to delete')
+           }),
+           execute: async ({ modelName, recordId }) => {
+             try {
+               // Convert PascalCase model name to camelCase for Prisma client access
+               const camelCaseModelName = modelName.charAt(0).toLowerCase() + modelName.slice(1);
+               const modelClient = (prisma as any)[camelCaseModelName];
+               if (!modelClient) {
+                 return {
+                   success: false,
+                   error: \`Model '\${modelName}' not found\`,
+                   details: \`Available models: \${Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_')).join(', ')}\`
+                 };
+               }
+
+               await modelClient.delete({ where: { id: recordId } });
+               return {
+                 success: true,
+                 message: \`Record deleted successfully from model \${modelName}\`
+               };
+            } catch (error) {
+              console.error(\`Delete record error for \${modelName}:\`, error);
+              return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                details: \`Failed to delete record from model \${modelName}. Error: \${error instanceof Error ? error.message : 'Unknown'}\`
+              };
+            }
+          }
+        },
+                 listRecords: {
+           description: 'List records from a specific model with optional filtering',
+           parameters: z.object({
+             modelName: z.string().describe('Name of the model to list records from'),
+             limit: z.number().optional().describe('Maximum number of records to return (default: 10)'),
+             search: z.string().optional().describe('Search term to filter records')
+           }),
+           execute: async ({ modelName, limit = 10, search }) => {
+             try {
+               // Convert PascalCase model name to camelCase for Prisma client access
+               const camelCaseModelName = modelName.charAt(0).toLowerCase() + modelName.slice(1);
+               const modelClient = (prisma as any)[camelCaseModelName];
+               if (!modelClient) {
+                 return {
+                   success: false,
+                   error: \`Model '\${modelName}' not found\`,
+                   details: \`Available models: \${Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_')).join(', ')}\`
+                 };
+               }
+
+               // Build search conditions if search term provided
+               let where = {};
+               if (search && typeof search === 'string') {
+                 // Try common searchable field names
+                 const searchConditions = [];
+                 const commonFields = ['name', 'title', 'description', 'content', 'email', 'medicationName', 'summary'];
+                 
+                 // Test which fields exist by trying a sample query first
+                 try {
+                   const sampleRecord = await modelClient.findFirst();
+                   if (sampleRecord) {
+                     const availableFields = Object.keys(sampleRecord).filter(key => 
+                       typeof sampleRecord[key] === 'string' && commonFields.includes(key)
+                     );
+                     
+                     availableFields.forEach(field => {
+                       searchConditions.push({ [field]: { contains: search, mode: 'insensitive' } });
+                     });
+                   }
+                 } catch (searchTestError) {
+                   console.warn('Search field test failed, using basic search:', searchTestError);
+                 }
+                 
+                 if (searchConditions.length > 0) {
+                   where = { OR: searchConditions };
+                 }
+               }
+
+               const records = await modelClient.findMany({
+                 where,
+                 take: Math.min(limit, 50), // Cap at 50 records for performance
+                 orderBy: { id: 'desc' } // Show newest first
+               });
+
+               return {
+                 success: true,
+                 data: records || [],
+                 count: records?.length || 0,
+                 message: \`Found \${records?.length || 0} records in \${modelName}\`
+               };
+            } catch (error) {
+              console.error(\`List records error for \${modelName}:\`, error);
+              return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                details: \`Failed to list records from model \${modelName}. Error: \${error instanceof Error ? error.message : 'Unknown'}\`
+              };
+            }
+          }
+        },
+                 getRecord: {
+           description: 'Get a specific record by ID from a model',
+           parameters: z.object({
+             modelName: z.string().describe('Name of the model containing the record'),
+             recordId: z.string().describe('ID of the record to retrieve')
+           }),
+           execute: async ({ modelName, recordId }) => {
+             try {
+               // Convert PascalCase model name to camelCase for Prisma client access
+               const camelCaseModelName = modelName.charAt(0).toLowerCase() + modelName.slice(1);
+               const modelClient = (prisma as any)[camelCaseModelName];
+               if (!modelClient) {
+                 return {
+                   success: false,
+                   error: \`Model '\${modelName}' not found\`,
+                   details: \`Available models: \${Object.keys(prisma).filter(key => !key.startsWith('$') && !key.startsWith('_')).join(', ')}\`
+                 };
+               }
+
+               const record = await modelClient.findUnique({ where: { id: recordId } });
+               if (!record) {
+                 return {
+                   success: false,
+                   error: \`Record '\${recordId}' not found in model \${modelName}\`,
+                   details: \`No record found with ID '\${recordId}' in model \${modelName}\`
+                 };
+               }
+
+               return {
+                 success: true,
+                 data: record,
+                 message: \`Record retrieved successfully from model \${modelName}\`
+               };
+            } catch (error) {
+              console.error(\`Get record error for \${modelName}:\`, error);
+              return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                details: \`Failed to retrieve record '\${recordId}' from model \${modelName}. Error: \${error instanceof Error ? error.message : 'Unknown'}\`
+              };
+            }
+          }
+        }
+      },
+      toolChoice: 'auto'
     });
 
     return result.toDataStreamResponse();
@@ -841,7 +1525,20 @@ export async function POST(request: Request) {
     const actionFunction = ${actionCode};
     
     // Execute the action function directly with access to all libraries
-    const result = await actionFunction();
+    const result = await actionFunction({
+      db: prisma,
+      input: parameters,
+      envVars: {},
+      testMode: false,
+      actionLogger: actionLogger,
+      executionId: executionId,
+      console: console,
+      generateId: () => \`id_\${Date.now()}_\${Math.random().toString(36).substr(2, 9)}\`,
+      formatDate: (date) => date.toISOString(),
+      validateRequired: (value, fieldName) => { if (!value) throw new Error(\`\${fieldName} is required\`); },
+      ai: { generateObject },
+      z: z
+    });
     `;
     } else if (hasGeneratedCode) {
       // If it's raw code, wrap it in a function context
@@ -865,8 +1562,130 @@ import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { z } from 'zod';
+import { createClient } from 'redis';
 
 const prisma = new PrismaClient();
+
+// Redis client for execution logging
+let redis: any = null;
+
+async function getRedisClient() {
+  if (!redis && process.env.REDIS_URL) {
+    try {
+      redis = createClient({ url: process.env.REDIS_URL });
+      await redis.connect();
+      console.log('Redis connected for action execution logging');
+    } catch (error) {
+      console.warn('Redis connection failed, continuing without logging:', error);
+    }
+  }
+  return redis;
+}
+
+// Action execution logger
+class ActionExecutionLogger {
+  constructor(private redis: any) {}
+
+  async startExecution(actionName: string, parameters: any): Promise<string> {
+    if (!this.redis) return 'no-redis';
+    
+    const executionId = \`exec_\${Date.now()}_\${Math.random().toString(36).substr(2, 9)}\`;
+    
+    const executionLog = {
+      executionId,
+      actionName,
+      startTime: new Date().toISOString(),
+      status: 'running',
+      parameters,
+      steps: []
+    };
+
+    try {
+      await this.redis.setEx(\`action_execution:\${executionId}\`, 24 * 60 * 60, JSON.stringify(executionLog));
+      await this.redis.lPush('all_executions', executionId);
+      await this.redis.lTrim('all_executions', 0, 999);
+      console.log(\`🚀 Started action execution: \${executionId} for action: \${actionName}\`);
+    } catch (error) {
+      console.warn('Redis logging failed:', error);
+    }
+    
+    return executionId;
+  }
+
+  async startStep(executionId: string, stepNumber: number, stepName: string, input: any): Promise<void> {
+    if (!this.redis || executionId === 'no-redis') return;
+    
+    try {
+      const executionData = await this.redis.get(\`action_execution:\${executionId}\`);
+      if (!executionData) return;
+
+      const executionLog = JSON.parse(executionData);
+      
+      const stepLog = {
+        stepNumber,
+        stepName,
+        startTime: new Date().toISOString(),
+        input
+      };
+
+      const existingStepIndex = executionLog.steps.findIndex((s: any) => s.stepNumber === stepNumber);
+      if (existingStepIndex >= 0) {
+        executionLog.steps[existingStepIndex] = { ...executionLog.steps[existingStepIndex], ...stepLog };
+      } else {
+        executionLog.steps.push(stepLog);
+      }
+
+      executionLog.steps.sort((a: any, b: any) => a.stepNumber - b.stepNumber);
+      await this.redis.setEx(\`action_execution:\${executionId}\`, 24 * 60 * 60, JSON.stringify(executionLog));
+    } catch (error) {
+      console.warn('Redis step logging failed:', error);
+    }
+  }
+
+  async completeStep(executionId: string, stepNumber: number, output: any, error?: string): Promise<void> {
+    if (!this.redis || executionId === 'no-redis') return;
+    
+    try {
+      const executionData = await this.redis.get(\`action_execution:\${executionId}\`);
+      if (!executionData) return;
+
+      const executionLog = JSON.parse(executionData);
+      const stepIndex = executionLog.steps.findIndex((s: any) => s.stepNumber === stepNumber);
+      
+      if (stepIndex >= 0) {
+        const step = executionLog.steps[stepIndex];
+        step.endTime = new Date().toISOString();
+        step.output = output;
+        step.error = error;
+        step.executionTime = new Date().getTime() - new Date(step.startTime).getTime();
+      }
+
+      await this.redis.setEx(\`action_execution:\${executionId}\`, 24 * 60 * 60, JSON.stringify(executionLog));
+    } catch (error) {
+      console.warn('Redis step completion logging failed:', error);
+    }
+  }
+
+  async completeExecution(executionId: string, success: boolean, result?: any, error?: string): Promise<void> {
+    if (!this.redis || executionId === 'no-redis') return;
+    
+    try {
+      const executionData = await this.redis.get(\`action_execution:\${executionId}\`);
+      if (!executionData) return;
+
+      const executionLog = JSON.parse(executionData);
+      executionLog.endTime = new Date().toISOString();
+      executionLog.status = success ? 'completed' : 'failed';
+      executionLog.error = error;
+      executionLog.totalExecutionTime = new Date().getTime() - new Date(executionLog.startTime).getTime();
+
+      await this.redis.setEx(\`action_execution:\${executionId}\`, 24 * 60 * 60, JSON.stringify(executionLog));
+      console.log(\`🏁 Completed action execution: \${executionId} (\${success ? 'success' : 'failed'})\`);
+    } catch (error) {
+      console.warn('Redis execution completion logging failed:', error);
+    }
+  }
+}
 
 // Get AI model configuration
 async function getAIModel() {
@@ -889,8 +1708,19 @@ async function getAIModel() {
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  let executionId: string = 'no-redis';
+  let actionLogger: ActionExecutionLogger | null = null;
+  
   try {
     const { parameters } = await request.json();
+    
+    // Initialize Redis logging
+    const redisClient = await getRedisClient();
+    if (redisClient) {
+      actionLogger = new ActionExecutionLogger(redisClient);
+      executionId = await actionLogger.startExecution('${action.name}', parameters);
+    }
     
     // Action: ${action.name}
     // Description: ${escapeJSString(action.description || 'No description provided')}
@@ -899,19 +1729,34 @@ export async function POST(request: NextRequest) {
     
     ${wrappedActionCode}
     
+    // Complete execution logging
+    if (actionLogger) {
+      await actionLogger.completeExecution(executionId, true, result);
+    }
+    
     return NextResponse.json({ 
       success: true, 
       action: '${action.name}',
       result: result,
       executedAt: new Date().toISOString(),
-      hasGeneratedCode: ${!!hasGeneratedCode}
+      hasGeneratedCode: ${!!hasGeneratedCode},
+      executionId: executionId !== 'no-redis' ? executionId : undefined,
+      executionTime: Date.now() - startTime
     });
   } catch (error) {
     console.error('Action execution error:', error);
+    
+    // Complete execution logging with error
+    if (actionLogger) {
+      await actionLogger.completeExecution(executionId, false, null, error instanceof Error ? error.message : 'Unknown error');
+    }
+    
     return NextResponse.json({ 
       error: 'Action execution failed',
       details: error instanceof Error ? error.message : 'Unknown error',
-      action: '${action.name}'
+      action: '${action.name}',
+      executionId: executionId !== 'no-redis' ? executionId : undefined,
+      executionTime: Date.now() - startTime
     }, { status: 500 });
   } finally {
     await prisma.$disconnect();
@@ -1013,6 +1858,17 @@ export async function POST(request: NextRequest) {
           executedAt: new Date().toISOString()
         });
         
+        // Log to Redis if logger available
+        if (scheduleLogger) {
+          await scheduleLogger.logActionStep(
+            executionId, 
+            i + 1, 
+            actionName, 
+            step.inputParams || step.input || {}, 
+            actionResult.result || actionResult.data
+          );
+        }
+        
         console.log(\`✅ Step \${i + 1} completed successfully\`);
         
         // Add delay if specified in step configuration
@@ -1031,6 +1887,18 @@ export async function POST(request: NextRequest) {
           error: stepError instanceof Error ? stepError.message : 'Unknown error',
           executedAt: new Date().toISOString()
         });
+        
+        // Log error to Redis if logger available
+        if (scheduleLogger) {
+          await scheduleLogger.logActionStep(
+            executionId, 
+            i + 1, 
+            actionName, 
+            step.inputParams || step.input || {}, 
+            null,
+            stepError instanceof Error ? stepError.message : 'Unknown error'
+          );
+        }
         
         // Stop execution if step is configured to stop on error
         if (step.onError?.action === 'stop') {
@@ -1072,8 +1940,108 @@ import { generateObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { z } from 'zod';
+import { createClient } from 'redis';
 
 const prisma = new PrismaClient();
+
+// Redis client for execution logging
+let redis: any = null;
+
+async function getRedisClient() {
+  if (!redis && process.env.REDIS_URL) {
+    try {
+      redis = createClient({ url: process.env.REDIS_URL });
+      await redis.connect();
+      console.log('Redis connected for schedule execution logging');
+    } catch (error) {
+      console.warn('Redis connection failed, continuing without logging:', error);
+    }
+  }
+  return redis;
+}
+
+// Schedule execution logger (same as action logger but for schedules)
+class ScheduleExecutionLogger {
+  constructor(private redis: any) {}
+
+  async startExecution(scheduleName: string, trigger: string = 'cron'): Promise<string> {
+    if (!this.redis) return 'no-redis';
+    
+    const executionId = \`sched_\${Date.now()}_\${Math.random().toString(36).substr(2, 9)}\`;
+    
+    const executionLog = {
+      executionId,
+      actionName: scheduleName, // Use actionName for consistency with action logs
+      scheduleName,
+      trigger,
+      startTime: new Date().toISOString(),
+      status: 'running',
+      parameters: { trigger },
+      steps: []
+    };
+
+    try {
+      await this.redis.setEx(\`action_execution:\${executionId}\`, 24 * 60 * 60, JSON.stringify(executionLog));
+      await this.redis.lPush('all_executions', executionId);
+      await this.redis.lTrim('all_executions', 0, 999);
+      console.log(\`🚀 Started schedule execution: \${executionId} for schedule: \${scheduleName}\`);
+    } catch (error) {
+      console.warn('Redis logging failed:', error);
+    }
+    
+    return executionId;
+  }
+
+  async logActionStep(executionId: string, stepNumber: number, actionName: string, input: any, result: any, error?: string): Promise<void> {
+    if (!this.redis || executionId === 'no-redis') return;
+    
+    try {
+      const executionData = await this.redis.get(\`action_execution:\${executionId}\`);
+      if (!executionData) return;
+
+      const executionLog = JSON.parse(executionData);
+      
+      const stepLog = {
+        stepNumber,
+        stepName: \`Execute Action: \${actionName}\`,
+        startTime: new Date().toISOString(),
+        endTime: new Date().toISOString(),
+        input,
+        output: result,
+        error,
+        executionTime: 0 // Will be calculated based on action execution time
+      };
+
+      executionLog.steps.push(stepLog);
+      executionLog.steps.sort((a: any, b: any) => a.stepNumber - b.stepNumber);
+      await this.redis.setEx(\`action_execution:\${executionId}\`, 24 * 60 * 60, JSON.stringify(executionLog));
+      
+      console.log(\`📝 Logged action step \${stepNumber} (\${actionName}) for schedule execution: \${executionId}\`);
+    } catch (error) {
+      console.warn('Redis action step logging failed:', error);
+    }
+  }
+
+  async completeExecution(executionId: string, success: boolean, result?: any, error?: string): Promise<void> {
+    if (!this.redis || executionId === 'no-redis') return;
+    
+    try {
+      const executionData = await this.redis.get(\`action_execution:\${executionId}\`);
+      if (!executionData) return;
+
+      const executionLog = JSON.parse(executionData);
+      executionLog.endTime = new Date().toISOString();
+      executionLog.status = success ? 'completed' : 'failed';
+      executionLog.error = error;
+      executionLog.totalExecutionTime = new Date().getTime() - new Date(executionLog.startTime).getTime();
+
+      await this.redis.setEx(\`action_execution:\${executionId}\`, 24 * 60 * 60, JSON.stringify(executionLog));
+      console.log(\`🏁 Completed schedule execution: \${executionId} (\${success ? 'success' : 'failed'})\`);
+    } catch (error) {
+      console.warn('Redis execution completion logging failed:', error);
+    }
+  }
+}
 
 // Get AI model configuration
 async function getAIModel() {
@@ -1096,6 +2064,10 @@ async function getAIModel() {
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  let executionId: string = 'no-redis';
+  let scheduleLogger: ScheduleExecutionLogger | null = null;
+  
   // Verify cron secret for manual calls, but allow Vercel's automatic cron execution
   const cronSecret = request.headers.get('x-cron-secret') || request.nextUrl.searchParams.get('secret');
   const userAgent = request.headers.get('user-agent') || '';
@@ -1108,27 +2080,51 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // Initialize Redis logging
+    const redisClient = await getRedisClient();
+    if (redisClient) {
+      scheduleLogger = new ScheduleExecutionLogger(redisClient);
+      const trigger = isVercelCron ? 'vercel-cron' : 'manual';
+      executionId = await scheduleLogger.startExecution('${schedule.name}', trigger);
+    }
+    
     console.log('🕐 Executing schedule: ${schedule.name}');
     console.log('📝 Description: ${escapeJSString(schedule.description || 'No description provided')}');
     console.log('⏰ Pattern: ${schedule.trigger?.pattern || '*/5 * * * *'}');
     console.log('🔢 Steps: ${schedule.steps?.length || 0} action steps');
     console.log('🔑 Auth method:', isVercelCron ? 'Vercel Cron' : 'Manual with secret');
+    console.log('🆔 Execution ID:', executionId);
     
     ${scheduleExecutionCode}
+    
+    // Complete schedule execution logging
+    if (scheduleLogger) {
+      await scheduleLogger.completeExecution(executionId, result.success, result);
+    }
     
     return NextResponse.json({ 
       success: true, 
       schedule: '${schedule.name}',
       executedAt: new Date().toISOString(),
       result: result,
-      hasSteps: ${hasSteps}
+      hasSteps: ${hasSteps},
+      executionId: executionId !== 'no-redis' ? executionId : undefined,
+      executionTime: Date.now() - startTime
     });
   } catch (error) {
     console.error('Schedule execution error:', error);
+    
+    // Complete schedule execution logging with error
+    if (scheduleLogger) {
+      await scheduleLogger.completeExecution(executionId, false, null, error instanceof Error ? error.message : 'Unknown error');
+    }
+    
     return NextResponse.json({ 
       error: 'Schedule execution failed',
       details: error instanceof Error ? error.message : 'Unknown error',
-      schedule: '${schedule.name}'
+      schedule: '${schedule.name}',
+      executionId: executionId !== 'no-redis' ? executionId : undefined,
+      executionTime: Date.now() - startTime
     }, { status: 500 });
   } finally {
     await prisma.$disconnect();
@@ -1286,6 +2282,171 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: false,
       error: 'Failed to return local configuration',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}`;
+  }
+
+  private generateExecutionLogsEndpoint(options: MobileAppTemplateOptions): string {
+    const agentActionNames = options.actions.map(a => a.name);
+    const agentScheduleNames = options.schedules.map(s => s.name);
+    const agentName = options.agentConfig?.name || options.projectName;
+    
+    return `import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from 'redis';
+
+// Make this route dynamic to handle search params
+export const dynamic = 'force-dynamic';
+
+let redis: any = null;
+
+async function getRedisClient() {
+  if (!redis && process.env.REDIS_URL) {
+    try {
+      redis = createClient({ url: process.env.REDIS_URL });
+      await redis.connect();
+    } catch (error) {
+      console.warn('Redis connection failed:', error);
+      return null;
+    }
+  }
+  return redis;
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const redisClient = await getRedisClient();
+    if (!redisClient) {
+      return NextResponse.json({
+        success: false,
+        error: 'Redis not available'
+      }, { status: 503 });
+    }
+
+    const { searchParams } = request.nextUrl;
+    const limit = parseInt(searchParams.get('limit') || '20', 10);
+    
+    // Get available action names for this specific agent
+    const agentActionNames = ${JSON.stringify(agentActionNames)};
+    const agentScheduleNames = ${JSON.stringify(agentScheduleNames)};
+    const agentName = '${agentName}';
+    
+    console.log(\`🔍 Filtering execution logs for agent: \${agentName}\`);
+    console.log(\`📋 Agent actions: \${agentActionNames.join(', ')}\`);
+    console.log(\`📋 Agent schedules: \${agentScheduleNames.join(', ')}\`);
+
+    // Get all execution IDs and filter for this agent's actions/schedules only
+    const allExecutionIds = await redisClient.lRange('all_executions', 0, limit * 3); // Get more to filter from
+    
+    const agentExecutions = [];
+    for (const executionId of allExecutionIds) {
+      try {
+        const executionData = await redisClient.get(\`action_execution:\${executionId}\`);
+        if (executionData) {
+          const execution = JSON.parse(executionData);
+          
+          // Only include executions for this agent's actions or schedules
+          if (agentActionNames.includes(execution.actionName) || 
+              agentScheduleNames.includes(execution.scheduleName) ||
+              agentScheduleNames.includes(execution.actionName)) {
+            agentExecutions.push(execution);
+          }
+        }
+      } catch (parseError) {
+        console.warn('Failed to parse execution data:', parseError);
+      }
+      
+      // Stop when we have enough results
+      if (agentExecutions.length >= limit) {
+        break;
+      }
+    }
+    
+    console.log(\`✅ Found \${agentExecutions.length} execution logs for agent \${agentName}\`);
+
+    return NextResponse.json({
+      success: true,
+      data: agentExecutions,
+      count: agentExecutions.length
+    });
+
+  } catch (error) {
+    console.error('❌ Failed to retrieve execution logs:', error);
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to retrieve execution logs',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
+  }
+}`;
+  }
+
+  private generateExecutionLogByIdEndpoint(): string {
+    return `import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from 'redis';
+
+// Make this route dynamic to handle dynamic params
+export const dynamic = 'force-dynamic';
+
+let redis: any = null;
+
+async function getRedisClient() {
+  if (!redis && process.env.REDIS_URL) {
+    try {
+      redis = createClient({ url: process.env.REDIS_URL });
+      await redis.connect();
+    } catch (error) {
+      console.warn('Redis connection failed:', error);
+      return null;
+    }
+  }
+  return redis;
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { executionId: string } }
+) {
+  try {
+    const { executionId } = params;
+
+    if (!executionId) {
+      return NextResponse.json({
+        success: false,
+        error: 'Execution ID is required'
+      }, { status: 400 });
+    }
+
+    const redisClient = await getRedisClient();
+    if (!redisClient) {
+      return NextResponse.json({
+        success: false,
+        error: 'Redis not available'
+      }, { status: 503 });
+    }
+
+    const executionData = await redisClient.get(\`action_execution:\${executionId}\`);
+    
+    if (!executionData) {
+      return NextResponse.json({
+        success: false,
+        error: 'Execution not found'
+      }, { status: 404 });
+    }
+
+    const execution = JSON.parse(executionData);
+
+    return NextResponse.json({
+      success: true,
+      data: execution
+    });
+
+  } catch (error) {
+    console.error('❌ Failed to retrieve execution log:', error);
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to retrieve execution log',
       details: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }

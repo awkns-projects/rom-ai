@@ -542,28 +542,51 @@ Convert the inferred semantic requirements into concrete technical specification
 
 FOR EVERY MODEL, ACTION, AND SCHEDULE, GENERATE TWO DISTINCT VALUES:
 
-1. **name**: MUST be camelCase with NO spaces (e.g., "syncCustomerData", "dailyReportGeneration", "userProfileModel")
+**FOR DATABASE MODELS:**
+1. **name**: MUST be PascalCase with NO spaces and NO "Model" suffix (e.g., "Customer", "Product", "Order")
+   - Start with uppercase letter
+   - No spaces, hyphens, underscores, or special characters
+   - Use PascalCase for multiple words
+   - This follows Prisma schema conventions
+   - NEVER add "Model" suffix - it's redundant and breaks conventions
+
+2. **title**: MUST be properly spaced, capitalized text (e.g., "Customer", "Product", "Order")
+   - Use normal spacing between words if multiple words
+   - Proper capitalization (Title Case)
+   - This is what users will see in the interface
+
+**FOR ACTIONS AND SCHEDULES:**
+1. **name**: MUST be camelCase with NO spaces (e.g., "syncCustomerData", "generateDailyReport")
    - Start with lowercase letter
    - No spaces, hyphens, underscores, or special characters
    - Use camelCase for multiple words
-   - This will be used internally in code, APIs, and database
 
-2. **title**: MUST be properly spaced, capitalized text (e.g., "Sync Customer Data", "Daily Report Generation", "User Profile Model")
+2. **title**: MUST be properly spaced, capitalized text (e.g., "Sync Customer Data", "Generate Daily Report")
    - Use normal spacing between words
    - Proper capitalization (Title Case)
-   - This is what users will see in the interface
-   - Should be the human-readable version of the name
 
 EXAMPLES OF CORRECT NAMING:
-- ✅ name: "customerProfileModel", title: "Customer Profile Model"
+**Models:**
+- ✅ name: "Customer", title: "Customer"
+- ✅ name: "PatientRecord", title: "Patient Record"
+- ✅ name: "MedicalDiagnosis", title: "Medical Diagnosis"
+
+**Actions:**
 - ✅ name: "syncInventoryData", title: "Sync Inventory Data"
-- ✅ name: "dailyHealthReport", title: "Daily Health Report"
+- ✅ name: "generateDailyReport", title: "Generate Daily Report"
 - ✅ name: "processOrderQueue", title: "Process Order Queue"
 
 ❌ WRONG NAMING PATTERNS:
+**Models:**
+- name: "customerModel" (has "Model" suffix - wrong!)
 - name: "Customer Profile" (has spaces)
+- name: "customer-profile" (has hyphens)
+- name: "customerprofile" (not properly capitalized)
+
+**Actions:**
+- name: "Sync Inventory Data" (has spaces)
 - name: "sync-inventory-data" (has hyphens)
-- title: "customerProfile" (no spaces, not user-friendly)
+- title: "syncInventoryData" (no spaces, not user-friendly)
 - title: "sync inventory data" (not properly capitalized)
 
 BOTH name AND title MUST BE PROVIDED FOR EVERY ENTITY.`;

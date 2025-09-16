@@ -48,6 +48,8 @@ export interface Step2Output {
 
 // Old generateActionExecutableCode function moved to action-generation-shared.ts
 
+
+
 /**
  * AI-powered business process action generation (replaces hardcoded logic)
  */
@@ -75,7 +77,20 @@ BUSINESS CONTEXT:
   '- No external APIs specified'
 }
 
-🚨 CRITICAL BATCH PROCESSING REQUIREMENTS:
+🚨 CRITICAL: FOCUS ON COMPLEX BUSINESS PROCESS ACTIONS
+
+**NOTE: CRUD actions are automatically generated separately and not needed here**
+
+**GENERATE: COMPLEX BUSINESS PROCESS ACTIONS**
+Generate advanced actions that require:
+- AI generation/analysis
+- Complex multi-step workflows
+- Multiple database operations
+- Report generation
+- External API integrations
+- actionType: "complex"
+
+🚨 CRITICAL BATCH PROCESSING REQUIREMENTS (for COMPLEX actions only):
 
 **ZERO MANUAL SELECTION ALLOWED - ONLY AUTOMATED SCANNING/FILTERING:**
 
@@ -106,103 +121,89 @@ BUSINESS CONTEXT:
 
 REQUIREMENTS:
 
-1. BUSINESS PROCESS FOCUS:
+1. COMPLEX BUSINESS PROCESS ACTIONS:
    - Generate actions that represent complete business workflows
    - Each action should orchestrate multiple steps and systems
    - Focus on automation and integration between systems
    - Actions should solve real business problems, not just data operations
+   - actionType: "complex"
 
-2. BATCH-FIRST DESIGN PRINCIPLES:
+3. BATCH-FIRST DESIGN PRINCIPLES (for complex actions):
    - Start with filtering criteria (date ranges, status, categories, etc.)
    - Process collections of items throughout the workflow
    - Use batch operations for updates/creates/deletes
    - Design smart defaults for filters when none provided
    - Ensure workflows scale from 1 to 1000+ items
 
-3. PARAMETER CHAINING AWARENESS:
+4. PARAMETER CHAINING AWARENESS:
    - Design actions that produce useful outputs for chaining (IDs, status, data objects)
    - Consider how actions can work together in sequences
    - Make outputs descriptive and reusable (e.g., "customerIds", "reportUrl", "processedData")
    - Think about common workflow patterns where one action feeds into another
 
-4. EXTERNAL API INTEGRATION:
+5. EXTERNAL API INTEGRATION:
    - If external APIs are specified, create actions that leverage those APIs
    - Each API should have at least one dedicated integration action
    - Design actions that combine multiple APIs for workflow automation
    - Focus on API-to-API orchestration and data synchronization
 
-5. ACTION TYPES:
-   - 'mutation': Actions that create, update, or modify data across systems
-   - 'query': Actions that analyze, generate insights, or retrieve complex data
+6. ACTION TYPES:
+   - CRUD actions: actionType: "crud" - redirect to model pages
+   - Complex actions: actionType: "complex" - execute with modal and tracking
 
-6. AVOID BASIC CRUD:
-   - Don't generate actions like "Create Record", "Update Item", "Delete Entry"
-   - Users already have basic database operations available
-   - Focus on business logic that adds significant value
+EXAMPLES OF COMPLEX ACTIONS (actionType: "complex"):
+- "Generate Weekly Sales Report" (AI analysis + report generation)
+- "Sync Customer Data from External API" (API integration + batch processing)
+- "Analyze Product Performance" (complex queries + AI insights)
+- "Process Order Fulfillment Workflow" (multi-step business process)
 
-7. EXAMPLES OF CHAINABLE BATCH BUSINESS PROCESS ACTIONS:
-   - "Import Customer Data" → processes all customers → outputs customerIds → feeds into "Send Welcome Email Campaign"
-   - "Analyze Sales Data" → analyzes all sales → outputs reportId → feeds into "Generate Dashboard"
-   - "Process Orders Batch" → processes all pending orders → outputs orderIds → feeds into "Update Inventory Levels"
-   - "Fetch User Preferences" → gets all user preferences → outputs preferences → feeds into "Customize Experience Campaign"
-   - "Validate Product Data" → validates all products → outputs validatedData → feeds into "Sync to Catalog"
-
-8. INPUT PARAMETER DESIGN:
-   Actions should accept parameters directly as defined in their pseudo steps.
-   Parameters should be intuitive and match the action's natural requirements.
-
-**ACTION DESIGN EXAMPLES:**
-
-✅ GOOD ACTION DESIGNS:
-- "Generate Weekly Report" (takes date range parameters)
-- "Update Customer Profile" (takes customer ID and update data)
-- "Process Order" (takes order ID and processing options)
-- "Send Email Campaign" (takes campaign parameters and recipient criteria)
-
-Generate 3-5 meaningful business process actions that can work independently OR be chained together for complex automation workflows.
+Generate actions that represent complete business processes AND can be chained together for complex workflows.
 
 🚨 CRITICAL NAMING FORMAT REQUIREMENTS:
 
 FOR EACH ACTION, GENERATE TWO DISTINCT VALUES:
 
-1. **name**: MUST be camelCase with NO spaces (e.g., "syncCustomerData", "generateSalesReport", "processOrderBatch")
+1. **name**: MUST be camelCase with NO spaces (e.g., "createCustomerRecord", "generateSalesReport", "processOrderBatch")
    - Start with lowercase letter
    - No spaces, hyphens, underscores, or special characters
    - Use camelCase for multiple words
    - This will be used internally in code and APIs
 
-2. **title**: MUST be properly spaced, capitalized text (e.g., "Sync Customer Data", "Generate Sales Report", "Process Order Batch")
+2. **title**: MUST be properly spaced, capitalized text (e.g., "Create Customer Record", "Generate Sales Report", "Process Order Batch")
    - Use normal spacing between words
    - Proper capitalization (Title Case)
    - This is what users will see in the interface
    - Should be the human-readable version of the name
 
 EXAMPLES OF CORRECT NAMING:
-- ✅ name: "syncCustomerProfiles", title: "Sync Customer Profiles"
-- ✅ name: "generateWeeklyReport", title: "Generate Weekly Report"
-- ✅ name: "processOrderQueue", title: "Process Order Queue"
-- ✅ name: "updateInventoryLevels", title: "Update Inventory Levels"
+- ✅ name: "createCustomerRecord", title: "Create Customer Record", actionType: "crud", crudOperation: "create", targetModel: "Customer"
+- ✅ name: "generateWeeklyReport", title: "Generate Weekly Report", actionType: "complex"
+- ✅ name: "updateProductRecord", title: "Update Product Record", actionType: "crud", crudOperation: "update", targetModel: "Product"
+- ✅ name: "syncInventoryData", title: "Sync Inventory Data", actionType: "complex"
 
 ❌ WRONG NAMING PATTERNS:
-- name: "Sync Customer Data" (has spaces)
-- name: "sync-customer-data" (has hyphens)
-- title: "syncCustomerData" (no spaces, not user-friendly)
-- title: "sync customer data" (not properly capitalized)
+- name: "Create Customer Data" (has spaces)
+- name: "sync-inventory-data" (has hyphens)
+- title: "createCustomerRecord" (no spaces, not user-friendly)
+- title: "sync inventory data" (not properly capitalized)
 
 BOTH name AND title MUST BE PROVIDED FOR EVERY ACTION.`;
 
   const result = await generateObject({
     model,
     schema: z.object({
-            actions: z.array(z.object({
-        name: z.string().describe('camelCase identifier for internal use (e.g., "syncCustomerData", "generateSalesReport") - NO SPACES, will be used in code'),
-        title: z.string().describe('User-friendly display name with proper spacing and capitalization (e.g., "Sync Customer Data", "Generate Sales Report") - what users see'),
+      actions: z.array(z.object({
+        name: z.string().describe('camelCase identifier for internal use (e.g., "createCustomerRecord", "generateSalesReport") - NO SPACES, will be used in code'),
+        title: z.string().describe('User-friendly display name with proper spacing and capitalization (e.g., "Create Customer Record", "Generate Sales Report") - what users see'),
         purpose: z.string().describe('Detailed description of the complete workflow including external API integrations'),
         operation: z.literal('create').describe('All generated actions are new'),
+        actionType: z.enum(['crud', 'complex']).describe('Type of action: "crud" for model operations, "complex" for business processes'),
+        crudOperation: z.enum(['create', 'read', 'update', 'delete', 'list']).optional().describe('CRUD operation type (only for crud actions)'),
+        targetModel: z.string().optional().describe('Target model name (only for crud actions)'),
         businessValue: z.string().describe('Explanation of the business value and automation benefit'),
         expectedOutputs: z.array(z.string()).describe('List of key outputs this action produces that could be used by other actions (e.g., "customerId", "reportUrl", "processedData")').optional(),
         chainingSuggestions: z.string().describe('Brief note on how this action could work with others in a chained workflow').optional()
-      })).min(3).max(5).describe('Business process actions that integrate systems and automate workflows')
+      })).min(3).max(15).describe('CRUD actions for all models PLUS business process actions that integrate systems and automate workflows')
     }),
     messages: [
       {
@@ -211,13 +212,14 @@ BOTH name AND title MUST BE PROVIDED FOR EVERY ACTION.`;
       },
       {
         role: 'user',
-        content: `Based on the business context "${businessContext}" and domain "${entityType}", generate business process actions that:
+        content: `Based on the business context "${businessContext}" and domain "${entityType}", generate COMPLEX BUSINESS PROCESS ACTIONS that:
 
 1. Leverage the available external APIs: ${externalApis.map((api: any) => api.provider).join(', ') || 'none'}
-2. Automate complete business workflows (not individual database operations)
+2. Require AI generation, analysis, or complex processing
 3. Integrate multiple systems for end-to-end automation
-4. Solve real business problems and add significant value
-5. 🔗 PRODUCE CHAINABLE OUTPUTS: Design actions that output useful data for parameter chaining
+4. Generate reports or insights
+5. Perform multi-step workflows that can't be done with simple database queries
+6. 🔗 PRODUCE CHAINABLE OUTPUTS: Design actions that output useful data for parameter chaining
 
 ${hasExternalApis ? 
   `Focus heavily on integrating these external services into comprehensive workflows that span multiple systems. Consider how data flows between different APIs and services.` :
@@ -229,11 +231,13 @@ ${hasExternalApis ?
 - Action 2: "Send Welcome Email" → uses customerId from Action 1
 - Action 3: "Setup Customer Dashboard" → uses customerData from Action 1
 
-Generate actions that represent complete business processes AND can be chained together for complex workflows.`
+Generate 3-7 complex business process actions that represent complete workflows and can be chained together.
+
+**NOTE: Do not generate basic CRUD actions (Create/Read/Update/Delete) as these are handled automatically by the system.**`
       }
     ],
     temperature: 0.3,
-    maxTokens: 1500
+    maxTokens: 2000
   });
 
   console.log(`✅ AI generated ${result.object.actions.length} business process actions`);
@@ -258,6 +262,9 @@ Generate actions that represent complete business processes AND can be chained t
     title: action.title,
     purpose: action.purpose,
     operation: action.operation,
+    actionType: action.actionType,
+    crudOperation: action.crudOperation,
+    targetModel: action.targetModel,
     _aiGenerated: true,
     businessValue: action.businessValue,
     expectedOutputs: action.expectedOutputs || [],
@@ -408,29 +415,37 @@ export async function executeStep2ActionGeneration(
       }
     }
     
-    // If no specific actions defined, use AI to generate intelligent actions based on business context
-    let actionsToGenerate = actionRequirements;
-    if (actionsToGenerate.length === 0) {
-      console.log('📝 No specific actions defined, using AI to generate business process actions based on context');
-      
+    // Generate only complex business process actions (CRUD handled via Data Models UI + Chat tools)
+    let actionsToGenerate: any[] = [];
+    
+    if (actionRequirements.length > 0) {
+      console.log(`📋 Step 0 provided ${actionRequirements.length} specific action requirements`);
+      // Filter out any CRUD actions from Step 0 requirements
+      actionsToGenerate = actionRequirements.filter(action => (action as any).actionType !== 'crud');
+      console.log(`✅ Using ${actionsToGenerate.length} complex actions from Step 0 (${actionRequirements.length - actionsToGenerate.length} CRUD actions filtered out)`);
+    } else {
+      console.log('📝 No specific actions from Step 0, generating AI-powered business process actions');
       actionsToGenerate = await generateBusinessProcessActions(
         businessContext,
         entityType,
         step0Analysis,
         availableModels
       );
-      
-      console.log(`🎯 AI Generated ${actionsToGenerate.length} business process actions`);
-      console.log(`🔧 Action Types: ${actionsToGenerate.map(a => a.name).join(', ')}`);
+      console.log(`✅ AI Generated ${actionsToGenerate.length} business process actions`);
     }
+    
+    console.log(`🎯 Total Actions to Generate: ${actionsToGenerate.length} (complex actions only)`);
+    console.log(`🔧 Complex Actions: ${actionsToGenerate.map((a: any) => a.name).join(', ')}`);
+    console.log(`📊 CRUD Operations: Available via Data Models UI and Chat interface tools`);
     
     console.log(`🔨 Generating ${actionsToGenerate.length} complete actions...`);
     
-    // Generate complete actions following the API route pattern
+    // Generate complete complex actions (no CRUD actions to process)
     const completeActions = await Promise.all(
       actionsToGenerate.map(async (actionSpec: any, index: number) => {
-        console.log(`\n🔄 Processing action ${index + 1}/${actionsToGenerate.length}: ${actionSpec.name}`);
+        console.log(`\n🔄 Processing complex action ${index + 1}/${actionsToGenerate.length}: ${actionSpec.name}`);
         
+        // All actions here are complex actions - generate full implementation
         return await createCompleteAction(
           actionSpec,
           availableModels,
@@ -457,7 +472,7 @@ export async function executeStep2ActionGeneration(
       console.log(`✅ Final action count: ${finalActions.length} (${existingActionsToKeep.length} existing + ${completeActions.length} new)`);
     }
     
-    // Calculate implementation complexity
+    // Calculate implementation complexity (only complex actions now)
     const codeGeneratedCount = finalActions.filter((a: any) => a._internal?.hasRealCode).length;
     const hasExternalAPIs = step0Analysis.externalApis && step0Analysis.externalApis.length > 0;
     const hasComplexDatabase = databaseGeneration.models.length > 3;
@@ -472,22 +487,24 @@ export async function executeStep2ActionGeneration(
     const result: Step2Output = {
       actions: finalActions,
       implementationComplexity,
-      implementationNotes: `Generated ${finalActions.length} actions following NEW 3-step pattern (technical spec → pseudo steps → executable code). ` +
+      implementationNotes: `Generated ${finalActions.length} complex business process actions. ` +
         `${codeGeneratedCount} actions have executable code. ` +
         `Step 0 identified ${actionRequirements.length} required actions. ` +
-        `Implementation complexity: ${implementationComplexity} (${hasExternalAPIs ? 'external APIs, ' : ''}${hasComplexDatabase ? 'complex database, ' : ''}${finalActions.length} total actions). ` +
+        `CRUD operations available via Data Models UI and Chat interface tools. ` +
+        `Implementation complexity: ${implementationComplexity} (${hasExternalAPIs ? 'external APIs, ' : ''}${hasComplexDatabase ? 'complex database, ' : ''}${finalActions.length} actions). ` +
         `${webSearchResults?.integrationNotes.join(' ') || ''}`,
       webSearchResults
     };
 
-    console.log('✅ STEP 2: Action generation with NEW 3-step pattern completed successfully');
+    console.log('✅ STEP 2: Action generation completed successfully');
     console.log(`🎯 Final Summary:
-- Total Actions: ${result.actions.length}
+- Total Actions: ${result.actions.length} (complex actions only)
 - Actions with Executable Code: ${codeGeneratedCount}
 - Actions with Technical Specifications: ${result.actions.filter((a: any) => a.technicalSpecification).length}
 - Actions with Pseudo Steps: ${result.actions.filter((a: any) => a.pseudoSteps?.length > 0).length}
 - Implementation Complexity: ${implementationComplexity}
-- NEW Pattern: ✅ Technical Spec → ✅ Pseudo Steps → ✅ Executable Code`);
+- CRUD Operations: Available via Data Models UI and Chat tools
+- Optimization: ✅ No CRUD action generation overhead`);
 
     return result;
     
@@ -552,7 +569,7 @@ export function extractActionInsights(output: Step2Output) {
     actionCount: output.actions.length,
     hasCustomCode: actionsWithCode.length > 0,
     hasPromptExecution: actionsWithPrompts.length > 0,
-    primaryActionTypes: [...new Set(output.actions.map((a: any) => a.type || 'query'))],
+    primaryActionTypes: Array.from(new Set(output.actions.map((a: any) => a.type || 'query'))),
     codeGenerationSuccess: actionsWithCode.length / output.actions.length,
     implementationComplexity: output.implementationComplexity,
     executableActionsCount: actionsWithCode.length,

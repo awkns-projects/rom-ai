@@ -9,6 +9,7 @@ import { CrossIcon, PlusIcon } from '@/components/icons';
 import { StepFieldEditor } from './StepFieldEditor';
 import { ModelExecutionChangesViewer } from './ModelExecutionChangesViewer';
 import { ActionMindMapEditor } from './ActionMindMapEditor';
+import { ExecutionTracker } from '@/components/execution-logs/execution-tracker';
 import type { AgentAction, EnvVar, PseudoCodeStep, StepField, AgentModel } from '../../types';
 import { generateNewId } from '../../utils';
 
@@ -83,6 +84,8 @@ export const ActionEditor = memo(({
   const [actionInputParameters, setActionInputParameters] = useState<InputParameter[]>([]);
   const [inputParametersCollapsed, setInputParametersCollapsed] = useState(true);
   const [outputParametersCollapsed, setOutputParametersCollapsed] = useState(true);
+  const [showExecutionTracker, setShowExecutionTracker] = useState(false);
+  const [currentExecutionId, setCurrentExecutionId] = useState<string | null>(null);
 
   // AI Generation Effect CSS
   const aiGeneratingCardClass = `
@@ -547,6 +550,9 @@ export const ActionEditor = memo(({
 
     setIsExecuting(true);
     setExecutionResult(null);
+    
+    // Show execution tracker
+    setShowExecutionTracker(true);
 
     try {
       const response = await fetch('/api/agent/execute-action', {
@@ -559,17 +565,27 @@ export const ActionEditor = memo(({
           code: executeCode,
           inputParameters: inputValues,
           envVars: envVarValues,
-          testMode
+          testMode,
+          actionName: action.name || action.title || 'Unknown Action'
         }),
       });
 
       const result = await response.json();
       setExecutionResult(result);
+      
+      // Set execution ID for tracking
+      if (result.executionId) {
+        setCurrentExecutionId(result.executionId);
+      }
 
       if (result.success) {
         const modeText = testMode ? 'test' : 'production';
         const dbUpdateText = result.databaseUpdated ? 'Database updated successfully!' : 'Database not modified (test mode)';
-        alert(`Action executed successfully in ${modeText} mode!\n\nExecution time: ${result.executionTime}ms\n${dbUpdateText}\n\nModels affected: ${result.modelsAffected?.map((m: any) => `${m.name} (${m.recordCount} records)`).join(', ') || 'None'}`);
+        
+        // Don't show alert immediately - let user see the execution tracker first
+        setTimeout(() => {
+          alert(`Action executed successfully in ${modeText} mode!\n\nExecution time: ${result.executionTime}ms\n${dbUpdateText}\n\nModels affected: ${result.modelsAffected?.map((m: any) => `${m.name} (${m.recordCount} records)`).join(', ') || 'None'}`);
+        }, 2000); // Wait 2 seconds to let user see the execution steps
       } else {
         alert(`Action execution failed:\n${result.error || 'Unknown error'}`);
       }
@@ -1668,6 +1684,48 @@ export const ActionEditor = memo(({
                 >
                   Execute ({executionMode === 'test' ? 'Test' : 'Production'})
                 </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Execution Tracker Modal */}
+        {showExecutionTracker && currentExecutionId && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-gray-900 border border-green-500/30 rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-green-200 font-mono">
+                  🚀 Executing: {action.name}
+                </h3>
+                <Button
+                  onClick={() => {
+                    setShowExecutionTracker(false);
+                    setCurrentExecutionId(null);
+                  }}
+                  variant="outline"
+                  className="px-3 py-1 text-sm"
+                >
+                  Close
+                </Button>
+              </div>
+              
+              <div className="text-green-400 text-sm font-mono mb-4">
+                Mode: {executionMode === 'test' ? '🧪 Test' : '🚀 Production'} | 
+                Execution ID: {currentExecutionId}
+              </div>
+              
+              <ExecutionTracker
+                executionId={currentExecutionId}
+                title={action.name}
+                compact={false}
+                showSteps={true}
+                maxHeight="400px"
+              />
+              
+              <div className="mt-4 text-center">
+                <p className="text-green-400/70 text-sm font-mono">
+                  {isExecuting ? 'Execution in progress...' : 'Execution completed'}
+                </p>
               </div>
             </div>
           </div>

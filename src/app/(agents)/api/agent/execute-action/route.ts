@@ -4,6 +4,7 @@ import { auth } from '@/app/(auth)/auth';
 import { getDocumentById, saveOrUpdateDocument } from '@/lib/db/queries';
 import { generateObject } from 'ai';
 import { getAgentBuilderModel } from '@/lib/ai/tools/agent-builder/generation';
+import { getActionLogger } from '@/lib/redis/client';
 
 // Schema for the execution request
 const ExecuteActionSchema = z.object({
@@ -11,7 +12,8 @@ const ExecuteActionSchema = z.object({
   code: z.string().describe('JavaScript code to execute'),
   inputParameters: z.record(z.any()).describe('Input parameters for the code'),
   envVars: z.record(z.string()).describe('Environment variables'),
-  testMode: z.boolean().default(false).describe('Whether this is a test run (no database updates)')
+  testMode: z.boolean().default(false).describe('Whether this is a test run (no database updates)'),
+  actionName: z.string().optional().describe('Name of the action being executed (for logging)')
 });
 
 export async function POST(request: NextRequest) {
@@ -23,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const validatedData = ExecuteActionSchema.parse(body);
-    const { documentId, code, inputParameters, envVars, testMode } = validatedData;
+    const { documentId, code, inputParameters, envVars, testMode, actionName } = validatedData;
 
     // Fetch the document to get the real database structure and records
     const document = await getDocumentById({ id: documentId });
@@ -518,6 +520,14 @@ export async function POST(request: NextRequest) {
 
     const db = createRealDatabase(agentData);
 
+    // Initialize Redis logging
+    const actionLogger = await getActionLogger();
+    const executionId = await actionLogger.startExecution(
+      actionName || 'unknown-action',
+      inputParameters,
+      session.user.id
+    );
+
     // Create AI interface for AI analysis steps
     const aiInterface = {
       generateObject: async (config: any) => {
@@ -535,6 +545,9 @@ export async function POST(request: NextRequest) {
       input: inputParameters,
       envVars,
       testMode,
+      // Redis logging globals
+      actionLogger,
+      executionId,
       // Utility functions
       console: {
         log: (...args: any[]) => console.log('[Action Execution]', ...args),
@@ -562,7 +575,7 @@ export async function POST(request: NextRequest) {
     try {
       // Create an async function from the code string
       const executeFunction = new Function(
-        'db', 'input', 'envVars', 'testMode', 'console', 'generateId', 'formatDate', 'validateRequired', 'ai', 'z',
+        'db', 'input', 'envVars', 'testMode', 'actionLogger', 'executionId', 'console', 'generateId', 'formatDate', 'validateRequired', 'ai', 'z',
         `
         return (async () => {
           try {
@@ -580,6 +593,8 @@ export async function POST(request: NextRequest) {
         executionContext.input,
         executionContext.envVars,
         executionContext.testMode,
+        executionContext.actionLogger,
+        executionContext.executionId,
         executionContext.console,
         executionContext.generateId,
         executionContext.formatDate,
@@ -594,6 +609,14 @@ export async function POST(request: NextRequest) {
     }
 
     const executionTime = Date.now() - startTime;
+
+    // Complete Redis logging
+    await actionLogger.completeExecution(
+      executionId,
+      !executionError,
+      result,
+      executionError ? executionError : undefined
+    );
 
     // Get change log for reporting
     const changeLog = db.getChangeLog();
@@ -670,7 +693,8 @@ export async function POST(request: NextRequest) {
       databaseUpdated: !testMode && !executionError,
       modelsAffected: modelChanges,
       changeLog: changeLog, // Keep full change log for debugging
-      changesCount: changeLog.filter(c => ['create', 'update', 'delete'].includes(c.operation)).length
+      changesCount: changeLog.filter(c => ['create', 'update', 'delete'].includes(c.operation)).length,
+      executionId // Include execution ID for Redis log tracking
     });
 
   } catch (error) {

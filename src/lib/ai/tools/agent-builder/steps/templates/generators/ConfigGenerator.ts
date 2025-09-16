@@ -141,7 +141,8 @@ pids/
       "@tailwindcss/forms": "^0.5.7",
       pg: "^8.11.3",
       "@types/pg": "^8.10.9",
-      "@vercel/blob": "^1.1.0"
+      "@vercel/blob": "^1.1.0",
+      "redis": "^5.0.0"
     };
 
     // Add AI SDK packages for Vercel (enabled by default)
@@ -184,7 +185,7 @@ pids/
       "prisma:format": "prisma format",
       "prisma:validate": "prisma validate",
       postinstall: "npm run prisma:format && npm run db:generate",
-      "vercel-build": "npm run db:setup && next build"
+      "vercel-build": "npm run db:setup && next build && npm run db:seed"
     };
 
     return JSON.stringify({
@@ -234,6 +235,10 @@ DATABASE_URL="postgresql://user:password@host:5432/database"
 # Neon Database Configuration (for production)
 NEON_API_KEY="your_neon_api_key_here"
 NEON_PROJECT_ID="your_neon_project_id_here"
+
+# Redis Configuration (for execution logging)
+# Create a Redis instance (e.g., Redis Cloud, Upstash, or local Redis)
+REDIS_URL="redis://default:password@host:port"
 
 # Note: You need to create the PostgreSQL database first before running the app
 # The tables will be created automatically when you run 'npm run db:setup'`;
