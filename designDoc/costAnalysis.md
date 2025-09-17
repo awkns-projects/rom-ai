@@ -70,11 +70,20 @@
 ### **階段一：短期計劃 (Vercel 生態系)**
 - 託管與運算：Next.js 前端和所有 Agent API 後端都部署為 Vercel Serverless Functions。
 - 核心資料庫：Vercel Postgres 和 Neon 用於主應用和 Agent 的多租戶數據存儲。
+    - Architecture for using Neon:
+        - database share the same bill, the cost depends on the usage 
+        - one Neon project per licenced agent, create different database in one instance
+            - Pros:
+                - good isolation
+                - avoid creating too many neon instances
+            - https://neon.com/pricing
+                - could consider using "Launch" program
 - 快取與訊息佇列：Vercel KV (Redis) 用於 Agent 間的非同步通訊。
 - 檔案儲存：Vercel Blob 用於存儲 AI 生成的程式碼、測試報告等產物。
 
 
 ***
+
 **Vercel Delivery Network (邊緣網絡)**
 
 |計費項目 (Billing Item)  |  Pro 方案每月免費額度  |  超出額度後收費標準  |  說明|
@@ -207,7 +216,12 @@
 
 
 ### **階段二：長期計劃 (遷移至 AWS 生態系)**
-｀
+consider migrating to AWS after having over 100 license Agent, since the price for using Vercel will go up drastically:
+- Neon
+    - from 0.14 CU-hour to 0.26 CU-hour
+    - https://neon.com/pricing
+
+
 | Vercel 服務 | AWS 對應服務 | 說明 |
 | -------- | ------- | -------- |
 | Vercel Serverless Functions | AWS Lambda + Amazon API Gateway | Lambda 負責執行 Agent 運算，API Gateway 提供 HTTP 端點。 |
@@ -216,6 +230,20 @@
 | Vercel KV (Redis) | Amazon ElastiCache for Redis | 提供託管的 Redis 服務，用於快取和訊息佇列。 |
 | Vercel Blob | Amazon S3 (Simple Storage Service) | 用於對象存儲，存儲生成的程式碼和大型文件。 |
 | Vercel Cron Jobs | Amazon EventBridge Scheduler | 用於觸發定時的 Lambda 函數，執行排程任務。 |
+
+- Architecture for using Amazon Aurora Serverless v2 (PostgreSQL) :
+    - One Cluster, One Database per Project
+        - Each project gets its own logical database (CREATE DATABASE projectA; CREATE DATABASE projectB;).
+        - Inside each database, you create that project’s tables.
+        - Pros:
+            - Clear separation of data.
+            - Easier to back up / drop a project without affecting others.
+            - Same cluster resources are shared (cheaper).
+                - setting up a cluster might have some additional cost
+                    - baseline costs (metadata storage, backups, connection management, monitoring).
+                    - each project’s cluster has to scale independently. This means less efficient utilization → higher cost overall.
+                        - Example: Project A uses 2 ACUs, Project B idle → you still pay 2 ACUs for A’s cluster, 0 ACU for B’s cluster, plus duplicated storage/system overhead.
+
 
 ***
 ### **AWS 基礎設施成本分析 (以 us-east-1 N. Virginia 為例)**
