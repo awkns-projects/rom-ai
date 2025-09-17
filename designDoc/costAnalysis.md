@@ -232,6 +232,7 @@ consider migrating to AWS after having over 100 license Agent, since the price f
 | Vercel Cron Jobs | Amazon EventBridge Scheduler | 用於觸發定時的 Lambda 函數，執行排程任務。 |
 
 - Architecture for using Amazon Aurora Serverless v2 (PostgreSQL) :
+    - limit: 40 Aurora clusters per AWS region per account
     - One Cluster, One Database per Project
         - Each project gets its own logical database (CREATE DATABASE projectA; CREATE DATABASE projectB;).
         - Inside each database, you create that project’s tables.
