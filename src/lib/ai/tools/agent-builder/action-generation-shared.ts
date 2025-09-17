@@ -1,7 +1,8 @@
 import { generateObject } from 'ai';
 import { z } from 'zod';
 import { getAgentBuilderModel, generatePseudoSteps, generateUIComponents } from './generation';
-import { sanitizeEnvironmentVariables } from './utils';
+import { sanitizeEnvironmentVariables, generateTitleAndName } from './utils';
+import { generateMigrationActionCode, generateStepTypeCode, type MigrationStep } from './migration-code-generators';
 
 /**
  * Sequential Implementation Step Schema
@@ -2300,21 +2301,36 @@ CODE GENERATION REQUIREMENTS:
    🚨 CRITICAL SYNTAX RULE: Use template literals (\`backticks\`) for ALL console.log and error messages to prevent syntax errors from apostrophes and quotes.
 
 9. ENVIRONMENT VARIABLES:
-   🚨 CRITICAL: ONLY generate environment variables if the user explicitly mentioned a specific external service!
+   🚨🚨🚨 CRITICAL: DEFAULT TO ZERO ENVIRONMENT VARIABLES 🚨🚨🚨
    
-   DO NOT generate generic environment variables like:
+   **MANDATORY DEFAULT: envVars: []**
+   
+   99% of business actions work perfectly with just:
+   - Database operations (db.modelName.method())
+   - AI operations (ai.generateObject())
+   - Internal calculations and transformations
+   
+   🚨 ABSOLUTELY FORBIDDEN ENVIRONMENT VARIABLES:
+   - API_KEY (too generic)
    - EMAIL_API_KEY, EMAIL_API_BASE_URL (too generic)
    - NOTIFICATION_API_KEY, NOTIFICATION_API_URL (too generic)  
    - SMS_API_KEY, PAYMENT_API_KEY (too generic)
    - UI_API_ENDPOINT, UI_API_KEY, API_ENDPOINT (too generic)
    - EXTERNAL_API_URL, THIRD_PARTY_API_KEY (too generic)
    - SERVICE_API_KEY, PLATFORM_API_URL (too generic)
+   - Any environment variable with action names in it
+   - Any environment variable longer than 50 characters
+   - Any environment variable with periods, hyphens, or spaces
    
-   ONLY generate environment variables for SPECIFIC, NAMED services:
-   - STRIPE_API_KEY (only if user mentioned Stripe specifically)
-   - SENDGRID_API_KEY (only if user mentioned SendGrid specifically)
-   - TWILIO_API_KEY (only if user mentioned Twilio specifically)
-   - INSTAGRAM_API_KEY (only if user mentioned Instagram API specifically)
+   🚨 ONLY GENERATE ENVIRONMENT VARIABLES IF:
+   1. User explicitly mentioned a specific service by name (Stripe, SendGrid, etc.)
+   2. AND the action description specifically mentions integrating with that service
+   3. AND it's not an OAuth service (Gmail, Slack, Facebook, etc.)
+   
+   VALID EXAMPLES (ONLY if explicitly mentioned):
+   - STRIPE_API_KEY (only if user said "integrate with Stripe")
+   - SENDGRID_API_KEY (only if user said "send emails via SendGrid")
+   - TWILIO_API_KEY (only if user said "send SMS via Twilio")
    
    🚨 DO NOT GENERATE SYSTEM-PROVIDED ENVIRONMENT VARIABLES:
    - OPENAI_API_KEY, ANTHROPIC_API_KEY, GROK_API_KEY (provided by system)
@@ -2361,13 +2377,29 @@ CODE GENERATION REQUIREMENTS:
    - Any internal application configuration variables
    - Any variables starting with NEXT_, VERCEL_, or other framework prefixes
    
-   🚨 DEFAULT APPROACH: NO ENVIRONMENT VARIABLES
+   🚨🚨🚨 MANDATORY DEFAULT APPROACH: EMPTY ENVIRONMENT VARIABLES ARRAY 🚨🚨🚨
+   
+   **YOUR DEFAULT RESPONSE MUST BE:**
+   - envVars: [] (empty array)
+   - NOT envVars: null or undefined
+   - NOT envVars: [{"name": "API_KEY", ...}]
+   
    Unless the user explicitly mentioned a specific external service by name, generate ZERO environment variables.
    Most actions can work with just the database and AI - don't assume external APIs are needed.
    
    🚨 ABSOLUTE RULE: NEVER GENERATE DATABASE_URL OR ANY SYSTEM VARIABLES
    The system automatically provides: DATABASE_URL, OPENAI_API_KEY, ANTHROPIC_API_KEY, AI_MODEL_PROVIDER, AI_MODEL_NAME, NEXTAUTH_SECRET, CRON_SECRET
-   NEVER EVER generate these in your envVars array. Your envVars array should be EMPTY unless the user explicitly mentioned external services.
+   NEVER EVER generate these in your envVars array.
+   
+   🚨 FINAL ENV VAR VALIDATION CHECKLIST:
+   Before generating ANY environment variable, ask yourself:
+   1. Did the user explicitly mention a specific service by name? (not "API" or "external service")
+   2. Is this service NOT OAuth-based? (OAuth services don't need env vars)
+   3. Is this NOT a system-provided variable?
+   4. Is the name shorter than 50 characters?
+   5. Does the name contain ONLY letters, numbers, and underscores?
+   
+   If ANY answer is NO, then DON'T generate that environment variable.
    
    AUTHENTICATION METHOD REFERENCE:
    - OAuth APIs (no env vars needed): Gmail, Slack, Shopify, Facebook, LinkedIn, Instagram, Google Calendar, Microsoft Teams, Notion, Salesforce, HubSpot
@@ -2885,3 +2917,924 @@ This updated technical specification provides architectural context to guide pse
   console.log(`✅ Regenerated ${pseudoSteps.length} pseudo steps from updated specification`);
   return pseudoSteps;
 } 
+
+/**
+ * NEW MIGRATION APPROACH: Generate pseudo steps directly from Step 0 analysis
+ * Replaces the complex technical specification approach
+ */
+export async function generatePseudoStepsFromStep0(
+  step0Analysis: any,
+  targetModel: string,
+  actionPurpose: string,
+  availableModels: any[] = [],
+  availableEnums: any[] = []
+): Promise<any[]> {
+  console.log(`🚀 NEW MIGRATION: Generating pseudo steps directly from Step 0 for ${targetModel}.${actionPurpose}`);
+  
+  const model = await getAgentBuilderModel();
+  
+  // Find the target model details
+  const modelDetails = availableModels.find(m => m.name === targetModel);
+  if (!modelDetails) {
+    throw new Error(`Target model ${targetModel} not found in available models`);
+  }
+  
+  // Extract business context from Step 0
+  const businessContext = step0Analysis.phaseAAnalysis?.userRequestAnalysis?.mainGoal || 
+                         step0Analysis.agentDescription || 
+                         'Business operations';
+  
+  // Extract related models for context
+  const relatedModels = availableModels.filter(m => m.name !== targetModel);
+  
+  const systemPrompt = `You are a database and AI operations architect designing focused pseudo steps for single-record processing.
+
+🎯 MIGRATION APPROACH: One Action = One Model + One Record
+
+TARGET MODEL: ${targetModel}
+Available Fields: ${modelDetails.fields?.map((f: any) => `${f.name}:${f.type}`).join(', ') || 'no fields'}
+
+RELATED MODELS (for context/relations):
+${relatedModels.map(m => `- ${m.name}: ${m.fields?.map((f: any) => `${f.name}:${f.type}`).join(', ') || 'no fields'}`).join('\n')}
+
+AVAILABLE ENUMS:
+${availableEnums.map(e => `- ${e.name}: [${e.fields?.map((f: any) => f.name).join(', ') || 'no values'}]`).join('\n') || 'No enums available'}
+
+BUSINESS CONTEXT: ${businessContext}
+ACTION PURPOSE: ${actionPurpose}
+
+🚨 CRITICAL REQUIREMENTS:
+
+1. **SINGLE RECORD PROCESSING**: This action processes exactly ONE record of ${targetModel} at a time
+2. **DYNAMIC INPUT FIELDS**: Input fields can be from other models, external APIs, or none at all
+3. **FLEXIBLE DATA SOURCES**: Determine what external data is needed based on action purpose
+
+🔧 NEW STEP TYPES AVAILABLE (NO DATABASE OPERATIONS):
+- 'ai_generate_object': Generate structured data, output fields save automatically
+- 'ai_generate_text': Generate text content, output fields save automatically
+- 'ai_generate_object_websearch': Generate with web search, output fields save automatically
+- 'ai_read_file_from_field': Read file from model field, output fields save automatically
+- 'ai_generate_image': Generate image, output fields save automatically
+- 'ai_modify_image': Modify existing image, output fields save automatically
+- 'ai_read_image': Read/analyze image, output fields save automatically
+- 'external_api': Call external API, output fields save automatically
+- 'npm_package': Use npm package, output fields save automatically
+- 'system_timestamp': Add timestamps, output fields save automatically
+- 'system_calculate': Perform calculations, output fields save automatically
+
+📋 INPUT/OUTPUT FIELD SEMANTICS:
+
+**INPUT FIELDS** (where data comes from - COMPLETELY DYNAMIC):
+- source: 'model_field' - Read from the target model record (only if needed for processing)
+- source: 'external_data' - External APIs, other database models, user parameters (as needed)
+- source: 'previous_step' - Output from previous pseudo step (for step chaining)
+- source: 'system' - System-provided values (current date, user ID, etc.) (if required)
+
+**EXTERNAL DATABASE MODEL FETCHING**:
+For external_data source with database models, specify:
+- externalModel: "ModelName" (e.g., "Doctor", "Order", "Customer")
+- whereClause: { field: "value" } (e.g., { "speciality": "cardiology" })
+- selectFields: ["field1", "field2"] (optional, defaults to all fields)
+
+**EXAMPLES OF DYNAMIC EXTERNAL DATA**:
+- External API: { source: "external_data", name: "weatherData" } (from API)
+- Other Model: { source: "external_data", externalModel: "Doctor", whereClause: { "id": "input.record.doctorId" } }
+- User Parameter: { source: "external_data", name: "analysisType" } (from user input)
+
+**IMPORTANT**: Input fields are completely optional and dynamic. Steps can have:
+- NO input fields (e.g., system timestamp generation)
+- ONLY model fields (e.g., AI analysis of existing data)
+- ONLY external data (e.g., API enrichment, other model data)
+- MIXED sources (e.g., AI analysis with external context)
+
+**OUTPUT FIELDS** (where data goes to):
+- target: 'model_field' - Update a field in the target model record
+- target: 'temporary' - Temporary value for next step
+- target: 'return' - Value returned to caller
+
+🎯 STEP DESIGN PRINCIPLES:
+1. Each step receives the complete ${targetModel} record data
+2. Steps can access external data (APIs, other models, user parameters) for context
+3. Steps use AI/external APIs/npm packages to process record + external data
+4. Steps generate output fields that get saved directly to the record
+5. All output fields with target 'model_field' are automatically saved at the end
+
+EXAMPLE PATTERNS:
+
+**Pattern 1: No Input Fields (System Generation)**
+Step 1: No input → System timestamp → Generate processingTimestamp, processingStatus
+
+**Pattern 2: Model Fields Only (Internal Analysis)**  
+Step 1: Record.symptoms, Record.history → AI analyze → Generate analysisResult, confidence
+
+**Pattern 3: External Database Model Data**
+Step 1: External Model fetch (Doctor where speciality=cardiology) → Process → Generate specialistNotes
+
+**Pattern 4: External API Data**
+Step 1: External API call → Process → Generate apiValidationResult, enrichmentData
+
+**Pattern 5: Mixed Sources (Comprehensive Processing)**
+Step 1: Record.data + External.model.data + External.api.data → AI process → Generate comprehensiveResult
+
+Final: All output fields automatically saved to the ${targetModel} record
+
+Generate 2-4 focused pseudo steps that implement "${actionPurpose}" for the ${targetModel} model.`;
+
+  const result = await generateObject({
+    model,
+    schema: z.object({
+      steps: z.array(z.object({
+        id: z.string(),
+        description: z.string(),
+        type: z.enum([
+          'ai_generate_object', 
+          'ai_generate_text',
+          'ai_generate_object_websearch',
+          'ai_read_file_from_field',
+          'ai_generate_image',
+          'ai_modify_image', 
+          'ai_read_image',
+          'external_api',
+          'npm_package',
+          'system_timestamp',
+          'system_calculate'
+        ]),
+        model: z.string().optional(),
+        inputFields: z.array(z.object({
+          id: z.string(),
+          name: z.string(),
+          type: z.string(),
+          kind: z.enum(['scalar', 'object', 'enum']),
+          required: z.boolean(),
+          list: z.boolean(),
+          relationModel: z.string().optional(),
+          description: z.string().optional(),
+          source: z.enum(['model_field', 'external_data', 'previous_step', 'system']),
+          // NEW: Dynamic database fetching properties
+          externalModel: z.string().optional().describe('Model name to fetch from (for external_data source)'),
+          whereClause: z.record(z.any()).optional().describe('Prisma where clause for fetching external data'),
+          selectFields: z.array(z.string()).optional().describe('Specific fields to select from external model')
+        })),
+        outputFields: z.array(z.object({
+          id: z.string(),
+          name: z.string(),
+          type: z.string(),
+          kind: z.enum(['scalar', 'object', 'enum']),
+          required: z.boolean(),
+          list: z.boolean(),
+          relationModel: z.string().optional(),
+          description: z.string().optional(),
+          target: z.enum(['model_field', 'temporary', 'return'])
+        })),
+        // Additional properties for specific step types
+        schema: z.any().optional(),
+        prompt: z.string().optional(),
+        maxLength: z.number().optional(),
+        searchQuery: z.string().optional(),
+        fileType: z.enum(['text', 'pdf', 'image', 'csv']).optional(),
+        processing: z.string().optional(),
+        dimensions: z.object({ width: z.number(), height: z.number() }).optional(),
+        style: z.string().optional(),
+        modifications: z.string().optional(),
+        preserveOriginal: z.boolean().optional(),
+        updateConditions: z.array(z.string()).optional(),
+        apiEndpoint: z.string().optional(),
+        packageName: z.string().optional(),
+        packageFunction: z.string().optional()
+      })).min(2).max(4)
+    }),
+    messages: [
+      {
+        role: 'system',
+        content: systemPrompt
+      },
+      {
+        role: 'user',
+        content: `Generate focused pseudo steps for the action "${actionPurpose}" that processes ONE record of the ${targetModel} model.
+
+CRITICAL DESIGN REQUIREMENTS:
+1. **Dynamic Input Fields**: Determine what external data is actually needed for "${actionPurpose}"
+   - If the action can work with just the record data, use NO input fields
+   - If external context is needed, specify exactly what external data is required
+   - If other model data is needed, specify which models and fields
+   - Don't assume any specific input fields - be purposeful and minimal
+
+2. **Purpose-Driven Processing**: Design steps that accomplish "${actionPurpose}" effectively
+   - Use appropriate step types (AI, external API, npm package, system, etc.)
+   - Generate output fields that make sense for "${actionPurpose}"
+   - Create meaningful, dynamic field names based on the purpose
+
+3. **Minimal External Dependencies**: Only request external data that's truly necessary
+   - Prefer using existing record data when possible
+   - Only add external_data input fields if they're essential for the purpose
+   - Be specific about what external data is needed and why
+
+Generate 2-4 pseudo steps that implement "${actionPurpose}" with appropriate, dynamic input/output fields.`
+      }
+    ],
+    temperature: 0.3,
+    maxTokens: 2000
+  });
+
+  console.log(`✅ Generated ${result.object.steps.length} pseudo steps directly from Step 0 analysis`);
+  return result.object.steps;
+}
+
+/**
+ * NEW MIGRATION APPROACH: Generate executable code from pseudo steps for single-record processing
+ * Now uses proper step-type-specific code generators and field source/target semantics
+ */
+export async function generateExecutableCodeFromPseudoSteps(
+  pseudoSteps: any[],
+  targetModel: string,
+  modelDetails: any,
+  availableEnums: any[] = []
+): Promise<{
+  code: string;
+  envVars: any[];
+  inputParameters: any[];
+  outputParameters: any[];
+  estimatedExecutionTime: string;
+  testData: any;
+}> {
+  console.log(`🔨 NEW MIGRATION: Generating executable code for ${targetModel} with ${pseudoSteps.length} steps using step-type-specific generators`);
+  
+  // Convert pseudo steps to migration steps format
+  const migrationSteps: MigrationStep[] = pseudoSteps.map((step: any) => ({
+    ...step,
+    inputFields: step.inputFields || [],
+    outputFields: step.outputFields || []
+  }));
+  
+  // Extract input parameters (external data with source: 'external_data')
+  const inputParameters = migrationSteps
+    .flatMap(step => step.inputFields)
+    .filter(field => field.source === 'external_data')
+    .map(field => ({
+      name: field.name,
+      type: field.type,
+      required: field.required,
+      description: field.description || `External data for ${field.name}`
+    }));
+  
+  // Add record ID parameter (always required for single-record processing)
+  if (!inputParameters.some(p => p.name === 'id')) {
+    inputParameters.unshift({
+      name: 'id',
+      type: 'String',
+      required: true,
+      description: `${targetModel} record ID to process`
+    });
+  }
+
+  // Extract output parameters (fields with target: 'return')
+  const outputParameters = migrationSteps
+    .flatMap(step => step.outputFields)
+    .filter(field => field.target === 'return')
+    .map(field => ({
+      name: field.name,
+      type: field.type,
+      description: field.description || `Output parameter for ${field.name}`
+    }));
+
+  // 🚨 CRITICAL FIX: Do NOT auto-generate environment variables
+  // Only generate env vars if user explicitly mentioned specific external services
+  // Most actions should work with just database and AI - no env vars needed
+  const envVars: any[] = [];
+  
+  // CONSERVATIVE APPROACH: Only generate env vars for very specific cases
+  // Most business actions don't need external APIs
+  console.log('🔍 DEBUG: Migration steps environment variable analysis:');
+  migrationSteps.forEach(step => {
+    console.log(`  Step ${step.id}: type=${step.type}, apiEndpoint=${step.apiEndpoint || 'none'}`);
+  });
+  
+  // Don't auto-generate any environment variables unless absolutely necessary
+  // Users can manually add env vars if they need specific external services
+
+  // Generate action name from target model
+  const actionName = `process${targetModel}Record`;
+  
+  // Use the migration code generator
+  const generatedCode = generateMigrationActionCode(
+    actionName,
+    targetModel,
+    migrationSteps,
+    inputParameters,
+    outputParameters,
+    envVars
+  );
+  
+  console.log(`✅ Generated migration code for ${targetModel} with proper step-type handlers`);
+  
+  return {
+    code: generatedCode,
+    envVars,
+    inputParameters,
+    outputParameters,
+    estimatedExecutionTime: `${migrationSteps.length * 15}-${migrationSteps.length * 30} seconds`,
+    testData: {
+      input: { id: 'test-record-id' },
+      expectedOutput: { recordId: 'test-record-id', success: true }
+    }
+  };
+}
+
+// Duplicate function removed - using the original one with enhancements
+
+/**
+ * NEW MIGRATION APPROACH: Complete simplified action generation
+ */
+export async function generateSimplifiedActionFromStep0(
+  step0Analysis: any,
+  targetModel: string,
+  actionName: string,
+  availableModels: any[] = [],
+  availableEnums: any[] = [],
+  actionTitle?: string,
+  actionDescription?: string
+): Promise<any> {
+  console.log(`🚀 NEW MIGRATION: Generating complete action for ${targetModel}.${actionName}`);
+  
+  try {
+    // Step 1: Generate pseudo steps directly from Step 0 (no tech spec needed)
+    const pseudoSteps = await generatePseudoStepsFromStep0(
+      step0Analysis,
+      targetModel,
+      actionDescription || actionName, // Use description if available, fallback to name
+      availableModels,
+      availableEnums
+    );
+    
+    // Step 2: Generate executable code from pseudo steps
+    const modelDetails = availableModels.find(m => m.name === targetModel);
+    const executableCode = await generateExecutableCodeFromPseudoSteps(
+      pseudoSteps,
+      targetModel,
+      modelDetails,
+      availableEnums
+    );
+    
+    // Use the provided name and title, or generate them if not provided
+    const finalName = `${actionName}${targetModel}`;
+    const finalTitle = actionTitle ? `${actionTitle} ${targetModel}` : `${actionName} ${targetModel}`;
+    
+    return {
+      id: `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: finalName.charAt(0).toLowerCase() + finalName.slice(1), // ensure camelCase
+      title: finalTitle,
+      description: actionDescription || `${actionName} for ${targetModel} records using single-record processing`,
+      role: 'member',
+      
+      // NEW: Migration properties
+      targetModel,
+      processingMode: 'single',
+      
+           // Enhanced pseudo steps with new structure
+     pseudoSteps: pseudoSteps.map((step: any) => ({
+       ...step,
+       inputFields: step.inputFields?.map((field: any) => ({ ...field, id: field.id || `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` })) || [],
+       outputFields: step.outputFields?.map((field: any) => ({ ...field, id: field.id || `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` })) || []
+     })),
+      
+      // Executable code
+      execute: {
+        type: 'code' as const,
+        code: {
+          script: executableCode.code,
+          envVars: executableCode.envVars || []
+        }
+      },
+      
+      // Metadata
+      _internal: {
+        hasRealCode: true,
+        hasTestCases: !!executableCode.testData,
+        codeGenerationMetadata: {
+          inputParameters: executableCode.inputParameters,
+          outputParameters: executableCode.outputParameters,
+          estimatedExecutionTime: executableCode.estimatedExecutionTime,
+          testData: executableCode.testData
+        }
+      },
+      
+      // Required fields for compatibility
+      dataSource: {
+        type: 'database' as const,
+        database: {
+          models: [modelDetails].filter(Boolean)
+        }
+      },
+      results: {
+        model: targetModel,
+        fields: {},
+        fieldsToUpdate: {}
+      }
+    };
+    
+  } catch (error) {
+    console.error(`❌ Failed to generate simplified action for ${targetModel}.${actionName}:`, error);
+    throw error;
+  }
+} 
+
+/**
+ * ULTRA-STREAMLINED APPROACH: Extract executable actions directly from Step 0
+ * This eliminates the need for Step 2 entirely by using Step 0's comprehensive analysis
+ */
+export function extractExecutableActionsFromStep0(
+  step0Output: any,
+  availableModels: any[] = [],
+  availableEnums: any[] = []
+): any[] {
+  console.log('🚀 ULTRA-STREAMLINED: Extracting executable actions directly from Step 0');
+  
+  // If Step 0 already has executableActions (future enhancement), use them
+  if (step0Output.executableActions && step0Output.executableActions.length > 0) {
+    console.log(`✅ Using ${step0Output.executableActions.length} pre-generated executable actions from Step 0`);
+    return step0Output.executableActions.map((actionSpec: any) => convertStep0ActionToAgentAction(actionSpec));
+  }
+  
+  // Otherwise, use Step 0's action specifications to create simplified actions
+  const actions = step0Output.actions || [];
+  console.log(`📋 Converting ${actions.length} Step 0 action specifications to executable actions`);
+  
+  return actions.map((actionSpec: any, index: number) => {
+    console.log(`🔄 Converting action ${index + 1}/${actions.length}: ${actionSpec.name}`);
+    
+    // Determine target model based on Step 0 analysis
+    const targetModel = determineTargetModelFromStep0(actionSpec, step0Output, availableModels);
+    
+    // Create simplified executable action
+    return {
+      id: `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      name: actionSpec.name,
+      title: actionSpec.title || actionSpec.name,
+      description: actionSpec.purpose,
+      role: 'member',
+      
+      // NEW: Migration properties
+      targetModel,
+      processingMode: 'single',
+      
+      // Simplified pseudo steps based on Step 0 analysis
+      pseudoSteps: generateSimplifiedPseudoStepsFromStep0Action(actionSpec, targetModel, availableModels),
+      
+      // Basic executable code structure
+      execute: {
+        type: 'code' as const,
+        code: {
+          script: generateBasicExecutableCodeFromStep0Action(actionSpec, targetModel, availableModels),
+          envVars: extractEnvVarsFromStep0(step0Output)
+        }
+      },
+      
+      // Metadata
+      _internal: {
+        hasRealCode: true,
+        hasTestCases: false,
+        generatedFromStep0: true,
+        codeGenerationMetadata: {
+          inputParameters: extractInputParametersFromStep0Action(actionSpec, targetModel),
+          outputParameters: extractOutputParametersFromStep0Action(actionSpec, targetModel),
+          estimatedExecutionTime: '30-60 seconds',
+          testData: { input: {}, expectedOutput: {} }
+        }
+      },
+      
+      // Required fields for compatibility
+      dataSource: {
+        type: 'database' as const,
+        database: {
+          models: availableModels.filter(m => m.name === targetModel)
+        }
+      },
+      results: {
+        model: targetModel,
+        fields: {},
+        fieldsToUpdate: {}
+      }
+    };
+  });
+}
+
+/**
+ * Convert Step 0 executable action to AgentAction format (future enhancement)
+ */
+function convertStep0ActionToAgentAction(step0Action: any): any {
+  return {
+    id: `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    name: step0Action.name,
+    title: step0Action.title,
+    description: step0Action.purpose,
+    role: 'member',
+    targetModel: step0Action.targetModel,
+    processingMode: step0Action.processingMode,
+    pseudoSteps: step0Action.pseudoSteps,
+    execute: {
+      type: 'code' as const,
+      code: {
+        script: step0Action.executableCode.script,
+        envVars: step0Action.executableCode.envVars
+      }
+    },
+    _internal: {
+      hasRealCode: true,
+      hasTestCases: !!step0Action.executableCode.testData,
+      generatedFromStep0: true,
+      codeGenerationMetadata: {
+        inputParameters: step0Action.executableCode.inputParameters,
+        outputParameters: step0Action.executableCode.outputParameters,
+        estimatedExecutionTime: step0Action.executableCode.estimatedExecutionTime,
+        testData: step0Action.executableCode.testData
+      }
+    },
+    dataSource: {
+      type: 'database' as const,
+      database: { models: [] }
+    },
+    results: {
+      model: step0Action.targetModel,
+      fields: {},
+      fieldsToUpdate: {}
+    }
+  };
+}
+
+/**
+ * Determine target model from Step 0 analysis
+ */
+export function determineTargetModelFromStep0(
+  actionSpec: any,
+  step0Output: any,
+  availableModels: any[]
+): string {
+  // Try to infer from action purpose and available models
+  const actionPurpose = actionSpec.purpose.toLowerCase();
+  
+  // Look for model names mentioned in the action purpose
+  for (const model of availableModels) {
+    const modelName = model.name.toLowerCase();
+    if (actionPurpose.includes(modelName) || actionPurpose.includes(modelName.replace(/([A-Z])/g, ' $1').toLowerCase())) {
+      return model.name;
+    }
+  }
+  
+  // Fallback to first available model
+  return availableModels[0]?.name || 'UnknownModel';
+}
+
+/**
+ * Generate simplified pseudo steps from Step 0 action specification
+ */
+function generateSimplifiedPseudoStepsFromStep0Action(
+  actionSpec: any,
+  targetModel: string,
+  availableModels: any[]
+): any[] {
+  const modelDetails = availableModels.find(m => m.name === targetModel);
+  const modelFields = modelDetails?.fields || [];
+  
+  // Create basic pseudo steps based on action purpose
+  const actionPurpose = actionSpec.purpose.toLowerCase();
+  const steps = [];
+  
+  // Step 1: Start with AI processing (no database read needed - record provided automatically)
+  steps.push({
+    id: `step_1_${Date.now()}`,
+    type: 'ai_generate_object',
+    description: `AI analysis for ${actionSpec.purpose}`,
+    model: targetModel,
+    prompt: `Analyze the ${targetModel} record data and ${actionSpec.purpose.toLowerCase()}. Provide structured insights and recommendations.`,
+    inputFields: [], // Dynamic - will be determined by AI based on action purpose
+    outputFields: [
+      {
+        id: `field_analysis_${Date.now()}`,
+        name: `${actionSpec.purpose.toLowerCase().replace(/\s+/g, '')}Result`,
+        type: 'String',
+        kind: 'scalar',
+        required: true,
+        list: false,
+        target: 'model_field',
+        description: `${actionSpec.purpose} result`
+      },
+      {
+        id: `field_confidence_${Date.now()}`,
+        name: `${actionSpec.purpose.toLowerCase().replace(/\s+/g, '')}Confidence`,
+        type: 'Float',
+        kind: 'scalar',
+        required: true,
+        list: false,
+        target: 'model_field',
+        description: `${actionSpec.purpose} confidence score`
+      }
+    ],
+    schema: {
+      analysisResult: 'string',
+      confidence: 'number',
+      recommendations: 'array'
+    }
+  });
+  
+  // Step 2: Add timestamp (output fields save automatically)
+  steps.push({
+    id: `step_2_${Date.now()}`,
+    type: 'system_timestamp',
+    description: `Add processing timestamp to ${targetModel} record`,
+    model: targetModel,
+    inputFields: [], // No input needed for timestamp
+    outputFields: [
+      {
+        id: `field_timestamp_${Date.now()}`,
+        name: `last${actionSpec.purpose.replace(/\s+/g, '')}Time`,
+        type: 'DateTime',
+        kind: 'scalar',
+        required: true,
+        list: false,
+        target: 'model_field',
+        description: `When ${actionSpec.purpose.toLowerCase()} was last performed`
+      },
+      {
+        id: `field_status_${Date.now()}`,
+        name: `${actionSpec.purpose.toLowerCase().replace(/\s+/g, '')}Status`,
+        type: 'String',
+        kind: 'scalar',
+        required: true,
+        list: false,
+        target: 'model_field',
+        description: `${actionSpec.purpose} processing status`
+      }
+    ]
+  });
+  
+  // No Step 3 needed - output fields from previous steps are automatically saved
+  
+  return steps;
+}
+
+/**
+ * Generate basic executable code from Step 0 action specification
+ */
+function generateBasicExecutableCodeFromStep0Action(
+  actionSpec: any,
+  targetModel: string,
+  availableModels: any[]
+): string {
+  const modelNameLower = targetModel.toLowerCase();
+  
+  return `
+// ULTRA-STREAMLINED: Generated directly from Step 0 analysis
+async function ${actionSpec.name}({ db, input, envVars, testMode, actionLogger, executionId, console, generateId, formatDate, validateRequired, ai, z }) {
+  const startTime = Date.now();
+  
+  try {
+    // Step 1: Read ${targetModel} record
+    await actionLogger.startStep(executionId, 1, 'Read ${targetModel} record', { recordId: input.id });
+    
+    const record = await db.${modelNameLower}.findUnique({
+      where: { id: input.id }
+    });
+    
+    if (!record) {
+      throw new Error(\`${targetModel} record with ID \${input.id} not found\`);
+    }
+    
+    await actionLogger.completeStep(executionId, 1, { recordFound: true, recordId: record.id });
+    console.log(\`✅ Step 1: Found ${targetModel} record\`, record.id);
+    
+    // Step 2: Process with AI (${actionSpec.purpose})
+    await actionLogger.startStep(executionId, 2, '${actionSpec.purpose}', { recordId: record.id });
+    
+    const analysisResult = await ai.generateObject({
+      model: 'gpt-4',
+      schema: z.object({
+        analysis: z.string().describe('Analysis result'),
+        confidence: z.number().describe('Confidence score 0-100'),
+        recommendations: z.array(z.string()).describe('Recommendations')
+      }),
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert analyst. ${actionSpec.purpose}.'
+        },
+        {
+          role: 'user',
+          content: \`Analyze this ${targetModel} record: \${JSON.stringify(record)}\`
+        }
+      ]
+    });
+    
+    await actionLogger.completeStep(executionId, 2, { 
+      analysisGenerated: true,
+      confidence: analysisResult.object.confidence 
+    });
+    console.log(\`✅ Step 2: Generated analysis\`, analysisResult.object.confidence);
+    
+    // Step 3: Update record with analysis
+    await actionLogger.startStep(executionId, 3, 'Update record', { recordId: record.id });
+    
+    const updatedRecord = await db.${modelNameLower}.update({
+      where: { id: record.id },
+             data: {
+         // Update with dynamic field names based on action purpose
+         [\`last\${actionSpec.purpose.replace(/\\s+/g, '')}Time\`]: new Date(),
+         [\`\${actionSpec.purpose.toLowerCase().replace(/\\s+/g, '')}Status\`]: 'completed'
+       }
+    });
+    
+    await actionLogger.completeStep(executionId, 3, { recordUpdated: true });
+    console.log(\`✅ Step 3: Updated ${targetModel} record\`);
+    
+    return {
+      success: true,
+      data: {
+        recordId: updatedRecord.id,
+                 [\`\${actionSpec.purpose.toLowerCase().replace(/\\s+/g, '')}Result\`]: analysisResult.object.analysis,
+         [\`\${actionSpec.purpose.toLowerCase().replace(/\\s+/g, '')}Confidence\`]: analysisResult.object.confidence,
+         additionalData: analysisResult.object.recommendations
+      },
+      message: \`Successfully processed ${targetModel} record: \${actionSpec.purpose}\`,
+      executionTime: Date.now() - startTime
+    };
+    
+  } catch (error) {
+    console.error(\`❌ ${actionSpec.name} failed:\`, error);
+    return {
+      success: false,
+      data: null,
+      message: \`Failed to process ${targetModel} record: \${error.message}\`,
+      executionTime: Date.now() - startTime
+    };
+  }
+}`;
+}
+
+/**
+ * Extract environment variables from Step 0 analysis
+ * 🚨 CRITICAL FIX: Be extremely conservative about generating env vars
+ */
+function extractEnvVarsFromStep0(step0Output: any): any[] {
+  console.log('🔍 DEBUG: Step 0 external APIs analysis:', step0Output.externalApis);
+  
+  // 🚨 CONSERVATIVE APPROACH: Don't auto-generate env vars
+  // Most business actions work fine with just database and AI
+  // Only generate env vars for very specific, explicitly mentioned services
+  const envVars: any[] = [];
+  
+  const externalApis = step0Output.externalApis || [];
+  
+  // 🚨 SOCIAL MEDIA APIs USE OAUTH - NO ENVIRONMENT VARIABLES NEEDED
+  // Social media platforms (Instagram, Facebook, Threads, X, TikTok) use OAuth authentication
+  // They don't require API keys in environment variables - authentication is handled by OAuth flow
+  
+  const allowedSocialMediaServices = ['instagram', 'facebook', 'threads', 'x', 'tiktok'];
+  
+  externalApis.forEach((api: any) => {
+    const providerLower = api.provider?.toLowerCase() || '';
+    
+    // Check if it's an allowed social media service
+    if (allowedSocialMediaServices.includes(providerLower)) {
+      if (api.connectionType === 'oauth') {
+        console.log(`✅ Social media API detected: ${api.provider} - uses OAuth (no env vars needed)`);
+      } else if (api.connectionType === 'api_key') {
+        console.log(`⚠️ Warning: ${api.provider} is configured as api_key but social media APIs should use OAuth`);
+        // Don't generate env vars even if misconfigured - social media should always be OAuth
+      }
+    } else {
+      console.log(`🚫 Rejected non-social media API: ${api.provider} - only social media platforms allowed`);
+    }
+  });
+  
+  console.log(`🔍 DEBUG: Generated ${envVars.length} environment variables from Step 0`);
+  return envVars;
+}
+
+/**
+ * Extract input parameters from Step 0 action
+ */
+function extractInputParametersFromStep0Action(actionSpec: any, targetModel: string): any[] {
+  return [
+    {
+      name: 'id',
+      type: 'String',
+      required: true,
+      description: `${targetModel} record ID to process`
+    }
+  ];
+}
+
+/**
+ * Extract output parameters from Step 0 action
+ */
+function extractOutputParametersFromStep0Action(actionSpec: any, targetModel: string): any[] {
+  return [
+         {
+       name: 'recordId',
+       type: 'String',
+       description: `Processed ${targetModel} record ID`
+     },
+     {
+       name: 'processingResult',
+       type: 'String', 
+       description: 'Dynamic processing result based on action purpose'
+     },
+     {
+       name: 'processingMetadata',
+       type: 'Object',
+       description: 'Dynamic metadata about the processing performed'
+     }
+  ];
+}
+
+/**
+ * Generate action from existing pseudo steps (from Step 0)
+ * Uses existing pseudo steps and generates executable code with AI
+ */
+export async function generateActionFromPseudoSteps(
+  actionSpec: any,
+  availableModels: any[] = [],
+  availableEnums: any[] = [],
+  step0Analysis?: any
+): Promise<any> {
+  console.log(`🔨 Generating executable code from existing pseudo steps for: ${actionSpec.name}`);
+  
+  // Use the existing pseudo steps from actionSpec
+  const pseudoSteps = actionSpec.pseudoSteps || [];
+  const targetModel = actionSpec.targetModel || availableModels[0]?.name || 'UnknownModel';
+  
+  if (pseudoSteps.length === 0) {
+    console.warn(`⚠️ No pseudo steps found for action: ${actionSpec.name}`);
+    throw new Error(`Action ${actionSpec.name} has no pseudo steps to process`);
+  }
+  
+  console.log(`📋 Using ${pseudoSteps.length} existing pseudo steps from Step 0`);
+  
+  // Generate executable code using the existing pseudo steps
+  const executableCode = await generateExecutableCodeFromPseudoSteps(
+    pseudoSteps,
+    targetModel,
+    availableModels.find(m => m.name === targetModel),
+    availableEnums
+  );
+  
+  // Create the complete action structure
+  return {
+    id: actionSpec.id || `action_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    name: actionSpec.name,
+    title: actionSpec.title || actionSpec.name,
+    description: actionSpec.purpose || actionSpec.description,
+    role: 'member',
+    
+    // Migration properties
+    targetModel,
+    processingMode: 'single',
+    
+    // Use the existing pseudo steps from Step 0
+    pseudoSteps: pseudoSteps.map((step: any) => ({
+      ...step,
+      inputFields: step.inputFields?.map((field: any) => ({ 
+        ...field, 
+        id: field.id || `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` 
+      })) || [],
+      outputFields: step.outputFields?.map((field: any) => ({ 
+        ...field, 
+        id: field.id || `field_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` 
+      })) || []
+    })),
+    
+    // Executable code generated from pseudo steps
+    execute: {
+      type: 'code' as const,
+      code: {
+        script: executableCode.code,
+        envVars: executableCode.envVars || []
+      }
+    },
+    
+    // Metadata
+    _internal: {
+      hasRealCode: true,
+      hasTestCases: !!executableCode.testData,
+      generatedFromStep0PseudoSteps: true,
+      codeGenerationMetadata: {
+        inputParameters: executableCode.inputParameters,
+        outputParameters: executableCode.outputParameters,
+        estimatedExecutionTime: executableCode.estimatedExecutionTime,
+        testData: executableCode.testData
+      }
+    },
+    
+    // Required fields for compatibility
+    dataSource: {
+      type: 'database' as const,
+      database: {
+        models: availableModels.filter(m => m.name === targetModel)
+      }
+    },
+    results: {
+      model: targetModel,
+      fields: {},
+      fieldsToUpdate: {}
+    }
+  };
+}

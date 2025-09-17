@@ -314,7 +314,6 @@ export default function Layout({
                 {[
                   { path: '/', icon: '🏠', label: 'Home' },
                   { path: '/models', icon: '🗃️', label: 'Data' },
-                  { path: '/actions', icon: '⚡', label: 'Actions' },
                   { path: '/schedules', icon: '⏰', label: 'Tasks' },
                   { path: '/chat', icon: '💬', label: 'Chat' },
                   { path: '/execution-logs', icon: '📊', label: 'Logs' }
@@ -366,9 +365,9 @@ export default function MobileNav({ currentTheme }: MobileNavProps) {
 
   const navItems = [
     { path: '/models', icon: '🗃️', label: 'Data' },
-    { path: '/actions', icon: '⚡', label: 'Actions' },
     { path: '/schedules', icon: '⏰', label: 'Tasks' },
-    { path: '/chat', icon: '🤖', label: 'AI Chat' }
+    { path: '/chat', icon: '🤖', label: 'AI Chat' },
+    { path: '/execution-logs', icon: '📊', label: 'Logs' }
   ];
 
   return (

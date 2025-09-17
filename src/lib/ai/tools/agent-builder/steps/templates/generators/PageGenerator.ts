@@ -7,7 +7,7 @@ export class PageGenerator implements TemplateGenerator {
       'src/app/page.tsx': this.generateHomePage(options),
       'src/app/models/page.tsx': this.generateModelsListPage(options),
       'src/app/models/[modelName]/page.tsx': this.generateModelDetailPage(options),
-      'src/app/actions/page.tsx': this.generateActionsPage(options),
+      // Removed: 'src/app/actions/page.tsx' - actions are now accessible per record
       'src/app/schedules/page.tsx': this.generateSchedulesPage(options),
       'src/app/chat/page.tsx': this.generateChatPage(options),
       'src/app/execution-logs/page.tsx': this.generateExecutionLogsPage(options)
@@ -77,19 +77,19 @@ export default function HomePage() {
       path: '/models', 
       icon: '🗃️', 
       title: 'View Data', 
-      desc: 'Manage your business information'
-    },
-    { 
-      path: '/actions', 
-      icon: '⚡', 
-      title: 'Actions', 
-      desc: 'Run automated workflows'
+      desc: 'Manage records and run actions'
     },
     { 
       path: '/schedules', 
       icon: '⏰', 
       title: 'Schedules', 
       desc: 'Manage automated tasks'
+    },
+    { 
+      path: '/execution-logs', 
+      icon: '📊', 
+      title: 'Execution Logs', 
+      desc: 'Monitor action executions'
     }
   ];
 
@@ -582,6 +582,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { themes } from '@/lib/theme';
+import ActionExecutionModal from '@/components/ActionExecutionModal';
 
 export default function ModelDetailPage({ params }: { params: { modelName: string } }) {
   const router = useRouter();
@@ -597,6 +598,10 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
   const [editFormData, setEditFormData] = useState<Record<string, any>>({});
   const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [availableActions, setAvailableActions] = useState<any[]>([]);
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [selectedActionForRecord, setSelectedActionForRecord] = useState<{action: any, record: any} | null>(null);
+  const [showActionMenu, setShowActionMenu] = useState<string | null>(null);
 
   // Get model definition from embedded config
   const embeddedModels = ${JSON.stringify(options.models)};
@@ -606,6 +611,7 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
       const foundModel = embeddedModels.find(m => m.name === modelName);
       setModelDef(foundModel);
       fetchRecords();
+      fetchAvailableActions();
       
       // Auto-open create modal if action=create parameter is present
       if (actionParam === 'create' && foundModel) {
@@ -613,6 +619,73 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
       }
     }
   }, [modelName, actionParam]);
+
+  // Close action menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showActionMenu) {
+        setShowActionMenu(null);
+      }
+    };
+
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [showActionMenu]);
+
+  const fetchAvailableActions = async () => {
+    try {
+      console.log(\`🔍 Fetching actions for model: \${modelName}\`);
+      const response = await fetch('/api/agent/actions');
+      const data = await response.json();
+      
+      console.log('📊 Actions API response:', { success: data.success, actionCount: data.actions?.length || 0 });
+      
+      if (data.success && data.actions) {
+        console.log('🔍 All available actions:', data.actions.map(a => ({ 
+          name: a.name, 
+          targetModel: a.targetModel, 
+          hasTargetModel: !!a.targetModel,
+          description: a.description?.substring(0, 30) + '...'
+        })));
+        
+        // Filter actions that target this specific model OR show all if no targetModel is set
+        const modelActions = data.actions.filter((action: any) => {
+          // NEW MIGRATION: Actions with targetModel matching current model
+          if (action.targetModel === modelName) {
+            console.log(\`✅ Action \${action.name} targets \${modelName}\`);
+            return true;
+          }
+          
+          // LEGACY: Actions without targetModel (old generation)
+          if (!action.targetModel) {
+            console.log(\`📝 Action \${action.name} has no targetModel (legacy) - including\`);
+            return true;
+          }
+          
+          // Check if action name or description mentions the model
+          const actionText = (action.name + ' ' + (action.description || '')).toLowerCase();
+          const modelNameLower = modelName.toLowerCase();
+          if (actionText.includes(modelNameLower)) {
+            console.log(\`🔍 Action \${action.name} mentions \${modelName} in text - including\`);
+            return true;
+          }
+          
+          console.log(\`❌ Action \${action.name} does not match \${modelName}\`);
+          return false;
+        });
+        
+        console.log(\`📋 Filtered actions for \${modelName}:\`, modelActions.map(a => ({ name: a.name, targetModel: a.targetModel || 'none' })));
+        setAvailableActions(modelActions);
+        console.log(\`✅ Found \${modelActions.length} actions for \${modelName} model\`);
+      } else {
+        console.warn('⚠️ No actions data received or API call failed');
+        setAvailableActions([]);
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch actions:', error);
+      setAvailableActions([]);
+    }
+  };
 
   const fetchRecords = async () => {
     try {
@@ -747,6 +820,28 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
     } finally {
       setDeleting(null);
     }
+  };
+
+  // Handle action execution on record
+  const executeActionOnRecord = (action: any, record: any) => {
+    setSelectedActionForRecord({ action, record });
+    setShowActionModal(true);
+    setShowActionMenu(null); // Close action menu
+  };
+
+  const handleActionComplete = (result: any) => {
+    setShowActionModal(false);
+    setSelectedActionForRecord(null);
+    
+    // Refresh records to show updated data
+    fetchRecords();
+    
+    console.log('Action completed on record:', result);
+  };
+
+  // Toggle action menu for a specific record
+  const toggleActionMenu = (recordId: string) => {
+    setShowActionMenu(showActionMenu === recordId ? null : recordId);
   };
 
   // Handle form field changes
@@ -943,6 +1038,49 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
                     Record #{getRecordId(record)}
                   </span>
                   <div className="flex items-center gap-2">
+                    {/* Action Menu Button - Always show for debugging */}
+                    <div className="relative">
+                      <button
+                        onClick={() => toggleActionMenu(getRecordId(record))}
+                        className={\`px-3 py-1.5 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-lg font-mono text-xs \${currentTheme?.accent || 'text-green-400'} hover:\${currentTheme?.bgHover || 'hover:bg-gray-600'} transition-colors flex items-center gap-1\`}
+                      >
+                        <span>⚡</span>
+                        <span>Actions</span>
+                        <span className="text-xs">({availableActions.length})</span>
+                      </button>
+                        
+                      {/* Action Dropdown Menu */}
+                      {showActionMenu === getRecordId(record) && (
+                        <div className={\`absolute right-0 top-full mt-1 \${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-lg shadow-xl z-50 min-w-48\`}>
+                          <div className="p-2 space-y-1">
+                            {availableActions.length > 0 ? (
+                              availableActions.map((action, actionIndex) => (
+                                <button
+                                  key={actionIndex}
+                                  onClick={() => executeActionOnRecord(action, record)}
+                                  className={\`w-full text-left px-3 py-2 rounded-lg \${currentTheme?.bgHover || 'hover:bg-gray-700'} transition-colors flex items-center gap-2\`}
+                                >
+                                  <span>{action.emoji || '⚡'}</span>
+                                  <div className="flex-1">
+                                    <div className={\`font-mono text-sm \${currentTheme?.light || 'text-gray-200'}\`}>
+                                      {action.title || action.name}
+                                    </div>
+                                    <div className={\`font-mono text-xs \${currentTheme?.dim || 'text-gray-400'}\`}>
+                                      {action.description?.substring(0, 40)}...
+                                    </div>
+                                  </div>
+                                </button>
+                              ))
+                            ) : (
+                              <div className={\`px-3 py-2 text-center \${currentTheme?.dim || 'text-gray-400'} font-mono text-xs\`}>
+                                No actions available for {modelName}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
                     <button
                       onClick={() => openEditModal(record)}
                       className={\`px-3 py-1.5 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-lg font-mono text-xs \${currentTheme?.accent || 'text-green-400'} hover:\${currentTheme?.bgHover || 'hover:bg-gray-600'} transition-colors\`}
@@ -1032,158 +1170,38 @@ export default function ModelDetailPage({ params }: { params: { modelName: strin
             </div>
           </div>
         )}
-      </div>
-    </Layout>
-  );
-}`;
-  }
 
-  private generateActionsPage(options: MobileAppTemplateOptions): string {
-    const agentTheme = options.agentConfig?.theme || 'green';
-    
-    return `'use client'
-import Layout from '@/components/Layout';
-import ActionCard from '@/components/ActionCard';
-import { useEffect, useState } from 'react';
-import api from '@/lib/api';
-import { themes } from '@/lib/theme';
-
-export default function ActionsPage() {
-  const [actions, setActions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Use embedded local configuration
-  const selectedTheme = '${agentTheme}';
-  const currentTheme = themes[selectedTheme as keyof typeof themes] || themes.green;
-
-  useEffect(() => {
-    fetchActions();
-  }, []);
-
-  const fetchActions = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // Call sub-agent's own API endpoint (returns embedded actions)
-      const response = await fetch('/api/agent/actions');
-      
-      if (!response.ok) {
-        throw new Error(\`Failed to fetch actions: \${response.status}\`);
-      }
-      
-      const data = await response.json();
-      
-      if (data.success && data.actions) {
-        // All actions are now complex actions (no CRUD actions generated)
-        const formattedActions = data.actions.map((action: any) => ({
-          id: action.name, // Use name as ID for consistency
-          name: action.name,
-          title: action.title || action.name,
-          emoji: action.emoji || '⚡',
-          description: action.description || 'Execute action',
-          type: action.type || 'query',
-          role: action.role || 'member',
-          actionType: action.actionType || 'complex',
-          uiComponentsDesign: action.uiComponentsDesign || [],
-          pseudoSteps: action.pseudoSteps || []
-        }));
-        setActions(formattedActions);
-      } else {
-        throw new Error('No actions data received');
-      }
-    } catch (err) {
-      console.error('Failed to fetch embedded actions:', err);
-      setError('Failed to load actions. Please refresh the page.');
-      setActions([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <Layout title="Actions">
-        <div className="p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <h1 className={\`text-xl font-mono font-bold \${currentTheme.light}\`}>Smart Actions</h1>
-            <span className={\`text-sm font-mono \${currentTheme.dim}\`}>Loading...</span>
-          </div>
-          <div className="space-y-4">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className={\`\${currentTheme.bg} border \${currentTheme.border} rounded-xl p-4 animate-pulse\`}>
-                <div className={\`h-6 \${currentTheme.bg} rounded w-1/3 mb-2\`}></div>
-                <div className={\`h-4 \${currentTheme.bg} rounded w-2/3\`}></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </Layout>
-    );
-  }
-
-  return (
-    <Layout title="Actions">
-      <div className="space-y-6">
-        <div className={\`\${currentTheme?.bg || 'bg-gray-800'} border \${currentTheme?.border || 'border-gray-700'} rounded-xl p-6\`}>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className={\`text-3xl font-mono font-bold \${currentTheme?.light || 'text-gray-200'} mb-2\`}>Business Process Actions</h1>
-              <p className={\`font-mono text-sm \${currentTheme?.dim || 'text-gray-400'}\`}>
-                Execute automated workflows and business processes
-              </p>
-            </div>
-            <span className={\`text-lg font-mono px-4 py-2 \${currentTheme?.bgActive || 'bg-gray-700'} border \${currentTheme?.borderActive || 'border-gray-600'} rounded-xl \${currentTheme?.accent || 'text-green-400'}\`}>
-              {actions.length} action{actions.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-        </div>
-
-        {error && (
-          <div className="mb-4 p-4 bg-red-500/10 border border-red-400/20 rounded-xl">
-            <p className="font-mono text-sm text-red-300">
-              ⚠️ {error}
-            </p>
-          </div>
-        )}
-
-        <div className={\`mb-4 p-4 \${currentTheme.bg} border \${currentTheme.border} rounded-xl\`}>
-          <p className={\`font-mono text-sm \${currentTheme.dim}\`}>
-            💡 <strong>Business Process Actions:</strong> Click any action card to open the execution modal. 
-            All action code is embedded and executes locally on this sub-agent for optimal performance.
-          </p>
-          <p className={\`font-mono text-xs \${currentTheme.dim} mt-2\`}>
-            🗃️ <strong>Data Management:</strong> Create, Read, Update, Delete operations are available in the <strong>Data Models</strong> section and <strong>Chat interface</strong>.
-          </p>
-        </div>
-
-        {actions.length > 0 ? (
-          <div className="space-y-3">
-            {actions.map((action) => (
-              <ActionCard 
-                key={action.id} 
-                action={action}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-12">
-            <div className={\`w-20 h-20 \${currentTheme.bg} border \${currentTheme.border} rounded-2xl flex items-center justify-center mx-auto mb-4\`}>
-              <span className={\`text-3xl \${currentTheme.dim}\`}>⚡</span>
-            </div>
-            <div className={\`font-mono text-lg font-bold \${currentTheme.light} mb-2\`}>No Actions Yet</div>
-            <div className={\`font-mono text-sm \${currentTheme.dim} max-w-xs mx-auto\`}>
-              Business process actions and workflows will appear here.
-              Data management is available in the Data Models section and Chat interface.
-            </div>
-          </div>
+        {/* Action Execution Modal */}
+        {showActionModal && selectedActionForRecord && (
+          <ActionExecutionModal
+            action={{
+              ...selectedActionForRecord.action,
+              // Pre-populate the record ID for single-record processing
+              uiComponentsDesign: [
+                {
+                  name: 'id',
+                  type: 'text',
+                  label: 'Record ID',
+                  required: true,
+                  defaultValue: getRecordId(selectedActionForRecord.record),
+                  readonly: true
+                },
+                ...(selectedActionForRecord.action.uiComponentsDesign || [])
+              ]
+            }}
+            isOpen={showActionModal}
+            onClose={() => setShowActionModal(false)}
+            onComplete={handleActionComplete}
+            theme={selectedTheme}
+          />
         )}
       </div>
     </Layout>
   );
 }`;
   }
+
+
 
   private generateSchedulesPage(options: MobileAppTemplateOptions): string {
     const agentTheme = options.agentConfig?.theme || 'green';
@@ -1576,8 +1594,8 @@ What would you like to explore first?\`,
     
     if (hasActionIntent) {
       suggestions.push({
-        text: '⚡ Go to Actions Page',
-        action: () => router.push('/actions'),
+        text: '🗃️ Go to Data Models (Actions)',
+        action: () => router.push('/models'),
         color: 'bg-blue-500/20 border-blue-400/30 text-blue-200'
       });
     }
@@ -1603,8 +1621,8 @@ What would you like to explore first?\`,
     { 
       icon: '⚡', 
       label: 'Execute Actions', 
-      action: () => router.push('/actions'),
-      description: 'Run smart actions'
+      action: () => router.push('/models'),
+      description: 'Run actions on records'
     },
     { 
       icon: '⏰', 
@@ -1701,7 +1719,7 @@ What would you like to explore first?\`,
             </button>
             {availableActions.length > 0 && (
               <button
-                onClick={() => router.push('/actions')}
+                onClick={() => router.push('/models')}
                 className={\`px-4 py-2 \${currentTheme.bg} border \${currentTheme.border} rounded-xl font-mono text-xs \${currentTheme.dim} hover:\${currentTheme.bgHover} transition-colors whitespace-nowrap\`}
               >
                 ⚡ Actions ({availableActions.length})
@@ -1747,10 +1765,10 @@ What would you like to explore first?\`,
               🗃️ View Data
             </button>
             <button 
-              onClick={() => router.push('/actions')}
+              onClick={() => router.push('/models')}
               className={\`px-4 py-2 \${currentTheme.bgActive} border \${currentTheme.borderActive} rounded-xl font-mono text-xs \${currentTheme.accent} hover:\${currentTheme.bgHover} transition-colors whitespace-nowrap\`}
             >
-              ⚡ Run Action
+              ⚡ Run Actions
             </button>
             <button 
               onClick={() => router.push('/schedules')}

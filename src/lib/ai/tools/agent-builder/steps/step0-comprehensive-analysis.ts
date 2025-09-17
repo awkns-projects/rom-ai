@@ -110,7 +110,96 @@ export interface Step0AOutput {
   };
 }
 
-// Phase B: Technical Aggregation Output
+// NEW: Enhanced Step 0 action output with complete executable specifications
+export interface Step0ExecutableAction {
+  // Existing Step 0B fields
+  name: string; // Code-safe name for API endpoints
+  title: string; // Human-readable display name for UI
+  purpose: string;
+  operation: 'create' | 'update';
+  updateDescription?: string;
+  
+  // NEW: Direct executable specifications
+  targetModel: string;           // Which model this action processes
+  processingMode: 'single';      // Always single-record processing
+  
+  // NEW: Direct pseudo steps (no separate generation needed)
+  pseudoSteps: Array<{
+    id: string;
+    type: 'db_update_fields' | 'ai_generate_object' | 'ai_generate_text' | 'ai_generate_object_websearch' | 
+          'ai_read_file_from_field' | 'ai_generate_image' | 'ai_modify_image' | 'ai_read_image' | 
+          'external_api' | 'npm_package' | 'system_timestamp' | 'system_calculate';
+    description: string;
+    model?: string; // Target model for this step
+    inputFields: Array<{
+      id: string;
+      name: string;
+      type: string;
+      kind: 'scalar' | 'object' | 'enum';
+      required: boolean;
+      list: boolean;
+      relationModel?: string;
+      description?: string;
+      source: 'model_field' | 'related_model' | 'system' | 'parameter' | 'previous_step';
+    }>;
+    outputFields: Array<{
+      id: string;
+      name: string;
+      type: string;
+      kind: 'scalar' | 'object' | 'enum';
+      required: boolean;
+      list: boolean;
+      relationModel?: string;
+      description?: string;
+      target: 'model_field' | 'temporary' | 'return';
+    }>;
+    // Step-specific properties
+    prompt?: string;             // For AI steps
+    apiEndpoint?: string;        // For external API steps
+    packageName?: string;        // For npm package steps
+    packageFunction?: string;    // Specific package function
+    schema?: any;               // For AI generate object steps
+    maxLength?: number;         // For AI text generation
+    searchQuery?: string;       // For web search steps
+    fileType?: 'text' | 'pdf' | 'image' | 'csv'; // For file reading
+    processing?: string;        // Processing instructions
+    dimensions?: { width: number; height: number }; // For image generation
+    style?: string;            // Art style for images
+    modifications?: string;     // Image modification instructions
+    preserveOriginal?: boolean; // Keep original image
+    updateConditions?: string[]; // Optional conditions for DB updates
+  }>;
+  
+  // NEW: Direct executable code (no separate generation needed)
+  executableCode: {
+    script: string;              // Ready-to-run JavaScript
+    envVars: Array<{            // Environment variables needed
+      name: string;
+      description: string;
+      required: boolean;
+      sensitive: boolean;
+    }>;
+    inputParameters: Array<{     // UI input parameters
+      name: string;
+      type: string;
+      required: boolean;
+      description: string;
+      defaultValue?: any;
+    }>;
+    outputParameters: Array<{    // Return values
+      name: string;
+      type: string;
+      description: string;
+    }>;
+    estimatedExecutionTime: string;
+    testData: {
+      input: Record<string, any>;
+      expectedOutput: Record<string, any>;
+    };
+  };
+}
+
+// Enhanced Phase B: Technical Aggregation Output with executable actions
 export interface Step0BOutput {
   // Basic info
   operation: 'create' | 'update' | 'extend';
@@ -150,6 +239,10 @@ export interface Step0BOutput {
     }>;
   }>;
   
+  // NEW: Complete executable actions instead of simple specifications
+  executableActions: Step0ExecutableAction[];
+  
+  // DEPRECATED: Keep for backward compatibility but will be populated from executableActions
   actions: Array<{
     name: string; // Code-safe name for API endpoints
     title: string; // Human-readable display name for UI
@@ -250,15 +343,34 @@ ANALYSIS FOCUS:
    - How often should things be checked or updated?
 
 5. IDENTIFY EXTERNAL API REQUIREMENTS:
+   🚨 CRITICAL: ONLY SOCIAL MEDIA PLATFORMS ARE ALLOWED 🚨
+   
+   ALLOWED EXTERNAL APIs (ONLY THESE):
+   - instagram (Instagram)
+   - facebook (Facebook)
+   - threads (Threads)
+   - x (X/Twitter)
+   - tiktok (TikTok)
+   
+   🚨 ABSOLUTELY FORBIDDEN APIs:
+   - Any non-social media APIs (Stripe, SendGrid, Shopify, Gmail, Slack, etc.)
+   - Any business/productivity APIs
+   - Any payment/financial APIs
+   - Any email/communication APIs (except social media)
+   - Any e-commerce APIs
+   - Any analytics APIs (except social media analytics)
+   
+   VALIDATION RULES:
    - Look for the "🔗 External Tools/APIs I Want to Connect:" section in the user's request
-   - ONLY include APIs that are EXPLICITLY LISTED in this dedicated section
+   - ONLY include APIs that are EXPLICITLY LISTED in this section AND are in the allowed list above
+   - If user mentions any non-social media API, IGNORE it completely
    - If this section is missing or empty, set requiresExternalApi to false
    - Do NOT infer APIs from tasks, context, or other parts of the request
    - Do NOT add APIs just because they might be useful for the use case
-   - For each API EXPLICITLY LISTED in the external tools section, determine its purpose and priority level (critical/high/medium/low)
-   - What specific functionality is needed from each LISTED external API?
-   - What scopes/permissions would be required for each LISTED API?
-   - IMPORTANT: The external tools section is the ONLY source for API requirements
+   - For each ALLOWED API EXPLICITLY LISTED in the external tools section, determine its purpose and priority level (critical/high/medium/low)
+   - What specific social media functionality is needed from each LISTED API?
+   - What scopes/permissions would be required for each LISTED social media API?
+   - IMPORTANT: The external tools section is the ONLY source for API requirements, and only social media APIs are allowed
 
 6. IDENTIFY BUSINESS FEATURES:
    - What are the 3-5 core features needed?
@@ -305,13 +417,13 @@ Be focused on business value and user needs. Use your intelligence to fill in th
         
         externalApiAnalysis: z.object({
           requiredApis: z.array(z.object({
-            name: z.string(),
-            purpose: z.string(),
+            name: z.enum(['instagram', 'facebook', 'threads', 'x', 'tiktok']).describe('ONLY social media platforms allowed: instagram, facebook, threads, x, tiktok'),
+            purpose: z.string().describe('Social media specific purpose only'),
             priority: z.enum(['critical', 'high', 'medium', 'low']),
-            useCase: z.string(),
-            requiredScopes: z.array(z.string()).max(5)
-          })).max(8), // Increased from 5 to support more APIs
-          primaryApi: z.string().nullable(),
+            useCase: z.string().describe('Social media use case only'),
+            requiredScopes: z.array(z.string()).max(5).describe('Social media API scopes only (read_posts, write_posts, analytics, etc.)')
+          })).max(5).describe('ONLY social media APIs allowed - reject any non-social media APIs'),
+          primaryApi: z.enum(['instagram', 'facebook', 'threads', 'x', 'tiktok']).nullable().describe('Primary social media API, null if none'),
           requiresExternalApi: z.boolean(),
           apiConflictResolution: z.string().optional()
         }),
@@ -390,14 +502,20 @@ BACKGROUND AUTOMATION EXAMPLES:
 - After "Log expenses" → categorize automatically, update budgets, send spending alerts
 
 EXTERNAL API DETECTION:
+🚨 CRITICAL: ONLY SOCIAL MEDIA PLATFORMS ARE ALLOWED 🚨
+
+ALLOWED APIs: instagram, facebook, threads, x, tiktok
+FORBIDDEN: Any non-social media APIs (Stripe, SendGrid, Shopify, Gmail, Slack, etc.)
+
 - Look specifically for the "🔗 External Tools/APIs I Want to Connect:" section in the user's request
-- ONLY include APIs that are EXPLICITLY LISTED in this section by name
+- ONLY include APIs that are EXPLICITLY LISTED in this section AND are social media platforms
+- If user mentions any non-social media API (Stripe, Gmail, Shopify, etc.), COMPLETELY IGNORE IT
 - If the section is present but empty, set requiresExternalApi to false and primaryApi to null
 - If the section is not present, set requiresExternalApi to false and primaryApi to null
 - Do NOT infer APIs from tasks or context - only use the explicit list provided
 - Do NOT add APIs that might be helpful but weren't specifically listed in the external tools section
-- If multiple APIs are explicitly listed, prioritize based on their importance to the core functionality
-- The external tools section is the ONLY source of truth for external API requirements
+- If multiple ALLOWED APIs are explicitly listed, prioritize based on their importance to the core functionality
+- The external tools section is the ONLY source of truth for external API requirements, and only social media APIs are allowed
 
 ${existingAgent ? 'Focus on what NEW functionality is needed beyond what already exists.' : 'This is a new system - identify all requirements from scratch.'}
 
@@ -467,31 +585,76 @@ For "update" operations, provide updateDescription explaining what changes are n
 TECHNICAL SPECIFICATION REQUIREMENTS:
 
 0. EXTERNAL API INTEGRATION:
-   - Based on the Phase A analysis, only integrate APIs that were explicitly mentioned
+   🚨 CRITICAL: ONLY SOCIAL MEDIA PLATFORMS ARE ALLOWED 🚨
+   
+   ALLOWED APIs: instagram, facebook, threads, x (twitter), tiktok
+   FORBIDDEN: Any non-social media APIs (Stripe, SendGrid, Shopify, Gmail, Slack, etc.)
+   
+   - Based on the Phase A analysis, only integrate APIs that were explicitly mentioned AND are social media platforms
    - Do NOT add or suggest additional APIs beyond what was identified in Phase A
-   - For each API identified in Phase A:
-     * Determine appropriate connection type (oauth or api_key based on API capabilities)
+   - IGNORE any non-social media APIs that may have been mentioned
+   - For each ALLOWED API identified in Phase A:
+     * All social media APIs use OAuth connection type (never api_key)
      * Set priority: 'primary' (core functionality) or 'secondary' (additional features)
-     * Define primaryUseCase explaining the main functionality this API enables
-     * Specify required scopes/permissions for the intended functionality
-   - Design models, actions, and schedules to work ONLY with the APIs from Phase A analysis
+     * Define primaryUseCase explaining the main social media functionality this API enables
+     * Specify required scopes/permissions for social media operations (read posts, write posts, analytics, etc.)
+   - Design models, actions, and schedules to work ONLY with the ALLOWED social media APIs from Phase A analysis
 
 1. DATABASE MODELS - Convert inferred data needs into database schemas:
-   ${existingAgent ? `
-   - For EXISTING models: operation="update", add new fields, update existing fields, add enums
-   - For NEW models: operation="create", design complete new models
-   - For each field: mark as "create" (new field) or "update" (modify existing field)
-   - For each enum: mark as "create" (new enum) or "update" (modify existing enum)
-   - Update descriptions should explain: "Add new field X for Y purpose" or "Modify field X to include Z"
-   ` : `
-   - Design 2-5 key data models from scratch (all operation="create")
-   `}
-   - Each model should have 3-7 practical fields
-   - Include proper field types (String, Int, DateTime, Boolean, etc.)
-   - Define necessary enums (max 3 per model, 5 values each)
-   - Specify relationships between models
-   - Design models to support the inferred commands and their variables
-   - If external APIs are specified, design models that integrate with those APIs' data structures
+  ${existingAgent ? `
+  - For EXISTING models: operation="update", add new fields, update existing fields, add enums
+  - For NEW models: operation="create", design complete new models
+  - For each field: mark as "create" (new field) or "update" (modify existing field)
+  - For each enum: mark as "create" (new enum) or "update" (modify existing enum)
+  - Update descriptions should explain: "Add new field X for Y purpose" or "Modify field X to include Z"
+  ` : `
+  - Design 2-5 key data models from scratch (all operation="create")
+  `}
+  - Each model should have 3-7 practical fields
+  - Include proper field types (String, Int, DateTime, Boolean, etc.)
+  - Define necessary enums (max 3 per model, 5 values each)
+  - Specify relationships between models
+  - Design models to support the inferred commands and their variables
+  - If external APIs are specified, design models that integrate with those APIs' data structures
+
+🚨 CRITICAL MODEL-ACTION FIELD COORDINATION:
+
+**MODELS MUST INCLUDE FIELDS THAT ACTIONS WILL POPULATE:**
+
+For each model, anticipate what fields actions will need to save results:
+
+**For AI Analysis Actions:**
+- Add fields with dynamic names based on action purpose and domain
+- Types: String for text results, Float for numeric scores, DateTime for timestamps, Json for structured data
+
+**For External API Actions:**  
+- Add fields with names related to the specific API and its purpose
+- Types: String for API responses, Boolean for validation results, Json for complex API data
+
+**For Image/File Processing Actions:**
+- Add fields based on the type of processing and file format
+- Types: String for URLs/text, Json for structured data, Boolean for processing flags
+
+**For System Actions:**
+- Add standard processing metadata fields
+- Types: DateTime for timestamps, String for status/notes, Boolean for flags
+
+**DYNAMIC FIELD GENERATION PRINCIPLES:**
+- Field names should be derived from action purposes and domain context
+- Field types should match the expected output of each processing type
+- All action output fields should be optional (nullable) 
+- Field names should be descriptive and domain-appropriate
+- Avoid generic names - use specific, meaningful field names based on business context
+
+🔧 FIELD COORDINATION STRATEGY:
+1. **Analyze the manual actions** from Phase A to understand what processing will happen
+2. **Dynamically determine output fields** based on action purposes and domain context
+3. **Include anticipated output fields** in the corresponding models with appropriate names
+4. **Use appropriate field types** based on processing type (String, Float, DateTime, Boolean, Json)
+5. **Make all action output fields optional** (nullable) since they'll be populated later
+6. **Generate field names dynamically** based on business context and action purposes
+
+This ensures field coordination without hardcoded values, allowing the AI to generate appropriate field names based on the specific business domain and action requirements.
 
 2. BUSINESS PROCESS ACTIONS - Convert inferred commands into action specifications:
    ${existingAgent ? `
@@ -603,13 +766,13 @@ BOTH name AND title MUST BE PROVIDED FOR EVERY ENTITY.`;
         domain: z.string(),
         
         externalApis: z.array(z.object({
-          provider: z.string(),
+          provider: z.enum(['instagram', 'facebook', 'threads', 'x', 'tiktok']).describe('ONLY social media platforms allowed'),
           requiresConnection: z.boolean(),
-          connectionType: z.enum(['oauth', 'api_key', 'none']),
-          primaryUseCase: z.string(),
-          requiredScopes: z.array(z.string()).max(5),
+          connectionType: z.enum(['oauth']).describe('Social media APIs only use OAuth'),
+          primaryUseCase: z.string().describe('Social media specific use case'),
+          requiredScopes: z.array(z.string()).max(5).describe('Social media API scopes'),
           priority: z.enum(['primary', 'secondary'])
-        })).max(5), // Support up to 5 external APIs
+        })).max(5).describe('ONLY social media APIs allowed - maximum 5 social media platforms'),
         
         models: z.array(z.object({
           name: z.string().describe('camelCase model name for internal use (e.g., "socialMediaPost", "customerProfile") - NO SPACES'),
@@ -792,7 +955,9 @@ Generate 3-7 business process actions that implement the commands Phase A inferr
       agentName: phaseAOutput.agentName,
       agentDescription: phaseAOutput.agentDescription,
       domain: phaseAOutput.domain,
-      phaseAAnalysis: phaseAOutput
+      phaseAAnalysis: phaseAOutput,
+      // TODO: Implement ultra-streamlined executable actions generation
+      executableActions: [] // Placeholder - will be implemented in next phase
     };
 
     console.log('✅ STEP 0B: Technical aggregation completed successfully');

@@ -41,11 +41,69 @@ export interface AgentEnumField {
   defaultValue?: string;
 }
 
+// NEW: Migration types for enhanced pseudo steps (CORRECTED)
+export type FieldSource = 
+  | 'model_field'      // Direct field from the target model record
+  | 'external_data'    // External APIs, other models, user parameters
+  | 'previous_step'    // Output from previous pseudo step
+  | 'system';          // System-provided values (current date, user ID, etc.)
+
+export type FieldTarget = 
+  | 'model_field'      // Update a field in the target model record
+  | 'temporary'        // Temporary value for next step (not saved to model)
+  | 'return';          // Value returned to caller (for action chaining)
+
+// NEW: Enhanced step types for the migration (NO DATABASE OPERATIONS)
+export type NewStepType = 
+  | 'ai_generate_object'         // Generate structured data
+  | 'ai_generate_text'           // Generate text content
+  | 'ai_generate_object_websearch' // Generate with web search
+  | 'ai_read_file_from_field'    // Read file from model field
+  | 'ai_generate_image'          // Generate image
+  | 'ai_modify_image'            // Modify existing image
+  | 'ai_read_image'              // Read/analyze image from field
+  | 'external_api'               // Call external API
+  | 'npm_package'                // Use npm package functionality
+  | 'system_timestamp'           // Add system timestamps
+  | 'system_calculate';          // Perform calculations
+
+// NEW: Enhanced field definition for migration
+export interface EnhancedStepField {
+  id: string;
+  name: string;
+  type: string; // 'String', 'Int', 'Float', 'Boolean', 'DateTime', 'Json', 'Bytes', or model name for relations
+  kind: 'scalar' | 'object' | 'enum';
+  required: boolean;
+  list: boolean;
+  relationModel?: string; // For object fields, reference to model name
+  description?: string;
+  defaultValue?: string;
+  // NEW: Migration-specific properties
+  source?: FieldSource;     // Where this field's value comes from
+  target?: FieldTarget;     // Where this field's value goes to
+  // NEW: Dynamic database fetching properties
+  externalModel?: string;   // Model name to fetch from (for external_data source)
+  whereClause?: Record<string, any>; // Prisma where clause for fetching external data
+  selectFields?: string[];  // Specific fields to select from external model
+}
+
 // ParamValue type for supporting static values, references to previous actions, and alias-based references during loops
 export type ParamValue = 
   | { type: 'static'; value: any }
   | { type: 'ref'; fromActionIndex: number; outputKey: string }
   | { type: 'alias'; fromAlias: string; outputKey: string };
+
+// NEW: Enhanced WHERE clause for schedule chaining
+export interface WhereCondition {
+  field: string;
+  operator: '=' | '!=' | '>' | '<' | '>=' | '<=' | 'IN' | 'NOT IN' | 'LIKE' | 'IS NULL' | 'IS NOT NULL';
+  value: any | ParameterReference;
+}
+
+export interface ParameterReference {
+  type: 'previous_step_output' | 'system_value' | 'schedule_parameter';
+  source: string;
+}
 
 // Interface for step execution in action chains
 export interface ActionChainStep {
@@ -68,6 +126,14 @@ export interface ActionChainStep {
     retryCount?: number;
     retryDelay?: number;
   };
+  // NEW: WHERE clause for record selection (migration feature)
+  whereClause?: {
+    model: string;               // Target model name
+    conditions: WhereCondition[];
+  };
+  // Chain control (migration feature)
+  continueOnError?: boolean;
+  maxRecords?: number;           // Limit processing
 }
 
 // Interface for scheduled action chains
@@ -129,6 +195,11 @@ export interface AgentAction {
   emoji?: string;
   description: string;
   role: 'admin' | 'member';
+  
+  // NEW: Migration properties
+  targetModel?: string;    // REQUIRED for new actions: target model name
+  processingMode?: 'single' | 'batch'; // Processing scope (migration: always 'single')
+  
   dataSource?: {
     type: 'database' | 'custom';
     customFunction?: {
@@ -194,6 +265,40 @@ export interface AgentAction {
       reactCode: string;
       propsInterface: Record<string, string>;
     };
+  };
+  
+  // NEW: Enhanced pseudo steps for migration
+  pseudoSteps?: Array<{
+    id: string;
+    inputFields: EnhancedStepField[];
+    outputFields: EnhancedStepField[];
+    description: string;
+    type: NewStepType; // Use new step types
+    model?: string; // For database operations, specifies which model/table to operate on
+    // Additional properties for specific step types
+    schema?: any;      // For AI generate object steps
+    prompt?: string;   // For AI steps
+    maxLength?: number; // For AI text generation
+    searchQuery?: string; // For web search steps
+    fileType?: 'text' | 'pdf' | 'image' | 'csv'; // For file reading steps
+    processing?: string; // Processing instructions
+    dimensions?: { width: number; height: number }; // For image generation
+    style?: string;    // Art style for image generation
+    modifications?: string; // Image modification instructions
+    preserveOriginal?: boolean; // Keep original image
+    updateConditions?: string[]; // Optional conditions for DB updates
+    apiEndpoint?: string; // For external API calls
+    packageName?: string; // For npm package steps
+    packageFunction?: string; // Specific function to call
+  }>;
+  
+  // Keep existing properties for backward compatibility
+  technicalSpecification?: any;
+  uiComponentsDesign?: any[];
+  _internal?: {
+    hasRealCode?: boolean;
+    hasTestCases?: boolean;
+    codeGenerationMetadata?: any;
   };
 }
 
