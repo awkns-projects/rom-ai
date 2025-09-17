@@ -27,20 +27,35 @@ module.exports = {
     hardhat: {
       chainId: 1337,
     },
+    // sepolia: {
+    //   url: ALCHEMY_API_KEY && ALCHEMY_API_KEY !== "demo" 
+    //     ? `https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`
+    //     : "https://sepolia.infura.io/v3/",  // Fallback to public endpoint
+    //   accounts: SEPOLIA_PRIVATE_KEY ? [SEPOLIA_PRIVATE_KEY] : [],
+    //   chainId: 11155111,
+    //   gasPrice: 20000000000, // 20 gwei
+    // },
     sepolia: {
-      url: `https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}`,
+      url:  "https://ethereum-sepolia-public.nodies.app",  // Fallback to public endpoint
       accounts: SEPOLIA_PRIVATE_KEY ? [SEPOLIA_PRIVATE_KEY] : [],
       chainId: 11155111,
       gasPrice: 20000000000, // 20 gwei
+    },
+    // Alternative Sepolia endpoints
+    sepoliaPublic: {
+      url: "https://rpc.sepolia.org",
+      accounts: SEPOLIA_PRIVATE_KEY ? [SEPOLIA_PRIVATE_KEY] : [],
+      chainId: 11155111,
+      gasPrice: 25000000000, // 25 gwei for public RPC
     },
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
     currency: "USD",
   },
-  etherscan: {
-    apiKey: ETHERSCAN_API_KEY,
-  },
+  // etherscan: {
+  //   apiKey: ETHERSCAN_API_KEY,
+  // },
   mocha: {
     timeout: 300000, // 5 minutes
   },

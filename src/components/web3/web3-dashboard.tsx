@@ -30,7 +30,7 @@ import { StakingPoolComponent } from './staking-pool';
 
 export function Web3Dashboard() {
   const { toast } = useToast();
-  const { account, connectWallet, disconnectWallet, isConnecting, chainId, authenticated, ready } = useWeb3Provider();
+  const { account, connectWallet, disconnectWallet, isConnecting, chainId, authenticated, ready, switchToSepolia } = useWeb3Provider();
   
   const [activeTab, setActiveTab] = useState('overview');
   const [contractAddresses, setContractAddresses] = useState({
@@ -38,6 +38,7 @@ export function Web3Dashboard() {
     token: '',
     pool: ''
   });
+  const [isSwitchingChain, setIsSwitchingChain] = useState(false);
 
   const handleAddressInput = (type: string, address: string) => {
     setContractAddresses(prev => ({ ...prev, [type]: address }));
@@ -45,6 +46,38 @@ export function Web3Dashboard() {
 
   const isValidAddress = (address: string) => {
     return address.length === 42 && address.startsWith('0x');
+  };
+
+  const isCorrectChain = chainId === 11155111; // Sepolia testnet
+  
+  const handleSwitchToSepolia = async () => {
+    setIsSwitchingChain(true);
+    try {
+      await switchToSepolia();
+      toast({
+        title: "Network Switched",
+        description: "Successfully switched to Sepolia testnet",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Network Switch Failed", 
+        description: error.message || "Failed to switch to Sepolia testnet",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSwitchingChain(false);
+    }
+  };
+
+  const getChainName = (chainId: number | null) => {
+    switch (chainId) {
+      case 1: return 'Ethereum Mainnet';
+      case 11155111: return 'Sepolia Testnet';
+      case 8453: return 'Base Mainnet';
+      case 137: return 'Polygon';
+      case 31337: return 'Hardhat Local';
+      default: return `Chain ${chainId}`;
+    }
   };
 
   return (
@@ -61,9 +94,31 @@ export function Web3Dashboard() {
           
           <div className="flex items-center gap-4">
             {chainId && (
-              <Badge variant="outline">
-                Chain: {chainId}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant={isCorrectChain ? "default" : "destructive"}>
+                  {getChainName(chainId)}
+                </Badge>
+                {!isCorrectChain && authenticated && (
+                  <Button
+                    onClick={handleSwitchToSepolia}
+                    disabled={isSwitchingChain}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {isSwitchingChain ? (
+                      <>
+                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                        Switching...
+                      </>
+                    ) : (
+                      <>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Switch to Sepolia
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             )}
             
             {!authenticated ? (
@@ -92,6 +147,58 @@ export function Web3Dashboard() {
             )}
           </div>
         </div>
+
+        {/* Wrong Chain Warning Banner */}
+        {authenticated && chainId && !isCorrectChain && (
+          <Card className="border-destructive bg-destructive/10">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-destructive">
+                <Settings className="h-5 w-5" />
+                Wrong Network Detected
+              </CardTitle>
+              <CardDescription>
+                You're connected to {getChainName(chainId)}, but this app requires Sepolia Testnet.
+                Please switch networks to use the Web3 features.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button
+                onClick={handleSwitchToSepolia}
+                disabled={isSwitchingChain}
+                className="w-full"
+              >
+                {isSwitchingChain ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    Switching to Sepolia...
+                  </>
+                ) : (
+                  <>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Switch to Sepolia Testnet
+                  </>
+                )}
+              </Button>
+              
+              <div className="text-sm text-muted-foreground space-y-2">
+                <p><strong>Manual Instructions:</strong></p>
+                <ol className="list-decimal list-inside space-y-1 ml-2">
+                  <li>Open your wallet (MetaMask, etc.)</li>
+                  <li>Click the network dropdown</li>
+                  <li>Select "Sepolia test network"</li>
+                  <li>If not available, add manually:</li>
+                </ol>
+                <div className="bg-muted p-3 rounded text-xs font-mono space-y-1">
+                  <div><strong>Network Name:</strong> Sepolia</div>
+                  <div><strong>Chain ID:</strong> 11155111</div>
+                  <div><strong>RPC URL:</strong> https://sepolia.infura.io/v3/</div>
+                  <div><strong>Currency:</strong> ETH</div>
+                  <div><strong>Explorer:</strong> https://sepolia.etherscan.io</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
 {!ready ? (
           /* Loading Screen */

@@ -48,11 +48,18 @@ export function useWeb3Provider() {
       const signer = await provider.getSigner();
       const address = await signer.getAddress();
       const network = await provider.getNetwork();
+      const chainId = Number(network.chainId);
+
+      // Warn if not on Sepolia testnet
+      if (chainId !== 11155111) {
+        console.warn(`⚠️ Connected to chain ${chainId}, but contracts are deployed on Sepolia testnet (11155111)`);
+        console.warn('Please switch to Sepolia testnet in your wallet');
+      }
 
       setProvider(provider);
       setSigner(signer);
       setAccount(address);
-      setChainId(Number(network.chainId));
+      setChainId(chainId);
 
     } catch (error) {
       console.error('Failed to connect wallet:', error);
@@ -63,14 +70,96 @@ export function useWeb3Provider() {
   }, [ready, authenticated, login, wallets]);
 
   const disconnectWallet = useCallback(async () => {
+    await logout();
     setProvider(null);
     setSigner(null);
     setAccount(null);
     setChainId(null);
-    if (authenticated) {
-      await logout();
+  }, [logout]);
+
+  const switchToSepolia = useCallback(async () => {
+    try {
+      // Get the first connected wallet from Privy
+      const wallet = wallets?.[0];
+      if (!wallet) {
+        throw new Error('No wallet connected');
+      }
+
+      // Try to switch the wallet to Sepolia
+      try {
+        await wallet.switchChain(11155111); // Sepolia chain ID
+        
+        // Update our provider state after switching
+        const ethereumProvider = await wallet.getEthereumProvider();
+        if (ethereumProvider) {
+          const provider = new ethers.BrowserProvider(ethereumProvider);
+          const network = await provider.getNetwork();
+          setChainId(Number(network.chainId));
+          setProvider(provider);
+          
+          // Update signer if we have an account
+          if (account) {
+            const signer = await provider.getSigner();
+            setSigner(signer);
+          }
+        }
+        
+      } catch (switchError: any) {
+        console.error('Wallet switch failed, trying manual approach:', switchError);
+        
+        // Fallback: Try the raw provider approach
+        const ethereumProvider = await wallet.getEthereumProvider();
+        if (!ethereumProvider) {
+          throw new Error('No Ethereum provider available');
+        }
+
+        // Try to switch using wallet_switchEthereumChain
+        try {
+          await ethereumProvider.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0xaa36a7' }], // 11155111 in hex
+          });
+        } catch (rawSwitchError: any) {
+          // This error code indicates that the chain has not been added
+          if (rawSwitchError.code === 4902) {
+            await ethereumProvider.request({
+              method: 'wallet_addEthereumChain',
+              params: [
+                {
+                  chainId: '0xaa36a7', // 11155111 in hex
+                  chainName: 'Sepolia Testnet',
+                  nativeCurrency: {
+                    name: 'Sepolia Ether',
+                    symbol: 'ETH',
+                    decimals: 18,
+                  },
+                  rpcUrls: ['https://sepolia.infura.io/v3/'],
+                  blockExplorerUrls: ['https://sepolia.etherscan.io/'],
+                },
+              ],
+            });
+          } else {
+            throw rawSwitchError;
+          }
+        }
+        
+        // Update provider state after manual switch
+        const provider = new ethers.BrowserProvider(ethereumProvider);
+        const network = await provider.getNetwork();
+        setChainId(Number(network.chainId));
+        setProvider(provider);
+        
+        if (account) {
+          const signer = await provider.getSigner();
+          setSigner(signer);
+        }
+      }
+      
+    } catch (error) {
+      console.error('Failed to switch to Sepolia:', error);
+      throw error;
     }
-  }, [authenticated, logout]);
+  }, [wallets, account]);
 
   // Auto-connect when Privy is ready and user is authenticated
   useEffect(() => {
@@ -98,7 +187,8 @@ export function useWeb3Provider() {
     connectWallet,
     disconnectWallet,
     authenticated,
-    ready
+    ready,
+    switchToSepolia
   };
 }
 
@@ -149,6 +239,11 @@ export function useNFTFactory() {
     maxSupply: string
   ) => {
     if (!signer || !account) throw new Error('Wallet not connected');
+    
+    // Check if contract address is configured
+    if (!CONTRACTS.NFTFactory.address || CONTRACTS.NFTFactory.address === '') {
+      throw new Error('NFT Factory contract address not configured. Please set NEXT_PUBLIC_NFT_FACTORY_ADDRESS in your .env.local file.');
+    }
     
     setLoading(true);
     setError(null);
@@ -212,6 +307,11 @@ export function useNFTFactory() {
 
   const getCreationFee = useCallback(async () => {
     if (!provider) return '0';
+    
+    // Check if contract address is configured
+    if (!CONTRACTS.NFTFactory.address || CONTRACTS.NFTFactory.address === '') {
+      throw new Error('NFT Factory contract address not configured. Please set NEXT_PUBLIC_NFT_FACTORY_ADDRESS in your .env.local file.');
+    }
     
     const contract = new ethers.Contract(
       CONTRACTS.NFTFactory.address,

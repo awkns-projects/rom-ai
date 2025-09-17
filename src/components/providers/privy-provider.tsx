@@ -35,6 +35,45 @@ export function PrivyProvider({ children }: PrivyProviderProps) {
         embeddedWallets: {
           createOnLogin: 'users-without-wallets',
         },
+        // Configure supported chains - focus on Sepolia testnet
+        defaultChain: {
+          id: 11155111,
+          name: 'Sepolia',
+          network: 'sepolia',
+          nativeCurrency: {
+            decimals: 18,
+            name: 'Sepolia Ether',
+            symbol: 'ETH',
+          },
+          rpcUrls: {
+            public: { http: ['https://sepolia.infura.io/v3/'] },
+            default: { http: ['https://sepolia.infura.io/v3/'] },
+          },
+          blockExplorers: {
+            etherscan: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' },
+            default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' },
+          },
+          testnet: true,
+        },
+        supportedChains: [{
+          id: 11155111,
+          name: 'Sepolia',
+          network: 'sepolia',
+          nativeCurrency: {
+            decimals: 18,
+            name: 'Sepolia Ether',
+            symbol: 'ETH',
+          },
+          rpcUrls: {
+            public: { http: ['https://sepolia.infura.io/v3/'] },
+            default: { http: ['https://sepolia.infura.io/v3/'] },
+          },
+          blockExplorers: {
+            etherscan: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' },
+            default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' },
+          },
+          testnet: true,
+        }],
       }}
     >
       {children}

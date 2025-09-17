@@ -1,0 +1,24 @@
+{
+  "network": "sepolia",
+  "chainId": 11155111,
+  "deployer": "0x5507e0E0DA1dD75290694e85789b18a6Ad6c29F2",
+  "timestamp": "2025-09-17T06:24:13.268Z",
+  "gasUsed": "TBD",
+  "contracts": {
+    "nftImplementation": "0x1c6b270b2236aCb54D8a556C28031643ae3A21a3",
+    "bondingImplementation": "0xebbc2d5bB9A22f6A8e666A43FcEc194583E8c19E",
+    "bondingETHImplementation": "0xB6811A21E583a051B56Ed664012ED1B728856362",
+    "stakingImplementation": "0x7A84D51d701edd4FB1b26Fc046A9B6f1F14c4EfE",
+    "nftFactory": "0xe41D746931AeB42d97dE8F190A8594E0845D2214",
+    "erc20Factory": "0x33D4bB302bEB224E13048be53934Bb8eF7Cde3eb",
+    "stakingFactory": "0x5376894483Be94f9efaE17d2BD9B3506bEdf1152"
+  },
+  "config": {
+    "nftCreationFee": "10000000000000000",
+    "erc20CreationFee": "10000000000000000",
+    "stakingCreationFee": "10000000000000000",
+    "protocolFeeRecipient": "0x5507e0E0DA1dD75290694e85789b18a6Ad6c29F2",
+    "nftProtocolFee": 250,
+    "stakingProtocolFee": 150
+  }
+}
