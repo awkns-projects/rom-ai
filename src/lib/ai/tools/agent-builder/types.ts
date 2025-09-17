@@ -57,12 +57,12 @@ export type FieldTarget =
 export type NewStepType = 
   | 'ai_generate_object'         // Generate structured data
   | 'ai_generate_text'           // Generate text content
-  | 'ai_generate_object_websearch' // Generate with web search
+  | 'ai_generate_text_websearch' // Generate text with web search
+  | 'ai_generate_object_websearch' // Generate structured data with web search
   | 'ai_read_file_from_field'    // Read file from model field
   | 'ai_generate_image'          // Generate image
   | 'ai_modify_image'            // Modify existing image
   | 'ai_read_image'              // Read/analyze image from field
-  | 'external_api'               // Call external API
   | 'npm_package'                // Use npm package functionality
   | 'system_timestamp'           // Add system timestamps
   | 'system_calculate';          // Perform calculations

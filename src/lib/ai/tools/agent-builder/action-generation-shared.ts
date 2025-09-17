@@ -2972,12 +2972,12 @@ ACTION PURPOSE: ${actionPurpose}
 🔧 NEW STEP TYPES AVAILABLE (NO DATABASE OPERATIONS):
 - 'ai_generate_object': Generate structured data, output fields save automatically
 - 'ai_generate_text': Generate text content, output fields save automatically
-- 'ai_generate_object_websearch': Generate with web search, output fields save automatically
+- 'ai_generate_text_websearch': Generate text with web search, output fields save automatically
+- 'ai_generate_object_websearch': Generate structured data with web search, output fields save automatically
 - 'ai_read_file_from_field': Read file from model field, output fields save automatically
 - 'ai_generate_image': Generate image, output fields save automatically
 - 'ai_modify_image': Modify existing image, output fields save automatically
 - 'ai_read_image': Read/analyze image, output fields save automatically
-- 'external_api': Call external API, output fields save automatically
 - 'npm_package': Use npm package, output fields save automatically
 - 'system_timestamp': Add timestamps, output fields save automatically
 - 'system_calculate': Perform calculations, output fields save automatically
@@ -3049,12 +3049,12 @@ Generate 2-4 focused pseudo steps that implement "${actionPurpose}" for the ${ta
         type: z.enum([
           'ai_generate_object', 
           'ai_generate_text',
+          'ai_generate_text_websearch',
           'ai_generate_object_websearch',
           'ai_read_file_from_field',
           'ai_generate_image',
           'ai_modify_image', 
           'ai_read_image',
-          'external_api',
           'npm_package',
           'system_timestamp',
           'system_calculate'

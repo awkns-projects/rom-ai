@@ -47,12 +47,18 @@ export function generateFieldAccessCode(field: EnhancedStepField, stepNumber: nu
         return `input.${field.name}`;
       }
     case 'previous_step': 
-      return `step${stepNumber - 1}_results.${field.name}`;  // From previous step output
+      // More defensive field access with fallback
+      return `(step${stepNumber - 1}_results && step${stepNumber - 1}_results.${field.name}) || input.${field.name} || null`;
     case 'system': 
+      // Handle common system values directly instead of using undefined systemValues
       return field.name === 'currentDate' ? 'new Date()' :
              field.name === 'userId' ? 'input.userId' :
              field.name === 'timestamp' ? 'Date.now()' :
-             `systemValues.${field.name}`;
+             field.name === 'weekStart' ? 'new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)' :
+             field.name === 'weekEnd' ? 'new Date()' :
+             field.name.includes('Date') ? 'new Date()' :
+             field.name.includes('Time') ? 'Date.now()' :
+             `input.${field.name}`; // Fallback to input parameter
     default:
       return `input.${field.name}`;
   }
@@ -366,12 +372,18 @@ ${inputData}
     };
     
     // External API call using step specifications
+    const step${stepNumber}_apiHeaders = {
+      'Content-Type': 'application/json'
+    };
+    
+    // Add authorization header only if API key is available
+    if (envVars.API_KEY) {
+      step${stepNumber}_apiHeaders['Authorization'] = \`Bearer \${envVars.API_KEY}\`;
+    }
+    
     const step${stepNumber}_apiResponse = await fetch('${apiEndpoint}', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': \`Bearer \${envVars.API_KEY}\`
-      },
+      headers: step${stepNumber}_apiHeaders,
       body: JSON.stringify(step${stepNumber}_requestData)
     });
     
@@ -486,39 +498,302 @@ ${returnOutputs}
 }
 
 /**
- * Generate step implementation with proper dependency handling
+ * Generate AI step implementation (CORRECTED APPROACH - only AI step types allowed)
  */
-function generateStepWithDependencies(
+function generateAIStepImplementation(
   step: MigrationStep,
   stepNumber: number,
   targetModel: string,
   allSteps: MigrationStep[]
 ): string {
-  // Check if this step has dependencies on previous steps
-  const hasPreviousStepDependency = step.inputFields.some(field => field.source === 'previous_step');
+  // Only allow AI step types - reject external APIs, system operations, etc.
+  const allowedAIStepTypes = [
+    'ai_generate_object',
+    'ai_generate_text', 
+    'ai_generate_text_websearch',
+    'ai_generate_object_websearch',
+    'ai_read_file_from_field',
+    'ai_generate_image',
+    'ai_modify_image',
+    'ai_read_image'
+  ];
   
-  if (hasPreviousStepDependency && stepNumber > 1) {
-    // Ensure previous step results are available
-    const dependentSteps = step.inputFields
-      .filter(field => field.source === 'previous_step')
-      .map(field => {
-        // Extract step number from field reference (assumes stepN_results.fieldName format)
-        const match = field.name.match(/step(\d+)_/);
-        return match ? parseInt(match[1]) : stepNumber - 1;
-      });
-    
-    // Add check for previous step completion
-    const dependencyChecks = dependentSteps.map(depStepNum => 
-      `    if (typeof step${depStepNum}_results === 'undefined') {
-      throw new Error('Step ${depStepNum} results not available for step ${stepNumber}');
-    }`
-    ).join('\n');
-    
-    const stepCode = generateStepTypeCode(step, stepNumber, targetModel);
-    return `${dependencyChecks}\n${stepCode}`;
+  if (!allowedAIStepTypes.includes(step.type)) {
+    console.warn(`⚠️ Non-AI step type '${step.type}' converted to ai_generate_object`);
+    // Convert non-AI steps to AI steps
+    step.type = 'ai_generate_object' as any;
   }
   
-  return generateStepTypeCode(step, stepNumber, targetModel);
+  // Generate AI step with record context and field saving
+  return generateAIStepWithRecordContext(step, stepNumber, targetModel, allSteps);
+}
+
+/**
+ * Generate AI step with proper record context and field saving
+ */
+function generateAIStepWithRecordContext(
+  step: MigrationStep,
+  stepNumber: number,
+  targetModel: string,
+  allSteps: MigrationStep[] = []
+): string {
+  const modelNameLower = targetModel.toLowerCase();
+  
+  // Prepare input context from the record and previous steps
+  const inputContext = step.inputFields.map(field => {
+    if (field.source === 'model_field') {
+      return `      ${field.name}: record.${field.name}`;
+    } else if (field.source === 'previous_step') {
+      // Find which step actually produces this field
+      const producingStepIndex = allSteps.findIndex((s: MigrationStep) => 
+        s.outputFields.some((of: any) => of.name === field.name)
+      );
+      const producingStepNumber = producingStepIndex >= 0 ? producingStepIndex + 1 : stepNumber - 1;
+      return `      ${field.name}: step${producingStepNumber}_results?.${field.name} || null`;
+    } else {
+      return `      ${field.name}: input.${field.name}`;
+    }
+  }).join(',\n');
+  
+  // Generate output field assignments
+  const outputAssignments = step.outputFields.map(field => 
+    `      ${field.name}: step${stepNumber}_aiResult.object.${field.name} || step${stepNumber}_aiResult.object`
+  ).join(',\n');
+  
+  // Use step description as the AI prompt
+  const stepPrompt = step.description || `Process ${targetModel} record data`;
+  
+  switch (step.type) {
+    case 'ai_generate_object':
+      return `
+    // Step ${stepNumber}: ${step.description}
+    await actionLogger.startStep(executionId, ${stepNumber}, \`${stepPrompt.replace(/`/g, '\\`')}\`, { recordId: record.id });
+    
+    // Prepare context from record and previous steps
+    const step${stepNumber}_context = {
+${inputContext}
+    };
+    
+    // AI generation using step description as prompt
+    const step${stepNumber}_aiResult = await generateObject({
+      model: aiModel,
+      schema: z.object({
+        ${step.outputFields.map(field => `${field.name}: z.string().describe("${field.description || field.name}")`).join(',\n        ')}
+      }),
+      messages: [
+        {
+          role: 'system',
+          content: \`You are processing a ${targetModel} record. ${stepPrompt.replace(/'/g, "\\'")}\`
+        },
+        {
+          role: 'user',
+          content: \`Record data: \${JSON.stringify(step${stepNumber}_context)}\`
+        }
+      ]
+    });
+    
+    if (!step${stepNumber}_aiResult.object) {
+      throw new Error(\`AI generation failed for step: ${stepPrompt.replace(/'/g, "\\'")}\`);
+    }
+    
+    // Store results for next steps and database saving
+    const step${stepNumber}_results = {
+${outputAssignments}
+    };
+    
+    await actionLogger.completeStep(executionId, ${stepNumber}, { 
+      stepDescription: \`${stepPrompt.replace(/`/g, '\\`')}\`,
+      stepType: 'ai_generate_object',
+      aiGenerated: true,
+      outputFields: [${step.outputFields.map(f => `'${f.name}'`).join(', ')}],
+      generatedData: step${stepNumber}_aiResult.object
+    });
+    console.log(\`✅ Step ${stepNumber} (ai_generate_object): ${stepPrompt.replace(/`/g, '\\`')}\`, step${stepNumber}_aiResult.object);`;
+
+    case 'ai_generate_text':
+      return `
+    // Step ${stepNumber}: ${step.description}
+    await actionLogger.startStep(executionId, ${stepNumber}, \`${stepPrompt.replace(/`/g, '\\`')}\`, { recordId: record.id });
+    
+    // Prepare context from record and previous steps
+    const step${stepNumber}_context = {
+${inputContext}
+    };
+    
+    // AI text generation using step description as prompt  
+    const step${stepNumber}_textResult = await generateObject({
+      model: aiModel,
+      schema: z.object({
+        text: z.string().describe('Generated text content')
+      }),
+      messages: [
+        {
+          role: 'system',
+          content: \`You are processing a ${targetModel} record. Generate text based on the prompt: ${stepPrompt.replace(/'/g, "\\'")}\`
+        },
+        {
+          role: 'user',
+          content: \`Context: \${JSON.stringify(step${stepNumber}_context)}\`
+        }
+      ]
+    });
+    
+    if (!step${stepNumber}_textResult.object || !step${stepNumber}_textResult.object.text) {
+      throw new Error(\`AI text generation failed for step: ${stepPrompt.replace(/'/g, "\\'")}\`);
+    }
+    
+    // Store results for next steps and database saving
+    const step${stepNumber}_results = {
+      ${step.outputFields.map(field => `${field.name}: step${stepNumber}_textResult.object.text`).join(',\n      ')}
+    };
+    
+    await actionLogger.completeStep(executionId, ${stepNumber}, { 
+      stepDescription: \`${stepPrompt.replace(/`/g, '\\`')}\`,
+      stepType: 'ai_generate_text',
+      textGenerated: true,
+      textLength: step${stepNumber}_textResult.object.text.length,
+      outputFields: [${step.outputFields.map(f => `'${f.name}'`).join(', ')}],
+      generatedText: step${stepNumber}_textResult.object.text
+    });
+    console.log(\`✅ Step ${stepNumber} (ai_generate_text): ${stepPrompt.replace(/`/g, '\\`')}\`, { text: step${stepNumber}_textResult.object.text, length: step${stepNumber}_textResult.object.text.length });`;
+
+    case 'ai_generate_text_websearch':
+      return `
+    // Step ${stepNumber}: ${step.description} (with web search)
+    await actionLogger.startStep(executionId, ${stepNumber}, \`${stepPrompt.replace(/`/g, '\\`')}\`, { recordId: record.id });
+    
+    // Prepare context from record and previous steps
+    const step${stepNumber}_context = {
+${inputContext}
+    };
+    
+    // AI text generation with web search using step description as prompt
+    const step${stepNumber}_textResult = await generateText({
+      model: aiModel,
+      prompt: \`${stepPrompt.replace(/'/g, "\\'")}. Context: \${JSON.stringify(step${stepNumber}_context)}\`,
+      tools: {
+        web_search: aiModel.tools?.webSearch ? aiModel.tools.webSearch({
+          searchContextSize: 'high'
+        }) : undefined
+      },
+      toolChoice: aiModel.tools?.webSearch ? { type: 'tool', toolName: 'web_search' } : undefined
+    });
+    
+    if (!step${stepNumber}_textResult.text) {
+      throw new Error(\`AI text generation with web search failed for step: ${stepPrompt.replace(/'/g, "\\'")}\`);
+    }
+    
+    // Store results for next steps and database saving
+    const step${stepNumber}_results = {
+      ${step.outputFields.map(field => `${field.name}: step${stepNumber}_textResult.text`).join(',\n      ')},
+      sources: step${stepNumber}_textResult.sources || []
+    };
+    
+    await actionLogger.completeStep(executionId, ${stepNumber}, { 
+      stepDescription: \`${stepPrompt.replace(/`/g, '\\`')}\`,
+      stepType: 'ai_generate_text_websearch',
+      textGenerated: true,
+      textLength: step${stepNumber}_textResult.text.length,
+      sourcesFound: step${stepNumber}_textResult.sources?.length || 0,
+      outputFields: [${step.outputFields.map(f => `'${f.name}'`).join(', ')}],
+      generatedText: step${stepNumber}_textResult.text,
+      sources: step${stepNumber}_textResult.sources
+    });
+    console.log(\`✅ Step ${stepNumber} (ai_generate_text_websearch): ${stepPrompt.replace(/`/g, '\\`')}\`, { text: step${stepNumber}_textResult.text, sources: step${stepNumber}_textResult.sources, textLength: step${stepNumber}_textResult.text.length });`;
+
+    case 'ai_generate_object_websearch':
+      return `
+    // Step ${stepNumber}: ${step.description} (with web search)
+    await actionLogger.startStep(executionId, ${stepNumber}, \`${stepPrompt.replace(/`/g, '\\`')}\`, { recordId: record.id });
+    
+    // Prepare context from record and previous steps
+    const step${stepNumber}_context = {
+${inputContext}
+    };
+    
+    // AI object generation with web search using step description as prompt
+    const step${stepNumber}_objectResult = await generateObject({
+      model: aiModel,
+      schema: z.object({
+        ${step.outputFields.map(field => `${field.name}: z.string().describe("${field.description || field.name}")`).join(',\n        ')}
+      }),
+      prompt: \`${stepPrompt.replace(/'/g, "\\'")}. Context: \${JSON.stringify(step${stepNumber}_context)}\`,
+      tools: {
+        web_search: aiModel.tools?.webSearch ? aiModel.tools.webSearch({
+          searchContextSize: 'high'
+        }) : undefined
+      },
+      toolChoice: aiModel.tools?.webSearch ? { type: 'tool', toolName: 'web_search' } : undefined
+    });
+    
+    if (!step${stepNumber}_objectResult.object) {
+      throw new Error(\`AI object generation with web search failed for step: ${stepPrompt.replace(/'/g, "\\'")}\`);
+    }
+    
+    // Store results for next steps and database saving
+    const step${stepNumber}_results = {
+      ${step.outputFields.map(field => `${field.name}: step${stepNumber}_objectResult.object.${field.name} || step${stepNumber}_objectResult.object`).join(',\n      ')},
+      sources: step${stepNumber}_objectResult.sources || []
+    };
+    
+    await actionLogger.completeStep(executionId, ${stepNumber}, { 
+      stepDescription: \`${stepPrompt.replace(/`/g, '\\`')}\`,
+      stepType: 'ai_generate_object_websearch',
+      objectGenerated: true,
+      sourcesFound: step${stepNumber}_objectResult.sources?.length || 0,
+      outputFields: [${step.outputFields.map(f => `'${f.name}'`).join(', ')}],
+      generatedData: step${stepNumber}_objectResult.object,
+      sources: step${stepNumber}_objectResult.sources
+    });
+    console.log(\`✅ Step ${stepNumber} (ai_generate_object_websearch): ${stepPrompt.replace(/`/g, '\\`')}\`, { data: step${stepNumber}_objectResult.object, sources: step${stepNumber}_objectResult.sources });`;
+
+    default:
+      // Convert unknown types to ai_generate_object
+      return `
+    // Step ${stepNumber}: ${step.description} (converted to AI generation)
+    await actionLogger.startStep(executionId, ${stepNumber}, \`${stepPrompt.replace(/`/g, '\\`')}\`, { recordId: record.id });
+    
+    // Prepare context from record and previous steps
+    const step${stepNumber}_context = {
+${inputContext}
+    };
+    
+    // AI generation using step description as prompt
+    const step${stepNumber}_aiResult = await generateObject({
+      model: aiModel,
+      schema: z.object({
+        ${step.outputFields.map(field => `${field.name}: z.string().describe("${field.description || field.name}")`).join(',\n        ')}
+      }),
+      messages: [
+        {
+          role: 'system',
+          content: \`You are processing a ${targetModel} record. ${stepPrompt.replace(/'/g, "\\'")}\`
+        },
+        {
+          role: 'user',
+          content: \`Record data: \${JSON.stringify(step${stepNumber}_context)}\`
+        }
+      ]
+    });
+    
+    if (!step${stepNumber}_aiResult.object) {
+      throw new Error(\`AI generation failed for step: ${stepPrompt.replace(/'/g, "\\'")}\`);
+    }
+    
+    // Store results for next steps and database saving
+    const step${stepNumber}_results = {
+${outputAssignments}
+    };
+    
+    await actionLogger.completeStep(executionId, ${stepNumber}, { 
+      stepDescription: \`${stepPrompt.replace(/`/g, '\\`')}\`,
+      stepType: 'ai_generate_object',
+      aiGenerated: true,
+      outputFields: [${step.outputFields.map(f => `'${f.name}'`).join(', ')}],
+      generatedData: step${stepNumber}_aiResult.object
+    });
+    console.log(\`✅ Step ${stepNumber} (ai_generate_object): ${stepPrompt.replace(/`/g, '\\`')}\`, step${stepNumber}_aiResult.object);`;
+  }
 }
 
 /**
@@ -534,8 +809,7 @@ export function generateStepTypeCode(
       return generateAiGenerateObjectCode(step, stepNumber, targetModel);
     case 'ai_generate_text':
       return generateAiGenerateTextCode(step, stepNumber, targetModel);
-    case 'external_api':
-      return generateExternalApiCode(step, stepNumber, targetModel);
+    // external_api step type removed - use AI with web search instead
     case 'npm_package':
       return generateNpmPackageCode(step, stepNumber, targetModel);
     case 'system_timestamp':
@@ -563,7 +837,7 @@ export function generateStepTypeCode(
 }
 
 /**
- * Generate complete single-record action function (CORRECTED - no database operations in action)
+ * Generate complete single-record action function (CORRECTED APPROACH - AI-only steps that save to record fields)
  */
 export function generateMigrationActionCode(
   actionName: string,
@@ -573,10 +847,19 @@ export function generateMigrationActionCode(
   outputParameters: any[] = [],
   envVars: any[] = []
 ): string {
-  // Generate step implementations
+  const modelNameLower = targetModel.toLowerCase();
+  
+  // Generate step implementations - only AI step types allowed
   const stepImplementations = pseudoSteps.map((step, index) => 
-    generateStepWithDependencies(step, index + 1, targetModel, pseudoSteps)
+    generateAIStepImplementation(step, index + 1, targetModel, pseudoSteps)
   ).join('\n\n');
+  
+  // Collect all output fields that should be saved to the database record
+  const modelFieldUpdates = pseudoSteps
+    .flatMap(step => step.outputFields)
+    .filter(field => field.target === 'model_field')
+    .map(field => `      ${field.name}: step${pseudoSteps.findIndex(s => s.outputFields.includes(field)) + 1}_results.${field.name}`)
+    .join(',\n');
   
   // Collect all output fields from all steps
   const allOutputFields = pseudoSteps.flatMap(step => step.outputFields);
@@ -589,18 +872,27 @@ export function generateMigrationActionCode(
   ).join(',\n');
   
   return `
-// CORRECTED MIGRATION APPROACH: Processing function for ${targetModel}
-async function ${actionName}({ db, input, envVars, testMode, actionLogger, executionId, console, generateId, formatDate, validateRequired, ai, z }) {
+// CORRECTED APPROACH: Single-record AI processing for ${targetModel}
+async function ${actionName}({ db, input, envVars, testMode, actionLogger, executionId, console, generateId, formatDate, validateRequired, ai, z, aiModel, generateText }) {
   const startTime = Date.now();
   
   try {
-    // Action receives user input parameters directly
-    // input = user-provided parameters from UI components
-    console.log(\`🔄 Processing ${actionName} with parameters:\`, Object.keys(input));
+    console.log(\`🔄 Processing ${actionName} for ${targetModel} record:\`, input.id);
+    
+    // Step 0: Fetch the specific ${targetModel} record by ID
+    const record = await db.${targetModel.charAt(0).toLowerCase() + targetModel.slice(1)}.findUnique({
+      where: { id: input.id }
+    });
+    
+    if (!record) {
+      throw new Error(\`${targetModel} record with ID \${input.id} not found\`);
+    }
+    
+    console.log(\`📋 Found ${targetModel} record:\`, record.id);
     
 ${stepImplementations}
     
-    // CRITICAL: Collect ALL output fields marked as 'model_field' and save to database
+    // CRITICAL: Save all AI-generated outputs to the record
     const modelFieldUpdates = {
       ${modelFieldOutputs.map((field, index) => {
         const stepIndex = pseudoSteps.findIndex(s => s.outputFields.includes(field)) + 1;
@@ -608,37 +900,28 @@ ${stepImplementations}
       }).join(',\n      ')}
     };
     
-    // CRITICAL: Save all output fields to the database record if we have a record ID
     let updatedRecord = null;
-    if (Object.keys(modelFieldUpdates).length > 0 && input.recordId) {
-      updatedRecord = await db.${targetModel.toLowerCase()}.update({
-        where: { id: input.recordId },
+    if (Object.keys(modelFieldUpdates).length > 0) {
+      updatedRecord = await db.${targetModel.charAt(0).toLowerCase() + targetModel.slice(1)}.update({
+        where: { id: record.id },
         data: modelFieldUpdates
       });
-      console.log(\`✅ Final Update: Saved \${Object.keys(modelFieldUpdates).length} fields to ${targetModel} record\`, Object.keys(modelFieldUpdates));
-    } else if (Object.keys(modelFieldUpdates).length > 0) {
-      // Create new record if no recordId provided
-      updatedRecord = await db.${targetModel.toLowerCase()}.create({
-        data: {
-          ...modelFieldUpdates,
-          ...input // Include other input parameters
-        }
-      });
-      console.log(\`✅ Final Create: Created new ${targetModel} record with \${Object.keys(modelFieldUpdates).length} fields\`, Object.keys(modelFieldUpdates));
+      console.log(\`✅ Updated ${targetModel} record with \${Object.keys(modelFieldUpdates).length} AI-generated fields:\`, modelFieldUpdates);
     } else {
-      console.log(\`ℹ️ No model fields to update for ${targetModel}\`);
+      console.log(\`ℹ️ No fields to update for ${targetModel} record\`);
+      updatedRecord = record;
     }
     
     return {
       success: true,
       data: {
-        recordId: updatedRecord?.id || input.recordId,
+        recordId: updatedRecord.id,
         ${returnFields ? returnFields + ',' : ''}
         updatedFields: Object.keys(modelFieldUpdates),
         fieldsUpdated: Object.keys(modelFieldUpdates).length,
         processedRecord: updatedRecord
       },
-      message: \`Successfully processed ${actionName} (updated \${Object.keys(modelFieldUpdates).length} fields)\`,
+      message: \`Successfully processed ${targetModel} record \${updatedRecord.id} with AI (updated \${Object.keys(modelFieldUpdates).length} fields)\`,
       executionTime: Date.now() - startTime
     };
     
@@ -647,7 +930,7 @@ ${stepImplementations}
     return {
       success: false,
       data: null,
-      message: \`Failed to process ${actionName}: \${error.message}\`,
+      message: \`Failed to process ${targetModel} record: \${error.message}\`,
       executionTime: Date.now() - startTime
     };
   }

@@ -1537,7 +1537,9 @@ Always be helpful and guide users through the action execution process step by s
       formatDate: (date) => date.toISOString(),
       validateRequired: (value, fieldName) => { if (!value) throw new Error(\`\${fieldName} is required\`); },
       ai: { generateObject },
-      z: z
+      z: z,
+      aiModel: aiModel,
+      generateText: generateText
     });
     `;
     } else if (hasGeneratedCode) {
@@ -1558,7 +1560,7 @@ Always be helpful and guide users through the action execution process step by s
 
     return `import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import { generateObject } from 'ai';
+import { generateObject, generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { z } from 'zod';
@@ -1936,7 +1938,7 @@ export async function POST(request: NextRequest) {
 
     return `import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient } from '@prisma/client';
-import { generateObject } from 'ai';
+import { generateObject, generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { anthropic } from '@ai-sdk/anthropic';
 import { z } from 'zod';

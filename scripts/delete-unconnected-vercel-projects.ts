@@ -145,9 +145,9 @@ async function checkGitConnection(projectId: string, projectName: string): Promi
     }
   }
 
-  // If we can't determine safely, assume it's connected (safer approach)
-  console.log(`❓ ${projectName} - Cannot determine Git status, assuming connected (safe)`);
-  return true;
+  // If we can't determine safely, assume it's unconnected (delete it)
+  console.log(`❓ ${projectName} - Cannot determine Git status, marking for deletion`);
+  return false;
 }
 
 async function findUnconnectedProjects(projects: VercelProject[]): Promise<VercelProject[]> {
