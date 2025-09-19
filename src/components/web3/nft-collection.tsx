@@ -19,7 +19,7 @@ interface NFTCollectionProps {
 
 export function NFTCollectionComponent({ collectionAddress }: NFTCollectionProps) {
   const { toast } = useToast();
-  const { account } = useWeb3Provider();
+  const { provider, account } = useWeb3Provider();
   const { mint, getCollectionDetails, setStakingPool, loading, error } = useNFTCollection(collectionAddress);
   
   const [collectionData, setCollectionData] = useState<any>(null);
@@ -42,10 +42,10 @@ export function NFTCollectionComponent({ collectionAddress }: NFTCollectionProps
   };
 
   useEffect(() => {
-    if (collectionAddress && account) {
+    if (provider && collectionAddress && account) {
       loadCollectionData();
     }
-  }, [collectionAddress, account]);
+  }, [provider, collectionAddress, account]);
 
   const handleMint = async () => {
     if (!account) {
