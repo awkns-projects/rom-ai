@@ -1,10 +1,13 @@
 'use client';
-import { forwardRef, useState, useEffect } from 'react';
+
+import { forwardRef, useState, useEffect, memo, useContext } from 'react';
 import Link from 'next/link';
-import { memo } from 'react';
 import Image from 'next/image';
-import { Bell } from 'lucide-react';
-import { useSession } from 'next-auth/react';
+// import { Bell } from 'lucide-react';
+import { signIn, useSession, signOut } from 'next-auth/react';
+import { useTheme } from 'next-themes';
+
+import { GoogleAuthContext } from '@/components/providers/google-auth-provider';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -13,8 +16,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { signOut } from 'next-auth/react';
-import { useTheme } from 'next-themes';
 
 interface AppWrapperProps {
   children: React.ReactNode;
@@ -24,6 +25,20 @@ const PureAppWrapper = forwardRef<HTMLElement, AppWrapperProps>(({ children }, r
   const { data: session, status } = useSession();
   const { setTheme, resolvedTheme } = useTheme();
   const [isMounted, setIsMounted] = useState(false);
+
+  const googleAuthContext = useContext(GoogleAuthContext)
+
+  const handleGoogleAuth = () =>{
+    if(googleAuthContext.userInfo.email) {
+      googleAuthContext.userLogout();
+    } else{
+      googleAuthContext.userLogin();
+    }
+  }
+  const handleXAuth = () => {}
+  const handleFacebookAuth = () => {}
+  const handleInstagramAuth = () => {}
+  const handleShopifyAuth = () => {}
 
   useEffect(() => {
     setIsMounted(true);
@@ -123,6 +138,43 @@ const PureAppWrapper = forwardRef<HTMLElement, AppWrapperProps>(({ children }, r
                 >
                   Toggle theme
                 </DropdownMenuItem> */}
+
+                <DropdownMenuItem 
+                  className="text-green-200 hover:bg-green-500/10 cursor-pointer"
+                  onClick={() => {handleGoogleAuth()}}
+                >
+                  {
+                    googleAuthContext.userInfo.email?
+                    `Google Logout(${googleAuthContext.userInfo.email})`: "Google Login"
+                  }
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="text-green-200 hover:bg-green-500/10 cursor-pointer"
+                  onClick={() => {handleXAuth()}}
+                >
+                  X Login
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="text-green-200 hover:bg-green-500/10 cursor-pointer"
+                  onClick={() => {handleFacebookAuth()}}
+                >
+                  Facebook Login
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="text-green-200 hover:bg-green-500/10 cursor-pointer"
+                  onClick={() => {handleInstagramAuth()}}
+                >
+                  Instagram Login
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="text-green-200 hover:bg-green-500/10 cursor-pointer"
+                  onClick={() => {handleShopifyAuth()}}
+                >
+                  Shopify Login
+                </DropdownMenuItem>
+
+                <DropdownMenuSeparator className="bg-green-500/20" />
+
                 <DropdownMenuItem 
                   className="text-green-200 hover:bg-green-500/10 cursor-pointer"
                   onClick={() => signOut()}

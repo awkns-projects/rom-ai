@@ -1,11 +1,14 @@
 'use client'
 
+import type { User } from 'next-auth'
+
 import { SessionProvider } from 'next-auth/react'
+
 import { AppWrapper } from '@/components/app-wrapper'
 import { PrivyProvider } from '@/components/providers/privy-provider'
+import { GoogleAuthProvider } from '@/components/providers/google-auth-provider'
 import { AppSidebar } from '@/components/app-sidebar'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import type { User } from 'next-auth'
 
 interface AppContentProps {
   children: React.ReactNode
@@ -16,14 +19,16 @@ interface AppContentProps {
 export function AppContent({ children, session, isCollapsed }: AppContentProps) {
   return (
     <PrivyProvider>
-      <SessionProvider>
-        <AppWrapper>
-          <SidebarProvider defaultOpen={!isCollapsed}>
-            <AppSidebar user={session?.user} />
-            <SidebarInset>{children}</SidebarInset>
-          </SidebarProvider>
-        </AppWrapper>
-      </SessionProvider>
+      <GoogleAuthProvider>
+        <SessionProvider>
+          <AppWrapper>
+            <SidebarProvider defaultOpen={!isCollapsed}>
+              <AppSidebar user={session?.user} />
+              <SidebarInset>{children}</SidebarInset>
+            </SidebarProvider>
+          </AppWrapper>
+        </SessionProvider>
+      </GoogleAuthProvider>
     </PrivyProvider>
   )
 } 
