@@ -8,6 +8,7 @@ import { signIn, useSession, signOut } from 'next-auth/react';
 import { useTheme } from 'next-themes';
 
 import { GoogleAuthContext } from '@/components/providers/google-auth-provider';
+import { XAuthContext } from '@/components/providers/x-auth-provider';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -26,7 +27,8 @@ const PureAppWrapper = forwardRef<HTMLElement, AppWrapperProps>(({ children }, r
   const { setTheme, resolvedTheme } = useTheme();
   const [isMounted, setIsMounted] = useState(false);
 
-  const googleAuthContext = useContext(GoogleAuthContext)
+  const googleAuthContext = useContext(GoogleAuthContext);
+  const xAuthContext = useContext(XAuthContext);
 
   const handleGoogleAuth = () =>{
     if(googleAuthContext.userInfo.email) {
@@ -35,7 +37,13 @@ const PureAppWrapper = forwardRef<HTMLElement, AppWrapperProps>(({ children }, r
       googleAuthContext.userLogin();
     }
   }
-  const handleXAuth = () => {}
+  const handleXAuth = () => {
+    if(xAuthContext.userInfo.id) {
+      xAuthContext.userLogout();
+    } else{
+      xAuthContext.userLogin();
+    }
+  }
   const handleFacebookAuth = () => {}
   const handleInstagramAuth = () => {}
   const handleShopifyAuth = () => {}
@@ -152,7 +160,10 @@ const PureAppWrapper = forwardRef<HTMLElement, AppWrapperProps>(({ children }, r
                   className="text-green-200 hover:bg-green-500/10 cursor-pointer"
                   onClick={() => {handleXAuth()}}
                 >
-                  X Login
+                  {
+                    xAuthContext.userInfo.id?
+                    `X Logout(${xAuthContext.userInfo.name})`: "X Login"
+                  }
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   className="text-green-200 hover:bg-green-500/10 cursor-pointer"

@@ -46,7 +46,7 @@ export const GoogleAuthProvider = (props:PropsWithChildren)=>{
                 "https://www.googleapis.com/auth/userinfo.profile"
               )
             ) {
-              gsiLogin(userLogin);
+              gsiLogin();
             }
           }
         },
@@ -56,7 +56,7 @@ export const GoogleAuthProvider = (props:PropsWithChildren)=>{
     }
   };
 
-  const gsiLogin = async (callback: (gsiData: Record<string, any>) => void) => {
+  const gsiLogin = async () => {
     const auth_type = localStorage.getItem("google_auth_type");
     const auth_token = localStorage.getItem("google_auth_token");
     if (auth_type && auth_token) {
