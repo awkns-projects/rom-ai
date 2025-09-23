@@ -31,7 +31,10 @@
     "verify:sepolia": "npx hardhat run src/web3/scripts/verify-sepolia.js --network sepolia",
     "compile:contracts": "npx hardhat compile",
     "test:contracts": "npx hardhat test",
-    "test-agent": "npx tsx scripts/test-agent.ts"
+    "test-agent": "npx tsx scripts/test-agent.ts",
+    "auto-corrector": "npx tsx scripts/auto-corrector.ts",
+    "auto-corrector:cron": "npx tsx scripts/auto-corrector.ts --cron",
+    "auto-corrector:test": "npx tsx scripts/auto-corrector.ts --test"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.22",
