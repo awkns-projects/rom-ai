@@ -2,58 +2,59 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   const data = await request.json();
-  const { code, code_verifier } = data;
+  const { code, shop } = data;
 
-  const client_id = process.env.NEXT_PUBLIC_X_CLIENT_ID || '';
-  const client_secret = process.env.NEXT_PUBLIC_X_CLIENT_SECRET || '';
-  const redirect_uri = process.env.NEXT_PUBLIC_X_REDIRECT_URI || '';
+  const apiKey = process.env.NEXT_PUBLIC_SHOPIFY_API_KEY || '';
+  const apiSecret = process.env.NEXT_PUBLIC_SHOPIFY_API_SECRET || '';
+  const shopName = process.env.NEXT_PUBLIC_SHOPIFY_SHOP_NAME || '';
 
   let access_token = '';
-  let refresh_token = '';
+  let scope = '';
   let userInfo = {};
 
   let isAuthenticationError = false;
 
-  if( code && code_verifier ) {
-    const params = new URLSearchParams();
-    params.append('grant_type', 'authorization_code');
-    params.append('code', code);
-    params.append('redirect_uri', redirect_uri);
-    params.append('code_verifier', code_verifier);
-
-    await fetch('https://api.x.com/2/oauth2/token', {
+  if( shop === `${shopName}.myshopify.com` && code ) {
+    await fetch(`https://${shop}/admin/oauth/access_token`, {
       method: 'POST',
       headers: { 
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${Buffer.from(`${client_id}:${client_secret}`).toString('base64')}`,
+        'Content-Type': 'application/json',
       },
-      body: params
+      body: JSON.stringify({
+        client_id: apiKey,
+        client_secret: apiSecret,
+        code
+      })
     }).then((response)=>{
       return response.json()
     }).then((res: any)=>{
       if(typeof res.error === 'undefined') {
         access_token = res.access_token;
-        refresh_token = res.refresh_token;
+        scope = res.scope;
       } else {
         isAuthenticationError = true;
       }
-    }).catch(()=>{
+    }).catch((error)=>{
       isAuthenticationError = true;
     })
 
     if(!isAuthenticationError) {
-      await fetch('https://api.twitter.com/2/users/me', {
+      await fetch(`https://${shop}/admin/api/2023-10/shop.json`, {
         method: "GET",
         headers: {
-          'Authorization': `Bearer ${access_token}`,
+          'X-Shopify-Access-Token': access_token,
           'Content-Type': 'application/json',
         }
       }).then((response) => {
         return response.json()
       })
       .then((res:any) => {
-        userInfo = res.data;
-      }).catch(()=>{
+       if(typeof res.errors === 'undefined') {
+          userInfo = res;
+        } else {
+          isAuthenticationError = true;
+        }
+      }).catch((error)=>{
         isAuthenticationError = true;
       })
     }
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     if(!isAuthenticationError) {
       return NextResponse.json({
         access_token,
-        refresh_token,
+        scope,
         ...userInfo
       }, { 
         status: 200,
@@ -71,13 +72,13 @@ export async function POST(request: NextRequest) {
       });
     } else {
       return NextResponse.json(
-        { error: 'Failed to login x(twitter)' },
+        { error: 'Failed to login shopify' },
         { status: 401 }
       );
     }
   } else {
     return NextResponse.json(
-      { error: 'Failed to login x(twitter)' },
+      { error: 'Failed to login shopify' },
       { status: 401 }
     );
   }

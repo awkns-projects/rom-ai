@@ -3,12 +3,11 @@
 import { forwardRef, useState, useEffect, memo, useContext } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-// import { Bell } from 'lucide-react';
-import { signIn, useSession, signOut } from 'next-auth/react';
-import { useTheme } from 'next-themes';
+import { useSession, signOut } from 'next-auth/react';
 
 import { GoogleAuthContext } from '@/components/providers/google-auth-provider';
 import { XAuthContext } from '@/components/providers/x-auth-provider';
+import { ShopifyAuthContext } from '@/components/providers/shopify-auth-provider';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -23,30 +22,37 @@ interface AppWrapperProps {
 }
 
 const PureAppWrapper = forwardRef<HTMLElement, AppWrapperProps>(({ children }, ref) => {
-  const { data: session, status } = useSession();
-  const { setTheme, resolvedTheme } = useTheme();
+  const { data: session } = useSession();
   const [isMounted, setIsMounted] = useState(false);
 
-  const googleAuthContext = useContext(GoogleAuthContext);
-  const xAuthContext = useContext(XAuthContext);
+  const googleAuth = useContext(GoogleAuthContext);
+  const xAuth = useContext(XAuthContext);
+  const shopifyAuth = useContext(ShopifyAuthContext);
 
   const handleGoogleAuth = () =>{
-    if(googleAuthContext.userInfo.email) {
-      googleAuthContext.userLogout();
+    if(googleAuth.userInfo.email) {
+      googleAuth.userLogout();
     } else{
-      googleAuthContext.userLogin();
+      googleAuth.userLogin();
     }
   }
   const handleXAuth = () => {
-    if(xAuthContext.userInfo.id) {
-      xAuthContext.userLogout();
+    if(xAuth.userInfo.id) {
+      xAuth.userLogout();
     } else{
-      xAuthContext.userLogin();
+      xAuth.userLogin();
     }
   }
   const handleFacebookAuth = () => {}
   const handleInstagramAuth = () => {}
-  const handleShopifyAuth = () => {}
+  const handleThreadsAuth = () => {}
+  const handleShopifyAuth = () => {
+    if(shopifyAuth.userInfo.shop) {
+      shopifyAuth.userLogout();
+    } else{
+      shopifyAuth.userLogin();
+    }
+  }
 
   useEffect(() => {
     setIsMounted(true);
@@ -152,8 +158,8 @@ const PureAppWrapper = forwardRef<HTMLElement, AppWrapperProps>(({ children }, r
                   onClick={() => {handleGoogleAuth()}}
                 >
                   {
-                    googleAuthContext.userInfo.email?
-                    `Google Logout(${googleAuthContext.userInfo.email})`: "Google Login"
+                    googleAuth.userInfo.email?
+                    `🔑 Google Logout(${googleAuth.userInfo.email})`: "🔒 Google Login"
                   }
                 </DropdownMenuItem>
                 <DropdownMenuItem 
@@ -161,8 +167,8 @@ const PureAppWrapper = forwardRef<HTMLElement, AppWrapperProps>(({ children }, r
                   onClick={() => {handleXAuth()}}
                 >
                   {
-                    xAuthContext.userInfo.id?
-                    `X Logout(${xAuthContext.userInfo.name})`: "X Login"
+                    xAuth.userInfo.id?
+                    `🔑 X Logout(${xAuth.userInfo.name})`: "🔒 X Login"
                   }
                 </DropdownMenuItem>
                 <DropdownMenuItem 
@@ -179,9 +185,18 @@ const PureAppWrapper = forwardRef<HTMLElement, AppWrapperProps>(({ children }, r
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   className="text-green-200 hover:bg-green-500/10 cursor-pointer"
+                  onClick={() => {handleThreadsAuth()}}
+                >
+                  Threads Login
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="text-green-200 hover:bg-green-500/10 cursor-pointer"
                   onClick={() => {handleShopifyAuth()}}
                 >
-                  Shopify Login
+                  {
+                    shopifyAuth.userInfo.shop?
+                    `🔑 Shopify Logout(${shopifyAuth.userInfo.shop.domain})`: "🔒 Shopify Login"
+                  }
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator className="bg-green-500/20" />

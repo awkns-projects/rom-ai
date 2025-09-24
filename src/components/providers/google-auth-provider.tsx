@@ -2,7 +2,7 @@
 
 import type { PropsWithChildren } from "react";
 
-import React, { useState, createContext } from 'react';
+import React, { useState, createContext, useEffect } from 'react';
 import Script from "next/script";
 
 export const GoogleAuthContext = createContext<any>("google-auth");
@@ -23,6 +23,7 @@ export const GoogleAuthProvider = (props:PropsWithChildren)=>{
     setUserInfo({});
     localStorage.removeItem("google_auth_type");
     localStorage.removeItem("google_auth_token");
+    localStorage.removeItem("google_auth_user_info");
   };
 
   const gsiInit = () => {
@@ -69,14 +70,19 @@ export const GoogleAuthProvider = (props:PropsWithChildren)=>{
         })
         .then(response => response.json())
         .then((res:any) => {
-          const gsiData = res;
-
           setUserInfo({
             ...userInfo,
-            ...gsiData,
+            ...res,
             token_type: auth_type,
             access_token: auth_token,
           });
+
+          localStorage.setItem("google_auth_user_info", JSON.stringify({
+            ...userInfo,
+            ...res,
+            token_type: auth_type,
+            access_token: auth_token,
+          }));
         })
         .catch((error) => {
           if (error.status === 401) {
@@ -85,6 +91,14 @@ export const GoogleAuthProvider = (props:PropsWithChildren)=>{
         })
     }
   };
+
+  useEffect(()=>{
+    const google_auth_user_info = localStorage.getItem("google_auth_user_info");
+
+    if(google_auth_user_info) {
+      setUserInfo(JSON.parse(google_auth_user_info))
+    }
+  }, [])
 
   return (
     <GoogleAuthContext.Provider value={{
