@@ -809,7 +809,7 @@ async function main(): Promise<void> {
   if (testFlag) {
     console.log('🧪 Running in test mode...');
     
-    const testProject = 'test-project';
+    const testProject = 'test-for-ai-corrector';
     try {
       await autoCorrector.execute(testProject, true);
       console.log('✅ Test completed successfully');
