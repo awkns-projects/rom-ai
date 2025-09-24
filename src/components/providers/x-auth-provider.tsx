@@ -37,15 +37,14 @@ export const XAuthProvider = (props:PropsWithChildren)=>{
         localStorage.setItem("x_auth_access_token", res.access_token);
         localStorage.setItem("x_auth_refresh_token", res.refresh_token);
 
-        setUserInfo({
+        const newUserInfo = {
           ...userInfo,
           ...res
-        });
+        }
 
-        localStorage.setItem("x_auth_user_info", JSON.stringify({
-          ...userInfo,
-          ...res
-        }));
+        setUserInfo(newUserInfo);
+
+        localStorage.setItem("x_auth_user_info", JSON.stringify(newUserInfo));
       })
       .catch((error) => {
         if (error.status === 401) {
@@ -93,7 +92,6 @@ export const XAuthProvider = (props:PropsWithChildren)=>{
     localStorage.removeItem("x_auth_code_verifier");
     localStorage.removeItem("x_auth_access_token");
     localStorage.removeItem("x_auth_refresh_token");
-    localStorage.removeItem("x_auth_user_info");
     localStorage.removeItem("x_auth_user_info");
   }
 

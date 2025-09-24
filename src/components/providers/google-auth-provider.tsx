@@ -64,25 +64,22 @@ export const GoogleAuthProvider = (props:PropsWithChildren)=>{
       await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
           method: "GET",
           headers: {
-            Authorization: `${auth_type} ${auth_token}`,
-            "Content-Type": `application/json`,
+            'Authorization': `${auth_type} ${auth_token}`,
+            'Content-Type': `application/json`,
           },
         })
         .then(response => response.json())
         .then((res:any) => {
-          setUserInfo({
+          const newUserInfo = {
             ...userInfo,
             ...res,
             token_type: auth_type,
             access_token: auth_token,
-          });
+          }
 
-          localStorage.setItem("google_auth_user_info", JSON.stringify({
-            ...userInfo,
-            ...res,
-            token_type: auth_type,
-            access_token: auth_token,
-          }));
+          setUserInfo(newUserInfo);
+
+          localStorage.setItem("google_auth_user_info", JSON.stringify(newUserInfo));
         })
         .catch((error) => {
           if (error.status === 401) {

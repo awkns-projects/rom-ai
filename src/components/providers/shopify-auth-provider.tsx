@@ -34,15 +34,14 @@ export const ShopifyAuthProvider = (props:PropsWithChildren)=>{
         return response.json()
       })
       .then((res:any) => {
-        setUserInfo({
+        const newUserInfo = {
           ...userInfo,
           ...res
-        })
+        }
+        
+        setUserInfo(newUserInfo)
 
-        localStorage.setItem("shopify_auth_user_info", JSON.stringify({
-          ...userInfo,
-          ...res
-        }));
+        localStorage.setItem("shopify_auth_user_info", JSON.stringify(newUserInfo));
       })
       .catch((error) => {
         if (error.status === 401) {
