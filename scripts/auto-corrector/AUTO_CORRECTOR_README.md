@@ -11,34 +11,54 @@ A standalone script that automatically monitors Vercel projects for errors, anal
 - ⏰ **Cron Support**: Can run as a background cron job for continuous monitoring
 - 🎯 **Multi-Project**: Supports monitoring multiple Vercel projects simultaneously
 
-## Runtime vs Build Logs
+## Log Access Methods
 
-**Important**: This script primarily detects **function errors** and **build-time errors**, not complete runtime logs.
+This script uses multiple approaches to access Vercel logs, in order of preference:
 
-### What We Can Detect
-- Function execution errors (HTTP 4xx/5xx responses)
-- Build failures and deployment issues
-- Performance metrics via Vercel's Observability API
+### 1. Vercel CLI (Recommended) ✅
+- **What it provides**: Complete runtime logs including console.log outputs, errors, and stack traces
+- **How it works**: Executes `vercel logs` command programmatically
+- **Requirements**: 
+  - Vercel CLI installed: `npm install -g vercel`
+  - CLI authenticated: `vercel login` 
+- **Advantages**: Real runtime data, same as dashboard logs
 
-### What We Cannot Access
-- Complete runtime logs (console.log outputs, debug information)
-- Real-time function execution traces
-- Detailed request/response data
+### 2. Monitoring API (Fallback) ⚠️
+- **What it provides**: Aggregated function error metrics and HTTP status codes
+- **How it works**: Uses Vercel's Monitoring API for error statistics
+- **Limitations**: No detailed error messages or stack traces
 
-### For Complete Runtime Log Access
-For production monitoring with full runtime logs, consider:
+### 3. Deployment Events (Final Fallback) ⚠️
+- **What it provides**: Build-time errors and deployment issues
+- **How it works**: Fetches deployment event logs via REST API
+- **Limitations**: Only build errors, not runtime errors
+
+### Setup for Best Results
+
+For optimal error detection, ensure Vercel CLI is properly configured:
+
+```bash
+# Install Vercel CLI globally
+npm install -g vercel
+
+# Authenticate (follow prompts)
+vercel login
+
+# Verify installation
+vercel --version
+```
+
+### Alternative Approaches
+
+If you can't use CLI integration:
 
 1. **Vercel Log Drains** (Pro/Enterprise plans)
    - Export logs to external services (Datadog, New Relic, etc.)
    - Real-time log streaming
    - Complete access to all runtime data
 
-2. **Vercel CLI**
-   - Use `vercel logs [deployment-url]` for real-time log viewing
-   - Good for development and debugging
-
-3. **Vercel Dashboard**
-   - View logs in the project's Logs tab
+2. **Vercel Dashboard**
+   - Manual log inspection in project's Logs tab
    - Filter and search capabilities
 
 ## Prerequisites
@@ -237,14 +257,15 @@ The script provides detailed logging with emojis for easy reading:
 
 - 🚀 Starting operations
 - 📥 Pulling repository
-- 📊 Fetching function errors and performance data
-- 📈 Observability API results
+- 📊 Fetching runtime logs and error data
+- 📱 Vercel CLI log retrieval attempts
+- 📈 Monitoring API results
+- 🎯 Error detection and sources
 - 🔍 Analyzing errors
 - 🤖 AI processing
 - ✅ Successful operations
 - ❌ Error conditions
-- ⚠️ Warnings and limitations
-- 💡 Helpful notes about log access
+- ⚠️ Warnings and CLI setup issues
 
 ## Troubleshooting
 
@@ -265,6 +286,12 @@ The script provides detailed logging with emojis for easy reading:
 #### Git Push Failures
 - Ensure your GitHub token has write access
 - Check for merge conflicts in the repository
+
+#### Vercel CLI Issues
+- **"Command not found"**: Install CLI with `npm install -g vercel`
+- **"Not authenticated"**: Run `vercel login` and follow prompts
+- **"No logs found"**: Ensure your project has recent deployments with function activity
+- **Permission denied**: Make sure your Vercel account has access to the project
 
 ### Debug Mode
 

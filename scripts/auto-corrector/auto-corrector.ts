@@ -166,11 +166,16 @@ class GitHubPuller {
 
 /**
  * Vercel API Client
- * Fetches runtime function logs and observability data from Vercel
+ * Fetches runtime logs and error data from Vercel using multiple approaches
  * 
- * Note: Vercel doesn't provide direct API access to runtime logs. This implementation
- * uses the Observability API to get function errors and performance metrics.
- * For complete runtime log access, consider using Vercel Log Drains (Pro/Enterprise plans).
+ * This implementation tries multiple approaches in order of preference:
+ * 1. Vercel CLI (`vercel logs`) - provides actual runtime logs including console.log outputs
+ * 2. Monitoring API - provides aggregated function error metrics  
+ * 3. Deployment events - provides build-time error logs as final fallback
+ * 
+ * Prerequisites for CLI access:
+ * - Vercel CLI installed: `npm install -g vercel`
+ * - CLI authenticated: `vercel login`
  */
 class VercelLogRetriever {
   private apiToken: string;
@@ -185,7 +190,7 @@ class VercelLogRetriever {
 
   async getErrorLogs(projectName: string): Promise<VercelErrorLog[]> {
     try {
-      console.log(`📊 Fetching function errors and performance data for project: ${projectName}`);
+      console.log(`📊 Fetching runtime logs and error data for project: ${projectName}`);
       
       // First, get the project info - handle both project names and project IDs
       let projectId = projectName;
@@ -229,23 +234,25 @@ class VercelLogRetriever {
         throw new Error(`Project not found or access denied: ${projectName} (${projectResponse.status})`);
       }
 
-      // Try to get function errors from Observability API
+      // Try multiple approaches to get error data
       const errors: VercelErrorLog[] = [];
       
       try {
         await this.getFunctionErrors(projectId, errors);
       } catch (error) {
-        console.warn(`⚠️ Could not fetch observability data:`, error);
+        console.warn(`⚠️ Could not fetch runtime logs:`, error);
       }
 
-      // Fall back to deployment event logs if no function errors found
+      // Fall back to deployment event logs if no errors found via CLI or Monitoring API
       if (errors.length === 0) {
-        console.log(`📋 No function errors found via Observability API, checking recent deployment events...`);
+        console.log(`📋 No runtime errors found, checking deployment event logs...`);
         await this.getDeploymentEventLogs(projectId, errors);
       }
 
       console.log(`📋 Found ${errors.length} potential error logs`);
-      console.log(`💡 Note: For complete runtime log access, consider setting up Vercel Log Drains`);
+      if (errors.length > 0) {
+        console.log(`🎯 Error sources: ${[...new Set(errors.map(e => (e.source || 'unknown').split('-')[0]))].join(', ')}`);
+      }
       return errors;
     } catch (error) {
       console.error('❌ Failed to retrieve Vercel logs:', error);
@@ -254,68 +261,257 @@ class VercelLogRetriever {
   }
 
   /**
-   * Attempt to get function errors from Vercel's Observability API
-   * This is a newer approach but may have limited availability
+   * Use Vercel CLI to retrieve runtime logs
+   * This provides access to actual runtime logs including console.log outputs
+   */
+  private async getRuntimeLogsViaCLI(projectId: string, errors: VercelErrorLog[]): Promise<void> {
+    try {
+      console.log(`📱 Attempting to fetch runtime logs via Vercel CLI...`);
+      
+      // First, get recent deployments to get deployment URLs
+      const deploymentsResponse = await this.makeRequest(
+        `https://api.vercel.com/v6/deployments?projectId=${projectId}&teamId=${this.teamId}&limit=3`
+      );
+
+      if (!deploymentsResponse.ok) {
+        throw new Error(`Failed to get deployments: ${deploymentsResponse.status}`);
+      }
+
+      const deployments = await deploymentsResponse.json();
+      
+      if (!deployments.deployments || deployments.deployments.length === 0) {
+        console.log(`📋 No recent deployments found for logs`);
+        return;
+      }
+
+      // Try to get logs from the most recent deployment
+      const latestDeployment = deployments.deployments[0];
+      const deploymentUrl = latestDeployment.url;
+      
+      console.log(`🔍 Fetching runtime logs for deployment: ${deploymentUrl}`);
+      
+      // Execute vercel logs command
+      const { execSync } = require('child_process');
+      
+      try {
+        // Run vercel logs with JSON output (if supported) or parse text output
+        const logOutput = execSync(`vercel logs ${deploymentUrl} --json --since=24h`, {
+          encoding: 'utf8',
+          timeout: 30000, // 30 second timeout
+          maxBuffer: 10 * 1024 * 1024 // 10MB buffer
+        });
+        
+        // Parse JSON logs if available
+        const logLines = logOutput.trim().split('\n');
+        let foundErrors = 0;
+        
+        for (const line of logLines) {
+          try {
+            const logEntry = JSON.parse(line);
+            
+            // Look for error-like log entries
+            if (this.isErrorLog(logEntry)) {
+              errors.push({
+                id: `cli-${logEntry.id || Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                message: logEntry.message || logEntry.text || 'Runtime error detected',
+                timestamp: logEntry.timestamp || new Date().toISOString(),
+                function: logEntry.source || logEntry.requestId || 'runtime',
+                route: this.extractRoute(logEntry.message || ''),
+                stack: logEntry.stack || '',
+                source: `vercel-cli-${deploymentUrl}`
+              });
+              foundErrors++;
+            }
+          } catch (parseError) {
+            // If JSON parsing fails, try to parse as text
+            if (this.isErrorLogText(line)) {
+              errors.push({
+                id: `cli-text-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                message: line.trim(),
+                timestamp: new Date().toISOString(),
+                function: 'runtime',
+                route: this.extractRoute(line),
+                stack: '',
+                source: `vercel-cli-${deploymentUrl}`
+              });
+              foundErrors++;
+            }
+          }
+        }
+        
+        if (foundErrors > 0) {
+          console.log(`🎯 Found ${foundErrors} runtime errors via Vercel CLI`);
+        } else {
+          console.log(`✅ No runtime errors found in recent logs`);
+        }
+        
+      } catch (cliError: any) {
+        // Try without --json flag as fallback
+        console.log(`⚠️ JSON logs not supported, trying text format...`);
+        
+        try {
+          const textOutput = execSync(`vercel logs ${deploymentUrl}`, {
+            encoding: 'utf8',
+            timeout: 30000,
+            maxBuffer: 10 * 1024 * 1024
+          });
+          
+          const logLines = textOutput.trim().split('\n');
+          let foundErrors = 0;
+          
+          for (const line of logLines) {
+            if (this.isErrorLogText(line)) {
+              errors.push({
+                id: `cli-text-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                message: line.trim(),
+                timestamp: new Date().toISOString(),
+                function: 'runtime',
+                route: this.extractRoute(line),
+                stack: '',
+                source: `vercel-cli-${deploymentUrl}`
+              });
+              foundErrors++;
+            }
+          }
+          
+          if (foundErrors > 0) {
+            console.log(`🎯 Found ${foundErrors} runtime errors via Vercel CLI (text mode)`);
+          } else {
+            console.log(`✅ No runtime errors found in recent logs (text mode)`);
+          }
+          
+        } catch (textError: any) {
+          throw new Error(`Both JSON and text CLI approaches failed: ${textError.message}`);
+        }
+      }
+      
+    } catch (error: any) {
+      if (error.message?.includes('command not found') || error.message?.includes('vercel')) {
+        console.warn(`⚠️ Vercel CLI not found. Please install with: npm i -g vercel`);
+      } else if (error.message?.includes('not authenticated')) {
+        console.warn(`⚠️ Vercel CLI not authenticated. Please run: vercel login`);
+      } else {
+        console.warn(`⚠️ Could not fetch logs via Vercel CLI:`, error.message);
+      }
+      throw error; // Re-throw to allow fallback
+    }
+  }
+
+  /**
+   * Check if a log entry (JSON format) indicates an error
+   */
+  private isErrorLog(logEntry: any): boolean {
+    if (!logEntry) return false;
+    
+    // Check log level
+    if (logEntry.level === 'error' || logEntry.level === 'ERROR') return true;
+    
+    // Check message content
+    const message = (logEntry.message || logEntry.text || '').toLowerCase();
+    if (message.includes('error') || message.includes('failed') || message.includes('exception')) {
+      return true;
+    }
+    
+    // Check status codes
+    if (logEntry.status && logEntry.status >= 400) return true;
+    
+    // Check for stack traces
+    if (logEntry.stack && logEntry.stack.length > 0) return true;
+    
+    return false;
+  }
+
+  /**
+   * Check if a log line (text format) indicates an error
+   */
+  private isErrorLogText(line: string): boolean {
+    if (!line || line.trim().length === 0) return false;
+    
+    const lowerLine = line.toLowerCase();
+    
+    // Check for error keywords
+    const errorKeywords = [
+      'error:', 'error -', '[error]',
+      'exception:', 'exception -', '[exception]',
+      'failed:', 'failed -', '[failed]',
+      'uncaught', 'unhandled',
+      'stack trace', 'traceback',
+      'http 4', 'http 5', // HTTP 4xx, 5xx errors
+      'internal server error',
+      'bad request', 'not found', 'forbidden',
+      'service unavailable', 'gateway timeout'
+    ];
+    
+    return errorKeywords.some(keyword => lowerLine.includes(keyword));
+  }
+
+  /**
+   * Attempt to get function errors from Vercel's Monitoring API
+   * This provides aggregated metrics but not individual runtime logs
    */
   private async getFunctionErrors(projectId: string, errors: VercelErrorLog[]): Promise<void> {
     try {
-      // Try the observability query API for function errors
+      // First try to get runtime logs via Vercel CLI
+      await this.getRuntimeLogsViaCLI(projectId, errors);
+      
+      // If we found errors via CLI, return early
+      if (errors.length > 0) {
+        console.log(`🎯 Successfully retrieved runtime logs via Vercel CLI`);
+        return;
+      }
+      
+      // Fall back to Monitoring API for aggregated metrics
+      console.log(`📊 No CLI errors found, trying Monitoring API...`);
+      
+      // Try the legacy Monitoring API for function error rates
       const endTime = Date.now();
       const startTime = endTime - (24 * 60 * 60 * 1000); // Last 24 hours
       
-      // Query for function invocations with errors
-      const queryResponse = await this.makeRequest(
-        `https://api.vercel.com/v1/observability/query?teamId=${this.teamId}`,
+      // Attempt to query function error rates via Monitoring API
+      const monitoringResponse = await this.makeRequest(
+        `https://api.vercel.com/v2/monitoring?teamId=${this.teamId}`,
         {
           method: 'POST',
           body: JSON.stringify({
-            query: `
-              SELECT 
-                path,
-                status,
-                duration,
-                timestamp,
-                error_message,
-                stack_trace
-              FROM function_invocations 
-              WHERE 
-                project_id = '${projectId}' 
-                AND timestamp >= ${startTime} 
-                AND timestamp <= ${endTime}
-                // AND (status >= 400 OR error_message IS NOT NULL)
-              ORDER BY timestamp DESC
-              LIMIT 50
-            `
+            projectId: projectId,
+            visualize: 'Function Invocations',
+            where: `status >= 400`,
+            groupBy: ['source_path', 'status'],
+            from: startTime,
+            to: endTime,
+            limit: 50
           })
         }
       );
 
-      if (queryResponse.ok) {
-        const queryData = await queryResponse.json();
+      if (monitoringResponse.ok) {
+        const monitoringData = await monitoringResponse.json();
         
-        if (queryData.rows && queryData.rows.length > 0) {
-          console.log(`📈 Found ${queryData.rows.length} function errors via Observability API`);
+        if (monitoringData.data && monitoringData.data.length > 0) {
+          console.log(`📈 Found ${monitoringData.data.length} function error metrics via Monitoring API`);
           
-          for (const row of queryData.rows) {
-            const [path, status, duration, timestamp, errorMessage, stackTrace] = row;
+          for (const dataPoint of monitoringData.data) {
+            const { source_path, status, count } = dataPoint;
             
             errors.push({
-              id: `obs-${timestamp}-${Math.random().toString(36).substr(2, 9)}`,
-              message: errorMessage || `HTTP ${status} error`,
-              timestamp: new Date(timestamp).toISOString(),
-              function: path || 'unknown',
-              route: this.extractRoute(path || ''),
-              stack: stackTrace || '',
-              source: 'observability-api'
+              id: `mon-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              message: `Function returned HTTP ${status} (${count} occurrences)`,
+              timestamp: new Date().toISOString(),
+              function: source_path || 'unknown',
+              route: this.extractRoute(source_path || ''),
+              stack: '',
+              source: 'monitoring-api'
             });
           }
           return;
         }
+      } else {
+        console.log(`📊 Monitoring API not accessible (${monitoringResponse.status})`);
       }
       
-      console.log(`📊 Observability API returned no function errors`);
+      console.log(`📊 No function error metrics found via Monitoring API`);
     } catch (error) {
-      console.warn(`⚠️ Could not access Observability API:`, error);
+      console.warn(`⚠️ Could not access runtime logs or Monitoring API:`, error);
       // Don't throw - fall back to deployment events
     }
   }
@@ -380,7 +576,7 @@ class VercelLogRetriever {
           console.warn(`⚠️ Could not fetch logs for deployment ${deployment.uid}:`, error);
         }
       }
-      
+
       if (errors.length > 0) {
         console.log(`📋 Found ${errors.length} build-time error logs as fallback`);
         console.log(`⚠️ Note: These are build errors, not runtime errors. For runtime errors, use Vercel Log Drains`);
