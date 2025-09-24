@@ -11,12 +11,18 @@
  * - Set up environment variables (see Environment Variables section below)
  * 
  * Usage:
- * - Run once: npx tsx scripts/auto-corrector.ts --project PROJECT_NAME [--env PATH_TO_ENV_FILE]
+ * - Run once (same name): npx tsx scripts/auto-corrector.ts --project PROJECT_NAME [--env PATH_TO_ENV_FILE]
+ * - Run once (different names): npx tsx scripts/auto-corrector.ts --github-project GITHUB_PATH --vercel-project VERCEL_NAME [--env PATH_TO_ENV_FILE]
  * - Run for all projects: npx tsx scripts/auto-corrector.ts --all [--env PATH_TO_ENV_FILE]
  * - Start cron job: npx tsx scripts/auto-corrector.ts --cron [--env PATH_TO_ENV_FILE]
  * - Test mode: npx tsx scripts/auto-corrector.ts --test [--env PATH_TO_ENV_FILE]
  * - Dry run: Add --dry-run to any command to see what would be changed without applying fixes
  * - Custom env: npx tsx scripts/auto-corrector.ts --env ./custom.env --project PROJECT_NAME
+ * 
+ * Project Name Flexibility:
+ * - Use --project when GitHub and Vercel names match
+ * - Use --github-project and --vercel-project when they differ
+ * - Configure PROJECT_MAPPINGS in env file for automatic resolution
  */
 
 import { execSync } from 'child_process';
@@ -50,12 +56,15 @@ interface AutoCorrectorConfig {
   githubRepoUrl: string;
   localRepoPath: string;
   monorepoPath: string;
+  projectMappings?: { [githubProjectPath: string]: string }; // GitHub path to Vercel project name mapping
 }
 
 interface ProjectInfo {
   name: string;
   path: string;
   isActive: boolean;
+  vercelProjectName?: string; // Optional override for Vercel project name
+  githubProjectPath?: string; // Optional override for GitHub project path
 }
 
 /**
@@ -94,10 +103,27 @@ class GitHubPuller {
   }
 
   async getProjectCode(projectName: string): Promise<{ [filePath: string]: string }> {
-    const projectPath = path.join(this.repoPath, projectName);
+    let projectPath: string;
     
-    if (!fs.existsSync(projectPath)) {
-      throw new Error(`Project directory not found: ${projectPath}`);
+    // Check if it's a monorepo structure or single project
+    const potentialProjectPath = path.join(this.repoPath, projectName);
+    
+    if (fs.existsSync(potentialProjectPath) && fs.statSync(potentialProjectPath).isDirectory()) {
+      // Monorepo structure - project has its own subdirectory
+      projectPath = potentialProjectPath;
+    } else {
+      // Single project structure - the entire repo is the project
+      console.log(`📁 Project '${projectName}' not found as subdirectory, treating repo as single project`);
+      projectPath = this.repoPath;
+      
+      // Verify it's a valid project directory (has package.json or similar)
+      const hasPackageJson = fs.existsSync(path.join(projectPath, 'package.json'));
+      const hasNextConfig = fs.existsSync(path.join(projectPath, 'next.config.js'));
+      const hasSrcDir = fs.existsSync(path.join(projectPath, 'src'));
+      
+      if (!hasPackageJson && !hasNextConfig && !hasSrcDir) {
+        throw new Error(`Project directory not found and repo doesn't appear to be a valid project: ${projectPath}`);
+      }
     }
 
     return await this.readDirectoryRecursively(projectPath);
@@ -157,29 +183,77 @@ class VercelLogRetriever {
     try {
       console.log(`📊 Fetching error logs for project: ${projectName}`);
       
-      // First, get the project info
-      const projectResponse = await this.makeRequest(
-        `https://api.vercel.com/v1/projects/${projectName}`
-      );
+      // First, get the project info - handle both project names and project IDs
+      let projectId = projectName;
+      let projectResponse: Response;
+      
+      // If it looks like a project ID (starts with prj_), use it directly
+      if (projectName.startsWith('prj_')) {
+        projectResponse = await this.makeRequest(
+          `https://api.vercel.com/v9/projects/${projectName}?teamId=${this.teamId}`
+        );
+      } else {
+        // If it's a project name, search for it first
+        const projectsResponse = await this.makeRequest(
+          `https://api.vercel.com/v9/projects?teamId=${this.teamId}&search=${encodeURIComponent(projectName)}`
+        );
+        
+        if (!projectsResponse.ok) {
+          throw new Error(`Failed to search for project: ${projectName}`);
+        }
+        
+        const projectsData = await projectsResponse.json();
+        const project = projectsData.projects?.find((p: any) => p.name === projectName);
+        
+        if (!project) {
+          throw new Error(`Project not found: ${projectName}`);
+        }
+        
+        projectId = project.id;
+        projectResponse = await this.makeRequest(
+          `https://api.vercel.com/v9/projects/${projectId}?teamId=${this.teamId}`
+        );
+      }
 
       if (!projectResponse.ok) {
-        throw new Error(`Project not found: ${projectName}`);
+        const errorText = await projectResponse.text();
+        console.error('Project response error:', {
+          status: projectResponse.status,
+          statusText: projectResponse.statusText,
+          body: errorText
+        });
+        throw new Error(`Project not found or access denied: ${projectName} (${projectResponse.status})`);
       }
 
       // Get recent deployments
       const deploymentsResponse = await this.makeRequest(
-        `https://api.vercel.com/v6/deployments?projectId=${projectName}&limit=5`
+        `https://api.vercel.com/v6/deployments?projectId=${projectId}&teamId=${this.teamId}&limit=5`
       );
+
+      if (!deploymentsResponse.ok) {
+        const errorText = await deploymentsResponse.text();
+        console.error('Deployments response error:', {
+          status: deploymentsResponse.status,
+          statusText: deploymentsResponse.statusText,
+          body: errorText
+        });
+        throw new Error(`Failed to get deployments for project ${projectName}: ${deploymentsResponse.status}`);
+      }
 
       const deployments = await deploymentsResponse.json();
       const errors: VercelErrorLog[] = [];
 
       // Get logs for each recent deployment
-      for (const deployment of deployments.deployments) {
+      for (const deployment of deployments.deployments || []) {
         try {
           const logsResponse = await this.makeRequest(
-            `https://api.vercel.com/v2/deployments/${deployment.uid}/events`
+            `https://api.vercel.com/v2/deployments/${deployment.uid}/events?teamId=${this.teamId}`
           );
+
+          if (!logsResponse.ok) {
+            console.warn(`⚠️ Could not fetch logs for deployment ${deployment.uid}: ${logsResponse.status}`);
+            continue;
+          }
 
           const logs = await logsResponse.json();
           
@@ -257,6 +331,78 @@ class VercelLogRetriever {
 
   setLastCheckTime(timestamp: number): void {
     this.lastCheckTime = timestamp;
+  }
+
+  async testConnection(): Promise<void> {
+    try {
+      console.log('🔧 Testing Vercel API connection...');
+      
+      // Test basic API access
+      const userResponse = await this.makeRequest(
+        `https://api.vercel.com/v2/user?teamId=${this.teamId}`
+      );
+      
+      if (!userResponse.ok) {
+        const errorText = await userResponse.text();
+        console.error('User API response error:', {
+          status: userResponse.status,
+          statusText: userResponse.statusText,
+          body: errorText
+        });
+        throw new Error(`Failed to authenticate with Vercel API: ${userResponse.status}`);
+      }
+      
+      const userData = await userResponse.json();
+      console.log(`✅ Successfully connected to Vercel API as: ${userData.user?.name || userData.user?.username || 'Unknown'}`);
+      
+      // Test team access
+      const teamResponse = await this.makeRequest(
+        `https://api.vercel.com/v2/teams/${this.teamId}`
+      );
+      
+      if (!teamResponse.ok) {
+        const errorText = await teamResponse.text();
+        console.error('Team API response error:', {
+          status: teamResponse.status,
+          statusText: teamResponse.statusText,
+          body: errorText
+        });
+        throw new Error(`Failed to access team: ${teamResponse.status}`);
+      }
+      
+      const teamData = await teamResponse.json();
+      console.log(`✅ Successfully accessed team: ${teamData.name || teamData.slug || this.teamId}`);
+      
+      // List projects to verify access
+      const projectsResponse = await this.makeRequest(
+        `https://api.vercel.com/v9/projects?teamId=${this.teamId}&limit=5`
+      );
+      
+      if (!projectsResponse.ok) {
+        const errorText = await projectsResponse.text();
+        console.error('Projects API response error:', {
+          status: projectsResponse.status,
+          statusText: projectsResponse.statusText,
+          body: errorText
+        });
+        throw new Error(`Failed to list projects: ${projectsResponse.status}`);
+      }
+      
+      const projectsData = await projectsResponse.json();
+      const projectCount = projectsData.projects?.length || 0;
+      console.log(`✅ Found ${projectCount} accessible projects`);
+      
+      if (projectCount > 0) {
+        console.log('📋 Sample projects:');
+        projectsData.projects.slice(0, 3).forEach((project: any) => {
+          console.log(`  - ${project.name} (${project.id})`);
+        });
+      }
+      
+    } catch (error) {
+      console.error('❌ Vercel API connection test failed:', error);
+      throw error;
+    }
   }
 }
 
@@ -583,40 +729,51 @@ class AutoCorrectorCronJob {
     this.githubPusher = new GitHubPusher(config.localRepoPath);
   }
 
-  async execute(projectName: string, dryRun: boolean = false): Promise<void> {
+  async execute(
+    githubProjectPath: string, 
+    vercelProjectName?: string, 
+    dryRun: boolean = false
+  ): Promise<void> {
+    // Resolve actual project names
+    const actualVercelProject = vercelProjectName || 
+      this.config.projectMappings?.[githubProjectPath] || 
+      githubProjectPath;
+    
     try {
-      console.log(`\n🚀 Starting auto-correction for project: ${projectName}`);
+      console.log(`\n🚀 Starting auto-correction:`);
+      console.log(`  GitHub Project Path: ${githubProjectPath}`);
+      console.log(`  Vercel Project Name: ${actualVercelProject}`);
       console.log('='.repeat(60));
       
       // Step 1: Pull latest code
       await this.githubPuller.pullRepository();
-      const projectCode = await this.githubPuller.getProjectCode(projectName);
+      const projectCode = await this.githubPuller.getProjectCode(githubProjectPath);
       
       // Step 2: Get error logs
-      const errorLogs = await this.vercelLogRetriever.getErrorLogs(projectName);
+      const errorLogs = await this.vercelLogRetriever.getErrorLogs(actualVercelProject);
       
       if (errorLogs.length === 0) {
         console.log('✅ No errors found, skipping correction');
         return;
       }
       
-      console.log(`📋 Processing ${errorLogs.length} error(s)...`);
+      // console.log(`📋 Processing ${errorLogs.length} error(s)...`);
       
-      // Step 3-5: Process each error
-      let correctionCount = 0;
-      for (const errorLog of errorLogs) {
-        try {
-          const corrected = await this.processError(errorLog, projectCode, dryRun);
-          if (corrected) correctionCount++;
-        } catch (error) {
-          console.error(`❌ Failed to process error ${errorLog.id}:`, error);
-        }
-      }
+      // // Step 3-5: Process each error
+      // let correctionCount = 0;
+      // for (const errorLog of errorLogs) {
+      //   try {
+      //     const corrected = await this.processError(errorLog, projectCode, dryRun);
+      //     if (corrected) correctionCount++;
+      //   } catch (error) {
+      //     console.error(`❌ Failed to process error ${errorLog.id}:`, error);
+      //   }
+      // }
       
-      console.log(`\n✅ Completed auto-correction for project: ${projectName}`);
-      console.log(`📊 Corrections applied: ${correctionCount}/${errorLogs.length}`);
+      // console.log(`\n✅ Completed auto-correction for GitHub: ${githubProjectPath}, Vercel: ${actualVercelProject}`);
+      // console.log(`📊 Corrections applied: ${correctionCount}/${errorLogs.length}`);
     } catch (error) {
-      console.error(`❌ Auto-correction failed for project ${projectName}:`, error);
+      console.error(`❌ Auto-correction failed for GitHub: ${githubProjectPath}, Vercel: ${actualVercelProject}:`, error);
       throw error;
     }
   }
@@ -672,8 +829,26 @@ class AutoCorrectorCronJob {
     // This would integrate with your project management system
     // For now, return mock data or read from a configuration file
     return [
-      { name: 'rom-ai-agent001-instance001', path: 'agent-001', isActive: true },
-      { name: 'rom-ai-agent002-instance001', path: 'agent-002', isActive: true }
+      { 
+        name: 'rom-ai-agent001-instance001', 
+        path: 'agent-001', 
+        isActive: true,
+        vercelProjectName: 'my-production-app', // Different Vercel name
+        githubProjectPath: 'agent-001' // Explicit GitHub path
+      },
+      { 
+        name: 'rom-ai-agent002-instance001', 
+        path: 'agent-002', 
+        isActive: true,
+        vercelProjectName: 'staging-app-v2', // Different Vercel name
+        githubProjectPath: 'agent-002' // Explicit GitHub path
+      },
+      {
+        name: 'shared-components',
+        path: 'shared',
+        isActive: true
+        // No explicit overrides - will use 'shared' for both GitHub and Vercel
+      }
     ];
   }
 }
@@ -713,6 +888,16 @@ function loadConfig(envFilePath?: string): AutoCorrectorConfig {
     console.warn(`⚠️ Could not load env file: ${envPath}`, error);
   }
 
+  // Parse project mappings if provided
+  let projectMappings: { [githubProjectPath: string]: string } | undefined;
+  if (process.env.PROJECT_MAPPINGS) {
+    try {
+      projectMappings = JSON.parse(process.env.PROJECT_MAPPINGS);
+    } catch (error) {
+      console.warn('⚠️ Invalid PROJECT_MAPPINGS JSON format, ignoring:', error);
+    }
+  }
+
   const config: AutoCorrectorConfig = {
     githubToken: process.env.GITHUB_TOKEN || '',
     vercelApiToken: process.env.VERCEL_API_TOKEN || '',
@@ -720,7 +905,8 @@ function loadConfig(envFilePath?: string): AutoCorrectorConfig {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     githubRepoUrl: process.env.GITHUB_REPO_URL || 'https://github.com/your-org/rom-ai-monorepo.git',
     localRepoPath: process.env.LOCAL_REPO_PATH || path.join(process.cwd(), 'temp-repo'),
-    monorepoPath: process.env.MONOREPO_PATH || 'agents'
+    monorepoPath: process.env.MONOREPO_PATH || 'agents',
+    projectMappings
   };
 
   // Validate required configuration
@@ -770,7 +956,10 @@ async function runCronJob(config: AutoCorrectorConfig): Promise<void> {
       
       for (const project of projects.filter(p => p.isActive)) {
         try {
-          await autoCorrector.execute(project.name);
+          await autoCorrector.execute(
+            project.githubProjectPath || project.path, 
+            project.vercelProjectName || project.name
+          );
         } catch (error) {
           console.error(`❌ Error processing project ${project.name}:`, error);
         }
@@ -806,12 +995,15 @@ async function main(): Promise<void> {
   
   // Parse command line arguments
   const projectFlag = args.findIndex(arg => arg === '--project');
+  const githubProjectFlag = args.findIndex(arg => arg === '--github-project');
+  const vercelProjectFlag = args.findIndex(arg => arg === '--vercel-project');
   const envFlag = args.findIndex(arg => arg === '--env');
   const allFlag = args.includes('--all');
   const cronFlag = args.includes('--cron');
   const testFlag = args.includes('--test');
   const dryRunFlag = args.includes('--dry-run');
   const helpFlag = args.includes('--help') || args.includes('-h');
+  const testVercelFlag = args.includes('--test-vercel');
   
   // Get custom env file path if specified
   let envFilePath: string | undefined;
@@ -829,15 +1021,19 @@ async function main(): Promise<void> {
     console.log('=======================\n');
     console.log('Usage: npx tsx scripts/auto-corrector.ts [OPTIONS]\n');
     console.log('Options:');
-    console.log('  --project NAME      Process specific project');
-    console.log('  --all              Process all active projects');
-    console.log('  --cron             Start cron job (runs every 15 minutes)');
-    console.log('  --test             Run in test mode');
-    console.log('  --dry-run          Show what would be changed without applying fixes');
-    console.log('  --env PATH         Specify custom environment file (default: .env.local)');
-    console.log('  --help, -h         Show this help message\n');
+    console.log('  --project NAME            Process specific project (legacy, assumes same name for GitHub and Vercel)');
+    console.log('  --github-project PATH     Specify GitHub project path');
+    console.log('  --vercel-project NAME     Specify Vercel project name (use with --github-project)');
+    console.log('  --all                     Process all active projects');
+    console.log('  --cron                    Start cron job (runs every 15 minutes)');
+    console.log('  --test                    Run in test mode');
+    console.log('  --test-vercel             Test Vercel API connectivity and configuration');
+    console.log('  --dry-run                 Show what would be changed without applying fixes');
+    console.log('  --env PATH                Specify custom environment file (default: .env.local)');
+    console.log('  --help, -h                Show this help message\n');
     console.log('Examples:');
     console.log('  npx tsx scripts/auto-corrector.ts --project my-project');
+    console.log('  npx tsx scripts/auto-corrector.ts --github-project agent-001 --vercel-project my-vercel-app');
     console.log('  npx tsx scripts/auto-corrector.ts --env ./prod.env --all --dry-run');
     console.log('  npx tsx scripts/auto-corrector.ts --env ~/.config/auto-corrector.env --cron');
     return;
@@ -857,7 +1053,7 @@ async function main(): Promise<void> {
     
     const testProject = 'test-for-ai-corrector';
     try {
-      await autoCorrector.execute(testProject, true);
+      await autoCorrector.execute(testProject, undefined, true);
       console.log('✅ Test completed successfully');
     } catch (error) {
       console.error('❌ Test failed:', error);
@@ -866,12 +1062,51 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (projectFlag >= 0 && projectFlag + 1 < args.length) {
-    const projectName = args[projectFlag + 1];
-    console.log(`🎯 Processing single project: ${projectName}`);
+  if (testVercelFlag) {
+    console.log('�� Testing Vercel API connectivity and configuration...');
+    try {
+      const vercelLogRetriever = new VercelLogRetriever(
+        config.vercelApiToken,
+        config.vercelTeamId
+      );
+      await vercelLogRetriever.testConnection();
+      console.log('✅ Vercel API connection test successful!');
+    } catch (error) {
+      console.error('❌ Vercel API connection test failed:', error);
+      process.exit(1);
+    }
+    return;
+  }
+
+  // Handle different project specification methods
+  if (githubProjectFlag >= 0 && githubProjectFlag + 1 < args.length) {
+    const githubProject = args[githubProjectFlag + 1];
+    let vercelProject: string | undefined;
+    
+    if (vercelProjectFlag >= 0 && vercelProjectFlag + 1 < args.length) {
+      vercelProject = args[vercelProjectFlag + 1];
+    }
+    
+    console.log(`🎯 Processing project:`);
+    console.log(`  GitHub: ${githubProject}`);
+    console.log(`  Vercel: ${vercelProject || 'auto-resolved'}`);
     
     try {
-      await autoCorrector.execute(projectName, dryRunFlag);
+      await autoCorrector.execute(githubProject, vercelProject, dryRunFlag);
+      console.log('✅ Project processing completed');
+    } catch (error) {
+      console.error('❌ Project processing failed:', error);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (projectFlag >= 0 && projectFlag + 1 < args.length) {
+    const projectName = args[projectFlag + 1];
+    console.log(`🎯 Processing single project (legacy mode): ${projectName}`);
+    
+    try {
+      await autoCorrector.execute(projectName, undefined, dryRunFlag);
       console.log('✅ Single project processing completed');
     } catch (error) {
       console.error('❌ Single project processing failed:', error);
@@ -891,7 +1126,11 @@ async function main(): Promise<void> {
       
       for (const project of activeProjects) {
         try {
-          await autoCorrector.execute(project.name, dryRunFlag);
+          await autoCorrector.execute(
+            project.githubProjectPath || project.path, 
+            project.vercelProjectName || project.name, 
+            dryRunFlag
+          );
         } catch (error) {
           console.error(`❌ Error processing project ${project.name}:`, error);
         }
@@ -917,14 +1156,19 @@ async function main(): Promise<void> {
   
   switch (choice) {
     case '1':
-      const projectName = await promptUser('Enter project name: ');
-      await autoCorrector.execute(projectName, dryRunFlag);
+      const githubProject = await promptUser('Enter GitHub project path: ');
+      const vercelProject = await promptUser('Enter Vercel project name (optional, press enter to use same as GitHub): ');
+      await autoCorrector.execute(githubProject, vercelProject || undefined, dryRunFlag);
       break;
       
     case '2':
       const projects = await autoCorrector.getAllProjects();
       for (const project of projects.filter(p => p.isActive)) {
-        await autoCorrector.execute(project.name, dryRunFlag);
+        await autoCorrector.execute(
+          project.githubProjectPath || project.path, 
+          project.vercelProjectName || project.name, 
+          dryRunFlag
+        );
       }
       break;
       
@@ -933,7 +1177,7 @@ async function main(): Promise<void> {
       break;
       
     case '4':
-      await autoCorrector.execute('test-project', true);
+      await autoCorrector.execute('test-project', undefined, true);
       break;
       
     default:
