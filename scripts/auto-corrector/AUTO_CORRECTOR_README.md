@@ -4,12 +4,42 @@ A standalone script that automatically monitors Vercel projects for errors, anal
 
 ## Features
 
-- 🔍 **Error Detection**: Automatically fetches error logs from Vercel deployments
+- 🔍 **Error Detection**: Automatically fetches function errors and performance data from Vercel
 - 🤖 **AI Analysis**: Uses OpenAI GPT-4 to analyze errors and generate fixes
 - 🔧 **Code Correction**: Applies AI-generated fixes to the codebase
 - 📤 **Auto-Deployment**: Commits and pushes fixes back to GitHub for automatic redeployment
 - ⏰ **Cron Support**: Can run as a background cron job for continuous monitoring
 - 🎯 **Multi-Project**: Supports monitoring multiple Vercel projects simultaneously
+
+## Runtime vs Build Logs
+
+**Important**: This script primarily detects **function errors** and **build-time errors**, not complete runtime logs.
+
+### What We Can Detect
+- Function execution errors (HTTP 4xx/5xx responses)
+- Build failures and deployment issues
+- Performance metrics via Vercel's Observability API
+
+### What We Cannot Access
+- Complete runtime logs (console.log outputs, debug information)
+- Real-time function execution traces
+- Detailed request/response data
+
+### For Complete Runtime Log Access
+For production monitoring with full runtime logs, consider:
+
+1. **Vercel Log Drains** (Pro/Enterprise plans)
+   - Export logs to external services (Datadog, New Relic, etc.)
+   - Real-time log streaming
+   - Complete access to all runtime data
+
+2. **Vercel CLI**
+   - Use `vercel logs [deployment-url]` for real-time log viewing
+   - Good for development and debugging
+
+3. **Vercel Dashboard**
+   - View logs in the project's Logs tab
+   - Filter and search capabilities
 
 ## Prerequisites
 
@@ -207,12 +237,14 @@ The script provides detailed logging with emojis for easy reading:
 
 - 🚀 Starting operations
 - 📥 Pulling repository
-- 📊 Fetching error logs
+- 📊 Fetching function errors and performance data
+- 📈 Observability API results
 - 🔍 Analyzing errors
 - 🤖 AI processing
 - ✅ Successful operations
 - ❌ Error conditions
-- ⚠️ Warnings
+- ⚠️ Warnings and limitations
+- 💡 Helpful notes about log access
 
 ## Troubleshooting
 
@@ -263,3 +295,9 @@ To contribute to the auto-corrector:
 ## License
 
 This script is part of the ROM-AI project and follows the same license terms. 
+
+
+
+```
+npx tsx scripts/auto-corrector/auto-corrector.ts --env scripts/auto-corrector/auto-corrector.env --test
+```
