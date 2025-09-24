@@ -44,3 +44,6 @@ yarn-error.log*
 
 # Development deployment backups
 /deployment-backups/
+
+# temporary files
+temp-repo/
