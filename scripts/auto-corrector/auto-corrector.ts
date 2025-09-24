@@ -11,10 +11,12 @@
  * - Set up environment variables (see Environment Variables section below)
  * 
  * Usage:
- * - Run once: npx tsx scripts/auto-corrector.ts --project PROJECT_NAME
- * - Run for all projects: npx tsx scripts/auto-corrector.ts --all
- * - Start cron job: npx tsx scripts/auto-corrector.ts --cron
- * - Test mode: npx tsx scripts/auto-corrector.ts --test
+ * - Run once: npx tsx scripts/auto-corrector.ts --project PROJECT_NAME [--env PATH_TO_ENV_FILE]
+ * - Run for all projects: npx tsx scripts/auto-corrector.ts --all [--env PATH_TO_ENV_FILE]
+ * - Start cron job: npx tsx scripts/auto-corrector.ts --cron [--env PATH_TO_ENV_FILE]
+ * - Test mode: npx tsx scripts/auto-corrector.ts --test [--env PATH_TO_ENV_FILE]
+ * - Dry run: Add --dry-run to any command to see what would be changed without applying fixes
+ * - Custom env: npx tsx scripts/auto-corrector.ts --env ./custom.env --project PROJECT_NAME
  */
 
 import { execSync } from 'child_process';
@@ -679,11 +681,14 @@ class AutoCorrectorCronJob {
 /**
  * Configuration Management
  */
-function loadConfig(): AutoCorrectorConfig {
-  // Try to load from .env file
+function loadConfig(envFilePath?: string): AutoCorrectorConfig {
+  // Try to load from specified env file or default to .env.local
+  const defaultEnvPath = path.join(process.cwd(), '.env.local');
+  const envPath = envFilePath || defaultEnvPath;
+  
   try {
-    const envPath = path.join(process.cwd(), '.env.local');
     if (fs.existsSync(envPath)) {
+      console.log(`📄 Loading environment from: ${envPath}`);
       const envContent = fs.readFileSync(envPath, 'utf8');
       const envVars: { [key: string]: string } = {};
       
@@ -696,9 +701,16 @@ function loadConfig(): AutoCorrectorConfig {
       
       // Set environment variables
       Object.assign(process.env, envVars);
+    } else {
+      if (envFilePath) {
+        console.error(`❌ Specified env file not found: ${envPath}`);
+        process.exit(1);
+      } else {
+        console.warn('⚠️ No .env.local file found, using system environment variables');
+      }
     }
   } catch (error) {
-    console.warn('⚠️ Could not load .env.local file');
+    console.warn(`⚠️ Could not load env file: ${envPath}`, error);
   }
 
   const config: AutoCorrectorConfig = {
@@ -718,7 +730,8 @@ function loadConfig(): AutoCorrectorConfig {
   if (missing.length > 0) {
     console.error('❌ Missing required environment variables:');
     missing.forEach(key => console.error(`  - ${key.toUpperCase()}`));
-    console.error('\nPlease set these in your .env.local file or environment.');
+    console.error('\nPlease set these in your .env.local file, custom env file (--env), or environment.');
+    console.error('Example: npx tsx scripts/auto-corrector.ts --env ./my-config.env --project my-project');
     process.exit(1);
   }
 
@@ -790,14 +803,47 @@ async function main(): Promise<void> {
   console.log('================================\n');
 
   const args = process.argv.slice(2);
-  const config = loadConfig();
   
   // Parse command line arguments
   const projectFlag = args.findIndex(arg => arg === '--project');
+  const envFlag = args.findIndex(arg => arg === '--env');
   const allFlag = args.includes('--all');
   const cronFlag = args.includes('--cron');
   const testFlag = args.includes('--test');
   const dryRunFlag = args.includes('--dry-run');
+  const helpFlag = args.includes('--help') || args.includes('-h');
+  
+  // Get custom env file path if specified
+  let envFilePath: string | undefined;
+  if (envFlag >= 0 && envFlag + 1 < args.length) {
+    envFilePath = args[envFlag + 1];
+    // Convert relative paths to absolute paths
+    if (!path.isAbsolute(envFilePath)) {
+      envFilePath = path.resolve(process.cwd(), envFilePath);
+    }
+  }
+  
+  // Show help if requested
+  if (helpFlag) {
+    console.log('📖 Auto-Corrector Help');
+    console.log('=======================\n');
+    console.log('Usage: npx tsx scripts/auto-corrector.ts [OPTIONS]\n');
+    console.log('Options:');
+    console.log('  --project NAME      Process specific project');
+    console.log('  --all              Process all active projects');
+    console.log('  --cron             Start cron job (runs every 15 minutes)');
+    console.log('  --test             Run in test mode');
+    console.log('  --dry-run          Show what would be changed without applying fixes');
+    console.log('  --env PATH         Specify custom environment file (default: .env.local)');
+    console.log('  --help, -h         Show this help message\n');
+    console.log('Examples:');
+    console.log('  npx tsx scripts/auto-corrector.ts --project my-project');
+    console.log('  npx tsx scripts/auto-corrector.ts --env ./prod.env --all --dry-run');
+    console.log('  npx tsx scripts/auto-corrector.ts --env ~/.config/auto-corrector.env --cron');
+    return;
+  }
+
+  const config = loadConfig(envFilePath);
   
   const autoCorrector = new AutoCorrectorCronJob(config);
 
