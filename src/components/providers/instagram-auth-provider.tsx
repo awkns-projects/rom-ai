@@ -16,7 +16,44 @@ export const InstagramAuthProvider = (props:PropsWithChildren)=>{
 
   const [userInfo, setUserInfo] = useState<Record<string, any>>({});
 
-  const fetchUserInfo = async () => {}
+  const fetchUserInfo = async () => {
+    const instagram_auth_code = localStorage.getItem("instagram_auth_code");
+
+    if(instagram_auth_code) {
+      await fetch('./api/auth/instagram/login', {
+        method: "POST",
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          code: instagram_auth_code
+        })
+      })
+      .then((response) => {
+        return response.json()
+      })
+      .then((res:any) => {
+        const newUserInfo = {
+          ...userInfo,
+          ...res
+        }
+
+        console.log('fetchUserInfo',res)
+        
+        setUserInfo(newUserInfo)
+
+        localStorage.setItem("instagram_auth_user_info", JSON.stringify(newUserInfo));
+      })
+      .catch((error) => {
+        if (error.status === 401) {
+          userLogout();
+        }
+      })
+      .finally(()=>{
+        localStorage.removeItem("login_type");
+      })
+    }
+  }
 
   const userLogin = () => {
     const appId = process.env.NEXT_PUBLIC_INSTAGRAM_APP_ID || '';
@@ -27,6 +64,7 @@ export const InstagramAuthProvider = (props:PropsWithChildren)=>{
     localStorage.setItem("instagram_auth_state", state);
 
     const params = new URLSearchParams({
+      force_reauth: "true",
       response_type: 'code',
       client_id: appId,
       redirect_uri: redirectUri,
@@ -36,13 +74,13 @@ export const InstagramAuthProvider = (props:PropsWithChildren)=>{
     
     localStorage.setItem("login_type", "instagram");
 
-    window.location.href = `https://api.instagram.com/oauth/authorize?${params}`;
+    window.location.href = `https://www.instagram.com/oauth/authorize?${params}`;
   }
 
   const userLogout = () => {
       setUserInfo({});
     localStorage.removeItem("instagram_auth_state");
-    // localStorage.removeItem("facebook_auth_code");
+    localStorage.removeItem("instagram_auth_code");
     localStorage.removeItem("instagram_auth_user_info");
   }
 
@@ -53,11 +91,11 @@ export const InstagramAuthProvider = (props:PropsWithChildren)=>{
       const state = searchParams.get('state');
 
       if(loginType === 'instagram' && state === localStorage.getItem("instagram_auth_state")) {
-        // if(!searchParams.get('error') ) {
-        //   localStorage.setItem("instagram_auth_state", searchParams.get('state') || '');
-        //   localStorage.setItem("instagram_auth_code", searchParams.get('code') || '');
-        // }
-        // router.push(`?`);
+        if(!searchParams.get('error') ) {
+          localStorage.setItem("instagram_auth_state", searchParams.get('state') || '');
+          localStorage.setItem("instagram_auth_code", searchParams.get('code') || '');
+        }
+        router.push(`?`);
       }
     }
   }, [searchParams])

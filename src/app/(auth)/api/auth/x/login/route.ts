@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
       },
       body: params
     }).then((response)=>{
-      return response.json()
+      return response.json();
     }).then((res: any)=>{
       if(typeof res.error === 'undefined') {
         access_token = res.access_token;
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
         }
       }).then((response) => {
-        return response.json()
+        return response.json();
       })
       .then((res:any) => {
         userInfo = res.data;
@@ -71,13 +71,13 @@ export async function POST(request: NextRequest) {
       });
     } else {
       return NextResponse.json(
-        { error: 'Failed to login x(twitter)' },
+        { error: 'Failed to login x(twitter).' },
         { status: 401 }
       );
     }
   } else {
     return NextResponse.json(
-      { error: 'Failed to login x(twitter)' },
+      { error: 'Failed to login x(twitter).' },
       { status: 401 }
     );
   }

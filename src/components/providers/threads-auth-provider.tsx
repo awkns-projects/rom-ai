@@ -15,7 +15,7 @@ export const ThreadsAuthProvider = (props:PropsWithChildren)=>{
 
   const [userInfo, setUserInfo] = useState<Record<string, any>>({});
 
-    const fetchUserInfo = async () => {
+  const fetchUserInfo = async () => {
     const threads_auth_code = localStorage.getItem("threads_auth_code");
 
     if(threads_auth_code) {
@@ -36,8 +36,6 @@ export const ThreadsAuthProvider = (props:PropsWithChildren)=>{
           ...userInfo,
           ...res
         }
-
-        console.log('fetchUserInfo',res)
         
         setUserInfo(newUserInfo)
 

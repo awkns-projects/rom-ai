@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// TODO: cause their has bug from instagram, now it is unusable.
 export async function POST(request: NextRequest) {
   const data = await request.json();
   const { code } = data;
@@ -30,9 +29,8 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
       }
     }).then((response)=>{
-      return response.json()
+      return response.json();
     }).then((res: any)=>{
-      console.log('resresresresres',res)
       if(typeof res.error === 'undefined') {
         access_token = res.access_token;
         user_id = res.user_id;
@@ -54,7 +52,7 @@ export async function POST(request: NextRequest) {
           'Content-Type': 'application/json',
         }
       }).then((response) => {
-        return response.json()
+        return response.json();
       })
       .then((res:any) => {
         userInfo = res;
@@ -76,13 +74,13 @@ export async function POST(request: NextRequest) {
       });
     } else {
       return NextResponse.json(
-        { error: 'Failed to login facebook' },
+        { error: 'Failed to login threads.' },
         { status: 401 }
       );
     }
   } else {
     return NextResponse.json(
-      { error: 'Failed to login facebook' },
+      { error: 'Failed to login threads.' },
       { status: 401 }
     );
   }
