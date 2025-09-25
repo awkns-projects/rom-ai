@@ -8,7 +8,7 @@ import { useSession, signOut } from 'next-auth/react';
 import { GoogleAuthContext } from '@/components/providers/google-auth-provider';
 import { XAuthContext } from '@/components/providers/x-auth-provider';
 import { FacebookAuthContext } from '@/components/providers/facebook-auth-provider';
-// import { InstagramAuthContext } from '@/components/providers/instagram-auth-provider';
+import { InstagramAuthContext } from '@/components/providers/instagram-auth-provider';
 import { ThreadsAuthContext } from '@/components/providers/threads-auth-provider';
 import { ShopifyAuthContext } from '@/components/providers/shopify-auth-provider';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,7 @@ const PureAppWrapper = forwardRef<HTMLElement, AppWrapperProps>(({ children }, r
   const googleAuth = useContext(GoogleAuthContext);
   const xAuth = useContext(XAuthContext);
   const facebookAuth = useContext(FacebookAuthContext);
-  // const instagramAuth = useContext(InstagramAuthContext);
+  const instagramAuth = useContext(InstagramAuthContext);
   const threadsAuth = useContext(ThreadsAuthContext);
   const shopifyAuth = useContext(ShopifyAuthContext);
 
@@ -56,11 +56,16 @@ const PureAppWrapper = forwardRef<HTMLElement, AppWrapperProps>(({ children }, r
       facebookAuth.userLogin();
     }
   }
-  // const handleInstagramAuth = () => {
-  //   instagramAuth.userLogin();
-  // }
+  const handleInstagramAuth = () => {
+    // TODO: There has some bug from meta
+    instagramAuth.userLogin();
+  }
   const handleThreadsAuth = () => {
-    threadsAuth.userLogin();
+    if(threadsAuth.userInfo.user_id) {
+      threadsAuth.userLogout();
+    } else{
+      threadsAuth.userLogin();
+    }
   }
   const handleShopifyAuth = () => {
     if(shopifyAuth.userInfo.shop) {
@@ -196,17 +201,20 @@ const PureAppWrapper = forwardRef<HTMLElement, AppWrapperProps>(({ children }, r
                     `🔑 Facebook Logout(${facebookAuth.userInfo.name})`: "🔒 Facebook Login"
                   }
                 </DropdownMenuItem>
-                {/* <DropdownMenuItem 
+                <DropdownMenuItem 
                   className="text-green-200 hover:bg-green-500/10 cursor-pointer"
                   onClick={() => {handleInstagramAuth()}}
                 >
-                  Instagram Login
-                </DropdownMenuItem> */}
+                  🚧 Instagram Login
+                </DropdownMenuItem>
                 <DropdownMenuItem 
                   className="text-green-200 hover:bg-green-500/10 cursor-pointer"
                   onClick={() => {handleThreadsAuth()}}
                 >
-                  Threads Login
+                  {
+                    threadsAuth.userInfo.user_id?
+                    `🔑 Threads Logout(${threadsAuth.userInfo.name})`: "🔒 Threads Login"
+                  }
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   className="text-green-200 hover:bg-green-500/10 cursor-pointer"

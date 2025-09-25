@@ -9,7 +9,7 @@ import { PrivyProvider } from '@/components/providers/privy-provider'
 import { GoogleAuthProvider } from '@/components/providers/google-auth-provider'
 import { XAuthProvider } from '@/components/providers/x-auth-provider'
 import { FacebookAuthProvider } from '@/components/providers/facebook-auth-provider'
-// import { InstagramAuthProvider } from '@/components/providers/instagram-auth-provider'
+import { InstagramAuthProvider } from '@/components/providers/instagram-auth-provider'
 import { ThreadsAuthProvider } from '@/components/providers/threads-auth-provider'
 import { ShopifyAuthProvider } from '@/components/providers/shopify-auth-provider';
 import { AppSidebar } from '@/components/app-sidebar'
@@ -27,7 +27,7 @@ export function AppContent({ children, session, isCollapsed }: AppContentProps) 
       <GoogleAuthProvider>
         <XAuthProvider>
           <FacebookAuthProvider>
-            {/* <InstagramAuthProvider> */}
+            <InstagramAuthProvider>
               <ThreadsAuthProvider>
                 <ShopifyAuthProvider>
                   <SessionProvider>
@@ -40,7 +40,7 @@ export function AppContent({ children, session, isCollapsed }: AppContentProps) 
                   </SessionProvider>
                 </ShopifyAuthProvider>
               </ThreadsAuthProvider>
-            {/* </InstagramAuthProvider> */}
+            </InstagramAuthProvider>
           </FacebookAuthProvider>
         </XAuthProvider>
       </GoogleAuthProvider>
